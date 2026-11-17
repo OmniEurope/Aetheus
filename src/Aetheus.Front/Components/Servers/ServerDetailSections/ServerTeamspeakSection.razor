@@ -13,10 +13,10 @@
     {
         @* Recette R3-41/R3-42: Restart is the zone's one visible action (blue); every other action sits in
            the single "More actions" menu, with the Start and Stop that used to be the split button's entries. *@
-        <OmniButton Disabled="@_actionRunning" Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Restart))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Restart"]</span></ChildContent></OmniButton>
+        <OmniButton Disabled="@ActionBusy" Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Restart))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Restart"]</span></ChildContent></OmniButton>
         <OmniOverflowMenu Label="@L["MoreActions"]">
-            <OmniMenuItem Disabled="@_actionRunning" OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Start))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
-            <OmniMenuItem Tone="OmniTone.Danger" Disabled="@_actionRunning" OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Stop))"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Disabled="@ActionBusy" OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Start))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Tone="OmniTone.Danger" Disabled="@ActionBusy" OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Stop))"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
             <OmniMenuItem Disabled="@AgentOffline" OnClick="@OpenEditServerDialogAsync"><Icon><OmniIcon Name="OmniIconName.Settings" /></Icon><ChildContent>@L["EditServer"]</ChildContent></OmniMenuItem>
             <OmniMenuItem Disabled="@AgentOffline" OnClick="@OpenMessageDialogAsync" title="@L["SendMessage"]"><Icon><OmniIcon Name="OmniIconName.Chat" /></Icon><ChildContent>@L["Send"]</ChildContent></OmniMenuItem>
             <OmniMenuItem OnClick="@(() => CopyToClipboardAsync($"serveradmin / QueryPort: {Ts.QueryPort}"))"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["CopyCredentials"]</ChildContent></OmniMenuItem>
@@ -56,7 +56,7 @@
     }
 </OmniRow>
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="TeamSpeak" SettleOnHeartbeat="true" OnSettled="RefreshLiveAsync" />
+<ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="TeamSpeak" SettleOnHeartbeat="true" OnSettled="RefreshLiveAsync" />
 
 @if (Ts.IsInstalled)
 {

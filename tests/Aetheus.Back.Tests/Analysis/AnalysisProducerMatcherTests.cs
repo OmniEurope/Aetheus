@@ -11,7 +11,7 @@ public sealed class AnalysisProducerMatcherTests
     [Fact]
     public void Coverage_IsClaimedOncePerTask()
     {
-        var missing = AnalysisProducerMatcher.FindMissingProducers(
+        var missing = Tokens(
             [Producer(1, OperationKind.PipelinePublishCoverage), Producer(2, OperationKind.PipelinePublishCoverage)],
             [Report(10, "coverlet", AnalysisCategory.Coverage)]);
 
@@ -21,7 +21,7 @@ public sealed class AnalysisProducerMatcherTests
     [Fact]
     public void LintComplexityAndMutation_ExpectTheirOwnKeys()
     {
-        var missing = AnalysisProducerMatcher.FindMissingProducers(
+        var missing = Tokens(
             [
                 Producer(3, OperationKind.PipelinePublishLint),
                 Producer(4, OperationKind.PipelinePublishComplexity),
@@ -39,7 +39,7 @@ public sealed class AnalysisProducerMatcherTests
     [Fact]
     public void NonDastScanner_AcceptsItsReportFromAnyStep()
     {
-        var missing = AnalysisProducerMatcher.FindMissingProducers(
+        var missing = Tokens(
             [Producer(6, OperationKind.PipelineRunScanner, "gitleaks", "scan")],
             [Report(14, "gitleaks", AnalysisCategory.Secrets, step: "other step")]);
 
@@ -49,7 +49,7 @@ public sealed class AnalysisProducerMatcherTests
     [Fact]
     public void DastScanner_NeedsItsOwnStepAndRefusesUnclaimedDastReports()
     {
-        var missing = AnalysisProducerMatcher.FindMissingProducers(
+        var missing = Tokens(
             [Producer(7, OperationKind.PipelineRunScanner, "zap-api", "zap staging")],
             [
                 Report(15, "zap-api", AnalysisCategory.Dast, step: "zap production"),
@@ -62,22 +62,47 @@ public sealed class AnalysisProducerMatcherTests
     [Fact]
     public void DastScanner_ClaimingItsReport_LeavesNothingMissing()
     {
-        var missing = AnalysisProducerMatcher.FindMissingProducers(
+        var missing = Tokens(
             [Producer(8, OperationKind.PipelineRunScanner, "zap-api", "zap staging")],
             [Report(17, "zap-api", AnalysisCategory.Dast, step: "zap staging")]);
 
         Assert.Empty(missing);
     }
 
+    // Recette R-2: the OSV-Scanner step is a producer of the gate like any other scanner, so a run whose
+    // JavaScript dependency scan published nothing is reported missing, and its report satisfies it.
+    [Fact]
+    public void JavaScriptDependencyScanner_IsMissingWithoutItsReport_AndClaimedWithIt()
+    {
+        var producers = new[]
+        {
+            Producer(20, OperationKind.PipelineRunScanner, "trivy-dependencies", "Scan dependencies"),
+            Producer(21, OperationKind.PipelineRunScanner, "osv-javascript", "Scan JavaScript dependencies"),
+        };
+
+        Assert.Equal(
+            ["osv-javascript:task:21"],
+            Tokens(producers, [Report(30, "trivy-dependencies", AnalysisCategory.Dependencies)]));
+        Assert.Empty(Tokens(producers,
+        [
+            Report(30, "trivy-dependencies", AnalysisCategory.Dependencies),
+            Report(31, "osv-javascript", AnalysisCategory.Dependencies),
+        ]));
+    }
+
     [Fact]
     public void OtherOperation_ExpectsNothing()
     {
-        var missing = AnalysisProducerMatcher.FindMissingProducers(
+        var missing = Tokens(
             [Producer(9, OperationKind.None)],
             []);
 
         Assert.Empty(missing);
     }
+
+    private static List<string> Tokens(
+        IReadOnlyCollection<ExpectedAnalysisProducer> producers, IReadOnlyCollection<AnalysisRunGateReportDto> reports) =>
+        [.. AnalysisProducerMatcher.FindMissing(producers, reports).Select(item => item.Token)];
 
     private static ExpectedAnalysisProducer Producer(int id, OperationKind operation, string command = "", string step = "step") =>
         new(id, operation, command, step);

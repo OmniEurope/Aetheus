@@ -99,7 +99,7 @@ public class HomeDeepTests : BunitContext
                     new MonitoredAppStatusDto
                     {
                         Id = 1, ProjectId = 4, Name = "healthy-with-analytics",
-                        CurrentStatus = AppHealthStatus.Up, OnlineVisitorCount = 3
+                        CurrentStatus = AppHealthStatus.Up, OnlineVisitorCount = 3, OnlineVisitorState = OnlineAudienceState.Measured
                     },
                     new MonitoredAppStatusDto
                     {
@@ -124,6 +124,36 @@ public class HomeDeepTests : BunitContext
             < headers.FindIndex(header => header.Contains("CurrentVisitors", StringComparison.Ordinal)));
         Assert.True(headers.FindIndex(header => header.Contains("CurrentVisitors", StringComparison.Ordinal))
             < headers.FindIndex(header => header.Contains("Project", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void MonitoredAppsGrid_ShowsWaitingForData_NotAZero_WhenNothingFreshWasIngested()
+    {
+        _handler.SetJsonResponse("api/monitoring/dashboard", MakeDashboard());
+        _handler.SetJsonResponse(HttpMethod.Get, "api/appmonitoring/summary",
+            new AppMonitoringSummaryDto
+            {
+                TotalCount = 1,
+                UpCount = 1,
+                Applications =
+                [
+                    new MonitoredAppStatusDto
+                    {
+                        Id = 1, ProjectId = 4, Name = "w1", CurrentStatus = AppHealthStatus.Up,
+                        OnlineVisitorCount = 0, OnlineVisitorState = OnlineAudienceState.Waiting
+                    }
+                ]
+            });
+
+        var cut = Render<Home>();
+        cut.WaitForAssertion(() => Assert.Contains("w1", cut.Markup));
+
+        var grid = Assert.Single(cut.FindComponents<OmniDataGrid<MonitoredAppStatusDto>>());
+        Assert.Contains("CurrentVisitors", cut.Markup);
+        Assert.NotNull(grid.Find("[data-testid='online-audience-waiting']"));
+        Assert.Empty(grid.FindAll("[data-testid='online-audience-count']"));
+        // User request 2026-11-10: no « ? » help on the dashboard's monitored applications.
+        Assert.Empty(grid.FindAll("[data-testid='online-audience-help']"));
     }
 
     [Fact]

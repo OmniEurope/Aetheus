@@ -20,8 +20,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// resource of another organization (M4); EntityHub and PipelineHub never deliver A's events to a
 /// user of B only (S4b).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class OrganizationAdministrationIntegrationTests(PostgresFixture fixture)
+public sealed class OrganizationAdministrationIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static readonly HttpStatusCode[] Refused = [HttpStatusCode.Forbidden, HttpStatusCode.NotFound];
 

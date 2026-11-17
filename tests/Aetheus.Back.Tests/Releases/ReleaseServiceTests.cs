@@ -176,10 +176,24 @@ public class ReleaseServiceTests
         await Assert.ThrowsAsync<BadRequestException>(() => _sut.SyncReleasesAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Recette R-4: an external address without a project mirror is refused with the mirror message, never
+    /// listed straight from the remote.</summary>
+    [Fact]
+    public async Task SyncReleasesAsync_ExternalAddressWithoutMirror_IsRefusedWithoutListingTheRemote()
+    {
+        _projectServiceMock.GetProjectDetailAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new ProjectDetailDto { Id = 1, RepositoryUrl = "https://github.com/test/repo.git" });
+
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(() => _sut.SyncReleasesAsync(1, ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal(ExternalRepositoryMirrorRequirement.Message, refusal.Message);
+        await _gitServiceMock.DidNotReceiveWithAnyArgs().ListReleaseBranchesAsync(default!, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task SyncReleasesAsync_NewBranches_CreatesReleases()
     {
-        var project = new ProjectDetailDto { Id = 1, RepositoryUrl = "https://github.com/test/repo.git" };
+        var project = new ProjectDetailDto { Id = 1, RepositoryUrl = "https://aetheus.example/git/1/repo.git" };
         _projectServiceMock.GetProjectDetailAsync(1, Arg.Any<CancellationToken>())
             .Returns(project);
 
@@ -207,7 +221,7 @@ public class ReleaseServiceTests
     [Fact]
     public async Task SyncReleasesAsync_ExistingBranch_SkipsCreation()
     {
-        var project = new ProjectDetailDto { Id = 1, RepositoryUrl = "https://github.com/test/repo.git" };
+        var project = new ProjectDetailDto { Id = 1, RepositoryUrl = "https://aetheus.example/git/1/repo.git" };
         _projectServiceMock.GetProjectDetailAsync(1, Arg.Any<CancellationToken>())
             .Returns(project);
 

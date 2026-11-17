@@ -7,6 +7,7 @@ using Aetheus.Back.Data.Entities;
 using Aetheus.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -32,9 +33,11 @@ public sealed class AppDatabaseSizeTests : IDisposable
         _sut = new AppTelemetryService(
             new AppMonitoringRepository(_db), new AppMetricRepository(_db),
             new AppLogRepository(_db), new AppErrorRepository(_db), new AppVisitorRepository(_db),
-            new IngestKeyHasher(Options.Create(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" })),
+            new IngestKeyHasher(new TokenHashKeys(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" })),
             Substitute.For<IIngestService>(), Substitute.For<IAuditService>(),
-            new ConfigurationBuilder().Build(), new FakeTimeProvider(new DateTimeOffset(Now)));
+            new ConfigurationBuilder().Build(),
+            new IngestKeyRejectionLog(new FakeTimeProvider(new DateTimeOffset(Now)), NullLogger<IngestKeyRejectionLog>.Instance),
+            new FakeTimeProvider(new DateTimeOffset(Now)));
         _db.MonitoredApps.Add(new MonitoredApp { Id = 1, ProjectId = 1, Name = "aetheus" });
         _db.SaveChanges();
     }

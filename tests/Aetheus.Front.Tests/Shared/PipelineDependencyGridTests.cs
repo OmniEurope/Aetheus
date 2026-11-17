@@ -2,6 +2,7 @@
 using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Localization;
 using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
@@ -39,6 +40,34 @@ public class PipelineDependencyGridTests : BunitContext
         });
     }
 
+    /// <summary>The list follows the pipelines and entities hubs: every live refresh hands the grid freshly
+    /// read items. A row the reader opened stays open across it (E2E 2026-11-02: the open detail vanished
+    /// under the click when a refresh landed, the row went back to "Expand row").</summary>
+    [Fact]
+    public void OpenRow_StaysOpen_WhenALiveRefreshHandsTheGridFreshlyReadItems()
+    {
+        static PipelineDependencyDto Read(int id, string name) => new()
+        {
+            Id = id,
+            Name = name,
+            References = [new PipelineDependencyReferenceDto(9, "deploy")]
+        };
+        var cut = Render<PipelineDependencyGrid>(parameters => parameters
+            .Add(component => component.Items, new List<PipelineDependencyDto> { Read(1, "release"), Read(2, "qa") })
+            .Add(component => component.PipelineHref, id => $"/pipelines/{id}")
+            .Add(component => component.RunPipeline, (_, _) => Task.CompletedTask)
+            .Add(component => component.SetFavorite, (_, _) => Task.CompletedTask));
+
+        cut.FindAll("td[data-omni-control='expand'] button[aria-expanded]")[0].Click();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".pipeline-relation-list-execution")));
+
+        cut.Render(parameters => parameters
+            .Add(component => component.Items, new List<PipelineDependencyDto> { Read(1, "release"), Read(2, "qa") }));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".pipeline-relation-list-execution")));
+        Assert.Equal("true", cut.FindAll("td[data-omni-control='expand'] button[aria-expanded]")[0].GetAttribute("aria-expanded"));
+    }
+
     /// <summary>One list, the chevron decided per row. A leaf (even one with parents) has
     /// none.</summary>
     [Fact]
@@ -74,7 +103,7 @@ public class PipelineDependencyGridTests : BunitContext
         var cut = RenderGrid(new PipelineDependencyDto { Id = 4, Name = "deploy" });
 
         Assert.Single(cut.FindAll("button[aria-label='AddPipelineToFavorites']"));
-        Assert.Contains(cut.FindAll("button"), button => button.Names().Contains("Run", StringComparison.Ordinal));
+        Assert.Contains(cut.FindAll("button"), button => button.Names().Contains("Run", StringComparison.Ordinal) && !button.Names().Contains("LastRun", StringComparison.Ordinal));
         Assert.Empty(cut.FindAll("[role='menuitem']"));
 
         cut.Find("button[aria-label='MoreActions']").Click();
@@ -97,7 +126,7 @@ public class PipelineDependencyGridTests : BunitContext
             .Add(component => component.SetFavorite, (_, _) => Task.CompletedTask)
             .Add(component => component.CanWrite, true));
 
-        cut.FindAll("button").Single(button => button.Names().Contains("Run", StringComparison.Ordinal)).Click();
+        cut.FindAll("button").Single(button => button.Names().Contains("Run", StringComparison.Ordinal) && !button.Names().Contains("LastRun", StringComparison.Ordinal)).Click();
 
         cut.WaitForAssertion(() =>
         {
@@ -105,6 +134,35 @@ public class PipelineDependencyGridTests : BunitContext
             Assert.Equal(17, invocation.Value.Id);
             Assert.Null(invocation.Value.Mode);
         });
+    }
+
+    [Fact]
+    public void RunButton_StaysBusyForTheWholeLaunch_ThenComesBack()
+    {
+        var launch = new TaskCompletionSource();
+        var calls = 0;
+        var item = new PipelineDependencyDto { Id = 17, Name = "release" };
+        Func<int, string?, Task> run = (_, _) => { calls++; return launch.Task; };
+        var cut = Render<PipelineDependencyGrid>(parameters => parameters
+            .Add(component => component.Items, new List<PipelineDependencyDto> { item })
+            .Add(component => component.PipelineHref, id => $"/pipelines/{id}")
+            .Add(component => component.RunPipeline, run)
+            .Add(component => component.SetFavorite, (_, _) => Task.CompletedTask)
+            .Add(component => component.CanWrite, true));
+        AngleSharp.Dom.IElement RunButton() =>
+            cut.FindAll("button").Single(button => button.Names().Contains("Run", StringComparison.Ordinal) && !button.Names().Contains("LastRun", StringComparison.Ordinal));
+
+        RunButton().Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("true", RunButton().GetAttribute("aria-busy")));
+        Assert.False(RunButton().HasAttribute("disabled"));
+        Assert.NotNull(cut.Find(".btn-busy"));
+        Assert.Equal(1, calls);
+
+        launch.SetResult();
+
+        cut.WaitForAssertion(() => Assert.Null(RunButton().GetAttribute("aria-busy")));
+        Assert.Empty(cut.FindAll(".btn-busy"));
     }
 
     [Fact]
@@ -298,6 +356,45 @@ public class PipelineDependencyGridTests : BunitContext
             .Add(component => component.RunPipeline, (_, _) => Task.CompletedTask)
             .Add(component => component.SetFavorite, (_, _) => Task.CompletedTask)
             .Add(component => component.CanWrite, true));
+
+    /// <summary>R-33: the date of the newest run (summaries are newest first) is written in the row, no hover needed.</summary>
+    [Fact]
+    public void Rows_ShowTheDateOfTheLatestRunNextToTheHistory()
+    {
+        Services.AddSingleton<IStringLocalizer<Aetheus.Front.Resources.AppStrings>>(ResxLocalizer.English());
+        var newest = new DateTime(2026, 11, 4, 22, 30, 0, DateTimeKind.Local);
+        var older = new DateTime(2026, 10, 1, 8, 0, 0, DateTimeKind.Local);
+
+        var cut = RenderGrid(new PipelineDependencyDto
+        {
+            Id = 5,
+            Name = "ci",
+            RecentRuns =
+            [
+                new PipelineRunSummaryDto { Id = 15, StartedAt = newest, Status = Aetheus.Shared.Components.Pipelines.PipelineStatus.Success },
+                new PipelineRunSummaryDto { Id = 14, StartedAt = older, Status = Aetheus.Shared.Components.Pipelines.PipelineStatus.Failed }
+            ]
+        });
+
+        var date = cut.Find("[data-testid='pipeline-last-run']");
+        Assert.Equal(newest.ToString("g"), date.TextContent);
+        Assert.Empty(cut.FindAll("[data-testid='pipeline-last-run-never']"));
+        Assert.Contains("Last Run", cut.Markup);
+    }
+
+    /// <summary>R-33: a pipeline that never ran says so, in both resource files.</summary>
+    [Fact]
+    public void Rows_SayNeverRun_WhenThePipelineHasNoRun()
+    {
+        Services.AddSingleton<IStringLocalizer<Aetheus.Front.Resources.AppStrings>>(ResxLocalizer.English());
+
+        var cut = RenderGrid(new PipelineDependencyDto { Id = 6, Name = "fresh" });
+
+        Assert.Equal("Never run", cut.Find("[data-testid='pipeline-last-run-never']").TextContent.Trim());
+        Assert.Empty(cut.FindAll("[data-testid='pipeline-last-run']"));
+        Assert.Equal("Jamais lancé", ResxLocalizer.French()["PipelineNeverRun"].Value);
+        Assert.Equal("Dernière exécution", ResxLocalizer.French()["LastRun"].Value);
+    }
 
     [Fact]
     public void RowControls_DoNotReachTheRow()

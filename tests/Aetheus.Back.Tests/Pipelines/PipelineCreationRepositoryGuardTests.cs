@@ -49,8 +49,11 @@ public sealed class PipelineCreationRepositoryGuardTests : IDisposable
         GitFixtureGuard.AssertOwnedBy(_bare, _bare);
 
         var gitService = Substitute.For<IGitLightService>();
-        gitService.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(
-            [new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "w6", DefaultBranch = Branch }]);
+        List<GitLightRepoDto> repositories = [new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "w6", DefaultBranch = Branch }];
+        gitService.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(repositories);
+        // The stored list, which the reads of a definition ask for.
+        gitService.GetAccessibleRepositoriesAsync(
+            Arg.Is<List<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 7 })), Arg.Any<CancellationToken>()).Returns(repositories);
         gitService.ResolveDiskPath(7, "w6").Returns(_bare);
         var sender = Substitute.For<IEmailSenderConfigurationResolver>();
         sender.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderResolution());

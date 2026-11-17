@@ -10,21 +10,20 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class PipelineTemplateRunIntegrationTests(PostgresFixture fixture)
+public sealed class PipelineTemplateRunIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task CompletingPrepare_DispatchesResolvedTemplateSteps()
     {
         await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        // Since external Git pipelines (a790fae72) a project with a repository URL and no internal mirror
-        // reads its pipeline from that repository; git.example never resolves, and this test is about the
-        // template steps, so the repository answers "no pipeline file" and the stored definition is used.
+        // R-4: the project names one of Aetheus's own clone URLs (an external address is read only through a project
+        // mirror); this test is about the template steps, so the release listing answers nothing and the stored
+        // definition is used.
         await using var factory = baseFactory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddSingleton<IGitCliService, NoPipelineFileGitCli>()));
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var organizationId = await db.Set<Organization>().Select(item => item.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var organizationId = await db.Set<Organization>().OrderBy(item => item.Id).Select(item => item.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         var suffix = Guid.NewGuid().ToString("N");
 
         var server = new Server
@@ -41,7 +40,7 @@ public sealed class PipelineTemplateRunIntegrationTests(PostgresFixture fixture)
         var project = new Project
         {
             Name = $"template-project-{suffix}",
-            RepositoryUrl = $"https://git.example/{suffix}.git",
+            RepositoryUrl = $"http://localhost:5300/git/1/{suffix}.git",
             OrganizationId = organizationId
         };
         var template = new PipelineTemplate
@@ -96,11 +95,5 @@ public sealed class PipelineTemplateRunIntegrationTests(PostgresFixture fixture)
     {
         public Task<List<(string BranchName, string Version)>> ListReleaseBranchesAsync(string repositoryUrl, CancellationToken ct = default) =>
             Task.FromResult(new List<(string BranchName, string Version)>());
-
-        public Task<GitRemoteBranch> ResolveBranchCommitAsync(string repositoryUrl, string? branch, CancellationToken ct = default) =>
-            Task.FromResult(new GitRemoteBranch(branch ?? "main", new string('a', 40)));
-
-        public Task<string?> ReadPipelineYamlAsync(string repositoryUrl, string commit, string pipelineName, CancellationToken ct = default) =>
-            Task.FromResult<string?>(null);
     }
 }

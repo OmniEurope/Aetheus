@@ -90,6 +90,31 @@ public sealed class AnalysisPortfolioTests : BunitContext
         });
     }
 
+    /// <summary>R-20: the whole tile is one link to the project quality; R-19: the last analysis is its last element.</summary>
+    [Fact]
+    public void ProjectTile_IsOneLinkToTheQuality_WithTheLastAnalysisAtTheBottom()
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto>
+        {
+            new() { ProjectId = 5, ProjectName = "Aetheus", OrganizationName = "Org", Grade = new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.B } }
+        });
+        _handler.SetJsonResponse("api/analysis/portfolio/filter-values", new AnalysisPortfolioFilterValuesDto());
+        _handler.SetPaginatedJsonResponse("api/analysis/portfolio", Array.Empty<AnalysisPortfolioRowDto>());
+
+        var cut = Render<AnalysisPortfolio>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var tile = cut.Find("a.analysis-portfolio-project-card");
+            Assert.Equal("projects/5/quality", tile.GetAttribute("href"));
+            Assert.Contains("Aetheus", tile.TextContent, StringComparison.Ordinal);
+            // The tile holds no nested link, and its last element is the last-analysis line.
+            Assert.Empty(tile.QuerySelectorAll("a, button"));
+            var body = tile.QuerySelector(".omni-card__body")!;
+            Assert.Contains("analysis-portfolio-last-run", body.LastElementChild!.ClassName, StringComparison.Ordinal);
+        });
+    }
+
     [Fact]
     public void Portfolio_PrimesDetailedReportsOnFirstRender()
     {

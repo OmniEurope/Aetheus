@@ -10,8 +10,9 @@
 
     @if (_state == ContactState.Running)
     {
-        @* Recette R-116: the attempts run under OE's busy veil over their own lines, no loader beside them. *@
-        <OmniStack Gap="OmniSpacing.Small" Class="omni-busy" aria-busy="true" data-testid="contact-agent-running">
+        @* Recette R-116, R-1: the attempts run with the page veil held, no loader beside their lines. *@
+        <VeilHold Busy="true" />
+        <OmniStack Gap="OmniSpacing.Small" data-testid="contact-agent-running">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">
                 @string.Format(L["ContactAgentAttempt"], _attempt, MaxAttempts)
             </OmniText>

@@ -31,10 +31,10 @@ public sealed class PortsObserveOperationExecutor(
             return new ExecutorResult(-1, false);
         }
 
-        List<ObservedPortDto> ports;
+        ListeningPortsScan scan;
         try
         {
-            ports = await collector.CollectAsync(cancellationToken).ConfigureAwait(false);
+            scan = await collector.ScanAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -44,14 +44,26 @@ public sealed class PortsObserveOperationExecutor(
             return new ExecutorResult(-1, false);
         }
 
+        // Neither probe worked: an empty listing is no reading, and reporting it would erase every
+        // observation the registry holds. The task fails instead of claiming "nothing listens".
+        if (!scan.HasMeasurement)
+        {
+            await onOutput("The TCP and UDP listings could not be read; the observed ports were left unchanged.", TaskLogLevel.Error)
+                .ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
+
+        var ports = scan.Ports;
+        var now = timeProvider.GetUtcNow();
         try
         {
             await apiClient.ReportObservedPortsAsync(
                 serverId,
                 new ObservedPortsReportDto
                 {
-                    Ports = ports,
-                    ObservedAt = timeProvider.GetUtcNow().UtcDateTime
+                    Ports = [.. ports],
+                    ObservedAt = now.UtcDateTime,
+                    Protocols = scan.ProtocolReport(now)
                 },
                 cancellationToken).ConfigureAwait(false);
         }
@@ -63,7 +75,12 @@ public sealed class PortsObserveOperationExecutor(
             return new ExecutorResult(-1, false);
         }
 
-        await onOutput($"Reported {ports.Count} listening TCP port(s).", TaskLogLevel.Info).ConfigureAwait(false);
+        var measured = string.Join("/", scan.Measured.Select(measurement => measurement.Protocol));
+        await onOutput($"Reported {ports.Count} listening port(s) ({measured}).", TaskLogLevel.Info).ConfigureAwait(false);
+        if (scan.Measured.Count < 2)
+            await onOutput(
+                "One protocol could not be read: its observed ports were left unchanged.", TaskLogLevel.Warning)
+                .ConfigureAwait(false);
         return new ExecutorResult(0, false);
     }
 }

@@ -34,7 +34,8 @@ public sealed class ClockAlertProvisioningTests
     private static StorageAlertProvisioningService CreateService(ServiceProvider provider, Dictionary<string, string?> settings) =>
         new(provider.GetRequiredService<IServiceScopeFactory>(),
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
-            NullLogger<StorageAlertProvisioningService>.Instance);
+            NullLogger<StorageAlertProvisioningService>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
     private static async Task<List<AlertRule>> RulesAsync(ServiceProvider provider)
     {

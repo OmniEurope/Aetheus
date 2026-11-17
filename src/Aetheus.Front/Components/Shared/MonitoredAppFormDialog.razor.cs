@@ -61,7 +61,7 @@ public partial class MonitoredAppFormDialog : EntityEditDialogBase
                 await Ui.RunAsync(
                     () => Api.Monitoring.UpdateMonitoredAppAsync(App!.Id, _model),
                     "MonitoredAppUpdated",
-                    _ => CloseAfterSuccessAsync(),
+                    saved => CloseAfterSuccessAsync(saved),
                     successTitleKey: "Updated");
             }
             else
@@ -83,7 +83,7 @@ public partial class MonitoredAppFormDialog : EntityEditDialogBase
                 await Ui.RunAsync(
                     () => Api.Monitoring.CreateMonitoredAppAsync(ProjectId, create),
                     "MonitoredAppCreated",
-                    _ => CloseAfterSuccessAsync(),
+                    saved => CloseAfterSuccessAsync(saved),
                     successTitleKey: "Created");
             }
         });

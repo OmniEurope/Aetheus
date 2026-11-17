@@ -8,7 +8,7 @@ public interface IAiTaskRepository
     Task<(List<AiRunnerProfile> Items, int Total)> GetProfilesPageAsync(
         string? search, int page, int pageSize, CancellationToken ct,
         IReadOnlyList<GridFilter>? columnFilters = null,
-        string? sortBy = null, bool sortDescending = false);
+        string? sortBy = null, bool sortDescending = false, int? organizationId = null);
     Task<List<AiRunnerProfile>> GetProfilesForOrganizationsAsync(
         List<int> organizationIds, CancellationToken ct);
     Task<AiRunnerProfile?> FindProfileAsync(int id, CancellationToken ct);

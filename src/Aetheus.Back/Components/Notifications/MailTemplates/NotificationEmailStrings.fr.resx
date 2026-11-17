@@ -17,13 +17,14 @@
   <data name="AnalysisLink" xml:space="preserve"><value>Examiner l'analyse</value></data>
   <data name="VaultLink" xml:space="preserve"><value>Examiner les coffres</value></data>
   <data name="UnknownTitle" xml:space="preserve"><value>Notification Aetheus</value></data>
+  <data name="UnknownWord" xml:space="preserve"><value>Notification</value></data>
   <data name="UnknownIntro" xml:space="preserve"><value>Aetheus a signalé un événement. Consultez ses détails et ouvrez la plateforme pour en savoir plus.</value></data>
   <data name="NoLink" xml:space="preserve"><value>Ouvrez votre plateforme Aetheus pour examiner cet événement. Aucune adresse web n'est configurée pour les liens des mails.</value></data>
   <data name="Payload" xml:space="preserve"><value>Données complémentaires de l'événement</value></data>
   <data name="PipelineRunId" xml:space="preserve"><value>Identifiant de l'exécution</value></data>
   <data name="PipelineId" xml:space="preserve"><value>Identifiant du pipeline</value></data>
   <data name="PipelineName" xml:space="preserve"><value>Pipeline</value></data>
-  <data name="BuildNumber" xml:space="preserve"><value>Numéro de build</value></data>
+  <data name="BuildNumber" xml:space="preserve"><value>Numéro d'exécution</value></data>
   <data name="IsChildRun" xml:space="preserve"><value>Lancée par un autre pipeline</value></data>
   <data name="RootRunId" xml:space="preserve"><value>Identifiant de l'exécution racine</value></data>
   <data name="RootPipelineName" xml:space="preserve"><value>Pipeline racine</value></data>
@@ -88,73 +89,143 @@
   <data name="True" xml:space="preserve"><value>Oui</value></data>
   <data name="False" xml:space="preserve"><value>Non</value></data>
   <data name="PipelineFailedTitle" xml:space="preserve"><value>Échec de l'exécution du pipeline</value></data>
+  <data name="PipelineFailedWord" xml:space="preserve"><value>Échec</value></data>
   <data name="PipelineFailedIntro" xml:space="preserve"><value>Le pipeline s'est arrêté sur un échec. Ouvrez les journaux de l'exécution pour trouver l'étape en échec.</value></data>
   <data name="PipelineSucceededTitle" xml:space="preserve"><value>Exécution du pipeline réussie</value></data>
+  <data name="PipelineSucceededWord" xml:space="preserve"><value>Succès</value></data>
   <data name="PipelineSucceededIntro" xml:space="preserve"><value>Le pipeline s'est terminé avec succès. Ouvrez l'exécution pour revoir ses étapes et ses résultats.</value></data>
   <data name="PipelineRejectedTitle" xml:space="preserve"><value>Exécution du pipeline rejetée</value></data>
+  <data name="PipelineRejectedWord" xml:space="preserve"><value>Rejet</value></data>
   <data name="PipelineRejectedIntro" xml:space="preserve"><value>Le pipeline s'est terminé mais son résultat a été rejeté. Ouvrez l'exécution pour en voir la raison.</value></data>
   <data name="PipelineChildResultTitle" xml:space="preserve"><value>Résultat d'un pipeline enfant</value></data>
+  <data name="PipelineChildResultWord" xml:space="preserve"><value>Résultat</value></data>
   <data name="PipelineChildResultIntro" xml:space="preserve"><value>Un pipeline lancé par un autre pipeline s'est terminé. Ouvrez l'exécution pour voir son résultat.</value></data>
   <data name="PipelineApprovalTitle" xml:space="preserve"><value>Votre approbation est demandée</value></data>
+  <data name="PipelineApprovalWord" xml:space="preserve"><value>Approbation</value></data>
   <data name="PipelineApprovalIntro" xml:space="preserve"><value>Un pipeline attend une approbation. Examinez l'exécution et l'environnement cible avant de décider.</value></data>
   <data name="ApprovalActionApprove" xml:space="preserve"><value>Approuver</value></data>
   <data name="ApprovalActionReject" xml:space="preserve"><value>Rejeter</value></data>
   <data name="ApprovalActionComment" xml:space="preserve"><value>Commenter</value></data>
   <data name="PipelineRefusedTitle" xml:space="preserve"><value>Lancement du pipeline refusé</value></data>
+  <data name="PipelineRefusedWord" xml:space="preserve"><value>Refus</value></data>
   <data name="PipelineRefusedIntro" xml:space="preserve"><value>Un déclencheur automatique n'a pas pu lancer le pipeline. Examinez la raison signalée et la configuration du pipeline.</value></data>
   <data name="ReleaseDeployedTitle" xml:space="preserve"><value>Release déployée</value></data>
+  <data name="ReleaseDeployedWord" xml:space="preserve"><value>Déploiement</value></data>
   <data name="ReleaseDeployedIntro" xml:space="preserve"><value>Une release a été enregistrée comme déployée. Examinez sa version, son étape de déploiement et son exécution.</value></data>
   <data name="AiTaskCompletedTitle" xml:space="preserve"><value>Rapport de l'IA prêt</value></data>
+  <data name="AiTaskCompletedWord" xml:space="preserve"><value>Rapport</value></data>
   <data name="AiTaskCompletedIntro" xml:space="preserve"><value>Une tâche d'IA a terminé son exécution. Ouvrez son rapport pour lire ce qu'elle a trouvé.</value></data>
   <data name="AgentCompletedTitle" xml:space="preserve"><value>Mise à jour de l'agent confirmée</value></data>
+  <data name="AgentCompletedWord" xml:space="preserve"><value>Actualisation</value></data>
   <data name="AgentCompletedIntro" xml:space="preserve"><value>Le signal du serveur a confirmé la mise à jour de l'agent. Vérifiez la version installée sur le serveur.</value></data>
   <data name="AgentFailedTitle" xml:space="preserve"><value>Échec de la mise à jour de l'agent</value></data>
+  <data name="AgentFailedWord" xml:space="preserve"><value>Échec</value></data>
   <data name="AgentFailedIntro" xml:space="preserve"><value>La mise à jour de l'agent n'a pas pu être confirmée. Examinez le diagnostic de l'échec et l'état du serveur.</value></data>
   <data name="AnalysisCompletedTitle" xml:space="preserve"><value>Rapport d'analyse disponible</value></data>
+  <data name="AnalysisCompletedWord" xml:space="preserve"><value>Analyse</value></data>
   <data name="AnalysisCompletedIntro" xml:space="preserve"><value>Un rapport de scanner est disponible. Examinez ses constats et le résultat de la barrière qualité.</value></data>
   <data name="GateWarningTitle" xml:space="preserve"><value>Avertissement de la barrière qualité</value></data>
+  <data name="GateWarningWord" xml:space="preserve"><value>Avertissement</value></data>
   <data name="GateWarningIntro" xml:space="preserve"><value>La barrière qualité a signalé des avertissements. Examinez l'analyse avant de poursuivre la livraison.</value></data>
   <data name="GateBlockedTitle" xml:space="preserve"><value>Barrière qualité bloquée</value></data>
+  <data name="GateBlockedWord" xml:space="preserve"><value>Bloqué</value></data>
   <data name="GateBlockedIntro" xml:space="preserve"><value>L'analyse ne respecte pas la politique qualité. Examinez les constats bloquants.</value></data>
   <data name="GateErrorTitle" xml:space="preserve"><value>Échec de l'évaluation de la barrière qualité</value></data>
+  <data name="GateErrorWord" xml:space="preserve"><value>Erreur</value></data>
   <data name="GateErrorIntro" xml:space="preserve"><value>La barrière qualité a rencontré une erreur. Examinez l'analyse et les diagnostics du scanner.</value></data>
   <data name="CveFailedTitle" xml:space="preserve"><value>Échec de la synchronisation des vulnérabilités</value></data>
+  <data name="CveFailedWord" xml:space="preserve"><value>Échec</value></data>
   <data name="CveFailedIntro" xml:space="preserve"><value>La synchronisation des vulnérabilités a échoué. Examinez les diagnostics de la plateforme d'analyse.</value></data>
+  <data name="CveDetectedTitle" xml:space="preserve"><value>Vulnérabilités graves détectées</value></data>
+  <data name="CveDetectedWord" xml:space="preserve"><value>Vulnérabilité</value></data>
+  <data name="CveDetectedIntro" xml:space="preserve"><value>La veille de vulnérabilités vient de trouver, dans les projets que vous suivez, des dépendances touchées par une vulnérabilité critique ou activement exploitée. Examinez-les et mettez à jour les paquets concernés.</value></data>
+  <data name="DependencyUpdateReadyTitle" xml:space="preserve"><value>Mise à jour de dépendance prête à fusionner</value></data>
+  <data name="DependencyUpdateReadyWord" xml:space="preserve"><value>Pull request</value></data>
+  <data name="DependencyUpdateReadyIntro" xml:space="preserve"><value>La CI et la QA d'une mise à jour automatique de dépendance ont toutes deux réussi. Examinez la mise à jour et fusionnez-la : rien n'est fusionné ni déployé automatiquement.</value></data>
+  <data name="DependencyUpdateClosedTitle" xml:space="preserve"><value>Branche de mise à jour de dépendance retirée</value></data>
+  <data name="DependencyUpdateClosedWord" xml:space="preserve"><value>Mise à jour</value></data>
+  <data name="DependencyUpdateClosedIntro" xml:space="preserve"><value>La vulnérabilité corrigée par une mise à jour automatique de dépendance est close : sa branche n'a plus d'utilité. Le résultat ci-dessous dit ce qui en a été fait.</value></data>
+  <data name="PackageName" xml:space="preserve"><value>Paquet</value></data>
+  <data name="TargetVersion" xml:space="preserve"><value>Version corrigée</value></data>
+  <data name="Advisory" xml:space="preserve"><value>Avis de sécurité</value></data>
+  <data name="Branch" xml:space="preserve"><value>Branche</value></data>
+  <data name="Outcome" xml:space="preserve"><value>Résultat</value></data>
+  <data name="Detail" xml:space="preserve"><value>Détail</value></data>
+  <data name="OutcomePullRequestOpened" xml:space="preserve"><value>Pull request ouverte sur le dépôt du projet</value></data>
+  <data name="OutcomePullRequestToOpenOnOrigin" xml:space="preserve"><value>Ce dépôt est le miroir d'un dépôt externe : ouvrez la demande de fusion sur son origine (rien n'y a été envoyé)</value></data>
+  <data name="OutcomeBranchDeleted" xml:space="preserve"><value>Branche supprimée du dépôt du projet</value></data>
+  <data name="OutcomeBranchAlreadyGone" xml:space="preserve"><value>Branche déjà disparue, rien à supprimer</value></data>
+  <data name="OutcomeBranchKeptMirror" xml:space="preserve"><value>Branche conservée : ce dépôt est le miroir d'un dépôt externe, supprimer la branche sur son origine demande votre accord</value></data>
+  <data name="OutcomeBranchKeptProtected" xml:space="preserve"><value>Branche conservée : elle n'a pas pu être supprimée (voir le détail)</value></data>
+  <data name="CveDigestTitle" xml:space="preserve"><value>Vulnérabilités encore ouvertes</value></data>
+  <data name="CveDigestWord" xml:space="preserve"><value>Vulnérabilité</value></data>
+  <data name="CveDigestIntro" xml:space="preserve"><value>Récapitulatif quotidien de la veille de vulnérabilités : dépendances des projets que vous suivez encore touchées par une vulnérabilité critique, de gravité élevée ou activement exploitée. Celles marquées nouvelles n'ont encore jamais été signalées par un mail. Examinez-les et mettez à jour les paquets concernés.</value></data>
+  <data name="CveWatchLink" xml:space="preserve"><value>Ouvrir la veille de vulnérabilités</value></data>
+  <data name="CveProjects" xml:space="preserve"><value>Projets touchés</value></data>
+  <data name="CveVulnerabilities" xml:space="preserve"><value>Vulnérabilités</value></data>
+  <data name="CveNewCount" xml:space="preserve"><value>Nouvelles depuis le dernier mail</value></data>
+  <data name="CveHostVulnerabilities" xml:space="preserve"><value>Vulnérabilités du système hôte</value></data>
+  <data name="CveCommonVulnerabilities" xml:space="preserve"><value>Communes à plusieurs projets</value></data>
+  <data name="CveCommonLabel" xml:space="preserve"><value>Communes à {0}</value></data>
+  <data name="CveBlockCount" xml:space="preserve"><value>Vulnérabilités distinctes : {0}</value></data>
+  <data name="CveMoreInformation" xml:space="preserve"><value>Voir plus d'informations</value></data>
+  <data name="CveServerLabel" xml:space="preserve"><value>Serveur {0}</value></data>
+  <data name="VulnerabilityCount" xml:space="preserve"><value>Nouvelles vulnérabilités</value></data>
+  <data name="ExploitedCount" xml:space="preserve"><value>Exploitées dans la nature</value></data>
+  <data name="Vulnerabilities" xml:space="preserve"><value>Vulnérabilités</value></data>
   <data name="GovernanceExpiringTitle" xml:space="preserve"><value>Exception d'analyse bientôt expirée</value></data>
+  <data name="GovernanceExpiringWord" xml:space="preserve"><value>Expiration</value></data>
   <data name="GovernanceExpiringIntro" xml:space="preserve"><value>Un élément de gouvernance approche de sa date d'expiration. Décidez s'il faut le renouveler ou le clore.</value></data>
   <data name="OperationalCveTitle" xml:space="preserve"><value>Alerte de synchronisation des vulnérabilités</value></data>
+  <data name="OperationalCveWord" xml:space="preserve"><value>Alerte</value></data>
   <data name="OperationalCveIntro" xml:space="preserve"><value>La plateforme d'analyse a détecté un échec de synchronisation. Examinez le diagnostic ci-dessous.</value></data>
   <data name="CveStaleTitle" xml:space="preserve"><value>Données de vulnérabilités périmées</value></data>
+  <data name="CveStaleWord" xml:space="preserve"><value>Périmé</value></data>
   <data name="CveStaleIntro" xml:space="preserve"><value>La plateforme d'analyse a détecté des données de vulnérabilités périmées. Examinez la synchronisation ou la base du scanner.</value></data>
   <data name="StorageDriftTitle" xml:space="preserve"><value>Incohérence du stockage d'analyse</value></data>
+  <data name="StorageDriftWord" xml:space="preserve"><value>Incohérence</value></data>
   <data name="StorageDriftIntro" xml:space="preserve"><value>La plateforme d'analyse a détecté une incohérence de stockage. Examinez le diagnostic signalé.</value></data>
   <data name="ScannerObsoleteTitle" xml:space="preserve"><value>Version de scanner obsolète</value></data>
+  <data name="ScannerObsoleteWord" xml:space="preserve"><value>Obsolète</value></data>
   <data name="ScannerObsoleteIntro" xml:space="preserve"><value>Une version de scanner configurée est obsolète. Examinez le manifeste des scanners et le diagnostic signalé.</value></data>
   <data name="WorkspaceResidualTitle" xml:space="preserve"><value>Alerte de nettoyage d'un espace de scanner</value></data>
+  <data name="WorkspaceResidualWord" xml:space="preserve"><value>Nettoyage</value></data>
   <data name="WorkspaceResidualIntro" xml:space="preserve"><value>Un espace de travail d'analyse résiduel a été détecté. Examinez son nettoyage et le diagnostic signalé.</value></data>
   <data name="ScannerUnavailableTitle" xml:space="preserve"><value>Scanner indisponible</value></data>
+  <data name="ScannerUnavailableWord" xml:space="preserve"><value>Indisponible</value></data>
   <data name="ScannerUnavailableIntro" xml:space="preserve"><value>Un scanner est indisponible. Examinez son installation et le diagnostic signalé.</value></data>
   <data name="AppDownTitle" xml:space="preserve"><value>Application indisponible</value></data>
+  <data name="AppDownWord" xml:space="preserve"><value>Indisponible</value></data>
   <data name="AppDownIntro" xml:space="preserve"><value>La supervision des applications a détecté une application indisponible. Examinez ses contrôles de santé et le dernier déploiement.</value></data>
   <data name="AppRecoveredTitle" xml:space="preserve"><value>Application rétablie</value></data>
+  <data name="AppRecoveredWord" xml:space="preserve"><value>Rétabli</value></data>
   <data name="AppRecoveredIntro" xml:space="preserve"><value>La supervision des applications a détecté un rétablissement. Examinez l'état de l'application et l'historique de l'incident.</value></data>
   <data name="AnalyticsQuotaTitle" xml:space="preserve"><value>Alerte de quota d'analyse web</value></data>
+  <data name="AnalyticsQuotaWord" xml:space="preserve"><value>Quota</value></data>
   <data name="AnalyticsQuotaIntro" xml:space="preserve"><value>L'application a atteint un seuil de quota d'analyse web. Examinez son usage et ses réglages de rétention.</value></data>
   <data name="StorageQuotaTitle" xml:space="preserve"><value>Alerte de quota de stockage du projet</value></data>
+  <data name="StorageQuotaWord" xml:space="preserve"><value>Quota</value></data>
   <data name="StorageQuotaIntro" xml:space="preserve"><value>Le projet a atteint un seuil de son budget de stockage. Examinez ses artefacts et ses réglages de rétention.</value></data>
   <data name="MetricThresholdTitle" xml:space="preserve"><value>Seuil de métrique applicative atteint</value></data>
+  <data name="MetricThresholdWord" xml:space="preserve"><value>Seuil</value></data>
   <data name="MetricThresholdIntro" xml:space="preserve"><value>Une métrique applicative a franchi un seuil configuré. Examinez ses mesures et les réglages de supervision.</value></data>
   <data name="AlertTriggeredTitle" xml:space="preserve"><value>Alerte de supervision déclenchée</value></data>
+  <data name="AlertTriggeredWord" xml:space="preserve"><value>Alerte</value></data>
   <data name="AlertTriggeredIntro" xml:space="preserve"><value>Une règle de supervision a déclenché une alerte. Examinez le serveur concerné et les mesures ci-dessous.</value></data>
   <data name="CertificateFailedTitle" xml:space="preserve"><value>Échec du contrôle de renouvellement du certificat</value></data>
+  <data name="CertificateFailedWord" xml:space="preserve"><value>Échec</value></data>
   <data name="CertificateFailedIntro" xml:space="preserve"><value>Le contrôle de renouvellement du certificat a échoué. Examinez l'état du certificat du serveur et le diagnostic signalé.</value></data>
   <data name="CertificateExpiringTitle" xml:space="preserve"><value>Certificat bientôt expiré</value></data>
+  <data name="CertificateExpiringWord" xml:space="preserve"><value>Expiration</value></data>
   <data name="CertificateExpiringIntro" xml:space="preserve"><value>Un certificat a atteint un délai d'alerte avant expiration. Vérifiez que son renouvellement fonctionne, et renouvelez-le à la main sinon.</value></data>
   <data name="SecretExpiringTitle" xml:space="preserve"><value>Secret bientôt expiré</value></data>
+  <data name="SecretExpiringWord" xml:space="preserve"><value>Expiration</value></data>
   <data name="SecretExpiringIntro" xml:space="preserve"><value>Un secret approche de sa date d'expiration. Examinez son coffre et prévoyez son renouvellement.</value></data>
   <data name="ServerOfflineTitle" xml:space="preserve"><value>Serveur hors ligne</value></data>
+  <data name="ServerOfflineWord" xml:space="preserve"><value>Hors ligne</value></data>
   <data name="ServerOfflineIntro" xml:space="preserve"><value>Le serveur ne se signale plus comme prévu. Examinez son dernier signal et sa connectivité.</value></data>
   <data name="ChannelTestTitle" xml:space="preserve"><value>Test du canal de notification</value></data>
+  <data name="ChannelTestWord" xml:space="preserve"><value>Test</value></data>
   <data name="ChannelTestIntro" xml:space="preserve"><value>Ceci est un test du canal de notification. Recevoir ce message confirme la remise à cette adresse.</value></data>
   <data name="StatusPassed" xml:space="preserve"><value>Réussi</value></data>
   <data name="StatusFailed" xml:space="preserve"><value>En échec</value></data>
@@ -230,4 +301,6 @@
   <data name="SshChangeKeysFileNoLongerWatched" xml:space="preserve"><value>{0} n'est plus surveillé : son compte a été supprimé de l'hôte.</value></data>
   <data name="SshChangeKeyAdded" xml:space="preserve"><value>Nouvelle clé ajoutée à {0} ({1} {2}).</value></data>
   <data name="SshChangeKeyRemoved" xml:space="preserve"><value>Clé retirée de {0} ({1} {2}).</value></data>
+  <data name="LaunchProblem_ScheduleOccurrenceMissed" xml:space="preserve"><value>L'occurrence planifiée du {first} UTC a été manquée au-delà de la limite de rattrapage de {limit} h et n'a pas été lancée.</value></data>
+  <data name="LaunchProblem_ScheduleOccurrencesMissed" xml:space="preserve"><value>{count} occurrences planifiées, du {first} au {last} UTC, ont été manquées au-delà de la limite de rattrapage de {limit} h et n'ont pas été lancées.</value></data>
 </root>

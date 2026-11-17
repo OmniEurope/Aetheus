@@ -7,7 +7,6 @@ namespace Aetheus.E2E;
 /// Reserve the full-page loader for an initial visit.</summary>
 [Category("E2E")]
 [Category("Pipelines")]
-[RollbackRelevant]
 public class PageReturnTests : E2ETestBase
 {
     [SetUp]

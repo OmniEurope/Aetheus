@@ -24,11 +24,12 @@ public static class PipelineRunGateProducer
     private static IReadOnlyDictionary<string, string> StatusVariables => PipelineControlVerdict.TestGateStatusVariables;
 
     /// <param name="RunId">The run the producing step belongs to.</param>
+    /// <param name="RunNumber">Its number within its pipeline, the one a person reads.</param>
     /// <param name="PipelineName">That run's pipeline.</param>
     /// <param name="StepId">The step that published the non-zero status.</param>
     /// <param name="StepName">Its name, as the timeline shows it.</param>
     /// <param name="FailedTests">The failed test names the run published beside the status, when it did.</param>
-    public sealed record Producer(int RunId, string PipelineName, int StepId, string StepName, IReadOnlyList<string> FailedTests);
+    public sealed record Producer(int RunId, int RunNumber, string PipelineName, int StepId, string StepName, IReadOnlyList<string> FailedTests);
 
     /// <summary>The status variable a seal test key is graded from, null for a key the seal does not declare.</summary>
     public static string? StatusVariableOf(string testKey) =>
@@ -76,7 +77,7 @@ public static class PipelineRunGateProducer
             if (step.TriggeredRunId is { } childId && children.TryGetValue(childId, out var child)
                 && FindIn(statusVariable, child, children, visited) is { } nested)
                 return nested;
-            return new Producer(run.Id, run.PipelineName, step.Id, step.StepName,
+            return new Producer(run.Id, run.BuildNumber, run.PipelineName, step.Id, step.StepName,
                 FailedTestsOf(FailedTestsVariableOf(statusVariable), step, ordered));
         }
         return null;

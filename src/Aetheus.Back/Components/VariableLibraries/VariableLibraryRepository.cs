@@ -179,6 +179,29 @@ public class VariableLibraryRepository(AppDbContext db) : IVariableLibraryReposi
             .ConfigureAwait(false);
     }
 
+    public async Task<List<(int Id, string Name, string Key)>> FindKeyHoldersWithCrossAccessAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default)
+    {
+        // Same reach as FindByNamesWithCrossAccessAsync (the run's own project only), key names only.
+        var found = await db.VariableLibraries
+            .AsNoTracking()
+            .Where(vl => vl.ProjectId == projectId
+                || (vl.ProjectId == null && vl.EnvironmentId != null && vl.Environment!.ProjectId == projectId)
+                || (vl.ProjectId == null && vl.ProjectServerId != null && vl.ProjectServer!.ProjectId == projectId)
+                || (vl.ProjectId == null && vl.EnvironmentId == null && vl.ProjectServerId == null))
+            .SelectMany(vl => vl.Entries.Where(e => keys.Contains(e.Key)).Select(e => new
+            {
+                vl.Id,
+                vl.Name,
+                e.Key,
+                Own = vl.ProjectId == projectId
+            }))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return [.. found.OrderByDescending(item => item.Own).ThenBy(item => item.Name, StringComparer.Ordinal)
+            .Select(item => (item.Id, item.Name, item.Key))];
+    }
+
     public async Task<List<string>> GetLibraryNamesAsync(int? projectId, List<int>? accessibleIds = null, CancellationToken ct = default)
     {
         var query = db.VariableLibraries

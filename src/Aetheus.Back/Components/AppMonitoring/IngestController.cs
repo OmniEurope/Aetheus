@@ -15,6 +15,7 @@ namespace Aetheus.Back.Components.AppMonitoring;
 [Route("api/ingest/otlp/v1")]
 [AllowAnonymous]
 [EnableRateLimiting("otlp-ingest")]
+[RelaxedCommitDurability]
 [RequestSizeLimit(1024 * 1024)]
 public sealed class IngestController(
     IIngestService ingest,
@@ -35,6 +36,20 @@ public sealed class IngestController(
             return Unauthorized();
         var result = await configuration.GetAsync(appId.Value, ct).ConfigureAwait(false);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary> R-29: the immediate export a user asked for from the Supervision, polled by the
+    /// <c>Aetheus.Telemetry</c> package (1.2.2 or later) with its ingest key. 200 with the request
+    /// identifier once, to the first poll after the request; 204 when none is pending. </summary>
+    [HttpGet("configuration/export-request")]
+    public async Task<IActionResult> ExportRequest(
+        [FromServices] IAppImmediateActionService actions, CancellationToken ct)
+    {
+        var appId = await ResolveRequestAppIdAsync(ct).ConfigureAwait(false);
+        if (appId is null)
+            return Unauthorized();
+        var requestId = await actions.TakeTelemetryExportRequestAsync(appId.Value, ct).ConfigureAwait(false);
+        return requestId is null ? NoContent() : Ok(new { requestId });
     }
 
     [HttpPost("metrics")]

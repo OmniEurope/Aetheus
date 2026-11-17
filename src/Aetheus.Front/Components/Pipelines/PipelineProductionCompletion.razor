@@ -1,0 +1,48 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-38: a production pipeline created while its Compose file could not be read (or whose production was never prepared) offers to
+   complete that preparation instead of being deleted and created again. One main action; what is missing is said by name, and
+   the Compose path can be given when none was found. *@
+@if (_setup is not null && (_done is not null || _setup.NeedsPreparation))
+{
+    @if (_done is not null)
+    {
+        <OmniAlert Severity="OmniSeverity.Success" data-testid="pipeline-production-completed">@_done</OmniAlert>
+    }
+    else
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ProductionNotPrepared"]" data-testid="pipeline-production-completion">
+            <OmniStack Gap="OmniSpacing.Small">
+                <span data-testid="pipeline-production-completion-cause">@Cause</span>
+                @if (!_setup.Ready)
+                {
+                    <OmniFormField For="pipeline-production-compose" Label="@L["PipelineProdCompletionCompose"]" Required="true"
+                                   Help="@L["PipelineProdCompletionComposeHelp"]" Class="omni-u-w-100">
+                        <OmniTextBox Id="pipeline-production-compose" @bind-Value="_composeTyped" Placeholder="deploy/compose/remote.compose.yml" Class="omni-u-w-100" />
+                    </OmniFormField>
+                }
+                @if (!_setup.Ready)
+                {
+                    <PipelineProductionApache Setup="@_setup" />
+                }
+                @if (ServerChoiceNeeded)
+                {
+                    <OmniFormField For="pipeline-production-server" Label="@L["PipelineSetupProdServer"]" Required="true"
+                                   Help="@L["PipelineSetupProdServerHelp"]" Class="omni-u-w-100">
+                        <OmniDropDown Id="pipeline-production-server" TValue="string" Options="@ServerOptions"
+                                      Value="@_setup.Server" ValueChanged="@ChooseServer" ValueExpression="@(() => ServerValue)"
+                                      AllowEmpty="true" Placeholder="@L["PipelineSetupProdServerChoose"]" Class="omni-u-w-100" />
+                    </OmniFormField>
+                }
+                @* R-27: every click ends on a visible outcome: a failure identical to the cause above is said as retried. *@
+                @if (_failure is not null)
+                {
+                    <span class="omni-u-text-danger" data-testid="pipeline-production-completion-error">@_failure</span>
+                }
+                <div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" Busy="@_busy" OnClick="@CompleteAsync"
+                                title="@L["PipelineProdCompletionActionHelp"]" data-testid="pipeline-production-complete"><Icon><OmniIcon Name="OmniIconName.Wrench" /></Icon><ChildContent><span>@L["PipelineProdCompletionAction"]</span></ChildContent></OmniButton>
+                </div>
+            </OmniStack>
+        </OmniAlert>
+    }
+}

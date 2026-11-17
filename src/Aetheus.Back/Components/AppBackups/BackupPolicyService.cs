@@ -91,6 +91,22 @@ internal sealed class BackupPolicyService(
         return Map(policy);
     }
 
+    public async Task<BackupPolicyDto?> SetScheduleAsync(int id, string scheduleCron, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(scheduleCron))
+            throw new BadRequestException("The backup schedule is required.");
+        ValidateCron(scheduleCron);
+
+        var policy = await repo.FindPolicyAsync(id, ct).ConfigureAwait(false);
+        if (policy is null) return null;
+
+        policy.ScheduleCron = scheduleCron.Trim();
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await audit.LogAsync("Updated", "BackupPolicy", policy.Id, policy.Name, ct).ConfigureAwait(false);
+        await BroadcastChangedAsync(policy.ProjectId, ct).ConfigureAwait(false);
+        return Map(policy);
+    }
+
     public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
     {
         var policy = await repo.FindPolicyAsync(id, ct).ConfigureAwait(false);

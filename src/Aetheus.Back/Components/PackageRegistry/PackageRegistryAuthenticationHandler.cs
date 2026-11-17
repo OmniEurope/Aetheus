@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -13,7 +14,9 @@ internal sealed class PackageRegistryAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IPersonalAccessTokenService personalAccessTokens)
+    IPersonalAccessTokenService personalAccessTokens,
+    PackageRunTokens runTokens,
+    IPackageRegistryRepository repository)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "PackageRegistry";
@@ -23,8 +26,11 @@ internal sealed class PackageRegistryAuthenticationHandler(
         var token = ReadToken();
         if (token is null)
             return AuthenticateResult.NoResult();
+        if (PackageRunTokens.IsRunToken(token))
+            return await AuthenticateRunTokenAsync(token).ConfigureAwait(false);
         if (!token.StartsWith(PatConstants.TokenPrefix, StringComparison.Ordinal))
-            return AuthenticateResult.Fail("The package registry requires an Aetheus personal access token.");
+            return AuthenticateResult.Fail(
+                "The package registry requires an Aetheus personal access token or a pipeline run token.");
 
         var principal = await personalAccessTokens.ValidateAsync(token, Context.RequestAborted).ConfigureAwait(false);
         if (principal is null)
@@ -45,6 +51,25 @@ internal sealed class PackageRegistryAuthenticationHandler(
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
     }
 
+    /// <summary>A pipeline run's registry credential (<see cref="PackageRunTokens"/>): authentic, unexpired, its run
+    /// still <c>Running</c> in that project and its pipeline owner still an active Admin (fail closed: a database fault is a 500,
+    /// never an acceptance). The principal carries no role, so it reads what any authenticated caller reads and
+    /// publishes only through <see cref="PackageRegistryPolicies.Publish"/>.</summary>
+    private async Task<AuthenticateResult> AuthenticateRunTokenAsync(string token)
+    {
+        if (runTokens.Validate(token) is not var (runId, projectId)
+            || !await repository.IsRunAuthorizedAsync(runId, projectId, Context.RequestAborted).ConfigureAwait(false))
+            return AuthenticateResult.Fail("Invalid, expired or finished pipeline run token.");
+
+        var identity = new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.Name, PackageRunTokens.Describe(runId)),
+            new Claim(PackageRunTokens.RunClaim, runId.ToString(CultureInfo.InvariantCulture)),
+            new Claim(PackageRunTokens.ProjectClaim, projectId.ToString(CultureInfo.InvariantCulture))
+        ], SchemeName);
+        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
+    }
+
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
         Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -56,7 +81,8 @@ internal sealed class PackageRegistryAuthenticationHandler(
     {
         var apiKey = Request.Headers["X-NuGet-ApiKey"].FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(apiKey)
-            && apiKey.Trim().StartsWith(PatConstants.TokenPrefix, StringComparison.Ordinal))
+            && (apiKey.Trim().StartsWith(PatConstants.TokenPrefix, StringComparison.Ordinal)
+                || PackageRunTokens.IsRunToken(apiKey.Trim())))
             return apiKey.Trim();
 
         var authorization = Request.Headers.Authorization.ToString();

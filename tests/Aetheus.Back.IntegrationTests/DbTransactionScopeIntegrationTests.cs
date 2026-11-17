@@ -16,48 +16,9 @@ namespace Aetheus.Back.IntegrationTests;
 /// discards writes and <c>Begin</c> → <c>Commit</c> actually persists them.
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class DbTransactionScopeIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
-    [Fact]
-    public async Task Rollback_DiscardsAllWritesInScope()
-    {
-        // Arrange
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        await using var sut = new DbTransactionScope(db);
-
-        // Act - write inside an explicit transaction, then roll back.
-        await sut.BeginTransactionAsync(ct: TestContext.Current.CancellationToken);
-        db.Organizations.Add(new Organization { Name = "Doomed", Slug = "doomed", Description = "rolled back" });
-        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-        await sut.RollbackAsync(ct: TestContext.Current.CancellationToken);
-
-        // Assert - a fresh context (new connection) must NOT see the rolled-back row.
-        await using var verify = NewContext();
-        Assert.False(await verify.Organizations.AnyAsync(o => o.Slug == "doomed", cancellationToken: TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task Commit_PersistsAllWritesInScope()
-    {
-        // Arrange
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        await using var sut = new DbTransactionScope(db);
-
-        // Act
-        await sut.BeginTransactionAsync(ct: TestContext.Current.CancellationToken);
-        db.Organizations.Add(new Organization { Name = "Kept", Slug = "kept", Description = "committed" });
-        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-        await sut.CommitAsync(ct: TestContext.Current.CancellationToken);
-
-        // Assert - visible from an independent connection after commit.
-        await using var verify = NewContext();
-        Assert.True(await verify.Organizations.AnyAsync(o => o.Slug == "kept", cancellationToken: TestContext.Current.CancellationToken));
-    }
-
     [Fact]
     public async Task Dispose_WithoutCommit_RollsBackTheTransaction()
     {

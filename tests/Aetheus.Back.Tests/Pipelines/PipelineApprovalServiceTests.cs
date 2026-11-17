@@ -375,13 +375,14 @@ public class PipelineApprovalServiceTests
                 Status = ApprovalStatus.Approved
             });
         _runServiceMock.ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>()).Returns(false);
+        _repoMock.GetRunNumberAsync(10, Arg.Any<CancellationToken>()).Returns(7);
 
         var refusal = await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.Approved
         }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Contains("The approval was recorded, but run 10 did not resume", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("The approval was recorded, but run #7 did not resume", refusal.Message, StringComparison.Ordinal);
         await _runServiceMock.Received(1).ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>());
     }
 
@@ -427,5 +428,147 @@ public class PipelineApprovalServiceTests
         await _repoMock.DidNotReceive().TryResolveApprovalAsync(
             Arg.Any<int>(), Arg.Any<ApprovalStatus>(), Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await _runServiceMock.DidNotReceive().ResumeAfterApprovalAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R8_AlreadyDecided_NamesTheRunByItsNumber_NotItsTechnicalKey()
+    {
+        _repoMock.FindApprovalAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineApproval
+        {
+            Id = 1,
+            PipelineRunId = 2555,
+            StageName = "Deploy",
+            Status = ApprovalStatus.Approved
+        });
+        _repoMock.GetRunNumberAsync(2555, Arg.Any<CancellationToken>()).Returns(12);
+
+        var refusal = await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(
+            1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, TestContext.Current.CancellationToken));
+
+        Assert.Contains("(run #12, stage 'Deploy')", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("2555", refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(ApprovalStatus.Approved)]
+    [InlineData(ApprovalStatus.Rejected)]
+    public async Task R8_TheDecisionAnswer_CarriesTheRunNumber(ApprovalStatus decision)
+    {
+        _repoMock.GetRunNumberAsync(10, Arg.Any<CancellationToken>()).Returns(7);
+        _repoMock.TryResolveApprovalAsync(
+                1, decision, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineApproval { Id = 1, PipelineRunId = 10, StageName = "deploy", Status = decision });
+        _runServiceMock.ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>()).Returns(true);
+        _runServiceMock.ApplyRefusalAsync(10, Arg.Any<CancellationToken>()).Returns(PipelineStatus.Failed);
+
+        var answer = await _sut.DecideApprovalAsync(
+            1, new ApprovalDecisionRequest { Decision = decision }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(10, answer.PipelineRunId);
+        Assert.Equal(7, answer.PipelineRunNumber);
+    }
+
+    private static PipelineRunDeployedReleaseDto StaleRelease(bool behind = true, bool alreadyDeployed = false) => new()
+    {
+        ReleaseId = 9,
+        Version = "c-7abbb42",
+        CommitHash = "7abbb42eff",
+        SourceBranch = "develop",
+        SourceCommitHash = "e8c21992aa",
+        IsBehindSourceHead = behind,
+        IsAlreadyDeployed = alreadyDeployed
+    };
+
+    private void GivenApprovalCanBeResolved()
+    {
+        _repoMock.TryResolveApprovalAsync(
+                1, ApprovalStatus.Approved, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineApproval { Id = 1, PipelineRunId = 10, StageName = "deploy", Status = ApprovalStatus.Approved });
+        _runServiceMock.ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>()).Returns(true);
+    }
+
+    [Fact]
+    public async Task R34_ThePendingApproval_CarriesTheReleaseTheRunRestores_AndADecidedOneDoesNot()
+    {
+        _repoMock.GetApprovalsAsync(1, Arg.Any<CancellationToken>()).Returns(
+        [
+            new PipelineApproval { Id = 1, PipelineRunId = 1, StageName = "deploy", Status = ApprovalStatus.Pending },
+            new PipelineApproval { Id = 2, PipelineRunId = 1, StageName = "old", Status = ApprovalStatus.Approved }
+        ]);
+        _repoMock.GetDeployedReleaseAsync(1, true, Arg.Any<CancellationToken>()).Returns(StaleRelease(alreadyDeployed: true));
+
+        var result = await _sut.GetApprovalsAsync(1, TestContext.Current.CancellationToken);
+
+        var pending = result.Single(approval => approval.Id == 1).DeployedRelease;
+        Assert.NotNull(pending);
+        Assert.True(pending.IsBehindSourceHead);
+        Assert.True(pending.IsAlreadyDeployed);
+        Assert.Null(result.Single(approval => approval.Id == 2).DeployedRelease);
+    }
+
+    [Fact]
+    public async Task R34_AnApprovalWithNoPendingDecision_DoesNotReadTheRelease()
+    {
+        _repoMock.GetApprovalsAsync(1, Arg.Any<CancellationToken>())
+            .Returns([new PipelineApproval { Id = 2, PipelineRunId = 1, StageName = "old", Status = ApprovalStatus.Approved }]);
+
+        await _sut.GetApprovalsAsync(1, TestContext.Current.CancellationToken);
+
+        await _repoMock.DidNotReceive().GetDeployedReleaseAsync(Arg.Any<int>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task R34_ApprovingAReleaseOlderThanTheHead_OrAlreadyDeployed_NeedsNoSeparateConfirmation(bool behind, bool alreadyDeployed)
+    {
+        GivenApprovalCanBeResolved();
+        _repoMock.GetDeployedReleaseAsync(10, true, Arg.Any<CancellationToken>()).Returns(StaleRelease(behind, alreadyDeployed));
+
+        var answer = await _sut.DecideApprovalAsync(
+            1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ApprovalStatus.Approved, answer.Status);
+        await _runServiceMock.Received(1).ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R34_ARejection_NeverNeedsTheConfirmation()
+    {
+        _repoMock.TryResolveApprovalAsync(
+                1, ApprovalStatus.Rejected, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineApproval { Id = 1, PipelineRunId = 10, StageName = "deploy", Status = ApprovalStatus.Rejected });
+        _runServiceMock.ApplyRefusalAsync(10, Arg.Any<CancellationToken>()).Returns(PipelineStatus.Failed);
+        _repoMock.GetDeployedReleaseAsync(10, true, Arg.Any<CancellationToken>()).Returns(StaleRelease());
+
+        var answer = await _sut.DecideApprovalAsync(
+            1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Rejected }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ApprovalStatus.Rejected, answer.Status);
+    }
+
+    [Fact]
+    public async Task R34_ARunWhoseReleaseIsTheHead_AndNotInProduction_NeedsNoConfirmation()
+    {
+        GivenApprovalCanBeResolved();
+        _repoMock.GetDeployedReleaseAsync(10, true, Arg.Any<CancellationToken>())
+            .Returns(StaleRelease(behind: false, alreadyDeployed: false));
+
+        var answer = await _sut.DecideApprovalAsync(
+            1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ApprovalStatus.Approved, answer.Status);
+    }
+
+    [Fact]
+    public async Task R8_TheRunApprovals_CarryTheRunNumber()
+    {
+        _repoMock.GetApprovalsAsync(1, Arg.Any<CancellationToken>())
+            .Returns([new PipelineApproval { Id = 1, PipelineRunId = 1, StageName = "deploy", Status = ApprovalStatus.Pending }]);
+        _repoMock.GetRunNumberAsync(1, Arg.Any<CancellationToken>()).Returns(5);
+
+        var result = await _sut.GetApprovalsAsync(1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(5, Assert.Single(result).PipelineRunNumber);
     }
 }

@@ -18,7 +18,7 @@
         }
         else
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreateClicked" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
         }
     </ActionsContent>
 </OmniPageHeader>
@@ -125,7 +125,7 @@ else
             }
             else if (_projectFilter.HasValue && _canWrite)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreateClicked"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
             }
         </ActionContent>
     </EmptyState>

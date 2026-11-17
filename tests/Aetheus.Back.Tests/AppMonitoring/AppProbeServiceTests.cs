@@ -49,7 +49,7 @@ public sealed class AppProbeServiceTests
                 results.Count == 2
                 && results.Any(x => x.MonitoredAppId == 1 && x.IsUp && x.StatusCode == 204 && x.Error == null)
                 && results.Any(x => x.MonitoredAppId == 2 && !x.IsUp && x.StatusCode == 503
-                    && x.Error != null && x.Error.Contains("expected 200", StringComparison.Ordinal))),
+                    && x.Error != null && x.Error.Contains("expected=200", StringComparison.Ordinal))),
             Arg.Any<CancellationToken>());
         _http.Received(2).CreateClient(AppProbeService.ProbeHttpClientName);
     }
@@ -74,7 +74,8 @@ public sealed class AppProbeServiceTests
         await _monitoring.Received(1).IngestProbeResultsAsync(
             Arg.Is<IReadOnlyCollection<AppProbeResultDto>>(results =>
                 results.Single().MonitoredAppId == 8 && !results.Single().IsUp
-                && results.Single().StatusCode == null && results.Single().Error!.Length == 500),
+                && results.Single().StatusCode == null
+                && results.Single().Error == "probe:unreachable;host=public.example"),
             Arg.Any<CancellationToken>());
     }
 
@@ -89,7 +90,8 @@ public sealed class AppProbeServiceTests
             new Dictionary<string, string?> { ["AppMonitoring:BackendProbe:Enabled"] = "false" }).Build();
         var service = new AppProbeService(
             provider.GetRequiredService<IServiceScopeFactory>(), _http, config,
-            NullLogger<AppProbeService>.Instance, _time);
+            NullLogger<AppProbeService>.Instance, _time,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await service.StartAsync(TestContext.Current.CancellationToken);
         await service.StopAsync(TestContext.Current.CancellationToken);
@@ -105,7 +107,8 @@ public sealed class AppProbeServiceTests
             .BuildServiceProvider();
         return new AppProbeService(
             provider.GetRequiredService<IServiceScopeFactory>(), _http,
-            new ConfigurationBuilder().Build(), NullLogger<AppProbeService>.Instance, _time);
+            new ConfigurationBuilder().Build(), NullLogger<AppProbeService>.Instance, _time,
+            leaderLease: LeaderLeaseDouble.Leader());
     }
 
     private sealed class RouteStatusHandler : HttpMessageHandler

@@ -7,7 +7,7 @@ namespace Aetheus.Back.Components.PersonalAccessTokens;
 
 internal sealed class PersonalAccessTokenService(
     IPersonalAccessTokenRepository repo,
-    JwtOptions jwtOptions,
+    TokenHashKeys tokenHashKeys,
     TimeProvider timeProvider,
     IAuditService audit)
     : IPersonalAccessTokenService
@@ -27,7 +27,7 @@ internal sealed class PersonalAccessTokenService(
         {
             UserId = userId,
             Name = request.Name.Trim(),
-            TokenHash = HashToken(plaintext),
+            TokenHash = tokenHashKeys.Hash(TokenHashPurpose.PersonalAccessToken, plaintext),
             TokenPrefix = plaintext[..Math.Min(PatConstants.PrefixDisplayLength, plaintext.Length)],
             Scope = request.Scope,
             ExpiresAt = now.AddDays(request.ExpirationDays)
@@ -75,7 +75,8 @@ internal sealed class PersonalAccessTokenService(
             return null;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var token = await repo.FindActiveByHashWithUserAsync(HashToken(plaintextToken), now, ct).ConfigureAwait(false);
+        var token = await repo.FindActiveByHashWithUserAsync(
+            tokenHashKeys.HashCandidates(TokenHashPurpose.PersonalAccessToken, plaintextToken), now, ct).ConfigureAwait(false);
         if (token is null)
             return null;
 
@@ -87,8 +88,6 @@ internal sealed class PersonalAccessTokenService(
         var roles = token.User.UserRoles.Select(ur => ur.Role.Name).ToList();
         return new PatPrincipal(token.UserId, token.User.Username, roles, token.Scope, token.Id);
     }
-
-    private string HashToken(string token) => AuthTokenHelper.HashToken(jwtOptions.SigningKey, token);
 
     private static PersonalAccessTokenDto Map(PersonalAccessToken t) => new()
     {

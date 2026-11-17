@@ -17,7 +17,8 @@ public sealed class PipelineFailedParentChildCanceller(
     public async Task<int> CancelRunningChildrenAsync(int failedParentRunId, CancellationToken ct)
     {
         var childIds = await repo.GetTriggeredChildRunIdsAsync(failedParentRunId, ct).ConfigureAwait(false);
-        var cancellation = PipelineRunCancellation.BySystem($"Parent run #{failedParentRunId} failed");
+        var parentNumber = (await repo.GetRunNumbersAsync([failedParentRunId], ct).ConfigureAwait(false)).GetValueOrDefault(failedParentRunId);
+        var cancellation = PipelineRunCancellation.BySystem($"Parent run #{parentNumber} failed");
 
         var cancelled = 0;
         foreach (var childId in childIds)

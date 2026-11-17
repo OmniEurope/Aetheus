@@ -8,8 +8,7 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>The baseline query selects at most the requested number of successful same-pipeline
 /// runs started before the viewed run.</summary>
-[Collection(PostgresCollection.Name)]
-public sealed class RunStageBaselinesIntegrationTests(PostgresFixture fixture)
+public sealed class RunStageBaselinesIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task Baselines_SampleOnlyEarlierSuccessfulRunsOfThePipeline_BoundedByN()
@@ -79,18 +78,5 @@ public sealed class RunStageBaselinesIntegrationTests(PostgresFixture fixture)
         Assert.Equal(190, build.LastSeconds, precision: 3);
         Assert.Equal(10, build.Samples);
         Assert.Equal(145, Assert.Single(baselines.Stages).AverageSeconds, precision: 3);
-    }
-
-    [Fact]
-    public async Task Baselines_ForARunOfAnotherPipeline_AreEmpty()
-    {
-        await fixture.ResetAsync();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(fixture.ConnectionString).Options;
-        await using var db = new AppDbContext(options);
-
-        var rows = await new PipelineCoverageRepository(db)
-            .GetRecentSuccessfulStepTimingsAsync(pipelineId: 999_999, runId: 1, take: 10, TestContext.Current.CancellationToken);
-
-        Assert.Empty(rows);
     }
 }

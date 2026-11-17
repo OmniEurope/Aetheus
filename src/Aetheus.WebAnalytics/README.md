@@ -39,7 +39,7 @@ anonymous refusal falls back to the single essential `aetheus_analytics_optout` 
 
 Include the immutable, package-versioned asset
 `/_content/Aetheus.WebAnalytics/<package version>/aetheus-web-analytics.js` in the host (for example
-`/_content/Aetheus.WebAnalytics/1.1.1/aetheus-web-analytics.js` with package 1.1.1). The script tracks initial and
+`/_content/Aetheus.WebAnalytics/1.2.1/aetheus-web-analytics.js` with package 1.2.1). The script tracks initial and
 SPA route page views without persistent browser state. Browser errors and navigation durations remain
 disabled unless `captureErrors` and `capturePerformance` are explicitly `true`; error messages, stacks,
 resource URLs and user input are never collected. Global Privacy Control and Do Not Track are honored.

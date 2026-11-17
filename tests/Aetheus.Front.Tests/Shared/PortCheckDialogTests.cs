@@ -113,14 +113,14 @@ public class PortCheckDialogTests : BunitContext
     }
 
     [Fact]
-    public void RefreshLink_QueuesAScanAndRunsTheCheckAgain()
+    public async Task RefreshLink_QueuesAScanAndRunsTheCheckAgain()
     {
         var cut = RenderWith(Result(
             new PortCheckEntryDto { Port = 10041, IsFree = true, Observation = PortObservationState.NotListening },
             lastScan: Scan,
             observationAvailable: true));
 
-        cut.FindAll("button").First(button => button.TextContent.Contains("PortScanRefresh", StringComparison.Ordinal)).Click();
+        await cut.FindAll("button").First(button => button.TextContent.Contains("PortScanRefresh", StringComparison.Ordinal)).ClickAsync(new());
 
         Assert.Contains(_handler!.Requests, request =>
             request.Method == "POST" && request.Url.EndsWith("/ports/observe", StringComparison.Ordinal));

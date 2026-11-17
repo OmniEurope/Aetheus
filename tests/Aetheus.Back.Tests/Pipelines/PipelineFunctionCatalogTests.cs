@@ -90,9 +90,8 @@ public sealed partial class PipelineFunctionCatalogTests
         Assert.Same(PipelineFunctionCatalog.EnsureDotnetSdk, function);
         Assert.Equal(PipelineFunctionAccess.Build, function.Access);
         Assert.Equal(["DOTNET"], function.Outputs);
-        var manifest = Assert.Single(function.Parameters);
-        Assert.Equal("global_json", manifest.Name);
-        Assert.False(manifest.Required);
+        Assert.Equal(["global_json", "project_root"], function.Parameters.Select(parameter => parameter.Name));
+        Assert.All(function.Parameters, parameter => Assert.False(parameter.Required));
     }
 
     [Fact]
@@ -182,7 +181,7 @@ public sealed partial class PipelineFunctionCatalogTests
     [Theory]
     [InlineData("verify-idle-frontend", new[] { "url" }, new[] { "url" })]
     [InlineData("settle-fast-release-transaction", new[] { "env_file" }, new string[0])]
-    [InlineData("verify-production-state", new[] { "env_file", "state_dir", "legacy_env_file", "compose_project" }, new string[0])]
+    [InlineData("verify-production-state", new[] { "env_file", "state_dir", "compose_project" }, new string[0])]
     [InlineData("verify-production-secrets", new[] { "keys", "env_file" }, new[] { "keys" })]
     [InlineData("backfill-env-secret", new[] { "key", "env_file" }, new[] { "key" })]
     [InlineData("reconcile-env-urls", new[] { "urls", "env_file" }, new[] { "urls" })]

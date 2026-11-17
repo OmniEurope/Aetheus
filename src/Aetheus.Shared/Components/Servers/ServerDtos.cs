@@ -273,6 +273,16 @@ public sealed record ServerHeartbeatDto
     /// Null for an agent predating the field or before its first collection completed.</summary>
     public SshConfigDataDto? SshConfig { get; init; }
 
+    /// <summary>Recette R-11: the reboots the host decides by itself (unattended-upgrades, cron, systemd timers, a
+    /// scheduled shutdown), which the planner shows read only. Null for an agent predating the field or before its first
+    /// collection completed: the backend then keeps what it stored.</summary>
+    public MachineRebootDataDto? MachineReboots { get; init; }
+
+    /// <summary>Recette R-27: the jobs the host schedules itself (system and user crontabs, the run-parts directories, the
+    /// whitelisted systemd timers) and its time zone, which the planner shows read only. Null for an agent predating the
+    /// field or before its first collection completed: the backend then keeps what it stored.</summary>
+    public MachineJobsDataDto? MachineJobs { get; init; }
+
     /// <summary>
     /// S-FEAT-HBDX / S-TECH-CAPX: agent-reported capability diagnostics that explain WHY a derived
     /// capability shows OFF despite the grant being installed - e.g. "sudoers drop-in aetheus-package
@@ -303,11 +313,26 @@ public sealed record ServerHeartbeatDto
     public bool? ObservedPortsAvailable { get; init; }
 
     /// <summary>
+    /// The protocols whose probe really succeeded, each with the age of its measurement. A protocol that
+    /// is missing was not measured, so its observations are kept rather than treated as gone. Null
+    /// identifies an agent predating the field: every protocol is then taken as measured now.
+    /// </summary>
+    [MaxLength(PortRegistryLimits.MaxProtocolLength)]
+    public List<ObservedProtocolScanDto>? ObservedProtocols { get; init; }
+
+    /// <summary>
     /// The four instants of the agent's previous heartbeat exchange, from which the backend estimates
     /// the agent's clock offset. Null from an agent predating the measure, on the first beat after a
     /// start, or when the backend did not stamp its reply: the offset is then unknown, never zero.
     /// </summary>
     public ClockSampleDto? ClockSample { get; init; }
+
+    /// <summary>
+    /// How the previous agent process ended, sent with the first successful heartbeat of a new process and
+    /// then no more. Null from an agent predating the field, on every later beat, and on a first install:
+    /// the backend then knows nothing, it never reads null as "clean exit".
+    /// </summary>
+    public AgentExitReportDto? PreviousExit { get; init; }
 }
 
 /// <summary>

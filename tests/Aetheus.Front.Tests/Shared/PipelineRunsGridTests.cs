@@ -14,6 +14,51 @@ public class PipelineRunsGridTests : BunitContext
 {
     public PipelineRunsGridTests() => BunitTestHelper.RegisterServices(this);
 
+    // R-35: a release number in the grid is shown short, the full number stays in the hover hint.
+    [Fact]
+    public void ADeployRun_ShowsItsReleaseNumberShort_WithTheFullNumberInTheHint()
+    {
+        const string longVersion = "c-4796537abcdef0123456789abcdef0123456789a";
+        var run = new PipelineRunDto
+        {
+            Id = 3167,
+            PipelineId = 4,
+            PipelineName = "deploy",
+            Status = PipelineStatus.Success,
+            CommitHash = "e8c21992aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            DeployedRelease = new PipelineRunDeployedReleaseDto { ReleaseId = 9, Version = longVersion, CommitHash = "7abbb42eaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        };
+        // The hint is a sentence of the resource file with the full number placed in it.
+        Services.AddSingleton<Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings>>(Aetheus.Front.Tests.TestDoubles.ResxLocalizer.English());
+
+        var cut = Render<PipelineRunsGrid>(parameters => parameters
+            .Add(component => component.Items, new List<PipelineRunDto> { run }));
+
+        cut.WaitForAssertion(() =>
+        {
+            var version = cut.Find(".pipeline-run-deployed-version");
+            Assert.Equal("c-4796537a", version.TextContent.Trim());
+            Assert.Contains(longVersion, version.GetAttribute("title"), StringComparison.Ordinal);
+        });
+    }
+
+    // R-8: a person reads the number within the pipeline; the address keeps the technical key.
+    [Fact]
+    public void ARow_ShowsTheRunNumber_AndLinksByTheTechnicalKey()
+    {
+        var run = new PipelineRunDto { Id = 3008, BuildNumber = 12, PipelineId = 4, PipelineName = "deploy", Status = PipelineStatus.Success };
+
+        var cut = Render<PipelineRunsGrid>(parameters => parameters
+            .Add(component => component.Items, new List<PipelineRunDto> { run }));
+
+        cut.WaitForAssertion(() =>
+        {
+            var link = cut.Find("a[href*='/pipelines/runs/3008']");
+            Assert.Equal("#12", link.TextContent);
+            Assert.DoesNotContain("#3008", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
     [Fact]
     public void LoadingIndicator_IsOeGridLoadingState_WithAccessibleStatus()
     {
@@ -99,6 +144,28 @@ public class PipelineRunsGridTests : BunitContext
                 && badge.ClassList.Any(name => name.Contains("warning", StringComparison.OrdinalIgnoreCase)));
             Assert.Single(cut.FindAll(".pipeline-launch-refused-badge"));
         });
+    }
+
+    /// <summary>R-36: the run a refused manual launch leaves, and the one a refused follow-up leaves on its target, both
+    /// read "Lancement refusé" in the runs grid; a plain failure does not.</summary>
+    [Fact]
+    public void R36_ARefusedManualLaunchAndARefusedFollowUp_BothShowTheRefusedLaunchBadge()
+    {
+        var manual = StoredProblem.Compose(
+            new ProblemDto("ManualLaunchRefused", new Dictionary<string, string> { ["detail"] = "x" }),
+            "The manual launch was refused: x");
+        var followUp = StoredProblem.Compose(
+            new ProblemDto("LaunchRefused", new Dictionary<string, string> { ["source"] = "on_success:ci#1", ["detail"] = "x" }),
+            "The automated launch (on_success:ci#1) was refused: x");
+        var items = new List<PipelineRunDto>
+        {
+            new() { Id = 1, PipelineId = 1, PipelineName = "deploy", Status = PipelineStatus.Failed, Warnings = [manual] },
+            new() { Id = 2, PipelineId = 1, PipelineName = "deploy", Status = PipelineStatus.Failed, Warnings = [followUp] },
+            new() { Id = 3, PipelineId = 1, PipelineName = "deploy", Status = PipelineStatus.Failed }
+        };
+        var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll(".pipeline-launch-refused-badge").Count));
     }
 
     [Fact]
@@ -366,13 +433,13 @@ public class PipelineRunsGridTests : BunitContext
             // status cell of a running run, so the wide live-updating value never costs a column.
             var columns = cut.FindComponents<OmniDataGridColumn<PipelineRunTableItem>>()
                 .Select(column => column.Instance).ToList();
-            Assert.Equal("RunId", columns[0].Property);
+            Assert.Equal("BuildNumber", columns[0].Property);
             Assert.Equal("pipeline-run-id-actions-column", columns[0].Class);
             Assert.Equal("PipelineName", columns[1].Property);
             Assert.Equal("Status", columns[2].Property);
             var titles = columns.Select(column => column.Title).ToList();
             Assert.Equal(
-                ["ID", "Pipeline", "Status", "Project", "Started", "Completed", "Duration", "Branch", "Commit", "Server"],
+                ["RunNumberColumn", "Pipeline", "Status", "Project", "Started", "Completed", "Duration", "Branch", "Commit", "Server"],
                 titles);
             Assert.Contains(">3min<", cut.Markup, StringComparison.Ordinal);
         });

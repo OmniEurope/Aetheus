@@ -82,13 +82,19 @@ public partial class RetiredServersDialog
         finally
         {
             _purgingIds.Remove(server.Id);
-            if (purged)
+            StateHasChanged();
+            // R-10: a purged server leaves the grid at once and the quiet read behind it confirms; a failed
+            // purge puts the rows back to what the server holds.
+            if (_grid is not null)
+            {
+                if (purged) await _grid.HideRowAsync(server);
+                else await _grid.RestoreRowsAsync();
+            }
+            else if (purged)
             {
                 _servers = _servers.Where(item => item.Id != server.Id).ToList();
                 _totalCount = Math.Max(0, _totalCount - 1);
             }
-            StateHasChanged();
-            if (_grid is not null) await _grid.Reload();
         }
     }
 

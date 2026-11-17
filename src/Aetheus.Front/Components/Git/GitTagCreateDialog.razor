@@ -2,7 +2,7 @@
 
 <OmniTemplateForm TModel="CreateGitLightTagRequest" Model="@_request" OnValidSubmit="@Submit">
     <OmniDataAnnotationsValidator Localizer="@L" />
-    <OmniStack Gap="OmniSpacing.Large">
+    <OmniStack Gap="OmniSpacing.Small">
         <OmniFormField For="oe-pages-git-gittagcreatedialog-1"><LabelContent>@L["TagName"]</LabelContent><ChildContent>
             <OmniTextBox @bind-Value="_request.Name" Id="oe-pages-git-gittagcreatedialog-1" />
         </ChildContent></OmniFormField>

@@ -93,9 +93,10 @@ public sealed class LaunchProblemTextTests : BunitContext
     [Fact]
     public void DescribeStored_TheQaWarningOfNoEndToEndCommand_IsSaidInFrench_AlsoOnTheCandidate()
     {
-        const string english = "No browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed version.";
+        const string english = "No browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed version. Set it in this pipeline's variables, or to none when the project has no browser test.";
         const string french = "Aucune commande de tests de bout en bout n'est déclarée (APPLICATION_QA_E2E_COMMANDS) : "
-            + "les tests navigateur n'ont pas été exécutés sur la version déployée.";
+            + "les tests navigateur n'ont pas été exécutés sur la version déployée. "
+            + "Renseignez-la dans les variables de ce pipeline, ou à none si le projet n'a pas de test navigateur.";
         var warning = Problem("RunWarning_QaE2eCommandMissing");
         var onQa = StoredProblem.Compose(warning, english);
         var onCandidate = StoredProblem.Compose(
@@ -105,6 +106,61 @@ public sealed class LaunchProblemTextTests : BunitContext
         Assert.Equal($"Étape « QA » (run n°12) : {french}", LaunchProblemText.DescribeStored(onCandidate, _localizer));
     }
 
+    /// <summary>Recette R-67: the nightly's extended QA with no declared command warns instead of failing, and the warning is
+    /// said in French, on the run and on the nightly that triggered it.</summary>
+    [Fact]
+    public void DescribeStored_TheWarningOfNoExtendedQaCommand_IsSaidInFrench_AlsoOnTheNightly()
+    {
+        const string english = "No extended QA command is declared (APPLICATION_QA_EXTENDED_COMMANDS): nothing was run. Set it in this pipeline's variables, or to none when the project has none.";
+        const string french = "Aucune commande de QA étendue n'est déclarée (APPLICATION_QA_EXTENDED_COMMANDS) : rien n'a été exécuté. "
+            + "Renseignez-la dans les variables de ce pipeline, ou à none si le projet n'en a pas.";
+        var warning = Problem("RunWarning_QaExtendedCommandMissing");
+        var onNightly = StoredProblem.Compose(
+            Problem("ChildRunWarning", ("stage", "NightlyQAExtended"), ("run", "4"), ("detail", english)),
+            $"Stage 'NightlyQAExtended' (run #4): {english}", [warning]);
+
+        Assert.Equal(french, LaunchProblemText.DescribeStored(StoredProblem.Compose(warning, english), _localizer));
+        Assert.Equal($"Étape « NightlyQAExtended » (run n°4) : {french}", LaunchProblemText.DescribeStored(onNightly, _localizer));
+    }
+
+    /// <summary>R-21: the artifact resolution errors of a restore step are said in French as the cause of the step's
+    /// sentence, each code with its parameters.</summary>
+    [Theory]
+    [InlineData("ArtifactNotFoundAtCommit", "l'artefact « ArtifactManifest-artifacts » est introuvable sur un run réussi de aetheus-ci au commit abc123.")]
+    [InlineData("ArtifactNeverProduced", "l'artefact « ArtifactManifest-artifacts » n'a jamais été produit par un run réussi de aetheus-ci.")]
+    [InlineData("ArtifactNotFoundOnRun", "l'artefact « ArtifactManifest-artifacts » est introuvable sur le run réussi 42 de aetheus-ci.")]
+    [InlineData("ArtifactSelectorInvalid", "« artifact_source_selector » doit valoir « same-commit » ou « latest-successful », et non « oldest ».")]
+    [InlineData("ArtifactSourceRequired", "Renseignez « release », ou à la fois « artifact » et « artifact_source_pipeline ».")]
+    [InlineData("ArtifactRunNoVerifiedCommit", "le run en cours n'a pas de commit source vérifié.")]
+    [InlineData("ArtifactRunNoProject", "le run en cours n'est rattaché à aucun projet.")]
+    [InlineData("ArtifactSourceRunOtherProject", "le run source appartient à un autre projet.")]
+    [InlineData("ArtifactSourceRunOtherCommit", "le run source appartient à un autre commit source.")]
+    [InlineData("ArtifactSourceRunNotSucceeded", "le run source n'a pas réussi : son artefact producteur facultatif n'est pas disponible.")]
+    [InlineData("ArtifactReleaseWithSourcePipeline", "« release » ne peut pas être combiné avec « artifact_source_pipeline ».")]
+    [InlineData("ArtifactReleaseNotRetained", "la release « 1.2.3 » n'a aucun artefact conservé dans ce projet.")]
+    [InlineData("ArtifactTargetDirectoryUnsafe", "« target_directory » doit être un chemin relatif sûr.")]
+    [InlineData("ArtifactInvalidSha256", "l'artefact « ArtifactManifest-artifacts » n'a pas de SHA-256 de référence valide.")]
+    public void DescribeStored_AnArtifactResolutionCause_IsSaidInFrenchAfterTheRestoreSentence(string code, string french)
+    {
+        var cause = Problem(code,
+            ("artifact", "ArtifactManifest-artifacts"), ("pipeline", "aetheus-ci"), ("commit", "abc123"), ("run", "42"),
+            ("release", "1.2.3"), ("selector", "oldest"), ("sameCommit", "same-commit"), ("latestSuccessful", "latest-successful"));
+        var stored = StoredProblem.Compose(
+            Problem("StepFailedRestoreArtifacts", ("step", "Restore exact CI artifact manifest"), ("detail", "english detail")),
+            "Restore-artifacts step 'Restore exact CI artifact manifest': english detail", [cause]);
+
+        Assert.Equal(
+            $"Pas de restauration d'artefacts « Restore exact CI artifact manifest » : {french}",
+            LaunchProblemText.DescribeStored(stored, _localizer));
+    }
+
+    [Fact]
+    public void DescribeStored_AnOldRestoreWarningStoredWithPlainEnglish_StaysAsStored()
+    {
+        const string old = "Restore-artifacts step 'x': artifact 'a' was not found on a successful aetheus-ci run at commit abc.";
+
+        Assert.Equal(old, LaunchProblemText.DescribeStored(old, _localizer));
+    }
     [Fact]
     public void DescribeStored_TheQaWarningOfNoEnvironment_IsSaidInFrench()
     {
@@ -114,6 +170,61 @@ public sealed class LaunchProblemTextTests : BunitContext
             "Aucun environnement de QA n'a été déployé (COMPOSE_FILE est vide dans ce pipeline) : rien n'a été validé sur une "
             + "application en marche. Seules les commandes de QA du projet ont été exécutées.",
             LaunchProblemText.DescribeStored(stored, _localizer));
+    }
+
+    private static string DroppedOccurrences(string code, params (string Name, string Value)[] parameters) =>
+        StoredProblem.Compose(
+            Problem("LaunchRefused", ("source", "Scheduler"), ("detail", "English fallback")),
+            "The automated launch (Scheduler) was refused: English fallback",
+            [Problem(code, parameters)]);
+
+    [Fact]
+    public void DescribeStored_OneDroppedScheduledOccurrence_IsSaidInFrenchInTheSingular()
+    {
+        var stored = DroppedOccurrences(
+            "ScheduleOccurrenceMissed", ("count", "1"), ("first", "2026-11-06 02:00"), ("last", "2026-11-06 02:00"), ("limit", "2"));
+
+        Assert.Equal(
+            "Le lancement automatique (planificateur) a été refusé : L'occurrence planifiée du 2026-11-06 02:00 UTC a été manquée "
+            + "au-delà de la limite de rattrapage de 2 h et n'a pas été lancée.",
+            LaunchProblemText.DescribeStored(stored, _localizer));
+    }
+
+    [Fact]
+    public void DescribeStored_SeveralDroppedScheduledOccurrences_AreSaidInFrenchInThePlural()
+    {
+        var stored = DroppedOccurrences(
+            "ScheduleOccurrencesMissed", ("count", "3"), ("first", "2026-11-06 02:00"), ("last", "2026-11-06 04:00"), ("limit", "2"));
+
+        Assert.Equal(
+            "Le lancement automatique (planificateur) a été refusé : 3 occurrences planifiées, du 2026-11-06 02:00 au 2026-11-06 04:00 UTC, "
+            + "ont été manquées au-delà de la limite de rattrapage de 2 h et n'ont pas été lancées.",
+            LaunchProblemText.DescribeStored(stored, _localizer));
+    }
+
+    [Fact]
+    public void DescribeStored_DroppedScheduledOccurrences_AreSaidInEnglishUnderTheEnglishCulture()
+    {
+        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+        var stored = DroppedOccurrences(
+            "ScheduleOccurrencesMissed", ("count", "3"), ("first", "2026-11-06 02:00"), ("last", "2026-11-06 04:00"), ("limit", "2"));
+
+        Assert.Equal(
+            "The automated launch (scheduler) was refused: 3 scheduled occurrences, from 2026-11-06 02:00 to 2026-11-06 04:00 UTC, "
+            + "were missed for longer than the catch-up limit of 2 h and were not run.",
+            LaunchProblemText.DescribeStored(stored, _localizer));
+    }
+
+    [Fact]
+    public void DescribeStored_ADroppedOccurrenceStoredBeforeTheCode_StillShowsItsEnglishSentence()
+    {
+        var old = StoredProblem.Compose(
+            Problem("LaunchRefused", ("source", "Scheduler"), ("detail", "1 scheduled occurrence(s) from a to b UTC were missed.")),
+            "The automated launch (Scheduler) was refused: 1 scheduled occurrence(s) from a to b UTC were missed.");
+
+        Assert.Equal(
+            "Le lancement automatique (planificateur) a été refusé : 1 scheduled occurrence(s) from a to b UTC were missed.",
+            LaunchProblemText.DescribeStored(old, _localizer));
     }
 
     [Fact]
@@ -152,6 +263,46 @@ public sealed class LaunchProblemTextTests : BunitContext
             [Problem("RequiredEnvironmentMissing", ("environment", "<b>{vault}</b>"))], _localizer);
 
         Assert.Equal("L'environnement « <b>{vault}</b> » est requis par ce pipeline et n'existe pas ici.", text);
+    }
+
+    [Theory]
+    [InlineData("Webhook", "webhook")]
+    [InlineData("on_success:ci#12", "on_success:ci#12")]
+    public void Describe_TheSourceOfARefusal_IsAFrenchWordWhenTheBackNamesItWithOne_ElseTheDataAsItIs(string source, string said)
+    {
+        var text = LaunchProblemText.Describe(
+            [Problem("LaunchRefused", ("source", source), ("detail", "verrou"))], _localizer);
+
+        Assert.Equal($"Le lancement automatique ({said}) a été refusé : verrou", text);
+    }
+
+    /// <summary>R-36: the refused run of a follow-up (run 3119 of oe1) says in French which follow-up trigger refused it
+    /// and why, with no English text.</summary>
+    [Fact]
+    public void R36_DescribeStored_ARefusedFollowUp_IsFrenchWithTheReasonInsideIt()
+    {
+        var stored = StoredProblem.Compose(
+            Problem("LaunchRefused", ("source", "on_success:oe1-candidate#3119"), ("detail", "x")),
+            "The automated launch (on_success:oe1-candidate#3119) was refused: x",
+            [Problem("ChainedDeployServerMissing", ("parameter", "deployServer"), ("pipeline", "oe1-deploy-prod"), ("servers", "2"))]);
+
+        var text = LaunchProblemText.DescribeStored(stored, _localizer);
+
+        Assert.StartsWith("Le lancement automatique (on_success:oe1-candidate#3119) a été refusé : Le paramètre deployServer n'a ni valeur ni défaut", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("The automated", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R36_DescribeStored_ARefusedManualLaunch_IsFrenchWithTheReasonInsideIt()
+    {
+        var stored = StoredProblem.Compose(
+            Problem("ManualLaunchRefused", ("detail", "Parameter 'candidateVersion' is required.")),
+            "The manual launch was refused: Parameter 'candidateVersion' is required.",
+            [Problem("ParameterRequired", ("parameter", "candidateVersion"))]);
+
+        Assert.Equal(
+            "Le lancement manuel a été refusé : Le paramètre « candidateVersion » est obligatoire.",
+            LaunchProblemText.DescribeStored(stored, _localizer));
     }
 
     [Fact]

@@ -16,7 +16,8 @@ public class VariableLibraryResolveTests
     public VariableLibraryResolveTests() =>
         _sut = new VariableLibraryService(_repo, Substitute.For<IDbTransactionScope>(),
             Substitute.For<IAuditService>(), Substitute.For<IEntityChangeNotifier>(),
-            TimeProvider.System, Substitute.For<IMemoryCache>());
+            TimeProvider.System, Substitute.For<IMemoryCache>(),
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>());
 
     private static VariableLibrary Lib(int? projectId, int? envId, int? projectServerId, string key, string value, int id = 0) =>
         new()

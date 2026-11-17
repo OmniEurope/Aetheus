@@ -74,9 +74,11 @@ public sealed class PipelineServerResolverTests : IDisposable
         return server;
     }
 
-    private void AddPool(int poolId, string name, params int[] serverIds)
+    private void AddPool(int poolId, string name, params int[] serverIds) => AddPoolOf(7, poolId, name, serverIds);
+
+    private void AddPoolOf(int organizationId, int poolId, string name, params int[] serverIds)
     {
-        _db.AgentPools.Add(new AgentPool { Id = poolId, Name = name });
+        _db.AgentPools.Add(new AgentPool { Id = poolId, Name = name, OrganizationId = organizationId });
         foreach (var serverId in serverIds)
             _db.AgentPoolServers.Add(new AgentPoolServer { AgentPoolId = poolId, ServerId = serverId });
     }
@@ -215,11 +217,13 @@ public sealed class PipelineServerResolverTests : IDisposable
     {
         AddServer(1, "ours", organizationId: 7);
         AddServer(2, "theirs", organizationId: 8);
-        AddPool(100, "builders", 1, 2);
+        // R-12: the pool is organization 8's; a link left from before R-12 to server 1 (of 7) is never used.
+        AddPoolOf(8, 100, "builders", 1, 2);
         await SaveAsync();
 
         Assert.Equal(2, (await _resolver.FindOnlineServerInPoolInOrganizationAsync("builders", OsType.Unknown, 8, Ct))!.Id);
         Assert.Null(await _resolver.FindOnlineServerInPoolInOrganizationAsync("builders", OsType.Unknown, 9, Ct));
+        Assert.Null(await _resolver.FindOnlineServerInPoolInOrganizationAsync("builders", OsType.Unknown, 7, Ct));
     }
 
     [Fact]

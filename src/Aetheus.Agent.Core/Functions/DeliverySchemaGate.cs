@@ -6,10 +6,13 @@ namespace Aetheus.Agent.Core.Functions;
 /// <summary>
 /// The schema half of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-delivery-promotion.mjs</c>, in its order and with its
 /// messages: the live production schema must be a state the candidate was proven against (before or
-/// after its migrations, an empty or identical database for a bootstrap), or the state of the release
-/// production runs when that release's own sealed contract proves the candidate is its predecessor
-/// (ADR-042). Every read of the candidate's <c>baseline</c> keeps JavaScript's meaning, so a malformed
-/// baseline fails where the script threw, with V8's message.
+/// after its migrations, an empty or identical database for a bootstrap), an intermediate state of its
+/// own forward migration (a migrating deploy interrupted after some of the candidate's migrations
+/// committed: the live history strictly extends <c>schemaBefore</c> and is strictly extended by
+/// <c>schemaAfter</c>, element by element, so the remaining migrations are the ones QA applied next), or
+/// the state of the release production runs when that release's own sealed contract proves the
+/// candidate is its predecessor (ADR-042). Every read of the candidate's <c>baseline</c> keeps
+/// JavaScript's meaning, so a malformed baseline fails where the script threw, with V8's message.
 /// </summary>
 /// <param name="baseline">The candidate's <c>baseline</c>, any JSON value.</param>
 /// <param name="productionSchemaPath">The migration history read from the live database, or <c>-</c>.</param>
@@ -63,6 +66,14 @@ internal sealed class DeliverySchemaGate(
                 + "the migration is a no-op and only the binaries move.").ConfigureAwait(false);
             return;
         }
+        if (InterruptedForwardMigrationOf(live) is var (applied, total))
+        {
+            await log(
+                "Production stopped partway through this candidate's own forward migration: "
+                + $"{applied} of {total} migrations already applied on {live.Describe()}; "
+                + $"the migrating deploy applies the remaining {total - applied}.").ConfigureAwait(false);
+            return;
+        }
         var (found, liveVersion) = await PreviousReleaseOfAsync(live, cancellationToken).ConfigureAwait(false);
         if (!found)
             throw new JsError(
@@ -77,6 +88,27 @@ internal sealed class DeliverySchemaGate(
             $"Previously deployed release: production runs {version} on {live.Describe()}, whose QA "
             + $"exercised the release before it on that schema from {DeliverySchemaState.Describe(JsValue.Get(baseline, "schemaAfter"))}; "
             + "the migration is a no-op and only the binaries move back.").ConfigureAwait(false);
+    }
+
+    /// <summary>The interrupted forward migration of this very candidate: a migrating deploy that stopped
+    /// partway leaves production on an intermediate state of the path QA walked from <c>schemaBefore</c> to
+    /// <c>schemaAfter</c>. The live history must strictly extend <c>schemaBefore.migrations</c> and be
+    /// strictly extended by <c>schemaAfter.migrations</c>, element by element; a list that is not an array
+    /// (<c>Array.isArray</c>) proves nothing. Returns the candidate's migrations already applied and the
+    /// number it carries, else <see langword="null"/>.</summary>
+    private (int Applied, int Total)? InterruptedForwardMigrationOf(DeliverySchemaState live)
+    {
+        // Both states were read for their hash already, so neither is nullish here.
+        var before = JsValue.Get(JsValue.Get(baseline, "schemaBefore"), "migrations");
+        var after = JsValue.Get(JsValue.Get(baseline, "schemaAfter"), "migrations");
+        if (before is not List<object?> beforeMigrations
+            || after is not List<object?> afterMigrations
+            || beforeMigrations.Count >= live.Migrations.Count
+            || live.Migrations.Count >= afterMigrations.Count
+            || beforeMigrations.Where((migration, index) => !JsValue.StrictEquals(live.Migrations[index], migration)).Any()
+            || live.Migrations.Where((migration, index) => !JsValue.StrictEquals(afterMigrations[index], migration)).Any())
+            return null;
+        return (live.Migrations.Count - beforeMigrations.Count, afterMigrations.Count - beforeMigrations.Count);
     }
 
     /// <summary>The previous-release branch: the live release's version when every link holds, else not

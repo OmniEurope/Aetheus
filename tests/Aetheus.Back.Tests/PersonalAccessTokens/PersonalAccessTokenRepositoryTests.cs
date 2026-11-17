@@ -38,7 +38,7 @@ public class PersonalAccessTokenRepositoryTests : IDisposable
     [Fact]
     public async Task FindActiveByHash_ReturnsActiveToken_WithUserAndRoles()
     {
-        var token = await _repo.FindActiveByHashWithUserAsync("hash-valid", _now, ct: TestContext.Current.CancellationToken);
+        var token = await _repo.FindActiveByHashWithUserAsync(["hash-valid"], _now, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(token);
         Assert.Equal(10, token.Id);
@@ -48,19 +48,19 @@ public class PersonalAccessTokenRepositoryTests : IDisposable
 
     [Fact]
     public async Task FindActiveByHash_ExcludesRevoked()
-        => Assert.Null(await _repo.FindActiveByHashWithUserAsync("hash-revoked", _now, ct: TestContext.Current.CancellationToken));
+        => Assert.Null(await _repo.FindActiveByHashWithUserAsync(["hash-revoked"], _now, ct: TestContext.Current.CancellationToken));
 
     [Fact]
     public async Task FindActiveByHash_ExcludesExpired()
-        => Assert.Null(await _repo.FindActiveByHashWithUserAsync("hash-expired", _now, ct: TestContext.Current.CancellationToken));
+        => Assert.Null(await _repo.FindActiveByHashWithUserAsync(["hash-expired"], _now, ct: TestContext.Current.CancellationToken));
 
     [Fact]
     public async Task FindActiveByHash_ExcludesTokenOfInactiveUser()
-        => Assert.Null(await _repo.FindActiveByHashWithUserAsync("hash-inactive", _now, ct: TestContext.Current.CancellationToken));
+        => Assert.Null(await _repo.FindActiveByHashWithUserAsync(["hash-inactive"], _now, ct: TestContext.Current.CancellationToken));
 
     [Fact]
     public async Task FindActiveByHash_UnknownHash_ReturnsNull()
-        => Assert.Null(await _repo.FindActiveByHashWithUserAsync("nope", _now, ct: TestContext.Current.CancellationToken));
+        => Assert.Null(await _repo.FindActiveByHashWithUserAsync(["nope"], _now, ct: TestContext.Current.CancellationToken));
 
     [Fact]
     public async Task GetForUser_ReturnsOwnTokensNewestFirst()

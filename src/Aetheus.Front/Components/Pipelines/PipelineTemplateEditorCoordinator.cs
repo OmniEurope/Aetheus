@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
+using System.Text.RegularExpressions;
+
 namespace Aetheus.Front.Components.Pipelines;
 
 internal sealed class PipelineTemplateEditorCoordinator(ApiClient api)
@@ -42,7 +44,21 @@ internal sealed class PipelineTemplateEditorCoordinator(ApiClient api)
         var declaredNames = declared.Select(parameter => parameter.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var parameter in overrides.Where(parameter => parameter.Default is not null && declaredNames.Contains(parameter.Name)))
             values[parameter.Name] = parameter.Default!;
-        return declared.Any(parameter => parameter.Required && !values.ContainsKey(parameter.Name)) ? null : values;
+        // R-44: the back refuses (HTTP 400) a required parameter whose value is empty, and a
+        // `${{ parameters.x }}` reference that no declaration of the template covers, so neither request is sent.
+        if (declared.Any(parameter => parameter.Required && string.IsNullOrWhiteSpace(values.GetValueOrDefault(parameter.Name))))
+            return null;
+        return templateYaml is not null && ReferencesUndeclaredParameter(templateYaml, declaredNames) ? null : values;
+    }
+
+    private static readonly Regex ParameterReference = new(
+        @"\$\{\{\s*parameters\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}", RegexOptions.Compiled);
+
+    private static bool ReferencesUndeclaredParameter(string templateYaml, IEnumerable<string> declaredNames)
+    {
+        var declaredIgnoringCase = declaredNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ParameterReference.Matches(templateYaml)
+            .Any(match => !declaredIgnoringCase.Contains(match.Groups[1].Value));
     }
 
     public async Task<PipelineTemplateSelection?> SelectAsync(int templateId, string pipelineName)

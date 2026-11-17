@@ -12,6 +12,10 @@ namespace Aetheus.Back.Tests.Analysis;
 public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
 {
     private const int ProjectId = 5;
+
+    // These tests select the analysis run tree; the overall letter of a project (the deployed release's
+    // verdict) is tested in AnalysisDeployedQualificationTests.
+    private static readonly Dictionary<int, int> NoPreferredRuns = [];
     private readonly AppDbContext _db;
     private readonly DateTime _now = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
     private int _nextId = 1;
@@ -41,7 +45,7 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
         Evaluate(2490, AnalysisGrade.A, AnalysisGradeDomain.Security, _now.AddMinutes(-30));
         await _db.SaveChangesAsync(Ct);
 
-        var grade = (await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct))[ProjectId];
+        var grade = (await new AnalysisProjectSummaryRepository(_db).GetAnalysisGradesAsync([ProjectId], NoPreferredRuns, Ct))[ProjectId];
 
         Assert.Equal(AnalysisGrade.D, grade.OverallGrade);
         // The run to open is the candidate's root, which shows its children merged.
@@ -59,7 +63,7 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
         Evaluate(302, AnalysisGrade.C, AnalysisGradeDomain.Security, _now.AddMinutes(-40));
         await _db.SaveChangesAsync(Ct);
 
-        var grade = (await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct))[ProjectId];
+        var grade = (await new AnalysisProjectSummaryRepository(_db).GetAnalysisGradesAsync([ProjectId], NoPreferredRuns, Ct))[ProjectId];
 
         Assert.Equal(AnalysisGrade.C, grade.OverallGrade);
         Assert.Equal(301, grade.PipelineRunId);
@@ -71,7 +75,7 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
         Run(400, _now);
         await _db.SaveChangesAsync(Ct);
 
-        Assert.Empty(await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct));
+        Assert.Empty(await new AnalysisProjectSummaryRepository(_db).GetAnalysisGradesAsync([ProjectId], NoPreferredRuns, Ct));
     }
 
     [Fact]
@@ -88,7 +92,7 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
             Measured(AnalysisGradeDomain.Security, AnalysisGrade.B), Unmeasured(AnalysisGradeDomain.CodeQuality));
         await _db.SaveChangesAsync(Ct);
 
-        var grade = (await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct))[ProjectId];
+        var grade = (await new AnalysisProjectSummaryRepository(_db).GetAnalysisGradesAsync([ProjectId], NoPreferredRuns, Ct))[ProjectId];
 
         var security = grade.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.Security);
         Assert.Equal(AnalysisGrade.B, security.Grade);
@@ -121,7 +125,7 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
         EvaluateDomains(705, _now.AddHours(-3), Unmeasured(AnalysisGradeDomain.Security, required: true));
         await _db.SaveChangesAsync(Ct);
 
-        var grade = (await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct))[ProjectId];
+        var grade = (await new AnalysisProjectSummaryRepository(_db).GetAnalysisGradesAsync([ProjectId], NoPreferredRuns, Ct))[ProjectId];
 
         Assert.Equal(700, grade.PipelineRunId);
         Assert.Equal(AnalysisGrade.D, grade.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.Security).Grade);

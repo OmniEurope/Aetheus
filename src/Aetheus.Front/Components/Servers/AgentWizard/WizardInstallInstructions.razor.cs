@@ -86,7 +86,7 @@ public partial class WizardInstallInstructions : AgentInstallOptionsComponentBas
     // Shared with AddAgent's "copy all commands" summary via AgentInstallFlags (S-TECH-WZFL).
     private string BuildLinuxModuleFlags() => AgentInstallFlags.BuildLinux(
         IncludePipelineRunner, IncludeServerManagement, IncludeDeploymentAgent,
-        IncludePatchManagement, IncludeFirewallManagement, IncludeDocker);
+        IncludePatchManagement, IncludeFirewallManagement, IncludeDocker, IncludeHostReboot);
 
     private string BuildWindowsModuleFlags() => AgentInstallFlags.BuildWindows(IncludePipelineRunner);
 }

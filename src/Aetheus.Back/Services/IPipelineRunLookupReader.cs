@@ -14,4 +14,11 @@ public interface IPipelineRunLookupReader
 
     /// <summary>Terminal/current status of the given runs, for cheaply reconciling waiting trigger steps.</summary>
     Task<Dictionary<int, PipelineStatus>> GetRunStatusesByIdsAsync(IReadOnlyCollection<int> runIds, CancellationToken ct = default);
+
+    /// <summary>R-34: the release a deployment run delivers (the candidate it restores) beside the source head the
+    /// run checked out; null when the run names no release this project has recorded. With
+    /// <paramref name="includeAlreadyDeployed"/> the release already being in production is read too, for a run
+    /// still waiting for its approval.</summary>
+    Task<PipelineRunDeployedReleaseDto?> GetDeployedReleaseAsync(
+        int runId, bool includeAlreadyDeployed, CancellationToken ct = default);
 }

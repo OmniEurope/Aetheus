@@ -931,6 +931,9 @@ public class PipelineRepositoryTests : IDisposable
         var runA = new PipelineRun { Id = 1, PipelineId = 1, StartedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) };
         var runB = new PipelineRun { Id = 2, PipelineId = 1, StartedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) };
         var runOther = new PipelineRun { Id = 3, PipelineId = 2, StartedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc) };
+        _db.Pipelines.AddRange(
+            new Pipeline { Id = 1, Name = "trend", YamlDefinition = "y" },
+            new Pipeline { Id = 2, Name = "other", YamlDefinition = "y" });
         _db.PipelineRuns.AddRange(runA, runB, runOther);
         _db.CoverageResults.AddRange(
             // run A and run B each have MULTIPLE results - the trend must collapse to one point per run.
@@ -960,6 +963,7 @@ public class PipelineRepositoryTests : IDisposable
     public async Task GetCoverageTrendAsync_HonoursTake_KeepsMostRecentRuns()
     {
         var runA = new PipelineRun { Id = 1, PipelineId = 1, StartedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) };
+        _db.Pipelines.Add(new Pipeline { Id = 1, Name = "trend", YamlDefinition = "y" });
         var runB = new PipelineRun { Id = 2, PipelineId = 1, StartedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) };
         _db.PipelineRuns.AddRange(runA, runB);
         _db.CoverageResults.AddRange(

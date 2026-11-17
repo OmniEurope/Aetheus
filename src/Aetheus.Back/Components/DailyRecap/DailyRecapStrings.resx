@@ -121,4 +121,26 @@
   <data name="FindingsNewTotalOne" xml:space="preserve"><value>{0} new finding</value></data>
   <data name="FindingsResolvedCount" xml:space="preserve"><value>{0} resolved</value></data>
   <data name="MailQueueCountOne" xml:space="preserve"><value>{0} message</value></data>
+  <data name="CveTitle" xml:space="preserve"><value>Known vulnerabilities (CVE)</value></data>
+  <data name="CveLink" xml:space="preserve"><value>View findings</value></data>
+  <data name="CveSummary" xml:space="preserve"><value>{0}.</value></data>
+  <data name="CveOpen" xml:space="preserve"><value>{0} open</value></data>
+  <data name="CveOpenWithBreakdown" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="CveProjectOpen" xml:space="preserve"><value>On this project there are {0} CVEs to handle</value></data>
+  <data name="CveProjectOpenOne" xml:space="preserve"><value>On this project there is {0} CVE to handle</value></data>
+  <data name="CveServerOpen" xml:space="preserve"><value>On the system of this server there are {0} CVEs to handle</value></data>
+  <data name="CveServerOpenOne" xml:space="preserve"><value>On the system of this server there is {0} CVE to handle</value></data>
+  <data name="CveCountExploited" xml:space="preserve"><value>{0} exploited</value></data>
+  <data name="CveCountCritical" xml:space="preserve"><value>{0} critical</value></data>
+  <data name="CveCountHigh" xml:space="preserve"><value>{0} high</value></data>
+  <data name="CveCountMedium" xml:space="preserve"><value>{0} medium</value></data>
+  <data name="CveCountLow" xml:space="preserve"><value>{0} low</value></data>
+  <data name="CveCountInfo" xml:space="preserve"><value>{0} info</value></data>
+  <data name="CveCountNone" xml:space="preserve"><value>{0} unclassified</value></data>
+  <data name="CveCountUnrated" xml:space="preserve"><value>{0} without a published severity</value></data>
+  <data name="CveToVerify" xml:space="preserve"><value>{0} to verify</value></data>
+  <data name="CveNew" xml:space="preserve"><value>{0} new</value></data>
+  <data name="CveClosed" xml:space="preserve"><value>{0} closed</value></data>
+  <data name="CveSourceWithLicence" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="CveSources" xml:space="preserve"><value>Data sources, each under its own licence: {0}.</value></data>
 </root>

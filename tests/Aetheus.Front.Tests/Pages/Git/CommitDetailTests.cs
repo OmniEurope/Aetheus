@@ -22,6 +22,10 @@ public class CommitDetailTests : BunitContext
         RepositoryUrl = repoUrl
     };
 
+    private void SetHoldsCommit(int repositoryId, bool holds) =>
+        _handler.SetJsonResponse(HttpMethod.Post, $"api/git/repos/{repositoryId}/commit-messages",
+            holds ? new Dictionary<string, string> { ["abcdef1234567890"] = "message" } : new Dictionary<string, string>());
+
     private void SetRepositories(params GitLightRepoDto[] repositories) =>
         _handler.SetJsonResponse("api/git/repos", new PaginatedResult<GitLightRepoDto>
         {
@@ -35,6 +39,7 @@ public class CommitDetailTests : BunitContext
     public void ExistingCommit_RedirectsToCanonicalRepositoryCommit()
     {
         _handler.SetJsonResponse("api/gitgraph/commits/3", Sample());
+        SetHoldsCommit(7, true);
         SetRepositories(new GitLightRepoDto
         {
             Id = 7,
@@ -54,6 +59,7 @@ public class CommitDetailTests : BunitContext
     {
         _handler.SetJsonResponse("api/gitgraph/commits/4", Sample(4,
             "https://host.docker.internal:5303/git/1/demo.git"));
+        SetHoldsCommit(7, true);
         SetRepositories(
             new GitLightRepoDto { Id = 7, ProjectId = 1, Name = "Demo", CloneUrl = "https://localhost:5302/git/1/demo.git" },
             new GitLightRepoDto { Id = 8, ProjectId = 1, Name = "Other", CloneUrl = "https://localhost:5302/git/1/other.git" });
@@ -83,11 +89,39 @@ public class CommitDetailTests : BunitContext
     public void OnlyRepository_IsStillChosen_WhenTheCommitNamesNoRepository()
     {
         _handler.SetJsonResponse("api/gitgraph/commits/6", Sample(6, repoUrl: null));
+        SetHoldsCommit(2, true);
         SetRepositories(new GitLightRepoDto { Id = 2, ProjectId = 1, Name = "Internal", CloneUrl = "https://localhost:5302/git/1/internal.git" });
 
         Render<CommitDetail>(parameters => parameters.Add(component => component.CommitId, 6));
 
         Assert.EndsWith("/git-repositories/2/commits/abcdef1234567890", Services.GetRequiredService<NavigationManager>().Uri);
+    }
+
+    [Fact]
+    public void CommitTheRepositoryNeverReceived_ExplainsInsteadOfOpeningAPageThatAnswers404()
+    {
+        // R-14: the commit graph records the commit of a run or a release (a seeded one, say) that the only
+        // internal repository does not hold; redirecting to its commit page made the back answer 404.
+        _handler.SetJsonResponse("api/gitgraph/commits/8", Sample(8, repoUrl: null));
+        SetHoldsCommit(2, false);
+        SetRepositories(new GitLightRepoDto { Id = 2, ProjectId = 1, Name = "Internal", CloneUrl = "https://localhost:5302/git/1/internal.git" });
+
+        var cut = Render<CommitDetail>(parameters => parameters.Add(component => component.CommitId, 8));
+
+        cut.WaitForAssertion(() => Assert.Contains("CommitOutsideInternalRepositories", cut.Markup, StringComparison.Ordinal));
+        Assert.Equal("http://localhost/", Services.GetRequiredService<NavigationManager>().Uri);
+    }
+
+    [Fact]
+    public void CommitWithoutAHexadecimalId_IsNeverAskedFromTheRepository()
+    {
+        _handler.SetJsonResponse("api/gitgraph/commits/10", Sample(10, repoUrl: null) with { Sha = "not-a-sha" });
+        SetRepositories(new GitLightRepoDto { Id = 2, ProjectId = 1, Name = "Internal", CloneUrl = "https://localhost:5302/git/1/internal.git" });
+
+        var cut = Render<CommitDetail>(parameters => parameters.Add(component => component.CommitId, 10));
+
+        cut.WaitForAssertion(() => Assert.Contains("CommitOutsideInternalRepositories", cut.Markup, StringComparison.Ordinal));
+        Assert.Equal("http://localhost/", Services.GetRequiredService<NavigationManager>().Uri);
     }
 
     [Theory]

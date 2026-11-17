@@ -11,8 +11,9 @@ namespace Aetheus.Agent.Core.Tests;
 /// on every contract the script itself verified (<c>TestData/delivery-promotion-cases.json</c>,
 /// <see cref="ScriptReferenceData"/>), each sealed by the real JS generator: every case of
 /// <c>delivery-contract.test.mjs</c>, the refusals of the candidate (schema 1, invalid, identity,
-/// release version, artifact digests), bootstrap and pre/post migration states, the previous-release
-/// branch, malformed baselines, and keys whose <c>localeCompare</c> order differs from the ordinal one.
+/// release version, artifact digests), bootstrap and pre/post migration states, an interrupted forward
+/// migration of the candidate itself (the production replica of deploy runs #152/#153 and the histories
+/// off that path), the previous-release branch, malformed baselines, and keys whose <c>localeCompare</c> order differs from the ordinal one.
 /// A success must log the script's lines, in order; a refusal must carry the script's message verbatim
 /// (multi-line ones included); where the script failed on a file it could not read, the port must fail
 /// too, with the .NET message.
@@ -65,7 +66,7 @@ public sealed class VerifyDeliveryPromotionFunctionTests : IDisposable
             "bootstrap-verifies-exact-bytes", "different-manifest-different-candidate", "schema-states",
             "schema-1-refused", "invalid-contracts", "invalid-identity", "release-version", "artifact-digests",
             "bootstrap-database-states", "baseline-malformed", "previous-release", "previous-release-non-prefix",
-            "previous-release-crafted", "locale-ordered-keys", "non-ascii-key"
+            "previous-release-crafted", "locale-ordered-keys", "non-ascii-key", "interrupted-forward-migration"
         });
     }
 

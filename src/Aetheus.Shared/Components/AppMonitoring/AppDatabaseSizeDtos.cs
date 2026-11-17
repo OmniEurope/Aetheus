@@ -8,6 +8,9 @@ public sealed record AppDatabaseSizeReportDto
     /// <summary>When the application last sent a measurement. Null when it never did.</summary>
     public DateTime? MeasuredAt { get; init; }
 
+    /// <summary>R-27: why no measure ever arrived, set only while <see cref="MeasuredAt"/> is null.</summary>
+    public AppNoMeasureDto? NoMeasure { get; init; }
+
     public string? DatabaseName { get; init; }
 
     /// <summary>The database on disk, in bytes.</summary>

@@ -9,7 +9,7 @@
 
 @if (Loader is null || Loader.Server is null)
 {
-    <AetheusLoader />
+    <ZoneVeil />
 }
 else if (!Loader.HasDocker)
 {
@@ -20,6 +20,5 @@ else
     <Aetheus.Front.Components.Servers.ServerDetailSections.ServerDockerSection
         @ref="_section"
         Server="@Loader.Server" ServerId="@Id"
-        DockerInitialLoaded="@Loader.InitialLoadCompleted"
-        ServerChanged="@OnServerChanged" />
+        DockerInitialLoaded="@Loader.InitialLoadCompleted" />
 }

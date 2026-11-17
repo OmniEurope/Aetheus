@@ -16,6 +16,9 @@
         </ActionsContent>
     </OmniPageHeader>
 
+    @* R-12: every plugin belongs to an organization; the site Admin narrows the list to one of them. *@
+    <AdministrationOrganizationSwitcher Changed="@OnOrganizationChangedAsync" />
+
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"
         Class="pipeline-list-search omni-u-mb-sm" />
 
@@ -41,7 +44,7 @@
                 <Template Context="plugin">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => TogglePlugin(plugin))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => UnregisterPlugin(plugin.Id))" title="@L["Unregister"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => UnregisterPlugin(plugin))" title="@L["Unregister"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>

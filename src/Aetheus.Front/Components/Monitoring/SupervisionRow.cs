@@ -23,6 +23,10 @@ internal sealed record SupervisionRow(
 
     public int? OnlineVisitors => App?.OnlineVisitorCount;
 
+    public OnlineAudienceState OnlineVisitorState => App?.OnlineVisitorState ?? OnlineAudienceState.Unavailable;
+
+    public DateTime? OnlineVisitorLastEventAt => App?.OnlineVisitorLastEventAt;
+
     public DateTime? LastEventAt => App?.LastEventAt;
 
     public long? UsedBytes => ShowsStorage ? Usage?.UsedBytes : null;

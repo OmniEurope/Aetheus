@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.VariableLibraries.Events;
 using Aetheus.Back.Configuration;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.DomainEvents;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.VariableLibraries;
 
-public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransactionScope transaction, IAuditService audit, IEntityChangeNotifier notifier, TimeProvider timeProvider, IMemoryCache cache) : IVariableLibraryService
+public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransactionScope transaction, IAuditService audit, IEntityChangeNotifier notifier, TimeProvider timeProvider, IMemoryCache cache, IDomainEventDispatcher domainEvents) : IVariableLibraryService
 {
     private const string LibNamesCachePrefix = "varlibs:names:";
     private static readonly TimeSpan CacheDuration = BackendRuntimeDefaults.ReferenceDataCacheDuration;
@@ -133,6 +135,7 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         if (request.RowVersion != library.RowVersion)
             throw new ConflictException("The variable library was modified by another user. Please reload and try again.");
 
+        var oldScope = ScopeOf(library);
         library.Name = request.Name;
         library.Description = request.Description;
         library.ProjectId = request.ProjectId;
@@ -140,10 +143,19 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         library.ProjectServerId = request.ProjectServerId;
         library.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         library.RowVersion = Guid.NewGuid();
+        var newScope = ScopeOf(library);
 
         try
         {
-            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            // One transaction with the registry: a library moved onto a port another project holds is
+            // refused whole, not saved and then reported as a conflict.
+            await transaction.ExecuteInTransactionAsync(async () =>
+            {
+                await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+                if (oldScope == newScope) return;
+                var ports = PortEntriesOf(await repo.GetEntriesAsync(id, ct).ConfigureAwait(false));
+                await AnnouncePortsAsync(library, oldScope, ports, newScope, ports, ct).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -161,7 +173,11 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         var library = await repo.FindLibraryAsync(id, ct).ConfigureAwait(false);
         if (library is null) return false;
 
+        var ports = PortEntriesOf(await repo.GetEntriesAsync(id, ct).ConfigureAwait(false));
         await repo.RemoveLibraryAsync(library, ct).ConfigureAwait(false);
+        // Its entries go with it: the ports they claimed are released, not left blocking nothing.
+        var scope = ScopeOf(library);
+        await AnnouncePortsAsync(library, scope, ports, scope, [], ct).ConfigureAwait(false);
         InvalidateNamesCache();
         await audit.LogAsync("Deleted", "VariableLibrary", id, library.Name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.VariableLibrary, id, EntityChangeOps.Deleted, ct).ConfigureAwait(false);
@@ -194,6 +210,7 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
             await repo.AddEntryAsync(entry, ct).ConfigureAwait(false);
 
             await AddEntryVersionAsync(entry, ChangeType.Created, ct).ConfigureAwait(false);
+            await AnnounceEntryPortAsync(libraryId, library, null, entry, ct).ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
 
         return new VariableEntryDto { Id = entry.Id, Key = entry.Key, Value = entry.Value };
@@ -210,6 +227,7 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
             return new VariableEntryDto { Id = entry.Id, Key = entry.Key, Value = entry.Value };
         await EnsureKeyIsFreeAsync(libraryId, request.Key, entryId, ct).ConfigureAwait(false);
 
+        var before = new VariableLibraryEntry { Key = entry.Key, Value = entry.Value };
         entry.Key = request.Key;
         entry.Value = request.Value;
 
@@ -218,6 +236,8 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
             await AddEntryVersionAsync(entry, ChangeType.Updated, ct).ConfigureAwait(false);
+            await AnnounceEntryPortAsync(libraryId, null, before, entry, ct)
+                .ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
 
         return new VariableEntryDto { Id = entry.Id, Key = entry.Key, Value = entry.Value };
@@ -233,6 +253,8 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
             await AddEntryVersionAsync(entry, ChangeType.Deleted, ct).ConfigureAwait(false);
 
             await repo.RemoveEntryAsync(entry, ct).ConfigureAwait(false);
+            await AnnounceEntryPortAsync(libraryId, null, entry, null, ct)
+                .ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
 
         return true;
@@ -289,6 +311,23 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
     private static Dictionary<string, string> MergeWithPrecedence(List<Data.Entities.VariableLibrary> libraries) =>
         MergeByPrecedence(libraries, CrossAccessScopes);
 
+    public async Task<Dictionary<string, int>> ResolveLibraryIdsWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
+    {
+        var libraries = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
+        var ids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Same walk as the merge: the last library of a name in the precedence order is the one a run reads.
+        foreach (var scope in CrossAccessScopes)
+            foreach (var library in libraries.Where(scope))
+                ids[library.Name] = library.Id;
+        return ids;
+    }
+
+    public Task<List<(int Id, string Name, string Key)>> FindKeyHoldersWithCrossAccessAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default) =>
+        keys.Count == 0
+            ? Task.FromResult(new List<(int Id, string Name, string Key)>())
+            : repo.FindKeyHoldersWithCrossAccessAsync(keys, projectId, ct);
+
     public async Task<Dictionary<string, int>> ResolveEntryOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
     {
         var libraries = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
@@ -318,6 +357,39 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         var libraries = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
         var foundNames = new HashSet<string>(libraries.Select(l => l.Name), StringComparer.OrdinalIgnoreCase);
         return (MergeWithPrecedence(libraries), foundNames);
+    }
+
+    private static LibraryPortScope ScopeOf(VariableLibrary library) =>
+        new(library.ProjectId, library.EnvironmentId, library.ProjectServerId);
+
+    private static List<LibraryPortEntry> PortEntriesOf(IEnumerable<VariableLibraryEntry>? entries) =>
+        [.. (entries ?? []).Select(entry => LibraryPortEntry.TryRead(entry.Key, entry.Value, out var port) ? port : null)
+            .OfType<LibraryPortEntry>()];
+
+    /// <summary>One entry written, changed or deleted: only a <c>PORT_*</c> entry holding a port says anything to the
+    /// registry, and only when what it claims changed. The library is read last, so an ordinary variable costs nothing.</summary>
+    private async Task AnnounceEntryPortAsync(
+        int libraryId, VariableLibrary? library, VariableLibraryEntry? before, VariableLibraryEntry? after,
+        CancellationToken ct)
+    {
+        var oldPorts = PortEntriesOf(before is null ? null : [before]);
+        var newPorts = PortEntriesOf(after is null ? null : [after]);
+        if (oldPorts.SequenceEqual(newPorts)) return;
+        library ??= await repo.FindLibraryAsync(libraryId, ct).ConfigureAwait(false);
+        if (library is null) return;
+        var scope = ScopeOf(library);
+        await AnnouncePortsAsync(library, scope, oldPorts, scope, newPorts, ct).ConfigureAwait(false);
+    }
+
+    private async Task AnnouncePortsAsync(
+        VariableLibrary library, LibraryPortScope oldScope, IReadOnlyList<LibraryPortEntry> oldPorts,
+        LibraryPortScope newScope, IReadOnlyList<LibraryPortEntry> newPorts, CancellationToken ct)
+    {
+        if (oldPorts.Count == 0 && newPorts.Count == 0) return;
+        // Strict: a refusal of the registry stops the write the caller is making (ADR-039).
+        await domainEvents.DispatchStrictAsync(
+            new VariableLibraryPortsChangedEvent(library.Id, library.Name, oldScope, oldPorts, newScope, newPorts), ct)
+            .ConfigureAwait(false);
     }
 
     private async Task AddEntryVersionAsync(
@@ -388,6 +460,9 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
             }).ToList();
 
             await repo.AddEntryVersionsRangeAsync(versions, ct).ConfigureAwait(false);
+
+            var scope = ScopeOf(library);
+            await AnnouncePortsAsync(library, scope, [], scope, PortEntriesOf(createdEntries), ct).ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
 
         return entries.Count;

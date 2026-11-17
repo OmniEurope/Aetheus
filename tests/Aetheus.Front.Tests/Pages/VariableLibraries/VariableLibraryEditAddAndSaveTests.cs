@@ -51,7 +51,7 @@ public sealed class VariableLibraryEditAddAndSaveTests : BunitContext
     {
         _handler.SetJsonResponse(HttpMethod.Post, EntriesUrl, new VariableEntryDto { Id = 6, Key = "OTHER_KEY", Value = "v" });
         var nav = Services.GetRequiredService<NavigationManager>();
-        nav.NavigateTo("http://test/variable-libraries/1?key=DOMAIN");
+        nav.NavigateTo("http://test/variable-libraries/1?key=SITE_DOMAIN");
         var cut = RenderWithEntry();
         // The link's filter is on a read of the grid before anything is added.
         await _handler.WhenRequestedAsync(
@@ -136,6 +136,33 @@ public sealed class VariableLibraryEditAddAndSaveTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Equal("changed.example", ValueCellText(cut)));
         Assert.DoesNotContain("aetheus.example", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASavedEdit_ShowsTheAnsweredRow_AndTheReadBehindItDrawsNoLoadingBar()
+    {
+        _handler.SetJsonResponse(HttpMethod.Put, $"{EntriesUrl}/5",
+            new VariableEntryDto { Id = 5, Key = "SITE_DOMAIN", Value = "changed.example", VersionCount = 2 });
+        var cut = RenderWithEntry();
+        var grid = cut.FindComponent<AetheusDataGrid<VariableEntryDto>>().Instance;
+        var gate = new TaskCompletionSource<PaginatedResult<VariableEntryDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, EntriesUrl, _ => gate.Task);
+
+        await (await ValidateTheEditAsync(cut, "changed.example"));
+
+        Assert.Equal("changed.example", ValueCellText(cut));
+        Assert.False(grid.BackgroundRefresh.IsCompleted);
+        Assert.Empty(cut.FindAll("thead > tr.omni-data-grid__progress .omni-loading-bar"));
+
+        gate.SetResult(new PaginatedResult<VariableEntryDto>
+        {
+            Items = [new VariableEntryDto { Id = 5, Key = "SITE_DOMAIN", Value = "changed.example", VersionCount = 2 }],
+            TotalCount = 1,
+            Page = 1,
+            PageSize = 25
+        });
+        await cut.InvokeAsync(() => grid.BackgroundRefresh);
+        Assert.Equal("changed.example", ValueCellText(cut));
     }
 
     [Fact]

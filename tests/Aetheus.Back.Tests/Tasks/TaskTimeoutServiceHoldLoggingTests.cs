@@ -55,7 +55,8 @@ public sealed class TaskTimeoutServiceHoldLoggingTests
             log,
             options,
             hub,
-            new FakeTimeProvider(Now));
+            new FakeTimeProvider(Now),
+            leaderLease: LeaderLeaseDouble.Leader());
         return (sut, repo, log);
     }
 

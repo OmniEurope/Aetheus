@@ -39,6 +39,9 @@ internal static class PipelineProblemCodes
     public const string ConfigTemplateMissingAtCommit = "ConfigTemplateMissingAtCommit";
     public const string ConfigTemplateMissingInConfigRepositoryMayRun = "ConfigTemplateMissingInConfigRepositoryMayRun";
     public const string ConfigTemplateMissingAtCommitMayRun = "ConfigTemplateMissingAtCommitMayRun";
+    // Decision 2026-11-10: the source is the mirror of an external repository, never read for a template.
+    public const string ConfigTemplateFromExternalMirror = "ConfigTemplateFromExternalMirror";
+    public const string ConfigTemplateFromExternalMirrorMayRun = "ConfigTemplateFromExternalMirrorMayRun";
 
     // Retained releases restored by a step.
     public const string ReleaseArtifactInvalidSha256 = "ReleaseArtifactInvalidSha256";
@@ -78,6 +81,13 @@ internal static class PipelineProblemCodes
     public const string ParameterDeclaredTwice = "ParameterDeclaredTwice";
     public const string ReleaseNumberModeInvalid = "ReleaseNumberModeInvalid";
 
+    // R-33: the release version of a versioned pipeline (PipelineApplicationVersion). Parameters: version, prefix, variable.
+    public const string ApplicationVersionInvalid = "ApplicationVersionInvalid";
+    public const string ApplicationVersionPrefixInvalid = "ApplicationVersionPrefixInvalid";
+    public const string ApplicationVersionAlreadyPublished = "ApplicationVersionAlreadyPublished";
+    // R-18: APPLICATION_VERSION_PREFIX declared empty, and the repository declares no VersionPrefix. Parameter: variable.
+    public const string ApplicationVersionSeriesMissing = "ApplicationVersionSeriesMissing";
+
     // R-72: a deployment launched despite the quality gate.
     public const string GateOverrideNotADeployment = "GateOverrideNotADeployment";
     public const string GateOverrideReleaseUnknown = "GateOverrideReleaseUnknown";
@@ -110,6 +120,13 @@ internal static class PipelineProblemCodes
     public const string LaunchSetupFailed = "LaunchSetupFailed";
     public const string LaunchRefused = "LaunchRefused";
     public const string LaunchRefusedRepeated = "LaunchRefusedRepeated";
+    // A launch someone asked for (interface, API) that was refused before any run existed. Parameter: detail.
+    public const string ManualLaunchRefused = "ManualLaunchRefused";
+
+    // The scheduler dropped occurrences missed for longer than its catch-up limit. Parameters: count, first, last, limit.
+    public const string ScheduleOccurrenceMissed = "ScheduleOccurrenceMissed";
+    public const string ScheduleOccurrencesMissed = "ScheduleOccurrencesMissed";
+
     public const string VariableLibraryNotFound = "VariableLibraryNotFound";
     public const string BlueGreenComposeEnvNotForwarded = "BlueGreenComposeEnvNotForwarded";
 
@@ -134,6 +151,24 @@ internal static class PipelineProblemCodes
     public const string StepFailedSmoke = "StepFailedSmoke";
     public const string StepFailedBlueGreen = "StepFailedBlueGreen";
 
+    // Why a step could not resolve the artifact it restores or releases (the cause written as the detail of
+    // the StepFailed* sentence). Parameters: artifact, pipeline, commit / run / release / selector.
+    public const string ArtifactSourceRequired = "ArtifactSourceRequired";
+    public const string ArtifactNeverProduced = "ArtifactNeverProduced";
+    public const string ArtifactNotFoundAtCommit = "ArtifactNotFoundAtCommit";
+    public const string ArtifactNotFoundOnRun = "ArtifactNotFoundOnRun";
+    public const string ArtifactSelectorInvalid = "ArtifactSelectorInvalid";
+    public const string ArtifactRunNoVerifiedCommit = "ArtifactRunNoVerifiedCommit";
+    public const string ArtifactRunNoProject = "ArtifactRunNoProject";
+    public const string ArtifactSourceRunOtherProject = "ArtifactSourceRunOtherProject";
+    public const string ArtifactSourceRunOtherCommit = "ArtifactSourceRunOtherCommit";
+    public const string ArtifactSourceRunNotSucceeded = "ArtifactSourceRunNotSucceeded";
+    public const string ArtifactReleaseWithSourcePipeline = "ArtifactReleaseWithSourcePipeline";
+    public const string ArtifactReleaseNotRetained = "ArtifactReleaseNotRetained";
+    public const string ArtifactUnresolved = "ArtifactUnresolved";
+    public const string ArtifactTargetDirectoryUnsafe = "ArtifactTargetDirectoryUnsafe";
+    public const string ArtifactInvalidSha256 = "ArtifactInvalidSha256";
+
     // The YAML's unknown properties (advisory).
     public const string UnknownProperty = "UnknownProperty";
     public const string UnknownPropertyAtTopLevel = "UnknownPropertyAtTopLevel";
@@ -155,6 +190,7 @@ internal static class PipelineProblemCodes
     public const string ChainedOwnerLacksServerAdmin = "ChainedOwnerLacksServerAdmin";
     public const string ChainedDefinitionNotPrepared = "ChainedDefinitionNotPrepared";
     public const string ChainedLaunchReturnedNoRun = "ChainedLaunchReturnedNoRun";
+    public const string ChainedDeployServerMissing = "ChainedDeployServerMissing";
 
     // Variables.
     public const string UnresolvedVariables = "UnresolvedVariables";

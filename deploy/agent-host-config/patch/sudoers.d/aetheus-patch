@@ -1,8 +1,8 @@
-# Aetheus Agent - fleet OS patching. A single EXACT argv (no wildcards): whole-box apt-get upgrade.
-# The agent runs a non-mutating 'apt-get -s upgrade' simulation FIRST (unprivileged, no sudo) and
+# Aetheus Agent - fleet OS patching. A single EXACT argv (no wildcards): whole-box apt-get upgrade --with-new-pkgs (installs new dependencies such as a new kernel, never removes a package).
+# The agent runs a non-mutating 'apt-get -s upgrade --with-new-pkgs' simulation FIRST (unprivileged, no sudo) and
 # aborts on any critical package (Aetheus.Shared.Constants.CriticalPackages) before ever calling this.
 Cmnd_Alias AETHEUS_PATCH = \
-    /usr/bin/apt-get upgrade -y
+    /usr/bin/apt-get upgrade --with-new-pkgs -y
 
 Defaults!AETHEUS_PATCH timestamp_timeout=0
 Defaults!AETHEUS_PATCH env_reset

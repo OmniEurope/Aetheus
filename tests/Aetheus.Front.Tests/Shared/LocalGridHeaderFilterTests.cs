@@ -43,6 +43,22 @@ public class LocalGridHeaderFilterTests : BunitContext
         cut.WaitForAssertion(() => Assert.Equal(["build", "lint"], RowNames(cut)));
     }
 
+    /// <summary>R-19: the last-run column sorts and filters on the latest run date; a pipeline that never ran has no value.</summary>
+    [Fact]
+    public void LastRunColumn_SortsAndFiltersOnTheLatestRunDate()
+    {
+        var cut = RenderCatalog();
+        var column = cut.FindComponents<OmniDataGridColumn<PipelineDependencyDto>>()
+            .Single(candidate => candidate.Instance.Key == PipelineDependencyGrid.LastRunColumn).Instance;
+        var started = new DateTime(2026, 11, 1, 8, 30, 0, DateTimeKind.Utc);
+
+        Assert.True(column.Sortable);
+        Assert.True(column.Filterable);
+        Assert.Equal(OmniDataGridColumnFilterType.DateRange, column.FilterType);
+        Assert.Equal(started, column.Value!(new PipelineDependencyDto { RecentRuns = [new PipelineRunSummaryDto { StartedAt = started }] }));
+        Assert.Null(column.Value!(new PipelineDependencyDto()));
+    }
+
     [Fact]
     public void CatalogStatusFilter_ListsTheChipStatusesByTheirLabel()
     {
@@ -86,12 +102,12 @@ public class LocalGridHeaderFilterTests : BunitContext
     [Fact]
     public void PipelineRunsGrid_MarksOnlyTheRunThatAppeared()
     {
-        var existing = new PipelineRunDto { Id = 10, PipelineId = 1, PipelineName = "ci", ProjectId = 1, Status = RunStatus.Success };
+        var existing = new PipelineRunDto { Id = 10, BuildNumber = 10, PipelineId = 1, PipelineName = "ci", ProjectId = 1, Status = RunStatus.Success };
         var cut = Render<PipelineRunsGrid>(parameters => parameters
             .Add(component => component.Items, new List<PipelineRunDto> { existing }));
         Assert.DoesNotContain(NewRowClass, cut.Markup, StringComparison.Ordinal);
 
-        var started = new PipelineRunDto { Id = 12, PipelineId = 1, PipelineName = "ci", ProjectId = 1, Status = RunStatus.Pending };
+        var started = new PipelineRunDto { Id = 12, BuildNumber = 12, PipelineId = 1, PipelineName = "ci", ProjectId = 1, Status = RunStatus.Pending };
         cut.Render(parameters => parameters
             .Add(component => component.Items, new List<PipelineRunDto> { started, existing }));
 

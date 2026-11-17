@@ -15,7 +15,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// consumes, each request on its own context as in production. The InMemory suite cannot show
 /// either race, since it has no row lock and no conditional UPDATE.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AuthConcurrencyIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

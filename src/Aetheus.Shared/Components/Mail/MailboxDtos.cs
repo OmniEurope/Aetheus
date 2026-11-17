@@ -144,6 +144,10 @@ public sealed record MailboxMessageDto
     public bool IsRead { get; init; }
     /// <summary>Sanitized HTML (no script, no event handler, no form); null when the message has no HTML part.</summary>
     public string? Html { get; init; }
+    /// <summary>The API path (relative to the API base address) of the sanitized document the reading frame
+    /// loads: single-use and short-lived, set when <see cref="Html"/> is.</summary>
+    [StringLength(200)]
+    public string? DocumentPath { get; init; }
     /// <summary>The plain text part, or the text drawn from the HTML when there is none.</summary>
     public string Text { get; init; } = string.Empty;
     /// <summary>How many remote images were withheld; the page then offers "show images".</summary>

@@ -98,7 +98,8 @@ public sealed class AppTelemetryRetentionCatchUpTests : IDisposable
             _provider.GetRequiredService<IServiceScopeFactory>(),
             new ConfigurationBuilder().Build(),
             NullLogger<AppTelemetryRetentionService>.Instance,
-            time);
+            time,
+            leaderLease: LeaderLeaseDouble.Leader());
     }
 
     private static List<DateTime> AggregatedHours(object repository) =>

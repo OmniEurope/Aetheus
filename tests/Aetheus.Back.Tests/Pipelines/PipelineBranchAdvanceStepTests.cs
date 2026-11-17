@@ -156,6 +156,9 @@ public class PipelineBranchAdvanceStepTests
         Assert.Equal(TaskExecutionStatus.Success, _stepRun.Status);
         Assert.Empty(_runLines);
         Assert.Contains("already points at 111111111111", Outcome(), StringComparison.Ordinal);
+        // R-34: the no-op is stated outright (it is the step's log), with the commit this run deployed.
+        Assert.StartsWith("Nothing was advanced:", Outcome(), StringComparison.Ordinal);
+        Assert.Contains("the commit this run deployed", Outcome(), StringComparison.Ordinal);
         await _audit.DidNotReceive().LogAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
@@ -175,6 +178,7 @@ public class PipelineBranchAdvanceStepTests
         Assert.Empty(_runLines);
         Assert.Contains("'main' is at 222222222222, which already contains 111111111111", Outcome(), StringComparison.Ordinal);
         Assert.Contains("nothing to advance", Outcome(), StringComparison.Ordinal);
+        Assert.StartsWith("Nothing was advanced:", Outcome(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -191,6 +195,47 @@ public class PipelineBranchAdvanceStepTests
         Assert.Contains("the branch was left where it is", Assert.Single(_runLines), StringComparison.Ordinal);
         await _audit.DidNotReceive().LogAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R38_ADivergedBranch_NamesTheCommitsOfTheBranchTheCandidateLacks_InTheLogAndTheWarning()
+    {
+        _advance.TryFastForwardAsync(ProjectId, "main", CandidateSha, Arg.Any<CancellationToken>())
+            .Returns(new GitBranchAdvanceResult(
+                GitBranchAdvanceOutcome.NotFastForward, "aetheus", PreviousSha,
+                BranchOnlyCommits: [new GitBranchCommit("a4652b6", "chore(pipeline): update aetheus-demo via Aetheus"), new GitBranchCommit("b1c2d3e", "fix: hotfix")],
+                BranchOnlyTotal: 2));
+
+        await ExecuteAsync();
+
+        const string expected = "Commits on 'main' missing from the candidate: "
+            + "a4652b6 chore(pipeline): update aetheus-demo via Aetheus; b1c2d3e fix: hotfix.";
+        Assert.Contains(expected, Outcome(), StringComparison.Ordinal);
+        Assert.Contains(expected, Assert.Single(_runLines), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R38_ADivergedBranch_WithMoreCommitsThanNamed_SaysHowManyMore()
+    {
+        _advance.TryFastForwardAsync(ProjectId, "main", CandidateSha, Arg.Any<CancellationToken>())
+            .Returns(new GitBranchAdvanceResult(
+                GitBranchAdvanceOutcome.NotFastForward, "aetheus", PreviousSha,
+                BranchOnlyCommits: [new GitBranchCommit("a4652b6", "one")], BranchOnlyTotal: 8));
+
+        await ExecuteAsync();
+
+        Assert.Contains("a4652b6 one (and 7 more).", Outcome(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R38_ADivergedBranch_WhenGitCouldNotListTheCommits_StillReportsTheDivergence()
+    {
+        GivenOutcome(GitBranchAdvanceOutcome.NotFastForward);
+
+        await ExecuteAsync();
+
+        Assert.Contains("a fast-forward is impossible", Outcome(), StringComparison.Ordinal);
+        Assert.DoesNotContain("missing from the candidate", Outcome(), StringComparison.Ordinal);
     }
 
     [Theory]

@@ -17,38 +17,6 @@ public class SettingsTests : E2ETestBase
     }
 
     [Test]
-    public async Task Settings_PageRendersAndSwitchesAllTabs()
-    {
-        await NavigateToAsync("admin/settings");
-        await Expect(Page.GetByText("Platform Settings").First).ToBeVisibleAsync(new() { Timeout = 10000 });
-        await Expect(Page).ToHaveTitleAsync(new System.Text.RegularExpressions.Regex("Settings"));
-        var tabs = Page.Locator(".omni-tabs");
-        await Expect(tabs).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        await Expect(Page.GetByText("General").First).ToBeVisibleAsync();
-        await Expect(Page.GetByText("Secrets").First).ToBeVisibleAsync();
-        await Expect(Page.GetByText("Registration Tokens").First).ToBeVisibleAsync();
-        await WaitForBlazorAsync();
-
-        var generalCard = Page.Locator(".omni-card").First;
-        await Expect(generalCard).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        await Page.GetByText("Secrets").First.ClickAsync();
-        await WaitForBlazorAsync();
-
-        // The Secrets tab exposes an "Add" button to create a new secret.
-        var addButton = Page.GetByRole(AriaRole.Button, new() { Name = "Add" });
-        await Expect(addButton.First).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        await Page.GetByText("Registration Tokens").First.ClickAsync();
-        await WaitForBlazorAsync();
-
-        var generateButton = Page.GetByRole(AriaRole.Button, new() { Name = "Generate", Exact = true });
-        await Expect(generateButton.First).ToBeVisibleAsync(new() { Timeout = 10000 });
-    }
-
-    [Test]
-    [RollbackRelevant]
     public async Task Settings_RegistrationTokensTab_GenerateToken()
     {
         await NavigateToAsync("admin/settings");

@@ -33,7 +33,8 @@ public sealed class UserServicePersistenceTests : IDisposable
             Substitute.For<IUserChangeNotifier>(),
             Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(),
             new Aetheus.Back.Services.OrganizationRoleAssignmentService(
-                new Aetheus.Back.Services.OrganizationRoleAssignmentRepository(_db)));
+                new Aetheus.Back.Services.OrganizationRoleAssignmentRepository(_db), LeaderLeaseDouble.Leader()),
+            LeaderLeaseDouble.Leader());
     }
 
     [Fact]

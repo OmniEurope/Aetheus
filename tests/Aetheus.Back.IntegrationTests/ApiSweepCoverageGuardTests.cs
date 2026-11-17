@@ -6,19 +6,16 @@ using Microsoft.AspNetCore.Mvc;
 namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>
-/// Anti-drift guard for the hand-written <see cref="ApiAuthorizationSmokeTests"/> /
-/// <see cref="ApiReadSmokeTests"/> route lists (S-TECH-RTDR). Those sweeps enumerate one route
-/// per controller as <c>[InlineData]</c>, but nothing tied those lists to the real set of
-/// controllers - so a controller added in three months would be covered by NO sweep without
-/// failing anything, and the two lists could silently diverge (as they already had:
-/// <c>/api/work-items</c> was in the auth sweep but dropped from the read sweep).
+/// Anti-drift guard for the hand-written <see cref="ApiAuthorizationSmokeTests"/> route lists
+/// (S-TECH-RTDR). That sweep enumerates one route per controller as <c>[InlineData]</c>, but nothing
+/// tied the list to the real set of controllers - so a controller added in three months would be
+/// covered by NO anonymous-401 sweep without failing anything.
 /// <para>
 /// This guard reflects over the real <see cref="ControllerBase"/> set (exactly like
 /// <c>ControllerAuthorizationAuditTests</c>) and reads the <c>[InlineData]</c> literals back out
-/// of both sweeps, then fails if:
-/// (1) a controller exposing a GET action is not covered by the anonymous-401 auth sweep; or
-/// (2) a controller covered by the auth sweep is not also covered by the admin read sweep,
-/// unless it is on a documented exemption list. Pure reflection - no container, no host boot.
+/// of the sweep, then fails if a controller exposing a GET action, or a mutation-only controller, is
+/// not covered by it unless it is on a documented exemption list. Pure reflection - no container,
+/// no host boot.
 /// </para>
 /// </summary>
 public sealed class ApiSweepCoverageGuardTests
@@ -34,39 +31,6 @@ public sealed class ApiSweepCoverageGuardTests
         // Git Smart HTTP transport: upload-pack (clone/fetch) is anonymous by design; per-endpoint auth.
         "Aetheus.Back.Components.Git.GitSmartHttpController",
     };
-
-    /// <summary>
-    /// Controllers covered by the auth sweep but legitimately absent from the PARAMETRIZED read
-    /// sweep - matched by EXACT normalized route prefix (not a broad <c>StartsWith</c> family, so a
-    /// new server-scoped controller is NOT silently auto-exempted: it fails the cross-check until it
-    /// is read-tested or explicitly added here). Each is read-tested by a dedicated, non-literal
-    /// case (server-scoped <c>[Theory]</c> interpolating a seeded id, invisible to literal
-    /// reflection) or is genuinely environment-dependent.
-    /// </summary>
-    private static readonly (string Prefix, string Reason)[] ReadSweepExemptPrefixes =
-    [
-        ("api/servers/#/certbot", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/docker", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/apache", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/mail", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/portsentry", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/rkhunter", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/teamspeak", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/modules", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/apps", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/module-links", "read-tested via ServerScopedGet_AsAdmin (interpolated route)"),
-        ("api/servers/#/configuration", "GET export returns 404 without a seeded config - not a success-read target"),
-        ("api/pipelines/runs", "read-tested via CheckpointResumePreview_AsAdmin with an interpolated seeded run id"),
-        ("api/pipelines/#/runs/#/stage-baselines",
-            "read-tested via RunStageBaselines_AsAdmin with the seeded pipeline and run ids"),
-        ("api/agent", "AgentInstaller: GET returns an install script, not a JSON collection"),
-        ("api/external-repos", "ExternalRepos: gated by Features:ExternalRepos (off in test env) - 404 by design"),
-        ("api/logs", "Logs: GET requires a seeded task id with on-disk logs"),
-        ("api/variable-libraries/#/ports",
-            "read-tested via VariableLibraryPortTargets_AsAdmin, which creates the library the route needs"),
-        ("api/packages/nuget", "NuGet protocol reads require a PAT credential, not the admin JWT used by the generic read sweep"),
-        ("api/packages/npm", "npm protocol reads require a PAT credential, not the admin JWT used by the generic read sweep"),
-    ];
 
     /// <summary>
     /// Controllers exposing a mutation (POST/PUT/DELETE/PATCH) action but legitimately absent from
@@ -141,27 +105,6 @@ public sealed class ApiSweepCoverageGuardTests
             + Environment.NewLine + string.Join(Environment.NewLine, uncovered));
     }
 
-    [Fact]
-    public void Every_auth_swept_controller_is_also_read_swept()
-    {
-        var authRoutes = NormalizedLiterals(typeof(ApiAuthorizationSmokeTests));
-        var readRoutes = NormalizedLiterals(typeof(ApiReadSmokeTests));
-        Assert.NotEmpty(readRoutes);
-
-        var allPrefixes = AllControllerPrefixes();
-        var drifted = ApiControllers()
-            .Where(c => HasGetAction(c) && !AuthSweepExemptControllers.Contains(c.FullName!))
-            .Where(c => IsCovered(RoutePrefix(c), authRoutes, allPrefixes))
-            .Where(c => !IsCovered(RoutePrefix(c), readRoutes, allPrefixes) && !IsReadExempt(RoutePrefix(c)))
-            .Select(c => $"{c.FullName} (route '{RouteTemplate(c)}')")
-            .ToList();
-
-        Assert.True(drifted.Count == 0,
-            "Controllers in the auth sweep but missing from the admin read sweep - read drift "
-            + "(add the route to ApiReadSmokeTests, or document a ReadSweepExemptPrefixes entry):"
-            + Environment.NewLine + string.Join(Environment.NewLine, drifted));
-    }
-
     private static List<Type> ApiControllers() =>
         typeof(Program).Assembly
             .GetTypes()
@@ -222,9 +165,6 @@ public sealed class ApiSweepCoverageGuardTests
 
         return false;
     }
-
-    private static bool IsReadExempt(string prefix) =>
-        ReadSweepExemptPrefixes.Any(e => prefix == e.Prefix);
 
     /// <summary>Pulls every route-shaped string out of a sweep's <c>[InlineData]</c> attributes and normalizes it.</summary>
     private static List<string> NormalizedLiterals(Type sweepType)

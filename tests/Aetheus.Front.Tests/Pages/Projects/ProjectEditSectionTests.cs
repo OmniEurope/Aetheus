@@ -41,7 +41,7 @@ public class ProjectEditSectionTests : BunitContext
     }
 
     [Fact]
-    public void Renders_AetheusLoader_WhenNoProject()
+    public void Renders_ZoneVeil_WhenNoProject()
     {
         var cut = Render<ProjectEditSection>(p => p
             .Add(x => x.Project, null));

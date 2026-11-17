@@ -8,10 +8,10 @@
             <ChildContent><OmniText Element="OmniTextElement.Strong">@L["TaskFailed"]</OmniText><OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@Model.Error</OmniText></ChildContent>
         </OmniAlert>
     }
-    @* Recette R3-32: while the config is read, OE's busy veil lies over the editor, which stays mounted
-       underneath, instead of a large loader replacing the dialog's content. *@
-    <div class="@(Model.Loading ? "omni-busy" : null)" aria-busy="@(Model.Loading ? "true" : "false")"
-         title="@(Model.Loading ? L["LoadingConfig"].Value : null)">
+    @* Recette R3-32, R-1: while the config is read, the page veil is held and the editor stays mounted,
+       instead of a large loader replacing the dialog's content. *@
+    <VeilHold Busy="@Model.Loading" />
+    <div title="@(Model.Loading ? L["LoadingConfig"].Value : null)">
         <OmniCodeEditor @bind-Value="_content" Language="apache" Height="24rem"
                         InteropModulePath="@EditorModules.Frame"
                         Label="@L["ApacheConfig"]" Disabled="@Model.Loading" />

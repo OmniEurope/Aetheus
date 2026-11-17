@@ -33,6 +33,29 @@ internal static class ProjectServerScope
         return linked.Union(viaEnvironment);
     }
 
+    /// <summary>The (server, project) pairs of these servers, directly or through an environment, each once: the
+    /// set-based form of <see cref="ProjectIdsOfServer"/>, with the same organization rule.</summary>
+    internal static IQueryable<ServerProjectLink> ProjectLinksOfServers(this AppDbContext db, IReadOnlyCollection<int> serverIds)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var ids = serverIds.ToArray();
+        var linked = db.ProjectServers
+            .Where(projectServer => projectServer.ServerId != null && ids.Contains(projectServer.ServerId.Value)
+                && projectServer.Server!.OrganizationId == projectServer.Project.OrganizationId)
+            .Select(projectServer => new ServerProjectLink { ServerId = projectServer.ServerId!.Value, ProjectId = projectServer.ProjectId });
+        var viaEnvironment = db.EnvironmentServers
+            .Where(link => ids.Contains(link.ServerId) && link.Environment.ProjectId != null
+                && link.Server.OrganizationId == link.Environment.Project!.OrganizationId)
+            .Select(link => new ServerProjectLink { ServerId = link.ServerId, ProjectId = link.Environment.ProjectId!.Value });
+        return linked.Union(viaEnvironment);
+    }
+
+    internal sealed class ServerProjectLink
+    {
+        public int ServerId { get; init; }
+        public int ProjectId { get; init; }
+    }
+
     /// <summary>The ids of the projects the server is attached to, directly or through an environment, each
     /// once.</summary>
     internal static IQueryable<int> ProjectIdsOfServer(this AppDbContext db, int serverId)

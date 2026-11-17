@@ -52,6 +52,7 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
             Port = v.Port,
             DocumentRoot = v.DocumentRoot,
             ConfigFile = v.ConfigFile,
+            ConfigFileForeignOwner = v.ConfigFileForeignOwner,
             IsEnabled = v.IsEnabled
         }).ToList();
     }
@@ -115,7 +116,8 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
     {
         // Item #8: switched from a shell `tail … 2>/dev/null || tail …` (rejected by the
         // CommandValidator since the RKHunter hardening) to a typed operation. The agent reads
-        // the log file with `tail` argv-only and resolves the platform path with File.Exists.
+        // the log file with `tail` argv-only and resolves the platform path by opening each candidate; when it
+        // cannot show one it writes an ApacheLogDiagnostic line (not found / access denied), localized by the front.
         var logType = request.LogType is "access" ? "access" : "error";
         var task = ServerTaskFactory.Operation(
             serverId,

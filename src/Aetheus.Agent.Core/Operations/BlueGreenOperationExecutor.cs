@@ -33,6 +33,11 @@ public sealed class BlueGreenOperationExecutor(
     /// <summary>The one door to Compose; see <see cref="BlueGreenCompose"/> for why it is not inline.</summary>
     private readonly BlueGreenCompose _compose = new(shell);
 
+    /// <summary>The one-shot migration bundle job, streamed with a heartbeat; see <see cref="BlueGreenMigrationJob"/>.</summary>
+    private readonly BlueGreenMigrationJob _migrationJob = new(
+        shell, new BlueGreenCompose(shell), timeProvider ?? TimeProvider.System,
+        BlueGreenMigrationJob.DefaultHeartbeatInterval);
+
     /// <summary>Names whoever holds a port the idle colour could not bind; see <see cref="BlueGreenPortHolders"/>.</summary>
     private readonly BlueGreenPortHolders _portHolders = new(shell);
 
@@ -64,7 +69,10 @@ public sealed class BlueGreenOperationExecutor(
             await onOutput($"Invalid Compose project '{target}'.", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
-        if (!BlueGreenContext.TryCreate(target, envVars, out var context, out var contextError))
+        // Only the migrate step talks to the project's database; a project without one deploys every other step.
+        if (!BlueGreenContext.TryCreate(
+                target, envVars, out var context, out var contextError,
+                requireDatabase: kind == OperationKind.BlueGreenMigrate))
         {
             // Use the journal to determine whether rollback is needed when context files are
             // absent. An unreachable open transaction must fail rather than claim successful
@@ -140,16 +148,17 @@ public sealed class BlueGreenOperationExecutor(
 
         // A dedicated one-shot job, never the application replicas: both colours set
         // Database__SkipMigrations so they cannot race each other on the shared schema.
-        var migrate = await _compose.RunAsync(
-            context,
+        // The job can run for many minutes: its output streams live and a heartbeat shows it is not hung
+        // (see BlueGreenMigrationJob), instead of one dump when it ends.
+        var migrate = await _migrationJob.RunAsync(
+            context, target,
             [
                 "--profile", target, "run", "--rm", "--no-deps",
                 "-e", "AETHEUS_RUN_MIGRATIONS=true",
                 "-e", "AETHEUS_MIGRATE_ONLY=true",
                 $"back-{target}"
             ],
-            timeoutSeconds, ct).ConfigureAwait(false);
-        if (migrate.StdOut.Length > 0) await onOutput(migrate.StdOut, TaskLogLevel.Info).ConfigureAwait(false);
+            timeoutSeconds, onOutput, ct).ConfigureAwait(false);
         if (migrate.ExitCode != 0)
         {
             await onOutput($"Migration job failed: {migrate.StdErr}", TaskLogLevel.Error).ConfigureAwait(false);
@@ -245,17 +254,18 @@ public sealed class BlueGreenOperationExecutor(
         }
         var (revision, reloadCommand, templatePath, confPath) = inputs;
 
-        if (!journal.TryOpen(live ?? "none", idle, revision, BlueGreenTransactionOwnership.OwnerOf(envVars), out var journalError))
+        // Snapshot before overwriting: a rejected reload must be able to put back exactly what was
+        // serving, and a later step must be able to reconcile an interrupted switch. ACORE-007: the
+        // journal records the snapshot (or that there was no configuration) before its state reaches
+        // PREPARED, so no PREPARED journal can lack it and an undo never deletes the live file by mistake.
+        var previousConf = File.Exists(confPath) ? await File.ReadAllTextAsync(confPath, ct).ConfigureAwait(false) : null;
+        if (!journal.TryOpen(
+                live ?? "none", idle, revision, BlueGreenTransactionOwnership.OwnerOf(envVars),
+                new BlueGreenJournal.UpstreamRecord(previousConf), out var journalError))
         {
             await onOutput(journalError, TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(1, false);
         }
-
-        // Snapshot before overwriting: a rejected reload must be able to put back exactly what was
-        // serving, and a later step must be able to reconcile an interrupted switch.
-        var previousConf = File.Exists(confPath) ? await File.ReadAllTextAsync(confPath, ct).ConfigureAwait(false) : null;
-        if (previousConf is not null)
-            await File.WriteAllTextAsync(Path.Combine(context.JournalDir, "upstream.before"), previousConf, ct).ConfigureAwait(false);
 
         var (front, back) = context.PortsFor(idle);
         var rendered = BlueGreenUpstream.Render(

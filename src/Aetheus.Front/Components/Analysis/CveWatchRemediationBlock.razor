@@ -1,0 +1,115 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-14: "What to do" on the page of a CVE watch finding: the recommendation of the watch for this match, one main action to
+   have the platform prepare the upgrade, and, when it cannot, the command to run and why. Nothing is drawn for a finding that
+   has no open match of the watch; a failed read is said in place, never turned into "nothing to do". *@
+@if (_loadFailed || _match is { ClosedAt: null })
+{
+    <OmniCard Class="cve-remediation-card" data-testid="cve-remediation">
+        <HeaderContent>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniIcon Name="OmniIconName.ArrowUp" />
+                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["CveRemediationTitle"]</OmniHeading>
+            </OmniStack>
+        </HeaderContent>
+        <ChildContent>
+            <VeilHold Busy="@_busy" />
+            <OmniStack>
+                @if (_loadFailed)
+                {
+                    <OmniAlert Severity="OmniSeverity.Danger" data-testid="cve-remediation-failed">
+                        @L["LoadFailed"]
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ReloadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+                    </OmniAlert>
+                }
+
+                @if (RecommendationText is { } recommendationText)
+                {
+                    <OmniText data-testid="cve-recommendation">@recommendationText</OmniText>
+                }
+                @if (_match is { ClosedAt: null })
+                {
+                    @* R-39: where the vulnerable version was read, and the fixed version to move to (or that none is published). *@
+                    <OmniStack Gap="OmniSpacing.XSmall" data-testid="cve-version-source">
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="cve-found-in">@L["CveRemediationFoundIn"] @FoundInText</OmniText>
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="cve-fixed-available">@L["CveRemediationFixedAvailable"] @FixedVersionText</OmniText>
+                    </OmniStack>
+                }
+                @if (_match?.Recommendation is { Files.Count: > 0 } recommendation)
+                {
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@string.Format(L["CveRemediationFiles"], string.Join(", ", recommendation.Files))</OmniText>
+                }
+
+                @if (_match?.Recommendation is { Files.Count: 0, Kind: CveRecommendationKind.BumpRuntime or CveRecommendationKind.BumpBaseImage })
+                {
+                    @* A runtime, a runtime pack or an image comes from the SDK or the base image: say where to raise it when no file is known. *@
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="cve-runtime-source">@L["CveRemediationRuntimeSource"]</OmniText>
+                }
+
+                @if (_remediation is { Status: { } status } attempt)
+                {
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="cve-remediation-attempt" data-testid="cve-remediation-attempt">
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CveRemediationLatestAttempt"]</OmniText>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(AttemptTone(status)))" Fill="OmniFill.Tonal" Tone="@AttemptTone(status)">@L.Localize(status)</OmniBadge>
+                        @if (attempt.Branch is { Length: > 0 } branch)
+                        {
+                            <OmniText Element="OmniTextElement.Small">@string.Format(L["CveRemediationBranch"], branch)</OmniText>
+                        }
+                        @if (attempt.PullRequestNumber is { } pullRequestNumber)
+                        {
+                            <OmniText Element="OmniTextElement.Small">@string.Format(L["CveRemediationPullRequest"], pullRequestNumber)</OmniText>
+                        }
+                        @if (attempt.ResolvedVersion is { Length: > 0 } resolved)
+                        {
+                            <OmniText Element="OmniTextElement.Small">@string.Format(L["CveRemediationResolved"], resolved)</OmniText>
+                        }
+                        @if (attempt.PipelineRunId is { } runId)
+                        {
+                            <OmniLink Href="@($"pipelines/runs/{runId}")">@L["PipelineRun"]</OmniLink>
+                        }
+                    </OmniStack>
+                    @if (attempt.FailureReason is { Length: > 0 } failure)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@failure</OmniText>
+                    }
+                }
+
+                @if (Fallback is { } fallback)
+                {
+                    @* The platform cannot do it: the reason and the command to run by hand, copyable, never an error toast. *@
+                    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["CveRemediationFallbackTitle"]" data-testid="cve-remediation-fallback">
+                        <OmniStack>
+                            <OmniText data-testid="cve-remediation-reason">@L.Localize(fallback.Reason)</OmniText>
+                            @if (!string.IsNullOrWhiteSpace(fallback.Detail))
+                            {
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@fallback.Detail</OmniText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(fallback.Command))
+                            {
+                                <OmniCodeBlock Code="@fallback.Command" Language="bash" Title="@L["CveRemediationFallbackCommand"]" Wrap="true" data-testid="cve-remediation-command" />
+                                @if (!string.IsNullOrWhiteSpace(fallback.WorkingDirectory))
+                                {
+                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@string.Format(L["CveRemediationFallbackDirectory"], fallback.WorkingDirectory)</OmniText>
+                                }
+                            }
+                            else
+                            {
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CveRemediationFallbackNoCommand"]</OmniText>
+                            }
+                        </OmniStack>
+                    </OmniAlert>
+                }
+
+                @* One main action; the rest is in the menu. *@
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                    @if (CanPrepare)
+                    {
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="PrepareAsync" Busy="@_busy" data-testid="cve-remediation-prepare"><Icon><OmniIcon Name="OmniIconName.ArrowUp" /></Icon><ChildContent><span>@L["CveRemediationPrepare"]</span></ChildContent></OmniButton>
+                    }
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="ReloadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Refresh"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
+                </OmniStack>
+            </OmniStack>
+        </ChildContent>
+    </OmniCard>
+}

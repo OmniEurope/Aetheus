@@ -63,6 +63,33 @@ public sealed class PipelineRunNotificationPublisherTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>R-30 follow-up: the refused-launch payload carries the reason as problem codes next to its English
+    /// sentence, so the inbox and the mail can say it in the reader's language.</summary>
+    [Fact]
+    public async Task LaunchRefused_CarriesTheReasonAsProblemCodes_NextToTheEnglishReason()
+    {
+        var pipeline = new Pipeline { Id = 4, Name = "build", EnvironmentId = 2 };
+        _repo.GetPipelineProjectIdAsync(pipeline, Arg.Any<CancellationToken>()).Returns(10);
+        var problem = new ProblemDto("ScheduleOccurrenceMissed", new() { ["first"] = "2026-11-05 02:00", ["limit"] = "6" });
+
+        await _sut.PublishLaunchRefusedAsync(pipeline, "Scheduler", "English reason", [problem], TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineLaunchRefused,
+            Arg.Is<string>(json => PayloadHasCodeAndEnglish(json)),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static bool PayloadHasCodeAndEnglish(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var first = root.GetProperty("ReasonProblems")[0];
+        return root.GetProperty("Reason").GetString() == "English reason"
+            && first.GetProperty("Code").GetString() == "ScheduleOccurrenceMissed"
+            && first.GetProperty("Parameters").GetProperty("limit").GetString() == "6";
+    }
+
     /// <summary>Recette R-24: the payload names the approval, so the mail's buttons open that approval and no later one of the run.</summary>
     [Fact]
     public async Task ApprovalRequested_CarriesTheApprovalId_ForTheMailButtons()

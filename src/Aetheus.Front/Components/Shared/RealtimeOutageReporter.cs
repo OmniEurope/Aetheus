@@ -12,6 +12,13 @@ namespace Aetheus.Front.Components.Shared;
 /// page's visibility is tracked (<see cref="PageVisibilityTimeline"/>), the report also says how long the
 /// page was hidden and how long visible during the outage, so a sleeping machine or a parked tab reads
 /// differently from an outage seen on screen (recette R1-42).
+/// <para>
+/// An outage the user never saw is not reported (R-2, 2026-10-31): a tab parked in the background, or a
+/// machine asleep, loses its connections without any fault of the server and gets them back by itself.
+/// Measured on the system logs of 2026-10-29, all 50 client warnings were such outages (the longest
+/// visible stretch was 31 s). An incident is reported when at least one of its hubs was down for
+/// <see cref="ReportedOutage"/> with the page visible; a visible tab that cannot reach the hub still logs.
+/// </para>
 /// </summary>
 internal sealed class RealtimeOutageReporter(
     ClientErrorReporter reporter, TimeProvider clock, PageVisibilityTimeline? visibility = null)
@@ -23,7 +30,7 @@ internal sealed class RealtimeOutageReporter(
     internal static readonly TimeSpan GroupingWindow = TimeSpan.FromSeconds(5);
 
     private readonly object _gate = new();
-    private readonly List<RestoredOutage> _pending = [];
+    private readonly List<PendingOutage> _pending = [];
     private bool _flushScheduled;
 
     /// <summary>The clock the connections time their outages with.</summary>
@@ -39,10 +46,15 @@ internal sealed class RealtimeOutageReporter(
         int? hiddenSeconds = visibility is null
             ? null
             : Math.Min(seconds, (int)visibility.HiddenBetween(since, now).TotalSeconds);
+        var seenOnScreen = hiddenSeconds is not { } hidden || seconds - hidden >= ReportedOutage.TotalSeconds;
         lock (_gate)
         {
-            _pending.Add(new RestoredOutage(hub, since, seconds, hiddenSeconds));
-            if (_flushScheduled) return;
+            // Hubs nobody saw wait only for a hub that was seen to arrive within the window; alone, they
+            // arm nothing and are forgotten once the window has passed.
+            if (!_flushScheduled)
+                _pending.RemoveAll(entry => now - entry.At > GroupingWindow);
+            _pending.Add(new PendingOutage(new RestoredOutage(hub, since, seconds, hiddenSeconds), now, seenOnScreen));
+            if (_flushScheduled || !seenOnScreen) return;
             _flushScheduled = true;
         }
         _ = FlushLaterAsync();
@@ -54,14 +66,16 @@ internal sealed class RealtimeOutageReporter(
         RestoredOutage[] incident;
         lock (_gate)
         {
-            incident = [.. _pending];
+            incident = [.. _pending.Select(entry => entry.Outage)];
             _pending.Clear();
             _flushScheduled = false;
         }
         if (incident.Length == 0) return;
         // Restored on its own: a warning, not an error (decision of 2026-10-14). A connection that
-        // closes for good is reported as an error by HubConnectionFactory.
-        reporter.Report(Guid.NewGuid().ToString("N"), Summary(incident), Describe(incident), level: ClientErrorLogLevels.Warning);
+        // closes for good is reported as an error by HubConnectionFactory. Only incidents the user saw on
+        // screen get here (R-2, 2026-10-31); the hidden and visible durations still say how much was hidden.
+        reporter.Report(Guid.NewGuid().ToString("N"), Summary(incident), Describe(incident),
+            level: ClientErrorLogLevels.Warning);
     }
 
     private static string Summary(RestoredOutage[] incident) =>
@@ -96,6 +110,9 @@ internal sealed class RealtimeOutageReporter(
         hiddenSeconds is { } hidden
             ? string.Create(CultureInfo.InvariantCulture, $" (page hidden {hidden} s, visible {seconds - hidden} s)")
             : string.Empty;
+
+    /// <summary>A restored hub waiting for the incident's report, with the time it was restored and whether the page was visible long enough to have seen it.</summary>
+    private sealed record PendingOutage(RestoredOutage Outage, DateTimeOffset At, bool SeenOnScreen);
 
     /// <summary>One restored hub; <paramref name="HiddenSeconds"/> is null when the page visibility is not tracked.</summary>
     internal sealed record RestoredOutage(string Hub, DateTimeOffset Since, int Seconds, int? HiddenSeconds = null);

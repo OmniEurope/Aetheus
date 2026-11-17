@@ -15,7 +15,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// This is the InMemory-blind layer: EF InMemory client-evaluates anything, so it never surfaces a
 /// non-translatable Expression - only a real Npgsql query does.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineRunsProjectionIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

@@ -22,10 +22,21 @@ public partial class ServerFirewallSection
     private ServerFirewallDto? _firewall;
     private bool _loading = true;
     private bool _busy;
+    private ServerFollowerBusyLink? _busyLink;
+
+    // R-12: the buttons stay disabled while a task adopted on arrival runs.
+    private bool ActionBusy => _busy || (_busyLink?.Busy ?? false);
+
+    protected override void OnAfterRender(bool firstRender) =>
+        (_busyLink ??= new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged))).Follower = _follower;
+
     private int? _loadedServerId;
     private int _loadGeneration;
 
     private readonly NewRuleModel _rule = new();
+
+    /// <summary>R-22: the rule form is folded by default and stays as the reader left it.</summary>
+    private bool _formExpanded;
     private enum FirewallRuleAction { Allow, Deny }
 
     private IReadOnlyList<OmniOption<FirewallRuleAction>> RuleActionOptions =>
@@ -109,6 +120,18 @@ public partial class ServerFirewallSection
     // R-119: the task the rules of this page queue is followed, and the section is veiled until it ends.
     private ServerTaskFollower? _follower;
 
+    /// <summary>Recette R-12: what a task adopted on arrival ("Firewall allow 22/tcp") is called, as the page names its own.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.KeyWith(L, ServerTaskNames.FirewallPrefix + "allow ", "FirewallAllow"),
+        ServerAdoptedTaskTitles.KeyWith(L, ServerTaskNames.FirewallPrefix + "deny ", "FirewallDeny"),
+        ServerAdoptedTaskTitles.KeyWith(L, ServerTaskNames.FirewallPrefix + "delete ", "Delete"),
+        new(ServerTaskNames.FirewallPrefix + "enable", _ => ToggleTitle(enable: true)),
+        new(ServerTaskNames.FirewallPrefix + "disable", _ => ToggleTitle(enable: false))
+    ]);
+
+    private string ToggleTitle(bool enable) => $"{L["FirewallTitle"]}: {L[enable ? "FirewallEnable" : "FirewallDisable"]}";
+
     private Task SubmitRuleAsync(NewRuleModel rule) => rule.Action == FirewallRuleAction.Allow
         ? RunAsync(() => Api.Security.FirewallAllowAsync(ServerId, BuildRequest()), "FirewallRuleQueued", $"{L["FirewallAllow"]} {_rule.Port}/{_rule.Protocol}")
         : RunAsync(() => Api.Security.FirewallDenyAsync(ServerId, BuildRequest()), "FirewallRuleQueued", $"{L["FirewallDeny"]} {_rule.Port}/{_rule.Protocol}");
@@ -128,7 +151,7 @@ public partial class ServerFirewallSection
                 new OmniConfirmOptions { Destructive = true, OkButtonText = L["FirewallDisable"].Value, CancelButtonText = L["GoBack"].Value });
             if (confirmed != true) return;
         }
-        await Veil.RunAsync(() => RunAsync(() => Api.Security.FirewallToggleAsync(ServerId, enable), enable ? "FirewallEnableQueued" : "FirewallDisableQueued", $"{L["FirewallTitle"]}: {L[enable ? "FirewallEnable" : "FirewallDisable"]}"));
+        await Veil.RunAsync(() => RunAsync(() => Api.Security.FirewallToggleAsync(ServerId, enable), enable ? "FirewallEnableQueued" : "FirewallDisableQueued", ToggleTitle(enable)));
     }
 
     private async Task DeleteRuleAsync(FirewallRuleDto rule)

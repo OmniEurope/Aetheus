@@ -22,8 +22,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// reason. It is not a dependency deadlock: a continue-on-error failure does not block B.
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PipelineDeadlockIntegrationTests(PostgresFixture fixture)
+public sealed class PipelineDeadlockIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string DeadlockYaml = """
         name: deadlock-it

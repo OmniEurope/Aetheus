@@ -12,7 +12,7 @@
             <div class="omni-u-mt-xs run-blocking-test">
                 @if (test.Producer is { } producer)
                 {
-                    <span>@string.Format(L["CandidateBlockingTestSource"], test.Key, producer.StepName, producer.RunId, producer.PipelineName)</span>
+                    <span>@string.Format(L["CandidateBlockingTestSource"], test.Key, producer.StepName, producer.RunNumber, producer.PipelineName)</span>
                     <OmniLink Href="@LogsHref(producer, ViewingRunId)" Class="run-blocking-test-logs">@L["CandidateBlockingTestOpenLogs"]</OmniLink>
                     @if (producer.FailedTests.Count > 0)
                     {

@@ -80,6 +80,8 @@ public class PluginManagementDeepTests : BunitContext
         var plugin = new PluginRegistrationDto { Id = 1, Name = "AuditPlugin", Version = "1.0.0", Status = PluginStatus.Enabled, Type = PluginType.Collector };
         var method = typeof(PluginManagement).GetMethod("TogglePlugin", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [plugin])!);
+        // R-10: the list is read again by the grid, quietly, behind the row the save answered.
+        await cut.InvokeAsync(() => cut.FindComponent<AetheusDataGrid<PluginRegistrationDto>>().Instance.BackgroundRefresh);
 
         var plugins = (List<PluginRegistrationDto>)typeof(PluginManagement).GetField("_plugins", Priv)!.GetValue(cut.Instance)!;
         Assert.Single(plugins);

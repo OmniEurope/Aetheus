@@ -43,6 +43,8 @@ public class TaskServiceTests
         // here we keep stored == plaintext so existing assertions on EnvironmentVariables hold.
         _encryption.EncryptValue(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
         _encryption.DecryptValue(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
+        // A completion reads the task's output-variable lines before it is stored (R-18): none by default.
+        _logService.GetTaskOutputVariableLinesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         _repo.TryStartTaskAsync(
                 Arg.Any<ServerTask>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -54,6 +56,7 @@ public class TaskServiceTests
             });
         var taskQueueNotifier = new TaskQueueNotifier(
             _serverHub,
+            _encryption,
             Substitute.For<Microsoft.Extensions.Logging.ILogger<TaskQueueNotifier>>());
         _sut = new TaskService(_repo, _logService, _pipelineHub, _serverHub, _auditMock, TimeProvider.System, _encryption, _artifactService, taskQueueNotifier,
             Substitute.For<Microsoft.Extensions.Logging.ILogger<TaskService>>(), _domainEvents);
@@ -277,6 +280,77 @@ public class TaskServiceTests
         Assert.False(result);
         Assert.Equal(TaskExecutionStatus.Assigned, task.Status);
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static readonly AgentTaskLeaseRequest StartLease = new()
+    {
+        AgentSessionId = "11111111111111111111111111111111",
+        AgentSessionFencingToken = 1
+    };
+
+    [Fact]
+    public async Task StartTaskAsync_RepeatedByTheLeaseHolderAfterALostResponse_IsAcknowledged()
+    {
+        // The first start committed (the task runs) but its response was lost, so the agent retries.
+        var startedAt = new DateTime(2026, 11, 10, 8, 0, 0, DateTimeKind.Utc);
+        var task = new ServerTask { Id = 1, ServerId = 1, Status = TaskExecutionStatus.Running, StartedAt = startedAt };
+        _repo.FindTaskAsync(1, Arg.Any<CancellationToken>()).Returns(task);
+        _repo.GetStartedAtUnderLeaseAsync(1, StartLease.AgentSessionId, 1, Arg.Any<CancellationToken>())
+            .Returns(startedAt);
+
+        var result = await _sut.StartTaskAsync(1, StartLease, TestContext.Current.CancellationToken);
+
+        Assert.True(result);
+        await _repo.DidNotReceive().TryStartTaskWithLeaseAsync(
+            Arg.Any<ServerTask>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StartTaskAsync_ConcurrentDuplicateLosingTheRowRace_IsAcknowledged()
+    {
+        // The retry read the task as Assigned before the first start committed, then its UPDATE matched
+        // no row: the repository answers false, yet the persisted row runs under this lease.
+        var startedAt = new DateTime(2026, 11, 10, 8, 0, 0, DateTimeKind.Utc);
+        var task = new ServerTask { Id = 1, ServerId = 1, Status = TaskExecutionStatus.Assigned };
+        _repo.FindTaskAsync(1, Arg.Any<CancellationToken>()).Returns(task);
+        _repo.TryStartTaskWithLeaseAsync(
+                task, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _repo.GetStartedAtUnderLeaseAsync(1, StartLease.AgentSessionId, 1, Arg.Any<CancellationToken>())
+            .Returns(startedAt);
+
+        var result = await _sut.StartTaskAsync(1, StartLease, TestContext.Current.CancellationToken);
+
+        Assert.True(result);
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StartTaskAsync_RunningTaskNotHeldByTheCallerLease_StaysRefused()
+    {
+        // Another claimant, a stale token or a lapsed lease: the repository finds no running task under it.
+        var task = new ServerTask { Id = 1, ServerId = 1, Status = TaskExecutionStatus.Running, StartedAt = DateTime.UtcNow };
+        _repo.FindTaskAsync(1, Arg.Any<CancellationToken>()).Returns(task);
+        _repo.GetStartedAtUnderLeaseAsync(1, StartLease.AgentSessionId, 1, Arg.Any<CancellationToken>())
+            .Returns((DateTime?)null);
+
+        var result = await _sut.StartTaskAsync(1, StartLease, TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task StartTaskAsync_RunningTaskOnTheUnfencedProtocol_StaysRefused()
+    {
+        // The legacy protocol carries no proof of ownership, so a repeated start cannot be told from a stranger's.
+        var task = new ServerTask { Id = 1, ServerId = 1, Status = TaskExecutionStatus.Running, StartedAt = DateTime.UtcNow };
+        _repo.FindTaskAsync(1, Arg.Any<CancellationToken>()).Returns(task);
+
+        var result = await _sut.StartTaskAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        await _repo.DidNotReceive().GetStartedAtUnderLeaseAsync(
+            Arg.Any<int>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     private static readonly AgentTaskLeaseRequest ReleaseLease = new()
@@ -504,6 +578,7 @@ public class TaskServiceTests
                 Arg.Any<int>(),
                 Arg.Any<DateTime>(),
                 Arg.Any<string>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(false);
 

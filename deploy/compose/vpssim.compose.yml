@@ -22,7 +22,7 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.vpssim
       args:
-        # -net10: pre-bake the .NET SDK 10.0 into the image (1) or keep it absent (0, default).
+        # -net10: pre-bake the .NET SDK 11.0 into the image (1) or keep it absent (0, default).
         INSTALL_DOTNET: ${VPSSIM_DOTNET:-0}
     # systemd needs to manage cgroups; DinD needs device access.
     privileged: true

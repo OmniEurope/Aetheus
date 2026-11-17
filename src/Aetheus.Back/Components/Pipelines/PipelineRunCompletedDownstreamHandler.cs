@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines.Events;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.DomainEvents;
@@ -46,6 +47,11 @@ public sealed class PipelineRunCompletedDownstreamHandler(
             return;
         }
         if (def?.OnSuccess is not { Count: > 0 }) return;
+        if (DependencyUpdateBranch.IsOurs(run.BranchName))
+        {
+            await SkipForDependencyUpdateAsync(run, ct).ConfigureAwait(false);
+            return;
+        }
 
         var projectId = await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
         if (projectId is not { } pid) // downstream resolution is project-scoped
@@ -65,6 +71,19 @@ public sealed class PipelineRunCompletedDownstreamHandler(
 
         foreach (var trigger in def.OnSuccess)
             await TriggerDownstreamAsync(trigger, run, pid, chain, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>PLAN-007: a run on the branch of an automatic dependency update tests that branch; it never starts what follows a
+    /// success (the deployment after a candidate). Production stays the user's decision, so the run says why nothing followed.</summary>
+    private async Task SkipForDependencyUpdateAsync(PipelineRun run, CancellationToken ct)
+    {
+        var reason = $"this run tests the dependency update branch '{run.BranchName}': the production deployment is left to the user";
+        logger.LogInformation("Downstream chaining skipped for run {RunId}: {Reason}", run.Id, reason);
+        await repo.AppendRunWarningsAsync(run.Id,
+            [PipelineProblem.Of(
+                PipelineProblemCodes.OnSuccessFollowUpsNotStarted,
+                $"The on_success follow-ups were not started: {reason}",
+                ("detail", reason)).ToStored()], ct).ConfigureAwait(false);
     }
 
     private (PipelineYamlDefinition? Definition, string? Error) ParseDefinition(PipelineRun run, int runId)
@@ -131,7 +150,7 @@ public sealed class PipelineRunCompletedDownstreamHandler(
                 run, projectId, targetName, target.Id,
                 PipelineProblem.Of(
                     PipelineProblemCodes.DownstreamLaunchRefused, $"the launch was refused: {ex.Message}", ("detail", ex.Message)),
-                ct, (ex as BadRequestException)?.Problems).ConfigureAwait(false);
+                ct, (ex as BadRequestException)?.Problems, vars).ConfigureAwait(false);
             return;
         }
         if (outcome.Run is null)
@@ -139,7 +158,7 @@ public sealed class PipelineRunCompletedDownstreamHandler(
             await ReportRefusalAsync(
                 run, projectId, targetName, target.Id,
                 outcome.Problem ?? PipelineProblem.Of(PipelineProblemCodes.DownstreamNoReason, "no reason was given"),
-                ct, outcome.Inner).ConfigureAwait(false);
+                ct, outcome.Inner, vars).ConfigureAwait(false);
             return;
         }
         logger.LogInformation("Downstream pipeline {TargetId} triggered after run {RunId} succeeded", target.Id, run.Id);
@@ -150,7 +169,8 @@ public sealed class PipelineRunCompletedDownstreamHandler(
     /// upstream run already succeeded and must stay so.</summary>
     private async Task ReportRefusalAsync(
         PipelineRun run, int? projectId, string? targetName, int? targetPipelineId, PipelineProblem reason,
-        CancellationToken ct, IReadOnlyList<ProblemDto>? innerProblems = null)
+        CancellationToken ct, IReadOnlyList<ProblemDto>? innerProblems = null,
+        IReadOnlyDictionary<string, string>? launchVariables = null)
     {
         logger.LogWarning(
             "Downstream chaining after run {RunId}: {Target} not started: {Reason}",
@@ -167,6 +187,8 @@ public sealed class PipelineRunCompletedDownstreamHandler(
                 PipelineProblemCodes.OnSuccessFollowUpNotStarted,
                 $"The on_success follow-up '{targetName}' was not started: {reason.English}",
                 ("target", targetName), ("detail", reason.English))).ToStored(inner);
+        if (targetPipelineId is { } targetId)
+            await RecordRefusedTargetRunAsync(run, targetId, reason, inner, launchVariables, ct).ConfigureAwait(false);
         try
         {
             await repo.AppendRunWarningsAsync(run.Id, [message], ct).ConfigureAwait(false);
@@ -179,6 +201,30 @@ public sealed class PipelineRunCompletedDownstreamHandler(
             // Mandatory catch: reporting is best effort and must not fail the upstream run or skip the
             // remaining on_success targets.
             logger.LogWarning(ex, "The refusal of an on_success follow-up of run {RunId} could not be recorded", run.Id);
+        }
+    }
+
+    /// <summary>Recette R-36: a follow-up refused before it could start leaves a failed run on the TARGET pipeline,
+    /// carrying the reason, so the refusal shows in that pipeline's runs table and not only on the upstream run. No
+    /// step runs and no job is dispatched for it. The subscribers are told once, by the notification the caller
+    /// sends (it opens the upstream run), so this record stays silent. Never throws: the upstream run already
+    /// succeeded and the next on_success target must still start.</summary>
+    private async Task RecordRefusedTargetRunAsync(
+        PipelineRun upstream, int targetPipelineId, PipelineProblem reason, IReadOnlyList<ProblemDto> inner,
+        IReadOnlyDictionary<string, string>? launchVariables, CancellationToken ct)
+    {
+        try
+        {
+            await runService.RecordRefusedAutomatedLaunchAsync(
+                targetPipelineId, $"on_success:{upstream.Pipeline?.Name}#{upstream.BuildNumber}", reason.English,
+                launchVariables, ct, inner, notifySubscribers: false).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Mandatory catch: see ReportRefusalAsync, recording is best effort.
+            logger.LogWarning(
+                ex, "The refused on_success follow-up {TargetId} of run {RunId} could not be recorded as a run",
+                targetPipelineId, upstream.Id);
         }
     }
 

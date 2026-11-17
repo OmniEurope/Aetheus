@@ -138,8 +138,10 @@ window.monacoInterop = {
     },
 
     // `pipeline: <name>` lines become clickable links (Ctrl/Cmd-click) that open the referenced pipeline's
-    // read-only definition peek in .NET. The provider is global (per-language); the opener routes the custom
-    // `pipeline:` scheme back to the active editor's .NET ref.
+    // read-only definition peek in .NET; so do `extends: <template>@<version>` lines (R-35), which open that
+    // template version in the same peek, where its own `extends:` lines can be followed in turn. The provider is
+    // global (per-language); the opener routes the custom `pipeline:` and `template:` schemes back to the active
+    // editor's .NET ref.
     _registerPipelineLinks: function (dotNetRef) {
         this._pipelineLinkRef = dotNetRef;
         if (this._pipelineLinksRegistered) return;
@@ -160,6 +162,18 @@ window.monacoInterop = {
                             url: 'pipeline:' + name,
                             tooltip: 'Ctrl+Click: view pipeline definition'
                         });
+                        continue;
+                    }
+                    // The reference is `name@version` (or the legacy bare name = latest), optionally quoted,
+                    // optionally followed by a comment.
+                    const e = text.match(/^(\s*extends:\s*['"]?)([^'"#\s]+)['"]?\s*(?:#.*)?$/);
+                    if (e) {
+                        const startCol = e[1].length + 1;
+                        links.push({
+                            range: new monaco.Range(i, startCol, i, startCol + e[2].length),
+                            url: 'template:' + encodeURIComponent(e[2]),
+                            tooltip: 'Ctrl+Click: view template definition'
+                        });
                     }
                 }
                 return { links: links };
@@ -172,6 +186,10 @@ window.monacoInterop = {
                 open: function (uri) {
                     if (uri && uri.scheme === 'pipeline') {
                         self._pipelineLinkRef?.invokeMethodAsync('OnPipelineLinkActivated', uri.path);
+                        return true;
+                    }
+                    if (uri && uri.scheme === 'template') {
+                        self._pipelineLinkRef?.invokeMethodAsync('OnTemplateLinkActivated', uri.path);
                         return true;
                     }
                     return false;

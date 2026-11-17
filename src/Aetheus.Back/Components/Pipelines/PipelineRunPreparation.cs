@@ -38,6 +38,17 @@ public sealed record PipelineRunPreparation
     /// <summary>R-72: the user deploying despite the quality gate, set by the manual launch once it checked
     /// the rights the override takes; null for every other launch. Never passed on to a child run.</summary>
     public string? GateOverrideBy { get; init; }
+
+    /// <summary>R-7: the manual launch answers once the run exists, and dispatches its first stage after the
+    /// answer (<see cref="IPipelineDeferredFirstDispatch"/>). That dispatch launches the child runs of a trigger
+    /// step, which took most of the answer's time. Never passed on to a child run: its launch is already off the
+    /// request.</summary>
+    public bool DeferFirstDispatch { get; init; }
+
+    /// <summary>R-7: the person whose click launched the run, captured by the manual launch from its request. The
+    /// deferred first dispatch has no request, so its audit entries (the child runs it starts) name this person, as
+    /// they did inside the click. An audit actor only, never a right; never passed on to a child run.</summary>
+    public string? InitiatedBy { get; init; }
     internal Pipeline Pipeline { get; init; } = default!;
     internal PipelineYamlDefinition Definition { get; init; } = default!;
     internal List<PipelineStageDefinition> EffectiveStages { get; init; } = [];

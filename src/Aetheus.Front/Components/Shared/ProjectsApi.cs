@@ -137,6 +137,15 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
         => PutJsonAsync<UpdateProjectRequest, ProjectDto>($"api/projects/{id}", request, ct);
 
 
+    /// <summary>R-31: writes the branch the pipeline setup wizard chose to the project's default branch.</summary>
+    public Task<ApiStatus> SetDefaultBranchAsync(int id, string branch, CancellationToken ct = default)
+        => PutJsonNoBodyAsync($"api/projects/{id}/default-branch", new SetProjectDefaultBranchRequest { Branch = branch }, ct);
+
+
+    /// <summary>R-13: turns the project's expand/contract model (its migration gate) on or off.</summary>
+    public Task<ApiStatus> SetMigrationGateEnabledAsync(int id, bool enabled, CancellationToken ct = default)
+        => PutJsonNoBodyAsync($"api/projects/{id}/migration-gate", new SetProjectMigrationGateRequest { Enabled = enabled }, ct);
+
     /// <summary>Deletes the project. <paramref name="serverTaskIds"/> are the deletion's server discoveries and
     /// removals: when they prove its server resources removed the project is deleted (204), otherwise it waits,
     /// deleted, for its server cleanup to be relaunched (202, recette R-51). Null when the deletion was refused

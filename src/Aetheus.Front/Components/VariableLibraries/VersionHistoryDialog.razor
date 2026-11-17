@@ -1,6 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* R-99: OE's veil lies over the dialog while a version is being restored; its content stays mounted under it. *@
-<OmniStack Class="@(_restoring ? "omni-busy" : null)" aria-busy="@(_restoring ? "true" : "false")" data-testid="version-history-zone">
+@* R-1: the page veil is held while a version is being restored; the dialog's content stays mounted. *@
+<VeilHold Busy="@_restoring" />
+<OmniStack data-testid="version-history-zone">
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger">

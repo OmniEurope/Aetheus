@@ -40,9 +40,16 @@ public sealed class R99BusyVeilTests : BunitContext
 
     private static void AssertVeiled(IRenderedComponent<MainLayout> layout, bool expected)
     {
+        // R-1: the veil is OE's OmniPageVeil (a status element carrying the site's logo), never a class on the page body.
         var wrapper = layout.Find(BodyWrapper);
-        Assert.Equal(expected, wrapper.ClassList.Contains("omni-busy"));
+        Assert.DoesNotContain("omni-busy", wrapper.ClassName, StringComparison.Ordinal);
+        Assert.Equal(expected, layout.FindAll(".omni-page-veil[role=status]").Count == 1);
+        if (expected)
+            Assert.Single(layout.FindAll(".omni-page-veil .aetheus-loader-logo"));
         Assert.Equal(expected ? "true" : "false", wrapper.GetAttribute("aria-busy"));
+        // R-1: the veil covers the pointer only; the content behind it must also be out of the keyboard's reach, or a
+        // focused button starts a second action under the veil (seen on the Certbot page, "Renouveler" kept the focus).
+        Assert.Equal(expected, wrapper.HasAttribute("inert"));
     }
 
     /// <summary>The page under test is hosted by the real layout, as the router does, so the veil is read where the user sees it.</summary>
@@ -266,7 +273,7 @@ public sealed class R99BusyVeilTests : BunitContext
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var cut = Render<PackageFeedPackagesDialog>(p => p.Add(x => x.FeedId, 3));
         cut.WaitForAssertion(() => Assert.Contains("Serilog", cut.Markup, StringComparison.Ordinal));
-        Assert.Equal("false", cut.Find("[data-testid='package-feed-packages-zone']").GetAttribute("aria-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
 
         var delete = cut.FindAll("button").First(button => button.GetAttribute("title") == "Delete");
         var task = ClickAsync(delete);
@@ -274,22 +281,12 @@ public sealed class R99BusyVeilTests : BunitContext
         {
             await cut.InvokeAsync(() => dialog.Close(true));
 
-            cut.WaitForAssertion(() =>
-            {
-                var zone = cut.Find("[data-testid='package-feed-packages-zone']");
-                Assert.Contains("omni-busy", zone.ClassName, StringComparison.Ordinal);
-                Assert.Equal("true", zone.GetAttribute("aria-busy"));
-            });
+            cut.WaitForAssertion(() => Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy));
             Assert.Contains("Serilog", cut.Markup, StringComparison.Ordinal);
 
             release.SetResult(new object());
             await task;
-            cut.WaitForAssertion(() =>
-            {
-                var zone = cut.Find("[data-testid='package-feed-packages-zone']");
-                Assert.DoesNotContain("omni-busy", zone.ClassName, StringComparison.Ordinal);
-                Assert.Equal("false", zone.GetAttribute("aria-busy"));
-            });
+            cut.WaitForAssertion(() => Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy));
             Assert.DoesNotContain("Serilog", cut.Markup, StringComparison.Ordinal);
         }
         finally
@@ -312,28 +309,18 @@ public sealed class R99BusyVeilTests : BunitContext
         _handler.SetAsyncJsonResponse(HttpMethod.Delete, "api/projects/9", _ => release.Task);
         var cut = Render<ProjectDeleteDialog>(p => p.Add(x => x.ProjectId, 9));
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("#project-delete-confirm")));
-        Assert.Equal("false", cut.Find("[data-testid='project-delete-zone']").GetAttribute("aria-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         cut.Find("#project-delete-confirm").Input("Alpha");
 
         var task = ClickAsync(cut.Find("#project-delete-submit"));
         try
         {
-            cut.WaitForAssertion(() =>
-            {
-                var zone = cut.Find("[data-testid='project-delete-zone']");
-                Assert.Contains("omni-busy", zone.ClassName, StringComparison.Ordinal);
-                Assert.Equal("true", zone.GetAttribute("aria-busy"));
-            });
+            cut.WaitForAssertion(() => Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy));
             Assert.Contains("Alpha", cut.Markup, StringComparison.Ordinal);
 
             release.SetResult(new object());
             await task;
-            cut.WaitForAssertion(() =>
-            {
-                var zone = cut.Find("[data-testid='project-delete-zone']");
-                Assert.DoesNotContain("omni-busy", zone.ClassName, StringComparison.Ordinal);
-                Assert.Equal("false", zone.GetAttribute("aria-busy"));
-            });
+            cut.WaitForAssertion(() => Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy));
         }
         finally
         {

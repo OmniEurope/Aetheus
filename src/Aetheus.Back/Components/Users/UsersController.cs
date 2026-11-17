@@ -111,6 +111,18 @@ public class UsersController(
         return NoContent();
     }
 
+    // R-1: the seeded administrator's first step, the one write its forced-change gate lets through besides the
+    // password change (which the service refuses to such an account). A wrong current password yields 400.
+    [HttpPost("me/account-setup")]
+    public async Task<IActionResult> SetUpOwnAccount(
+        [FromBody] SetUpOwnAccountRequest request, [FromServices] IAccountSetupService accountSetup, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(accountSetup);
+        var done = await accountSetup.SetUpOwnAccountAsync(request, ct);
+        if (!done) return BadRequest();
+        return NoContent();
+    }
+
     [HttpGet("roles")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<List<string>>> GetRoles(CancellationToken ct)

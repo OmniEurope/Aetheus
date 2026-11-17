@@ -2,7 +2,7 @@
 
 <OmniTemplateForm TModel="CreateInternalPullRequestRequest" Model="@_request" OnValidSubmit="@Submit">
     <OmniDataAnnotationsValidator Localizer="@L" />
-    <OmniStack Gap="OmniSpacing.Large">
+    <OmniStack Gap="OmniSpacing.Small">
         <OmniFormField For="oe-pages-git-gitprcreatedialog-1"><LabelContent>@L["Title"]</LabelContent><ChildContent>
             <OmniTextBox @bind-Value="_request.Title" Id="oe-pages-git-gitprcreatedialog-1" />
         </ChildContent></OmniFormField>

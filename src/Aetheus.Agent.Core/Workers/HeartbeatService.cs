@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Agent.Core.Collectors;
+using Aetheus.Agent.Core.Collectors.MachineJobs;
+using Aetheus.Agent.Core.Collectors.MachineReboot;
 using Aetheus.Agent.Core.Collectors.Ssh;
 using Aetheus.Agent.Core.Operations;
 
@@ -22,9 +24,12 @@ public sealed class HeartbeatService(
     IListeningPortsCollector listeningPortsCollector,
     ISudoersHashCollector sudoersHashCollector,
     ISshConfigCollector sshConfigCollector,
+    IMachineRebootCollector machineRebootCollector,
+    IMachineJobsCollector machineJobsCollector,
     IDockerStorageMaintenance dockerStorageMaintenance,
     IShellRunner shell,
     AgentState agentState,
+    IAgentExitJournal exitJournal,
     AgentRuntimeHealth runtimeHealth,
     TimeProvider timeProvider,
     IOptions<AetheusAgentOptions> options,
@@ -52,6 +57,10 @@ public sealed class HeartbeatService(
         DockerInventoryTtl, dockerCollector.CollectAllAsync, timeProvider, static () => new DockerDataDto(), logger, "docker");
     private readonly CachedCollector<ApacheDataDto> _apacheCache = new(
         SlowInventoryTtl, apacheCollector.CollectAsync, timeProvider, static () => new ApacheDataDto(), logger, "apache");
+    // Recette R-17: the running state is read on every beat (TTL zero, like the services): the rest of the Apache
+    // inventory may be up to SlowInventoryTtl old, but an Apache restarted on the host must show within a beat.
+    private readonly CachedCollector<ApacheRunState?> _apacheRunStateCache = new(
+        TimeSpan.Zero, apacheCollector.CollectRunStateAsync, timeProvider, static () => null, logger, "apache running state");
     private readonly CachedCollector<CertbotDataDto> _certbotCache = new(
         SlowInventoryTtl, certbotCollector.CollectAsync, timeProvider, static () => new CertbotDataDto(), logger, "certbot");
     private readonly CachedCollector<MailDataDto> _mailCache = new(
@@ -68,12 +77,18 @@ public sealed class HeartbeatService(
         SlowInventoryTtl, firewallCollector.CollectAsync, timeProvider, static () => new FirewallDataDto(), logger, "firewall");
     // Same slow-inventory rhythm as the other module probes. The on-demand scan
     // (OperationKind.PortsObserve) is what an operator uses when that period is too long to wait.
-    private readonly CachedCollector<List<ObservedPortDto>> _listeningPortsCache = new(
-        SlowInventoryTtl, listeningPortsCollector.CollectAsync, timeProvider, static () => [], logger, "listening ports");
+    // The scan carries the time of its own probes, so a cached one is reported with its real age. The
+    // fallback (a refresh still in flight, no value yet) is "nothing measured", never an empty reading.
+    private readonly CachedCollector<ListeningPortsScan> _listeningPortsCache = new(
+        SlowInventoryTtl, listeningPortsCollector.ScanAsync, timeProvider, static () => ListeningPortsScan.None, logger, "listening ports");
     private readonly CachedCollector<Dictionary<string, string>> _sudoersCache = new(
         SlowInventoryTtl, sudoersHashCollector.CollectAsync, timeProvider, static () => new Dictionary<string, string>(), logger, "sudoers");
     private readonly CachedCollector<SshConfigDataDto> _sshConfigCache = new(
         SlowInventoryTtl, sshConfigCollector.CollectAsync, timeProvider, static () => new SshConfigDataDto(), logger, "ssh configuration");
+    private readonly CachedCollector<MachineRebootDataDto> _machineRebootCache = new(
+        SlowInventoryTtl, machineRebootCollector.CollectAsync, timeProvider, static () => new MachineRebootDataDto(), logger, "machine reboots");
+    private readonly CachedCollector<MachineJobsDataDto> _machineJobsCache = new(
+        SlowInventoryTtl, machineJobsCollector.CollectAsync, timeProvider, static () => new MachineJobsDataDto(), logger, "machine jobs");
     private readonly CachedCollector<bool> _dockerAvailableCache =
         CreateDockerAvailabilityCollector(shell, timeProvider, logger);
     private readonly CachedCollector<bool> _pipelineRunnerAvailableCache = new(
@@ -181,6 +196,7 @@ public sealed class HeartbeatService(
         var servicesTask = _servicesCache.GetAsync(collectorToken);
         var dockerTask = _dockerCache.GetAsync(collectorToken);
         var apacheTask = _apacheCache.GetAsync(collectorToken);
+        var apacheRunStateTask = _apacheRunStateCache.GetAsync(collectorToken);
         var certbotTask = _certbotCache.GetAsync(collectorToken);
         var mailTask = _mailCache.GetAsync(collectorToken);
         var teamspeakTask = _teamspeakCache.GetAsync(collectorToken);
@@ -191,6 +207,8 @@ public sealed class HeartbeatService(
         var listeningPortsTask = _listeningPortsCache.GetAsync(collectorToken);
         var sudoersTask = _sudoersCache.GetAsync(collectorToken);
         var sshConfigTask = _sshConfigCache.GetAsync(collectorToken);
+        var machineRebootTask = _machineRebootCache.GetAsync(collectorToken);
+        var machineJobsTask = _machineJobsCache.GetAsync(collectorToken);
         var dockerAvailableTask = _dockerAvailableCache.GetAsync(collectorToken);
         var pipelineRunnerAvailableTask = _pipelineRunnerAvailableCache.GetAsync(collectorToken);
         var deploymentAvailableTask = _deploymentAvailableCache.GetAsync(collectorToken);
@@ -199,10 +217,10 @@ public sealed class HeartbeatService(
         // Stopping token, not the collector token: the beat neither waits for this refresh nor cancels it.
         var storageDiagnosticsTask = _storageDiagnosticsCache.GetAsync(ct);
         var allCollectors = Task.WhenAll(
-            servicesTask, dockerTask, apacheTask, certbotTask, mailTask, teamspeakTask,
+            servicesTask, dockerTask, apacheTask, apacheRunStateTask, certbotTask, mailTask, teamspeakTask,
             portsentryTask, rkhunterTask, securityUpdatesTask, firewallTask, listeningPortsTask, sudoersTask,
             dockerAvailableTask, pipelineRunnerAvailableTask, capDiagnosticsTask, scannerDiagnosticsTask);
-        allCollectors = Task.WhenAll(allCollectors, deploymentAvailableTask, sshConfigTask);
+        allCollectors = Task.WhenAll(allCollectors, deploymentAvailableTask, sshConfigTask, machineRebootTask, machineJobsTask);
 
         var timeoutTask = Task.Delay(_collectionTimeout, timeProvider, ct);
         var collectorsCompleted = await Task.WhenAny(allCollectors, timeoutTask).ConfigureAwait(false) == allCollectors;
@@ -255,6 +273,7 @@ public sealed class HeartbeatService(
             ];
         }
 
+        var listeningPorts = CompletedValueOr(listeningPortsTask, ListeningPortsScan.None);
         heartbeat = heartbeat with
         {
             AgentSessionId = agentState.SessionId,
@@ -269,7 +288,9 @@ public sealed class HeartbeatService(
             InsecureTls = _options.AllowInsecureCerts,
             Services = CompletedValueOr(servicesTask, _servicesCache.LastValueOr([])),
             Docker = CompletedValueOr(dockerTask, _dockerCache.LastValueOr(new DockerDataDto())),
-            Apache = CompletedValueOr(apacheTask, _apacheCache.LastValueOr(new ApacheDataDto())),
+            Apache = WithLiveRunState(
+                CompletedValueOr(apacheTask, _apacheCache.LastValueOr(new ApacheDataDto())),
+                CompletedValueOr(apacheRunStateTask, null)),
             Certbot = CompletedValueOr(certbotTask, _certbotCache.LastValueOr(new CertbotDataDto())),
             Mail = CompletedValueOr(mailTask, _mailCache.LastValueOr(new MailDataDto())),
             Teamspeak = CompletedValueOr(teamspeakTask, _teamspeakCache.LastValueOr(new TeamspeakDataDto())),
@@ -278,18 +299,25 @@ public sealed class HeartbeatService(
             SecurityUpdates = CompletedValueOr(
                 securityUpdatesTask, _securityUpdatesCache.LastValueOr(new SecurityUpdatesDataDto())),
             Firewall = CompletedValueOr(firewallTask, _firewallCache.LastValueOr(new FirewallDataDto())),
-            // Reported only when this beat's scan actually completed. Falling back to the cached list
-            // would restate an old scan as a fresh one, and the backend replaces the whole observed
-            // source with what it receives - stale data would read as "these ports are listening now".
-            ObservedPorts = listeningPortsTask.Status == TaskStatus.RanToCompletion
-                ? listeningPortsTask.Result
-                : [],
-            ObservedPortsAvailable = listeningPortsTask.Status == TaskStatus.RanToCompletion,
+            // Reported only for the protocols whose probe really succeeded, each with the age of its own
+            // measurement: a probe that failed is not an empty reading, and a cached scan is not a fresh one.
+            // The backend replaces the observed rows of the listed protocols only, dated by that age.
+            ObservedPorts = [.. listeningPorts.Ports],
+            ObservedPortsAvailable = listeningPorts.HasMeasurement,
+            ObservedProtocols = listeningPorts.ProtocolReport(timeProvider.GetUtcNow()),
             SudoersHashes = sudoersHashes,
             SudoersInventoryAvailable = _sudoersCache.HasValue,
             // Null until one collection completed: the backend must not take an empty default for a reading.
             SshConfig = _sshConfigCache.HasValue
                 ? CompletedValueOr(sshConfigTask, _sshConfigCache.LastValueOr(new SshConfigDataDto()))
+                : null,
+            // Null until one collection completed: an empty default is not a reading, the backend keeps what it stored.
+            MachineReboots = _machineRebootCache.HasValue
+                ? CompletedValueOr(machineRebootTask, _machineRebootCache.LastValueOr(new MachineRebootDataDto()))
+                : null,
+            // Same rule as the reboots: null until one collection completed, the backend keeps what it stored.
+            MachineJobs = _machineJobsCache.HasValue
+                ? CompletedValueOr(machineJobsTask, _machineJobsCache.LastValueOr(new MachineJobsDataDto()))
                 : null,
             CapabilityDiagnostics = capabilityDiagnostics,
             ScannerCapabilities = EnsureScannerManifestIdentity(CompletedValueOr(
@@ -298,7 +326,9 @@ public sealed class HeartbeatService(
                 storageDiagnosticsTask, _storageDiagnosticsCache.LastValueOr(new StorageDiagnosticsDto())))
         };
 
-        heartbeat = heartbeat with { ClockSample = _lastClockSample };
+        // How the previous process ended: sent with every beat until one succeeds, then never again.
+        var previousExit = exitJournal.GetPendingReport();
+        heartbeat = heartbeat with { ClockSample = _lastClockSample, PreviousExit = previousExit };
         _lastClockSample = null;
         // T1 on the wall clock; the round trip on the monotonic clock, so a clock step during the
         // exchange does not distort it. Retries of the resilience handler fall inside the interval
@@ -308,6 +338,9 @@ public sealed class HeartbeatService(
         var response = await apiClient.SendHeartbeatAsync(agentState.ServerId!.Value, heartbeat, ct).ConfigureAwait(false);
         _lastClockSample = ClockSampleDto.FromExchange(
             sentAt, timeProvider.GetElapsedTime(sendStarted), response?.ReceivedAtUtc, response?.RepliedAtUtc);
+        // SendHeartbeatAsync throws on any refusal, so reaching here means the backend accepted the report.
+        if (previousExit is not null)
+            exitJournal.MarkReported();
         AgentUpdateRecoveryState.ConfirmSuccessfulHeartbeat(_options.WorkDirectory);
         runtimeHealth.MarkHeartbeatSuccess();
         await ApplyTokenRenewalAsync(response, ct).ConfigureAwait(false);
@@ -350,6 +383,7 @@ public sealed class HeartbeatService(
         }
         AddGrantCapability("aetheus-package", AgentCapabilities.PackageManagement);
         AddGrantCapability("aetheus-patch", AgentCapabilities.PatchManagement);
+        AddGrantCapability("aetheus-reboot", AgentCapabilities.HostReboot);
         AddGrantCapability("aetheus-firewall", AgentCapabilities.FirewallManagement);
         AddGrantCapability("aetheus-apache", AgentCapabilities.ApacheManagement);
         AddGrantCapability("aetheus-certbot", AgentCapabilities.CertbotManagement);
@@ -414,6 +448,13 @@ public sealed class HeartbeatService(
         if (outdated.HasFlag(CachedInventory.Docker)) _dockerCache.Invalidate();
     }
 
+    // R-17: the cached inventory carries the running state of its collection (up to SlowInventoryTtl old); the beat
+    // reports the state read now. An unreadable state, or an Apache that is not installed, keeps the cached one.
+    private static ApacheDataDto WithLiveRunState(ApacheDataDto inventory, ApacheRunState? live) =>
+        live is { } state && inventory.IsInstalled
+            ? inventory with { IsRunning = state.IsRunning, Pid = state.Pid }
+            : inventory;
+
     private static T CompletedValueOr<T>(Task<T> task, T fallback) =>
         task.Status == TaskStatus.RanToCompletion ? task.Result : fallback;
 
@@ -452,6 +493,8 @@ public sealed class HeartbeatService(
             ("firewall", _firewallCache.IsCollectionInFlight),
             ("sudoers", _sudoersCache.IsCollectionInFlight),
             ("ssh configuration", _sshConfigCache.IsCollectionInFlight),
+            ("machine reboots", _machineRebootCache.IsCollectionInFlight),
+            ("machine jobs", _machineJobsCache.IsCollectionInFlight),
             ("docker availability", _dockerAvailableCache.IsCollectionInFlight),
             ("pipeline runner", _pipelineRunnerAvailableCache.IsCollectionInFlight),
             ("capability diagnostics", _capDiagnosticsCache.IsCollectionInFlight),

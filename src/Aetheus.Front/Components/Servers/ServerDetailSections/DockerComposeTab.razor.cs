@@ -81,21 +81,34 @@ public partial class DockerComposeTab
         _ = InvokeAsync(StateHasChanged);
     }
 
+    // A stack action reads as the button that launches it: Up is "Start", Down is "Stop".
+    private static string ActionLabel(IStringLocalizer<AppStrings> l, DockerComposeAction action) => l[action switch
+    {
+        DockerComposeAction.Up => "Start",
+        DockerComposeAction.Down => "Stop",
+        _ => "Restart"
+    }].Value;
+
+    /// <summary>What the follower calls a stack action, launched here or adopted on arrival.</summary>
+    internal static string ActionTitle(IStringLocalizer<AppStrings> l, DockerComposeAction action, string? stackName) =>
+        $"{l["DockerCompose"]} {ActionLabel(l, action)} {stackName}";
+
     private async Task ComposeActionAsync(string stackName, DockerComposeAction action)
     {
         if (BlockedByOfflineAgent()) return;
         var request = new DockerComposeActionRequest { StackName = stackName, Action = action };
         // Recette R3-37: the follower shows what becomes of the task, in place of a lone "queued" toast.
-        _follower?.Expect($"{L["DockerCompose"]} {action} {stackName}");
+        var label = ActionLabel(L, action);
+        _follower?.Expect(ActionTitle(L, action, stackName), ServerTaskNames.ComposeActionPrefix);
         var success = await Api.ServerTools.ExecuteComposeActionAsync(ServerId, request);
         if (success)
         {
-            Toast.Success("DockerCompose", "DockerComposeQueued", action, stackName);
+            Toast.Success("DockerCompose", "DockerComposeQueued", label, stackName);
         }
         else
         {
             _follower?.Forget();
-            Toast.Error("DockerCompose", "DockerComposeFailed", action, stackName);
+            Toast.Error("DockerCompose", "DockerComposeFailed", label, stackName);
         }
     }
 

@@ -22,7 +22,8 @@ public partial class InboxNotificationDialog
 
     private IReadOnlyList<(string Name, string Value)> Elements { get; set; } = [];
 
-    protected override void OnParametersSet() => Elements = PayloadElements(Notification.PayloadJson);
+    protected override void OnParametersSet() =>
+        Elements = NotificationReasonText.Apply(Notification.EventType, PayloadElements(Notification.PayloadJson), L);
 
     /// <summary>
     /// The payload's top-level properties in their order, a nested value as its compact JSON. A payload

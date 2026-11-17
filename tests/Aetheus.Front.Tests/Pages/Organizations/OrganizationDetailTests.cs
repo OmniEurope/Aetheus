@@ -3,6 +3,7 @@ using System.Reflection;
 using Aetheus.Front.Components.Organizations;
 using Aetheus.Shared.Components.Organizations;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests;
 
@@ -89,7 +90,7 @@ public class OrganizationDetailTests : BunitContext
         _handler.SetResponse("api/organizations/1", System.Net.HttpStatusCode.InternalServerError);
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup));
-        Assert.Empty(cut.FindComponents<AetheusLoader>());
+        Assert.False(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy);
         _handler.SetJsonResponse("api/organizations/1", new OrganizationDetailDto(
             1, "Recovered", "recovered", "", DateTime.UtcNow, DateTime.UtcNow, [], []));
         _handler.SetJsonResponse("api/users", new PaginatedResult<UserDto>());

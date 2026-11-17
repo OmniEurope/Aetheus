@@ -24,6 +24,13 @@ public partial class ServerPortsentrySection
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
     private bool _actionRunning;
+    private ServerFollowerBusyLink? _busyLink;
+
+    // R-12: the actions stay disabled while a task adopted on arrival runs.
+    private bool ActionBusy => _actionRunning || (_busyLink?.Busy ?? false);
+
+    protected override void OnAfterRender(bool firstRender) =>
+        (_busyLink ??= new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged))).Follower = _follower;
     private string _setupMode = "atcp";
     private string _setupTcpPorts = "1,11,15,79,111,119,143,540,635,1080,1524,2000,5742,6667,12345,12346,20034,27665,31337,32771,32772,32773,32774,40421,49724,54320";
     private string _setupUdpPorts = "1,7,9,69,161,162,513,635,640,641,700,32770,32771,32772,32773,32774,31337,54321";
@@ -62,12 +69,12 @@ public partial class ServerPortsentrySection
     }
 
     // R-119: the blocked and whitelisted addresses are read from the backend, which has them once the agent's new
-    // state has arrived; the follower asks for this read before it lifts the veil.
+    // state has arrived; the follower asks for this read before it lifts the veil. R-10: quiet, no bar.
     private async Task ReloadAfterSettleAsync()
     {
         if (!Ps.IsInstalled) return;
-        var blockedReload = _blockedGrid?.Reload() ?? Task.CompletedTask;
-        var whitelistReload = _whitelistGrid?.Reload() ?? Task.CompletedTask;
+        var blockedReload = _blockedGrid?.RestoreRowsAsync() ?? Task.CompletedTask;
+        var whitelistReload = _whitelistGrid?.RestoreRowsAsync() ?? Task.CompletedTask;
         await Task.WhenAll(blockedReload, whitelistReload, LoadProtocolValuesAsync());
     }
 
@@ -177,6 +184,15 @@ public partial class ServerPortsentrySection
         var parts = args.OrderBy.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return (parts[0], parts.Length > 1 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>Recette R-12: what a task adopted on arrival ("PortSentry - Restart") is called, as the page names its own.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.Key(L, "PortSentry - setup", "PortsentrySetup"),
+        ServerAdoptedTaskTitles.Key(L, "PortSentry - logs", "ViewLogs"),
+        ServerAdoptedTaskTitles.KeyWith(L, "PortSentry - unblock ", "Unblock"),
+        new("PortSentry - ", rest => ServerAdoptedTaskTitles.Action<PortsentryAction>(rest, (action, _) => L[action.ToString()].Value))
+    ]);
 
     private async Task ExecuteActionAsync(PortsentryAction action)
     {
@@ -295,7 +311,8 @@ public partial class ServerPortsentrySection
             _whitelistIp = string.Empty;
             _whitelistDesc = string.Empty;
             Toast.Success("Saved");
-            if (_whitelistGrid is not null) await _whitelistGrid.Reload();
+            // R-10: the address shows at once from the answer; the quiet read behind it confirms.
+            if (_whitelistGrid is not null) await _whitelistGrid.ShowRowAsync(result);
         }
         else
             Toast.Error("Error", "SaveFailed");
@@ -316,7 +333,7 @@ public partial class ServerPortsentrySection
             {
                 Toast.Success("Deleted");
                 if (_whitelistGrid is not null)
-                    await _whitelistGrid.Reload();
+                    await _whitelistGrid.HideRowAsync(entry);
                 else
                 {
                     _whitelist.RemoveAll(item => item.Id == entry.Id);

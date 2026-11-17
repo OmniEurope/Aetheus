@@ -84,6 +84,56 @@ public class GitRepositoryDetailTests : BunitContext
         Assert.Contains("my-repo", cut.Markup);
     }
 
+    [Fact]
+    public void R31_AnEmptyRepository_SaysHowToPushTheCode_WithItsAddressAndBranch()
+    {
+        SetupDefaultMocks();
+        _handler.SetJsonResponse("api/git/repos/1", new GitLightRepoDto
+        {
+            Id = 1,
+            ProjectId = 1,
+            Name = "my-repo",
+            DefaultBranch = "main",
+            IsEmpty = true,
+            CloneUrl = "http://localhost/git/my-repo.git",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+
+        var help = cut.WaitForElement("[data-testid='git-repo-push-help']");
+        Assert.Contains("GitRepoPushTitle", help.TextContent, StringComparison.Ordinal);
+        Assert.Contains("git remote add origin http://localhost/git/my-repo.git", help.TextContent, StringComparison.Ordinal);
+        Assert.Contains("git push -u origin main", help.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R31_ARepositoryWithCode_HasNoPushHelp()
+    {
+        SetupDefaultMocks();
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("my-repo"));
+
+        Assert.Empty(cut.FindAll("[data-testid='git-repo-push-help']"));
+    }
+
+    [Theory]
+    [InlineData("/projects/1/pipelines/setup", "http://localhost/projects/1/pipelines/setup")]
+    [InlineData("https://evil.example/x", "http://localhost/git-repositories?projectId=1")]
+    public async Task R31_TheBackButton_LeadsToTheValidatedReturnUrl_Only(string returnUrl, string expected)
+    {
+        SetupDefaultMocks();
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("http://localhost/git-repositories/1?returnUrl=" + Uri.EscapeDataString(returnUrl));
+
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("my-repo"));
+        await cut.Find(".omni-page-header__back").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        // An address of another site is never followed: the arrow keeps its usual parent, the project repository list.
+        Assert.StartsWith(expected, nav.Uri, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

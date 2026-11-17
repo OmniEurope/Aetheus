@@ -67,6 +67,8 @@ public sealed class NotificationRuleEditDialogBehaviorTests : BunitContext
 
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.EndsWith("api/notifications/rules/6", StringComparison.Ordinal));
         Assert.True(Spy.Closed);
+        // R-10: the dialog closes with the rule the server saved, so the list draws it at once.
+        Assert.Equal(6, Assert.IsType<NotificationRuleDto>(Spy.LastResult).Id);
     }
 
     [Fact]

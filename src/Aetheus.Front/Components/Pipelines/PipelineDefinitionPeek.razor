@@ -1,20 +1,25 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-@* Read-only right split pane: shows a referenced pipeline's live definition. Its own `pipeline:` refs
-   are themselves clickable (navigates within this pane); wrap/copy are independent; close bubbles up. *@
+@* Read-only right split pane: shows a referenced pipeline's live definition, or (R-35) the template version an
+   `extends:` line points at. Its own `pipeline:` and `extends:` refs are themselves clickable (navigates within
+   this pane, so inherited templates are followed one after the other); wrap/copy are independent; close bubbles up. *@
 @if (_currentName is not null)
 {
-    <div class="run-yaml-pane run-yaml-peek">
+    <div class="run-yaml-pane run-yaml-peek" data-testid="@(ShowsTemplate ? "template-peek" : "pipeline-peek")">
         <div class="run-logs-header">
-            <OmniIcon Name="OmniIconName.Graph" Class="run-tl-chip-icon" />
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@(_current?.Name ?? _currentName)</OmniText>
+            <OmniIcon Name="@(ShowsTemplate ? OmniIconName.Copy : OmniIconName.Graph)" Class="run-tl-chip-icon" />
+            <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@(ShowsTemplate ? _currentName : _current?.Name ?? _currentName)</OmniText>
             @if (_current is { } pp)
             {
                 <a href="/pipelines/@pp.Id" class="pipeline-name-link" title="@L["OpenPipeline"]"><OmniIcon Name="OmniIconName.OpenExternal" /></a>
             }
+            else if (_templateSummary is { } templateSummary)
+            {
+                <a href="/templates/@templateSummary.Id" class="pipeline-name-link" title="@L["OpenTemplate"]"><OmniIcon Name="OmniIconName.OpenExternal" /></a>
+            }
             <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lock))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="run-system-label">@L["ReadOnly"]</OmniBadge>
             <div class="pipeline-list-spacer"></div>
-            @if (_current is not null)
+            @if (HasContent)
             {
                 @* STD-BTN detection 11: Wrap visible, the other actions in the menu. *@
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _wrap = !_wrap)" title="@L["WrapLinesHint"]"><Icon><OmniIcon Name="OmniIconName.ArrowElbowDownLeft" /></Icon><ChildContent><span>@L["WrapLines"]</span></ChildContent></OmniButton>
@@ -26,20 +31,20 @@
         </div>
         @if (_loading)
         {
-            <div class="run-yaml-code run-yaml-empty"><AetheusLoader Size="OmniControlSize.Small" /></div>
+            <div class="run-yaml-code run-yaml-empty"><ZoneVeil /></div>
         }
-        else if (_current is { } pk)
+        else if (HasContent)
         {
             <div class="run-yaml-code @(_wrap ? "run-yaml-wrap" : "")">
-                @foreach (var yl in PipelineYamlLines.Parse(pk.YamlDefinition))
+                @foreach (var yl in PipelineYamlLines.Parse(CurrentYaml, templateReferences: true))
                 {
-                    <div class="yaml-line">@if (yl.PipelineRef is { } pref){@yl.Text<span class="yaml-pipeline-link" role="link" tabindex="0" title="@L["PeekPipelineDefinition"]" @onclick="@(() => PeekAsync(pref))" @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await PeekAsync(pref); })">@pref</span>}else{@yl.Text}</div>
+                    <div class="yaml-line">@if (yl.PipelineRef is { } pref){@yl.Text<span class="yaml-pipeline-link" role="link" tabindex="0" title="@L["PeekPipelineDefinition"]" @onclick="@(() => PeekAsync(pref))" @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await PeekAsync(pref); })">@pref</span>}else if (yl.TemplateRef is { } tref){@yl.Text<span class="yaml-pipeline-link" role="link" tabindex="0" title="@L["PeekTemplateDefinition"]" @onclick="@(() => PeekTemplateAsync(tref))" @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await PeekTemplateAsync(tref); })">@tref</span>@yl.Suffix}else{@yl.Text}</div>
                 }
             </div>
         }
         else
         {
-            <div class="run-yaml-code run-yaml-empty">@L["PipelineNotFound"]</div>
+            <div class="run-yaml-code run-yaml-empty">@(ShowsTemplate ? L["TemplateNotFound"] : L["PipelineNotFound"])</div>
         }
     </div>
 }

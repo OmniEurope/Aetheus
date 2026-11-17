@@ -1,15 +1,54 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 
-<OmniDataGrid Items="@ParameterList" ExportTitle="@ExportContext.Title(L["RunParameters"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>"
+@* R-37: one table for everything the run was given: the parameters it was launched with and the variables it read from
+   libraries and vaults. Source, name, then the value (for a vault secret only whether it is available, never the value). *@
+<OmniDataGrid Items="@Rows" ExportTitle="@ExportContext.Title(L["RunParameters"])" ExportFields="@ExportContext.Fields()" TItem="PipelineRunParameterRow"
  Class="run-params-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Parameter"]" Width="40%" Filterable="true" />
-        <OmniDataGridColumn TItem="KeyValuePair<string, string>" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true">
-            <Template Context="parameter"><code>@parameter.Value</code></Template>
+        <OmniDataGridColumn Frozen="true" TItem="PipelineRunParameterRow" Property="Source" Title="@L["Source"]" Width="30%" Filterable="true">
+            <Template Context="row">
+                @if (row.SourceHref is { } href)
+                {
+                    <OmniLink Href="@href" data-testid="run-variable-source-link">@row.Source</OmniLink>
+                }
+                else
+                {
+                    @row.Source
+                }
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="PipelineRunParameterRow" Property="Name" Title="@L["Parameter"]" Width="30%" Filterable="true">
+            <Template Context="row">
+                @if (row.NameHref is { } href)
+                {
+                    <OmniLink Href="@href" data-testid="run-variable-name-link">@row.Name</OmniLink>
+                }
+                else
+                {
+                    @row.Name
+                }
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="PipelineRunParameterRow" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true">
+            <Template Context="row">
+                @if (row.IsSecret)
+                {
+                    <OmniBadge Icon="@(BadgeIcon.For(row.IsAvailable ? OmniTone.Success : OmniTone.Warning))" Fill="OmniFill.Solid" Tone="@(row.IsAvailable ? OmniTone.Success : OmniTone.Warning)"
+                               data-testid="run-variable-secret-state">@(row.IsAvailable ? L["Available"] : L["RunVariableNotAvailable"])</OmniBadge>
+                }
+                else
+                {
+                    <code>@row.Value</code>
+                }
+            </Template>
         </OmniDataGridColumn>
     </Columns>
 </OmniDataGrid>
+@if (_loadFailed)
+{
+    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-md" data-testid="run-variables-unavailable">@L["RunUsedVariablesUnavailable"]</OmniText>
+}
 <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
     <Aetheus.Front.Components.Servers.DialogCloseButton />
 </OmniStack>

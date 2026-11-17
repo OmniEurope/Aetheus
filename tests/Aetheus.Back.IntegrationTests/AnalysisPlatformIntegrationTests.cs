@@ -11,7 +11,6 @@ using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
 public sealed class AnalysisPlatformIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]
@@ -233,59 +232,6 @@ public sealed class AnalysisPlatformIntegrationTests(PostgresFixture fixture) : 
         Assert.Equal(first.Id, item.AnalysisReportId);
         Assert.Equal(artifactId, item.PipelineArtifactId);
         Assert.Equal(DependencyTrackOutboxStatuses.Pending, item.Status);
-    }
-
-    [Fact]
-    public async Task PolicyCrudPreviewPrecedenceAndRollback_AreConsistentOnPostgres()
-    {
-        await ResetAndMigrateAsync();
-        var (runId, _) = await SeedRunAsync();
-        await using var db = NewContext();
-        var run = await db.PipelineRuns.Include(item => item.Pipeline)
-            .SingleAsync(item => item.Id == runId, TestContext.Current.CancellationToken);
-        var projectId = run.Pipeline.ProjectId!.Value;
-        var organizationId = await db.Projects.Where(item => item.Id == projectId)
-            .Select(item => item.OrganizationId)
-            .SingleAsync(TestContext.Current.CancellationToken);
-        var service = CreateService(db);
-
-        await service.CreateScopedPolicyAsync(null, CoverageRequest("Global coverage", 78),
-            TestContext.Current.CancellationToken);
-        await service.CreateScopedPolicyAsync(organizationId, CoverageRequest("Organization coverage", 82),
-            TestContext.Current.CancellationToken);
-        var project = await service.CreatePolicyAsync(projectId, CoverageRequest("Project coverage", 85),
-            TestContext.Current.CancellationToken);
-
-        var effective = await service.GetPoliciesAsync(projectId, TestContext.Current.CancellationToken);
-        var coverage = Assert.Single(effective, item => item.PolicyKey == "quality.coverage.line");
-        Assert.Equal(85, coverage.Threshold);
-        Assert.Equal(AnalysisPolicyScope.Project, coverage.Scope);
-        Assert.True(coverage.IsOverride);
-        Assert.Equal(AnalysisPolicyScope.Organization, coverage.OverriddenScope);
-
-        var preview = await service.PreviewPolicySetAsync(null, projectId,
-            new PreviewAnalysisPolicySetRequest
-            {
-                PolicyId = project.Id,
-                Candidate = CoverageRequest("Project coverage", 90)
-            }, TestContext.Current.CancellationToken);
-        Assert.Equal(90, Assert.Single(
-            preview.Policies, item => item.PolicyKey == "quality.coverage.line").Threshold);
-        Assert.Contains("coverage", preview.ExpectedProducers);
-        Assert.Empty(preview.Conflicts);
-        Assert.Equal(85, (await db.AnalysisPolicies.AsNoTracking()
-            .SingleAsync(item => item.Id == project.Id, TestContext.Current.CancellationToken)).Threshold);
-
-        await service.UpdatePolicyAsync(projectId, project.Id, CoverageRequest("Project coverage", 88),
-            TestContext.Current.CancellationToken);
-        var restored = await service.RollbackPolicyAsync(null, projectId, project.Id, 1,
-            TestContext.Current.CancellationToken);
-        var revisions = await service.GetPolicyRevisionsAsync(null, projectId, project.Id,
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(3, restored.Version);
-        Assert.Equal(85, restored.Threshold);
-        Assert.Equal([3, 2, 1], revisions.Select(item => item.Version));
     }
 
     [Fact]

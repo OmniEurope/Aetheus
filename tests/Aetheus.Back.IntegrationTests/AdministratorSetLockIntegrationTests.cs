@@ -8,6 +8,8 @@ using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
@@ -17,7 +19,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// a different one of the last two administrators, each on its own context as in production. Without
 /// the administrator-set lock both counted two administrators and both committed, leaving none.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]
@@ -29,9 +30,10 @@ public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture
 
         await using var first = NewContext();
         await using var second = NewContext();
+        // The real lease: each request takes the administrator-set lock on a connection of its own.
         var outcomes = await Task.WhenAll(
-            TryUnassignAsync(first, firstId, roleId, ct),
-            TryUnassignAsync(second, secondId, roleId, ct));
+            TryUnassignAsync(first, NewLease(), firstId, roleId, ct),
+            TryUnassignAsync(second, NewLease(), secondId, roleId, ct));
 
         Assert.Single(outcomes, removed => removed);
         await using var verify = NewContext();
@@ -41,7 +43,7 @@ public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture
     }
 
     private static async Task<bool> TryUnassignAsync(
-        Aetheus.Back.Data.AppDbContext db, int userId, int roleId, CancellationToken ct)
+        Aetheus.Back.Data.AppDbContext db, PostgresLeaderLease lease, int userId, int roleId, CancellationToken ct)
     {
         var service = new UserService(
             new UserRepository(db),
@@ -53,7 +55,8 @@ public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture
             Substitute.For<IAdminChangeNotifier>(),
             Substitute.For<IUserChangeNotifier>(),
             Substitute.For<IDomainEventDispatcher>(),
-            new OrganizationRoleAssignmentService(new OrganizationRoleAssignmentRepository(db)));
+            new OrganizationRoleAssignmentService(new OrganizationRoleAssignmentRepository(db), lease),
+            lease);
         try
         {
             return await service.UnassignRoleAsync(userId, roleId, null, ct);
@@ -63,6 +66,12 @@ public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture
             return false;
         }
     }
+
+    private PostgresLeaderLease NewLease() => new(
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Default"] = ConnectionString })
+            .Build(),
+        NullLogger<PostgresLeaderLease>.Instance);
 
     private async Task<(int RoleId, int FirstId, int SecondId)> SeedTwoAdministratorsAsync(CancellationToken ct)
     {

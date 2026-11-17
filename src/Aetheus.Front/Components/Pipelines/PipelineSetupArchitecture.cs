@@ -10,7 +10,7 @@ public static class PipelineSetupArchitecture
     private static readonly HashSet<string> ApplicationCapabilities = new(StringComparer.Ordinal)
     {
         "ci", "quality", "security", "qa", "qa-extended", "security-history", "candidate", "nightly",
-        "production", "fast-deploy", "rollback", "packages"
+        "production", "fast-deploy", "rollback", "packages", "telemetry"
     };
 
     /// <summary>A package is built, checked and published: no candidate, deployment, rollback, QA of a
@@ -20,12 +20,16 @@ public static class PipelineSetupArchitecture
         "ci", "quality", "security", "packages"
     };
 
-    /// <summary> An external repository gets only the platform's own scans: every other template runs
-    /// build, test or deployment commands the project declares, or deploys what it builds, which
-    /// Aetheus does not do for an application it does not own (recette R1-33). </summary>
+    /// <summary> An external repository gets the platform's own scans, and (recette R-34, user decision 2026-10-29) the
+    /// quality evidence, offered when the repository holds a language the quality pipeline analyses: every other
+    /// template runs build, test or deployment commands the project declares, or deploys what it builds, which
+    /// Aetheus does not do for an application it does not own (recette R1-33). Security and quality are each offered
+    /// as a minimal and a complete choice, exclusive (recette R-12, user decision 2026-11-09, see
+    /// <see cref="PipelineSetupExternalOptions"/>). </summary>
     private static readonly HashSet<string> ExternalCapabilities = new(StringComparer.Ordinal)
     {
-        "external-security"
+        PipelineSetupExternalOptions.Security, PipelineSetupExternalOptions.SecurityComplete,
+        PipelineSetupExternalOptions.Quality, PipelineSetupExternalOptions.QualityMinimal
     };
 
     public static bool Proposes(PipelineArchitecture? architecture, string capability) => architecture switch

@@ -1,0 +1,35 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Pipelines
+@* R-8: one click moves every pipeline of the scope pinned on an older version of a shipped template to its latest
+   version, after the one confirmation the single update also asks; the result names what stayed as it was. *@
+@if (Visible || _result is not null)
+{
+    <OmniStack Gap="OmniSpacing.Small">
+        @if (Visible)
+        {
+            <OmniStack Orientation="OmniOrientation.Horizontal">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RunAsync" Busy="@_running"
+                            data-testid="update-all-pipelines" title="@L["UpdateAllPipelines"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["UpdateAllPipelinesShort"]</span></ChildContent></OmniButton>
+            </OmniStack>
+        }
+        @if (_result is not null)
+        {
+            <OmniAlert Severity="@ResultSeverity" Title="@ResultTitle" Dismissible="true" OnDismiss="@DismissResult"
+                       data-testid="update-all-pipelines-result">
+                @if (_result.Items.Count == 0)
+                {
+                    <OmniText>@L["UpdateAllPipelinesNothing"]</OmniText>
+                }
+                else
+                {
+                    <OmniStack Gap="OmniSpacing.Small">
+                        @foreach (var item in NotUpdated)
+                        {
+                            <OmniText>@ItemText(item)</OmniText>
+                        }
+                    </OmniStack>
+                }
+            </OmniAlert>
+        }
+    </OmniStack>
+}

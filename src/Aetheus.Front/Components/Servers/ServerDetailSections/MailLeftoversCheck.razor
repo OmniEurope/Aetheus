@@ -1,8 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Recette R3-23 / R3-26: one check that says, without SSH, whether a mail stack left anything on the host
    after an uninstall or a reinstall: packages (configuration files left, rc, included), directories, the
-   Aetheus marker and the mail ports still listening. While it runs, OE's veil lies over the card. *@
-<OmniCard Class="@(Busy ? "mail-leftovers omni-busy" : "mail-leftovers")" aria-busy="@(Busy ? "true" : "false")">
+   Aetheus marker and the mail ports still listening. While it runs, the page veil is held (R-1). *@
+<VeilHold Busy="@Busy" />
+<OmniCard Class="mail-leftovers">
     <OmniStack Gap="OmniSpacing.Medium">
         <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MailLeftoversTitle"]</OmniHeading>

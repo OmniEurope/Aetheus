@@ -8,7 +8,7 @@
 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium" Class="notification-preferences">
     @if (_loading)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else if (_loadFailed)
     {
@@ -34,6 +34,8 @@
                 }
             </OmniSettingsSection>
         }
+
+        <PipelineFailureMailChoices />
 
         <OmniSettingsSection Title="@L["NotificationSubscriptions"]" Description="@L["NotificationSubscriptionsHint"]">
             @* Following nothing is why nothing arrives; the empty state says so and offers the way

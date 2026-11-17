@@ -31,12 +31,11 @@ else if (!_isNew && _loadFailed)
 }
 else if (!_isNew && _detail is null)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else
 {
-    <OmniStack>
-    <OmniTemplateForm TModel="EnvironmentModel" Model="@_model" OnValidSubmit="@OnSubmit">
+    RenderFragment form = @<OmniTemplateForm TModel="EnvironmentModel" Model="@_model" OnValidSubmit="@OnSubmit">
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniStack>
         @if (_isNew)
@@ -69,7 +68,7 @@ else
         }
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField Label="@L["Name"]" For="Name">
                         <OmniTextBox @bind-Value="_model.Name"
 
@@ -87,7 +86,7 @@ else
                 </OmniStack>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField Label="@L["Project"]" For="oe-formfield-pages-environments-environmentedit-5">
                         <OmniDropDown Id="oe-formfield-pages-environments-environmentedit-5" TValue="int?" Options="@(_projects.ToOptions(item => (int?)item.Id, item => item.Name))"
                             @bind-Value="_model.ProjectId" AllowEmpty="true" Placeholder="@L["NoProject"]" />
@@ -132,11 +131,27 @@ else
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
         </OmniStack>
         </OmniStack>
-    </OmniTemplateForm>
-    @* R-18: only a production environment carries the database's expand/contract tracking. *@
-    @if (!_isNew && _detail is { Type: EnvironmentType.Production } production)
+    </OmniTemplateForm>;
+
+    @* R-10: an existing environment has two tabs, its form (unchanged) and the database's expand/contract tracking
+       (R-18, unchanged). A new environment has no tracking yet: its form stays alone. *@
+    @if (_isNew)
     {
-        <EnvironmentSchemaTracking EnvironmentId="@production.Id" />
+        @form
     }
-    </OmniStack>
+    else
+    {
+        <UrlSyncedTabs Slugs="@TabSlugs" Class="environment-edit-tabs">
+            <Tabs>
+                <OmniTabsItem Key="overview" Title="@L["Overview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("dashboard")" /></Icon><ChildContent>
+                    @* The form's root is a display: contents wrapper with no box of its own: as the first child of the
+                       panel it left the strip with no measurable content below it (page rule 2.blocks-touching). *@
+                    <OmniStack>@form</OmniStack>
+                </ChildContent></OmniTabsItem>
+                <OmniTabsItem Key="expand-contract" Title="@L["SchemaTrackingTabEnvironment"]"><Icon><OmniIcon Name="OmniIconName.Database" /></Icon><ChildContent>
+                    <EnvironmentSchemaTracking EnvironmentId="@_detail!.Id" />
+                </ChildContent></OmniTabsItem>
+            </Tabs>
+        </UrlSyncedTabs>
+    }
 }

@@ -18,6 +18,10 @@ public partial class MonacoEditor : IAsyncDisposable
     /// <summary>Raised when the user activates a <c>pipeline: &lt;name&gt;</c> reference (Ctrl/Cmd-click) in the
     /// editor - the host opens that pipeline's definition in a read-only peek pane.</summary>
     [Parameter] public EventCallback<string> OnPipelineRefClicked { get; set; }
+    /// <summary>Raised when the user activates an <c>extends: &lt;template&gt;@&lt;version&gt;</c> reference
+    /// (Ctrl/Cmd-click) - the host opens that template version in a read-only peek pane. The value is the
+    /// reference as written (<c>name@version</c>, or the legacy bare name).</summary>
+    [Parameter] public EventCallback<string> OnTemplateRefClicked { get; set; }
 
     private string ElementId { get; } = $"monaco-{Guid.NewGuid():N}";
     private DotNetObjectReference<MonacoEditor>? _dotNetRef;
@@ -150,6 +154,13 @@ public partial class MonacoEditor : IAsyncDisposable
     {
         if (!string.IsNullOrWhiteSpace(name))
             await OnPipelineRefClicked.InvokeAsync(name);
+    }
+
+    [JSInvokable]
+    public async Task OnTemplateLinkActivated(string reference)
+    {
+        if (!string.IsNullOrWhiteSpace(reference))
+            await OnTemplateRefClicked.InvokeAsync(reference);
     }
 
     [JSInvokable]

@@ -5,14 +5,16 @@
 <OmniTemplateForm TModel="NextVersionModel" Model="@_model" OnValidSubmit="@Submit">
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniStack Gap="OmniSpacing.Large">
-        <OmniFormField Label="@L["Series"]" Required="true" Help="@SeriesHelp" Class="omni-u-w-100" For="next-version-series">
-            <OmniTextBox Id="next-version-series" @bind-Value="_model.Series" Placeholder="1.4" Class="omni-u-w-100" />
-        </OmniFormField>
-        <ValidationMessage For="@(() => _model.Series)" />
-        <OmniFormField Label="@L["ReleaseNumber"]" Required="true" Class="omni-u-w-100" For="next-version-number">
-            <OmniNumeric TValue="int" Id="next-version-number" @bind-Value="_model.NextNumber" Minimum="0" Maximum="@ReleaseSeries.MaxNumber" Class="omni-u-w-100" />
-        </OmniFormField>
-        <ValidationMessage For="@(() => _model.NextNumber)" />
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniFormField Label="@L["Series"]" Required="true" Help="@SeriesHelp" Class="omni-u-w-100" For="next-version-series">
+                <OmniTextBox Id="next-version-series" @bind-Value="_model.Series" Placeholder="1.4" Class="omni-u-w-100" />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.Series)" />
+            <OmniFormField Label="@L["ReleaseNumber"]" Required="true" Class="omni-u-w-100" For="next-version-number">
+                <OmniNumeric TValue="int" Id="next-version-number" @bind-Value="_model.NextNumber" Minimum="0" Maximum="@ReleaseSeries.MaxNumber" Class="omni-u-w-100" />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.NextNumber)" />
+        </OmniStack>
         @if (Version is { } version)
         {
             <OmniAlert Severity="OmniSeverity.Info">@string.Format(L["NextVersionPreview"].Value, version)</OmniAlert>

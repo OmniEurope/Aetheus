@@ -27,6 +27,20 @@ public interface IPipelineDispatchServerResolver
         CancellationToken ct);
 
     /// <summary>
+    /// R-11 (decision of 2026-11-10): <see cref="ResolveServerForTargetAsync"/> for a pipeline imported from an
+    /// external repository mirror, which runs only on the servers linked to <paramref name="projectId"/>. A stage
+    /// without a selector takes the least busy online runner linked to the project; a server any other selector
+    /// resolves to is accepted only when it is linked to the project. Returns <c>null</c> otherwise.
+    /// </summary>
+    Task<Server?> ResolveProjectServerForTargetAsync(
+        PipelineStageDefinition stageDef,
+        IReadOnlyDictionary<string, string> resolvedVars,
+        int? organizationId,
+        bool deploymentStage,
+        int projectId,
+        CancellationToken ct);
+
+    /// <summary>
     /// The stage as the selectors should actually be read: a run-scoped local deployment target
     /// replaces pool/environment/agent. Callers that query candidate servers themselves need it.
     /// </summary>
@@ -128,6 +142,27 @@ public sealed class PipelineDispatchServerResolver(IPipelineRunnerTargetReader r
                 OsTypeHelper.Parse(effectiveStage.Os), organizationId, projectId, ct).ConfigureAwait(false)
             : await ResolveServerAsync(effectiveStage, organizationId, projectId, ct).ConfigureAwait(false);
     }
+
+    public async Task<Server?> ResolveProjectServerForTargetAsync(
+        PipelineStageDefinition stageDef, IReadOnlyDictionary<string, string> resolvedVars,
+        int? organizationId, bool deploymentStage, int projectId, CancellationToken ct)
+    {
+        var effectiveStage = ResolveEffectiveStageTarget(stageDef, resolvedVars);
+        if (!deploymentStage && !HasExplicitSelector(effectiveStage))
+            return await repo.FindAnyOnlineProjectRunnerAsync(
+                projectId, organizationId, OsTypeHelper.Parse(effectiveStage.Os), ct).ConfigureAwait(false);
+        var server = await ResolveServerForTargetAsync(
+            stageDef, resolvedVars, organizationId, deploymentStage, projectId, ct).ConfigureAwait(false);
+        return server is not null
+               && (await repo.GetProjectLinkedServerIdsAsync(projectId, ct).ConfigureAwait(false)).Contains(server.Id)
+            ? server
+            : null;
+    }
+
+    private static bool HasExplicitSelector(PipelineStageDefinition stageDef)
+        => !string.IsNullOrEmpty(stageDef.Pool)
+           || !string.IsNullOrEmpty(stageDef.Environment)
+           || !string.IsNullOrEmpty(stageDef.Agent) && !stageDef.Agent.Equals("default", StringComparison.OrdinalIgnoreCase);
 
     // The two reason builders describe the same selector precedence; saying it once keeps them honest.
     private static string DescribeTarget(PipelineStageDefinition stageDef)

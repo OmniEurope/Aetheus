@@ -10,7 +10,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// shared one, never a homonym of another project, whatever order the rows were written in; and the run's
 /// project is found through the pipeline whichever way the pipeline is owned.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineEnvironmentProjectScopeIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

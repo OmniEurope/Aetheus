@@ -15,17 +15,11 @@ public sealed class ExternalRepoSyncService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<ExternalRepoSyncService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:external-repo-sync")
 {
     private static readonly TimeSpan PollInterval = BackendRuntimeDefaults.SchedulerCheckInterval;
 
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:external-repo-sync", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(PollInterval, timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))

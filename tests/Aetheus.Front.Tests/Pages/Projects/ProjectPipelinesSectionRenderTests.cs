@@ -12,6 +12,8 @@ public class ProjectPipelinesSectionRenderTests : BunitContext
     public ProjectPipelinesSectionRenderTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
+        // R-11: the external repository panel above the list; these projects have none.
+        _handler.SetJsonResponse(HttpMethod.Get, "/external-pipelines", new ExternalPipelineCandidatesDto());
         _handler.SetJsonResponse("api/pipelines/dependencies", new PipelineDependencyGroupsDto());
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         _handler.SetJsonResponse("api/pipelines/favorites", new PipelineFavoritesDto());
@@ -72,7 +74,7 @@ public class ProjectPipelinesSectionRenderTests : BunitContext
         // The verdict is not read yet: no list, a loader, no banner.
         Assert.Empty(cut.FindAll(".pipeline-catalog-panel"));
         Assert.Empty(cut.FindAll("[data-testid='project-pipelines-readiness']"));
-        Assert.NotEmpty(cut.FindComponents<AetheusLoader>());
+        Assert.NotEmpty(cut.FindComponents<ZoneVeil>());
 
         release.SetResult();
 

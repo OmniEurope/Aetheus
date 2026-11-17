@@ -242,6 +242,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
             Title = "Review required",
             Status = AnalysisFindingStatus.Accepted
         });
+        // R-21: the finding page reads its project for the trail and the menu.
+        _handler.SetJsonResponse("api/projects/1", new ProjectDetailDto { Id = 1, Name = "Aetheus" });
         _handler.SetJsonResponse("api/analysis/findings/10/occurrences?take=100", new List<AnalysisFindingOccurrenceDto>());
         _handler.SetJsonResponse("api/analysis/findings/10/decisions", new List<AnalysisFindingDecisionDto>
         {
@@ -271,6 +273,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
             Title = "Reopened",
             Status = AnalysisFindingStatus.Open
         });
+        // R-21: the finding page reads its project for the trail and the menu.
+        _handler.SetJsonResponse("api/projects/1", new ProjectDetailDto { Id = 1, Name = "Aetheus" });
         _handler.SetJsonResponse("api/analysis/findings/11/occurrences?take=100", new List<AnalysisFindingOccurrenceDto>());
         _handler.SetJsonResponse("api/analysis/findings/11/decisions", new List<AnalysisFindingDecisionDto>
         {

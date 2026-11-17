@@ -171,15 +171,15 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
 
         var click = cut.Find("[data-testid='setup-provision'] button").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
-        cut.WaitForAssertion(() => Assert.Contains("omni-busy", cut.Find("[data-testid='setup-todo']").ClassList));
+        cut.WaitForAssertion(() => Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy));
         // Still holding its content, and no loader took its place.
         Assert.Contains("atlas-secrets", cut.Find("[data-testid='setup-provisioned-pending']").TextContent, StringComparison.Ordinal);
-        Assert.Empty(cut.FindComponents<AetheusLoader>());
+        Assert.Empty(cut.FindComponents<ZoneVeil>());
 
         release.SetResult(true);
         await click;
 
-        cut.WaitForAssertion(() => Assert.DoesNotContain("omni-busy", cut.Find("[data-testid='setup-todo']").ClassList));
+        cut.WaitForAssertion(() => Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy));
         Assert.Single(cut.FindAll("[data-testid='setup-provisioned-created']"));
     }
 
@@ -193,15 +193,15 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
             .Add(panel => panel.Loading, true)
             .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.NoRepository)));
 
-        Assert.Contains("omni-busy", cut.Find("[data-testid='setup-todo']").ClassList);
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Single(cut.FindAll("[data-testid='setup-readiness-create-repository']"));
-        Assert.Empty(cut.FindComponents<AetheusLoader>());
+        Assert.Empty(cut.FindComponents<ZoneVeil>());
 
         var first = Render<PipelineSetupReadinessPanel>(parameters => parameters
             .Add(panel => panel.ProjectId, 4)
             .Add(panel => panel.Loading, true));
 
-        Assert.Single(first.FindComponents<AetheusLoader>());
+        Assert.Single(first.FindComponents<ZoneVeil>());
         Assert.Empty(first.FindAll("[data-testid='setup-todo']"));
     }
 
@@ -255,24 +255,65 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
     /// <summary>The missing repository is created in the dialog over the wizard, never by leaving
     /// it, and the host is asked to check again once it exists.</summary>
     [Fact]
-    public void NoRepository_OpensTheCreateDialogOverThePage_AndRechecksAfterIt()
+    public void NoRepository_OpensTheCreateDialogOverThePage_ThenOpensTheNewRepositoryPage()
     {
+        // R-31: once created, the user lands on the repository page (how to push), which leads back to the summary.
+        const string summary = "/pipelines/setup?projectId=4&step=summary";
         BunitTestHelper.UseImmediateDialogs(this);
         var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
-        dialog.OpenResult = true;
-        var rechecked = 0;
+        dialog.OpenResult = 8; // the dialog hands back the id of the repository it created
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
 
         var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
             .Add(panel => panel.ProjectId, 4)
-            .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.NoRepository))
-            .Add(panel => panel.OnChanged, () => rechecked++));
+            .Add(panel => panel.ReturnUrl, summary)
+            .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.NoRepository)));
 
         Assert.DoesNotContain("create=true", cut.Markup, StringComparison.Ordinal);
         cut.Find("[data-testid='setup-readiness-create-repository']").Click();
 
         Assert.Equal(typeof(GitRepositoryCreateDialog), dialog.LastComponent);
         Assert.Equal(4, dialog.LastParameters![nameof(GitRepositoryCreateDialog.ProjectId)]);
-        Assert.Equal(1, rechecked);
+        Assert.Equal($"http://localhost/git-repositories/8?returnUrl={Uri.EscapeDataString(summary)}", nav.Uri);
+    }
+
+    /// <summary>Recette R-69 (OE2): for an external application the wizard never offers to create a repository (an empty internal
+    /// repository became the project's source and the production analysis then read nothing); it leads to the page that attaches
+    /// the external one.</summary>
+    [Fact]
+    public void NoRepository_ForAnExternalApplication_OffersToAttachTheExternalRepository_NeverToCreateAnEmptyOne()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+
+        var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
+            .Add(panel => panel.ProjectId, 17)
+            .Add(panel => panel.ExternalApplication, true)
+            .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.NoRepository)));
+
+        Assert.Empty(cut.FindAll("[data-testid='setup-readiness-create-repository']"));
+        cut.Find("[data-testid='setup-readiness-attach-external']").Click();
+
+        Assert.Null(dialog.LastComponent);
+        Assert.Equal("http://localhost/projects/17/external-repo", nav.Uri);
+    }
+
+    [Fact]
+    public void NoRepository_ACancelledDialog_StaysOnThePage()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        dialog.OpenResult = false;
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        var before = nav.Uri;
+
+        var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
+            .Add(panel => panel.ProjectId, 4)
+            .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.NoRepository)));
+        cut.Find("[data-testid='setup-readiness-create-repository']").Click();
+
+        Assert.Equal(before, nav.Uri);
     }
 
     /// <summary>The pages that create an environment or add a server carry the summary as their

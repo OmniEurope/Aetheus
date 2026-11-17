@@ -375,6 +375,8 @@ public sealed class AiTaskServiceTests
             task.EnvironmentVariables)!;
         Assert.Equal("masked prompt", environment["AETHEUS_AI_PROMPT"]);
         Assert.Equal(definition.Id.ToString(), environment["AETHEUS_AI_TASK_DEFINITION_ID"]);
+        // R-12: the live task feed reads the definition of the run back from this same environment.
+        Assert.Equal(definition.Id, AiRunDefinitionLink.Read(_encryption, task));
         Assert.Equal("false", environment["AETHEUS_AI_GATE"]);
         Assert.False(environment.ContainsKey("AETHEUS_AI_SOURCE_REPOSITORY_ID"));
     }

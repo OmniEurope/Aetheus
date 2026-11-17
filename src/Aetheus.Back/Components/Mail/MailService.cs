@@ -110,7 +110,7 @@ public class MailService(
         // (the old free-form postconf/systemctl shell task always failed for the non-root agent). The
         // new domain is the operation target; no secret is involved. Queued via QueueTaskAsync so the
         // TaskQueued SignalR event is broadcast (top-bar tracker).
-        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"Mail - add domain {request.Name}",
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.MailAddDomainPrefix}{request.Name}",
             OperationKind.MailAddDomain, request.Name,
             new Dictionary<string, string> { [MailSetupEnv.DkimSelector] = request.DkimSelector }, timeoutSeconds: 60), ct).ConfigureAwait(false);
 
@@ -145,7 +145,7 @@ public class MailService(
         await repo.DeleteDomainAsync(domain, ct).ConfigureAwait(false);
 
         // Typed op via the root-owned mail-manage helper (replaces the dead `postconf $(...) &&` shell).
-        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"Mail - remove domain {domain.Name}",
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.MailRemoveDomainPrefix}{domain.Name}",
             OperationKind.MailRemoveDomain, target: domain.Name, timeoutSeconds: 30), ct).ConfigureAwait(false);
 
         await audit.LogAsync("MailRemoveDomain", "Mail", serverId, domain.Name, ct).ConfigureAwait(false);
@@ -195,7 +195,7 @@ public class MailService(
             [MailSetupEnv.QuotaMb] = request.QuotaMb.ToString(CultureInfo.InvariantCulture),
             [MailSetupEnv.AccountPassword] = request.Password
         };
-        var task = ServerTaskFactory.Operation(serverId, $"Mail - add account {request.Email}",
+        var task = ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.MailAddAccountPrefix}{request.Email}",
             OperationKind.MailAddAccount, request.Email, env, timeoutSeconds: 30);
         task.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(env));
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
@@ -312,7 +312,7 @@ public class MailService(
 
         // Typed op via mail-manage (replaces the dead `sed -i ... && postmap ...` shell). The parent
         // domain travels in env so the helper can re-validate the account belongs to it.
-        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"Mail - delete account {email}",
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.MailDeleteAccountPrefix}{email}",
             OperationKind.MailDeleteAccount, target: email,
             environmentVariables: new Dictionary<string, string> { [MailSetupEnv.Domain] = domain },
             timeoutSeconds: 15), ct).ConfigureAwait(false);
@@ -329,7 +329,7 @@ public class MailService(
         await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
         if (request.Action == MailAction.ApplyRetryTuning)
             await EnsureRetryTuningHelperAsync(serverId, ct).ConfigureAwait(false);
-        var task = ServerTaskFactory.Operation(serverId, $"Mail - {request.Action}", kind, target, timeoutSeconds: 90);
+        var task = ServerTaskFactory.Operation(serverId, ServerTaskNames.MailActionTask(request.Action), kind, target, timeoutSeconds: 90);
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
         await audit.LogAsync($"Mail{request.Action}", "Mail", serverId, request.Action.ToString(), ct).ConfigureAwait(false);
         return new MailTaskQueuedDto { TaskId = task.Id };
@@ -577,7 +577,7 @@ public class MailService(
         {
             [MailSetupEnv.AliasDestination] = destination
         };
-        return ServerTaskFactory.Operation(serverId, $"Mail - alias {source} → {destination}",
+        return ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.MailAddAliasPrefix}{source} → {destination}",
             OperationKind.MailAddAlias, source, env, timeoutSeconds: 15);
     }
 
@@ -692,7 +692,7 @@ public class MailService(
         await repo.DeleteAliasAsync(alias, ct).ConfigureAwait(false);
 
         // Typed op via mail-manage (replaces the dead `sed -i ... && postmap ...` shell).
-        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"Mail - remove alias {alias.SourceEmail}",
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.MailRemoveAliasPrefix}{alias.SourceEmail}",
             OperationKind.MailRemoveAlias, target: alias.SourceEmail, timeoutSeconds: 15), ct).ConfigureAwait(false);
 
         await audit.LogAsync("MailAliasDeleted", "Mail", serverId, alias.SourceEmail, ct).ConfigureAwait(false);
@@ -722,7 +722,7 @@ public class MailService(
             [MailSetupEnv.NewSelector] = request.NewSelector
         };
         await QueueTaskAsync(ServerTaskFactory.Operation(serverId,
-            $"Mail - rotate DKIM key for {domain.Name} ({oldSelector} → {request.NewSelector})",
+            $"{ServerTaskNames.MailRotateDkimPrefix}{domain.Name} ({oldSelector} → {request.NewSelector})",
             OperationKind.MailDkimRotate, domain.Name, env, timeoutSeconds: 30), ct).ConfigureAwait(false);
 
         await audit.LogAsync("DkimKeyRotated", "Mail", serverId, $"{domain.Name}: {oldSelector} → {request.NewSelector}", ct).ConfigureAwait(false);

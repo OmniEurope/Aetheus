@@ -23,10 +23,27 @@ public partial class ServerPatchSection
 
     private ServerSecurityUpdatesDto? _status;
 
+    // Recette R-12: the tasks this page launches, adopted again when the user comes back while one still runs.
+    private static readonly string[] PatchTaskPrefixes = [ServerTaskNames.PatchCheck, ServerTaskNames.PatchUpgrade];
+
     // R-119: the task an upgrade check or apply queues is followed, and the section is veiled until it ends.
     private ServerTaskFollower? _follower;
     private bool _loading = true;
     private bool _busy;
+    private ServerFollowerBusyLink? _busyLink;
+
+    // R-12: the buttons stay disabled while a task adopted on arrival runs.
+    private bool ActionBusy => _busy || (_busyLink?.Busy ?? false);
+
+    protected override void OnAfterRender(bool firstRender) =>
+        (_busyLink ??= new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged))).Follower = _follower;
+
+    /// <summary>Recette R-12: what a task adopted on arrival is called, as the page names its own.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.Key(L, ServerTaskNames.PatchCheck, "PatchCheck"),
+        ServerAdoptedTaskTitles.Key(L, ServerTaskNames.PatchUpgrade, "PatchApply")
+    ]);
 
     private int? _loadedServerId;
 
@@ -92,7 +109,7 @@ public partial class ServerPatchSection
             var taskId = await Api.Security.UpgradeSystemAsync(ServerId, dryRun);
             if (taskId is { } queued)
             {
-                _follower?.Follow(L[dryRun ? "PatchCheck" : "PatchApply"], queued);
+                _follower?.Follow(L[dryRun ? "PatchCheck" : "PatchApply"], queued, veil: ServerBlockingTasks.Veils(dryRun ? ServerTaskNames.PatchCheck : ServerTaskNames.PatchUpgrade));
                 Toast.Success(successKey, successKey);
             }
             else

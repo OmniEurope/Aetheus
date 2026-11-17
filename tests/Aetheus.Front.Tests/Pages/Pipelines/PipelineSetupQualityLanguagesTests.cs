@@ -181,7 +181,7 @@ public sealed class PipelineSetupQualityLanguagesTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/templates", new[]
         {
             "application-ci", "application-quality", "application-security", "application-qa",
-            "application-candidate", "application-nightly", "application-deploy-prod"
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
         }.Select((name, index) => new PipelineTemplateSummaryDto { Id = index + 1, Name = name, Version = 1 }).ToList());
         // The pinned version of the quality template (id 2), read when exactly one of Python and Java is used.
         _handler.SetJsonResponse("api/pipelines/templates/2/versions/1", new PipelineTemplateVersionDto { Version = 1, YamlContent = TemplateYaml });
@@ -272,21 +272,29 @@ public sealed class PipelineSetupQualityLanguagesTests : BunitContext
     }
 
     [Fact]
-    public async Task ARepositoryThatWasNotRead_TicksOnlyDotNet_AndAsksTheUserToConfirm()
+    public async Task ARepositoryThatWasNotRead_TicksOnlyDotNet_AndSaysItInTheSummaryAsPlainInformation()
     {
         var cut = await OpenCapabilitiesAsync(new PipelineSetupDetectionDto());
 
         Assert.True(IsTicked(cut, "lang-dotnet"));
         Assert.False(IsTicked(cut, "lang-python"));
         Assert.False(IsTicked(cut, "lang-java"));
-        Assert.Contains("PipelineQualityLanguagesUncertain",
-            cut.Find("[data-testid='setup-quality-languages-uncertain']").TextContent, StringComparison.Ordinal);
+        // R-17: nothing at the Capabilities step, the information is in the summary and is not an alert.
+        Assert.Empty(cut.FindAll("[data-testid='setup-quality-languages-uncertain']"));
+
+        await OpenSummaryAsync(cut);
+
+        var information = cut.Find("[data-testid='setup-quality-languages-uncertain']");
+        Assert.Contains("PipelineQualityLanguagesUncertain", information.TextContent, StringComparison.Ordinal);
+        Assert.Equal("span", information.LocalName);
+        Assert.Null(information.Closest(".omni-alert"));
     }
 
     [Fact]
-    public async Task ARepositoryReadToTheEnd_AsksNothing()
+    public async Task ARepositoryReadToTheEnd_SaysNothingAboutTheLanguages()
     {
         var cut = await OpenCapabilitiesAsync(new PipelineSetupDetectionDto { HasDotNetProject = true, HasPython = false, HasJava = false });
+        await OpenSummaryAsync(cut);
 
         Assert.Empty(cut.FindAll("[data-testid='setup-quality-languages-uncertain']"));
     }
@@ -298,7 +306,15 @@ public sealed class PipelineSetupQualityLanguagesTests : BunitContext
 
         Assert.False(IsTicked(cut, "lang-python"));
         Assert.False(IsTicked(cut, "lang-java"));
+        Assert.Empty(cut.FindAll("[data-testid='setup-quality-languages-uncertain']"));
+        await OpenSummaryAsync(cut);
         Assert.NotEmpty(cut.FindAll("[data-testid='setup-quality-languages-uncertain']"));
+    }
+
+    private static async Task OpenSummaryAsync(IRenderedComponent<PipelineSetupWizard> cut)
+    {
+        await cut.InvokeAsync(cut.FindComponent<WizardDialog>().Instance.NextStep);
+        cut.WaitForAssertion(() => Assert.Contains("setup-summary", cut.Markup, StringComparison.Ordinal));
     }
 
     [Fact]

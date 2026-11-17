@@ -276,6 +276,7 @@ public class RkhunterServiceTests
     [Fact]
     public async Task SetScheduleAsync_ValidCron_UpdatesAndAudits()
     {
+        _repoMock.UpdateScanScheduleAsync(1, "0 3 * * *", Arg.Any<CancellationToken>()).Returns(true);
         var request = new RkhunterScheduleRequest { CronExpression = "0 3 * * *" };
 
         await _sut.SetScheduleAsync(1, request, ct: TestContext.Current.CancellationToken);
@@ -288,6 +289,7 @@ public class RkhunterServiceTests
     [Fact]
     public async Task SetScheduleAsync_NullCron_DisablesSchedule()
     {
+        _repoMock.UpdateScanScheduleAsync(1, null, Arg.Any<CancellationToken>()).Returns(true);
         var request = new RkhunterScheduleRequest { CronExpression = null };
 
         await _sut.SetScheduleAsync(1, request, ct: TestContext.Current.CancellationToken);
@@ -295,6 +297,17 @@ public class RkhunterServiceTests
         await _repoMock.Received(1).UpdateScanScheduleAsync(1, null, Arg.Any<CancellationToken>());
         await _auditMock.Received(1).LogAsync(
             "RkhunterSchedule", "Rkhunter", 1, "disabled", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetScheduleAsync_RkhunterNotInstalled_RefusesAndAuditsNothing()
+    {
+        _repoMock.UpdateScanScheduleAsync(1, "0 3 * * *", Arg.Any<CancellationToken>()).Returns(false);
+        var request = new RkhunterScheduleRequest { CronExpression = "0 3 * * *" };
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.SetScheduleAsync(1, request, ct: TestContext.Current.CancellationToken));
+
+        await _auditMock.DidNotReceiveWithAnyArgs().LogAsync(default!, default!, default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

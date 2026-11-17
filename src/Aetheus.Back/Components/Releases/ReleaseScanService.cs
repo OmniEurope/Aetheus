@@ -11,15 +11,9 @@ public sealed class ReleaseScanService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
     ILogger<ReleaseScanService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:release-scan")
 {
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:release-scan", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         var intervalMinutes = configuration.GetValue("ReleaseScan:IntervalMinutes", 0);
         if (intervalMinutes <= 0)
@@ -61,6 +55,8 @@ public sealed class ReleaseScanService(
             releaseHub = scope.ServiceProvider.GetRequiredService<IHubContext<ReleaseHub>>();
             projects = await projectRepo.GetAllProjectsWithRepoUrlAsync(ct).ConfigureAwait(false);
         }
+        // R-4: an external address without a project mirror is not scanned; its project page says to create the mirror.
+        projects = [.. projects.Where(project => !ExternalRepositoryAddress.IsUnmirrored(project.RepositoryUrl))];
 
         using var semaphore = new SemaphoreSlim(4);
         await Task.WhenAll(projects.Select(async project =>

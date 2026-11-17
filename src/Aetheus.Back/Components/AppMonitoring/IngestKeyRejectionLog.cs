@@ -18,6 +18,26 @@ public sealed class IngestKeyRejectionLog(TimeProvider time, ILogger<IngestKeyRe
 
     private readonly Lock _gate = new();
     private readonly Dictionary<string, (DateTime Start, int Suppressed)> _windows = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTime> _lastRefusals = new(StringComparer.Ordinal);
+
+    /// <summary>R-27: when the server last refused one of these keys (UTC), by their hashes; null when none was refused since this
+    /// process started. Only a key the application still stores can be attributed to it: a refused key the server does not
+    /// know says nothing about which application sent it, so the answer never covers another application's refusals.</summary>
+    public DateTime? LastRefusalOf(IEnumerable<string?> keyHashes)
+    {
+        DateTime? latest = null;
+        lock (_gate)
+        {
+            foreach (var keyHash in keyHashes)
+            {
+                if (string.IsNullOrEmpty(keyHash)) continue;
+                var fingerprint = keyHash[..Math.Min(FingerprintLength, keyHash.Length)];
+                if (_lastRefusals.TryGetValue(fingerprint, out var at) && (latest is null || at > latest))
+                    latest = at;
+            }
+        }
+        return latest;
+    }
 
     /// <param name="keyHash">The hash of the refused key, or null when the request carried none.</param>
     /// <param name="origin">Where the request came from (address, user agent), or null when unknown. Refusals
@@ -34,6 +54,7 @@ public sealed class IngestKeyRejectionLog(TimeProvider time, ILogger<IngestKeyRe
         int count;
         lock (_gate)
         {
+            NoteLastRefusal(keyHash is null ? null : fingerprint, now);
             if (!_windows.ContainsKey(windowKey) && _windows.Count >= MaxTrackedKeys)
             {
                 foreach (var expired in _windows.Where(entry => now - entry.Value.Start >= Period).Select(entry => entry.Key).ToList())
@@ -56,6 +77,21 @@ public sealed class IngestKeyRejectionLog(TimeProvider time, ILogger<IngestKeyRe
             _windows[windowKey] = (now, 0);
         }
 
+        LogRefusal(previousReport, count, fingerprint, origin);
+    }
+
+    /// <summary>Keeps the instant of the latest refusal of each key, bounded like the report windows: past the cap the oldest
+    /// entry leaves.</summary>
+    private void NoteLastRefusal(string? fingerprint, DateTime now)
+    {
+        if (fingerprint is null) return;
+        if (!_lastRefusals.ContainsKey(fingerprint) && _lastRefusals.Count >= MaxTrackedKeys)
+            _lastRefusals.Remove(_lastRefusals.MinBy(entry => entry.Value).Key);
+        _lastRefusals[fingerprint] = now;
+    }
+
+    private void LogRefusal(DateTime? previousReport, int count, string fingerprint, string? origin)
+    {
         if (previousReport is { } reportedAt)
             logger.LogWarning(
                 "Telemetry ingest refused key {KeyFingerprint} {Count} more time(s) since the report of {ReportedAt:O}; the sender still holds no valid ingest key. Origin {Origin}",

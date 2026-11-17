@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net.Http;
+using Aetheus.Shared.Components.VulnerabilityWatch;
 
 namespace Aetheus.Agent.Core.Functions;
 
@@ -19,14 +20,28 @@ public sealed class ScanDotnetRuntimeCveFunction : IPipelineFunction
 {
     internal const string DefaultMetadataUrl = "https://dotnetcli.blob.core.windows.net/dotnet/release-metadata";
 
+    internal const int MaxAttempts = 3;
+    internal static readonly TimeSpan RetryBackoff = TimeSpan.FromSeconds(2);
+    internal static readonly TimeSpan DefaultAttemptTimeout = TimeSpan.FromSeconds(60);
+
     private readonly HttpClient _http;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly TimeSpan _attemptTimeout;
 
     public ScanDotnetRuntimeCveFunction()
         : this(FunctionHttp.Shared)
     {
     }
 
-    internal ScanDotnetRuntimeCveFunction(HttpClient http) => _http = http;
+    /// <param name="delay">The wait between two attempts; tests pass one that returns at once.</param>
+    /// <param name="attemptTimeout">How long one fetch may take; null for <see cref="DefaultAttemptTimeout"/>.</param>
+    internal ScanDotnetRuntimeCveFunction(
+        HttpClient http, Func<TimeSpan, CancellationToken, Task>? delay = null, TimeSpan? attemptTimeout = null)
+    {
+        _http = http;
+        _delay = delay ?? Task.Delay;
+        _attemptTimeout = attemptTimeout ?? DefaultAttemptTimeout;
+    }
 
     public string Name => PipelineFunctionCatalog.ScanDotnetRuntimeCve.Name;
 
@@ -43,12 +58,14 @@ public sealed class ScanDotnetRuntimeCveFunction : IPipelineFunction
             return PipelineFunctionResult.Failure($"Image archive '{invalid}' is not a plain .tar file name.");
         var workspace = Path.GetFullPath(context.Workspace);
         var output = Path.GetFullPath(context.Parameters["output"], workspace);
-        if (!output.StartsWith(workspace.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        if (!IsInside(workspace, output))
             return PipelineFunctionResult.Failure($"The output {output} is outside the workspace.");
         var metadataUrl = context.Parameters.GetValueOrDefault("metadata_url") is { Length: > 0 } custom ? custom : DefaultMetadataUrl;
         if (!Uri.TryCreate(metadataUrl, UriKind.Absolute, out var metadata) || metadata.Scheme is not ("http" or "https"))
             return PipelineFunctionResult.Failure($"The metadata_url '{metadataUrl}' is not an absolute HTTP(S) URL.");
-        var input = Path.Combine(workspace, context.Parameters.GetValueOrDefault("input") is { Length: > 0 } relative ? relative : ".analysis-image");
+        var input = Path.GetFullPath(context.Parameters.GetValueOrDefault("input") is { Length: > 0 } relative ? relative : ".analysis-image", workspace);
+        if (!IsInside(workspace, input))
+            return PipelineFunctionResult.Failure($"The input {input} is outside the workspace.");
 
         try
         {
@@ -67,6 +84,9 @@ public sealed class ScanDotnetRuntimeCveFunction : IPipelineFunction
             return PipelineFunctionResult.Failure(ex.Message);
         }
     }
+
+    private static bool IsInside(string workspace, string path) =>
+        path.StartsWith(workspace.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal);
 
     private async Task<IReadOnlyList<DotnetRuntimeCveFinding>> ScanImageAsync(
         PipelineFunctionContext context,
@@ -112,7 +132,7 @@ public sealed class ScanDotnetRuntimeCveFunction : IPipelineFunction
             var url = DotnetReleaseAdvisories.ChannelUrl(metadataUrl, version);
             try
             {
-                releases = await new FunctionHttp(_http).GetAsync(url.AbsoluteUri, null, cancellationToken).ConfigureAwait(false);
+                releases = await GetWithRetryAsync(url.AbsoluteUri, cancellationToken).ConfigureAwait(false);
             }
             catch (FunctionHttpException ex)
             {
@@ -121,5 +141,33 @@ public sealed class ScanDotnetRuntimeCveFunction : IPipelineFunction
             channels[version.Channel] = releases;
         }
         return releases;
+    }
+
+    /// <summary>One fetch of the channel's metadata, tried up to <see cref="MaxAttempts"/> times in all on a server error
+    /// (5xx), no answer or a timeout; a client error (404...) is final at once. The last failure is the one reported.</summary>
+    private async Task<string> GetWithRetryAsync(string url, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            using var attemptTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            attemptTimeout.CancelAfter(_attemptTimeout);
+            FunctionHttpException failure;
+            try
+            {
+                return await new FunctionHttp(_http).GetAsync(url, null, attemptTimeout.Token).ConfigureAwait(false);
+            }
+            catch (FunctionHttpException ex) when (ex.StatusCode is null or >= System.Net.HttpStatusCode.InternalServerError)
+            {
+                failure = ex;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                failure = new FunctionHttpException($"GET {url} timed out after {_attemptTimeout.TotalSeconds:0} seconds.");
+            }
+
+            if (attempt >= MaxAttempts)
+                throw new FunctionHttpException($"{failure.Message} (after {MaxAttempts} attempts)", failure);
+            await _delay(RetryBackoff * attempt, cancellationToken).ConfigureAwait(false);
+        }
     }
 }

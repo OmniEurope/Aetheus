@@ -2,6 +2,7 @@
 using System.Security;
 using System.Xml.Linq;
 using Aetheus.Agent.Core.Functions;
+using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
 
@@ -110,13 +111,14 @@ public sealed class FailedTestRerunTests
     }
 
     [Fact]
-    public void Reconcile_FailsTheSuiteWhenEveryFailurePassedOnTheRerun_ForAFlakyTestIsADefect()
+    public void Reconcile_PassesTheSuiteWhenEveryFailurePassedOnTheRerun_AFlakyTestIsAFindingNotAFailure()
     {
         var verdict = FailedTestRerun.Reconcile(
             Read(("S.C", "A", "A", "Failed"), ("S.D", "A", "A", "Passed")),
             Read(("S.C", "A", "A", "Passed")));
 
-        Assert.Equal(1, verdict.Status);
+        // PLAN-006 (2026-11-05): flaky tests alone never fail their suite; the seal grades them.
+        Assert.Equal(0, verdict.Status);
         Assert.Empty(verdict.Failed);
         // S.D's A shares the display name, not the class: it is another test, untouched by the rerun.
         Assert.Equal([new FailedTestRerun.FlakyTest("A", true)], verdict.Flaky);

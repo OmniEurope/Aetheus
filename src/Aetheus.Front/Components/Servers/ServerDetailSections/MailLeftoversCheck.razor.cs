@@ -49,9 +49,7 @@ public partial class MailLeftoversCheck : IDisposable
     private bool AdoptOpenCheck()
     {
         if (Busy) return false;
-        var open = Tracker.Tasks.FirstOrDefault(task => task.ServerId == ServerId
-            && task.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned or TaskExecutionStatus.Running
-            && task.Name == MailTaskNames.LeftoversCheck);
+        var open = ServerTaskAdoption.FindInFlight(Tracker.Tasks, ServerId, name => name == MailTaskNames.LeftoversCheck, includePipelineTasks: true);
         if (open is null) return false;
         _taskId = open.Id;
         _running = true;

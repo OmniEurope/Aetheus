@@ -41,6 +41,32 @@ public sealed class AuthStateProviderAnalyticsTests
     }
 
     [Fact]
+    public async Task AfterAReload_TheRestoredSession_NamesTheSameVisitorAsTheSignInDid()
+    {
+        // F-FRONT-002: the restore after a full-page reload read the roles and the account but not the visitor
+        // claim, so the measurement identified nobody until the next renewal.
+        var token = Jwt(new Dictionary<string, object>
+        {
+            ["unique_name"] = "sony",
+            ["aetheus:avid"] = "opaque-visitor-identifier",
+            ["exp"] = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+        });
+        var js = Substitute.For<IJSRuntime>();
+        js.InvokeAsync<string?>("localStorage.getItem",
+                Arg.Is<object?[]>(a => a.Length == 1 && (string?)a[0] == StorageKeys.AuthToken))
+            .Returns(new ValueTask<string?>(token));
+        js.InvokeAsync<string?>("localStorage.getItem",
+                Arg.Is<object?[]>(a => a.Length == 1 && (string?)a[0] == StorageKeys.RefreshToken))
+            .Returns(new ValueTask<string?>("refresh"));
+        var reloaded = new AuthStateProvider(js, NullLogger<AuthStateProvider>.Instance);
+
+        await reloaded.InitializeAsync();
+
+        Assert.Equal("sony", reloaded.Username);
+        Assert.Equal("opaque-visitor-identifier", reloaded.VisitorForAnalytics());
+    }
+
+    [Fact]
     public async Task AnExpiredToken_NamesNobody()
     {
         var auth = new AuthStateProvider(Substitute.For<IJSRuntime>(), NullLogger<AuthStateProvider>.Instance);

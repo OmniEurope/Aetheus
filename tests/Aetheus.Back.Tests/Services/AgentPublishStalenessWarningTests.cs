@@ -46,8 +46,8 @@ public sealed class AgentPublishStalenessWarningTests : IDisposable
         return path;
     }
 
-    private static readonly string Publish = Path.Combine("src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0", "linux-x64", "publish", "Aetheus.Agent.Core.dll");
-    private static readonly string Build = Path.Combine("src", "Aetheus.Agent.Core", "bin", "Debug", "net10.0", "Aetheus.Agent.Core.dll");
+    private static readonly string Publish = Path.Combine("src", "Aetheus.Agent.Linux", "bin", "Debug", "net11.0", "linux-x64", "publish", "Aetheus.Agent.Core.dll");
+    private static readonly string Build = Path.Combine("src", "Aetheus.Agent.Core", "bin", "Debug", "net11.0", "Aetheus.Agent.Core.dll");
     private static readonly DateTime BuiltAt = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]

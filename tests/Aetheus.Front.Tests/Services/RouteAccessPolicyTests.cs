@@ -157,6 +157,8 @@ public class RouteAccessPolicyTests
     // Read; each stays closed to a user without that permission, and to the other one.
     [Theory]
     [InlineData("tasks/42", ResourceType.Server, true)]
+    [InlineData("tasks/0192f3a0-7c11-7f3e-9a44-1b2c3d4e5f60", ResourceType.Server, true)]
+    [InlineData("tasks/0192f3a0-7c11-7f3e-9a44-1b2c3d4e5f60", ResourceType.Project, false)]
     [InlineData("tasks/42", ResourceType.Project, false)]
     [InlineData("monitoring", ResourceType.Project, true)]
     [InlineData("monitoring", ResourceType.Server, false)]

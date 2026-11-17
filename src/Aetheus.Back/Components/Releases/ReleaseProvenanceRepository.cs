@@ -63,6 +63,10 @@ public sealed class ReleaseProvenanceRepository(AppDbContext db) : IReleaseProve
                 ArtifactName = input.ArtifactName,
                 Sha256 = input.Sha256,
                 SourcePipelineRunId = input.SourcePipelineRunId,
+                SourcePipelineRunNumber = db.PipelineRuns
+                    .Where(run => run.Id == input.SourcePipelineRunId)
+                    .Select(run => run.BuildNumber)
+                    .FirstOrDefault(),
                 SourceReleaseId = input.ReleaseId,
                 SourceReleaseVersion = input.Release == null ? null : input.Release.Version
             })
@@ -83,7 +87,8 @@ public sealed class ReleaseProvenanceRepository(AppDbContext db) : IReleaseProve
                 component.Version,
                 component.PackageUrl,
                 component.IsDirect,
-                RunId = component.AnalysisReport.PipelineRunId!.Value
+                RunId = component.AnalysisReport.PipelineRunId!.Value,
+                RunNumber = component.AnalysisReport.PipelineRun!.BuildNumber
             })
             .Distinct()
             .ToListAsync(ct).ConfigureAwait(false);
@@ -96,7 +101,8 @@ public sealed class ReleaseProvenanceRepository(AppDbContext db) : IReleaseProve
                 Version = group.Key.Version,
                 PackageUrl = group.Key.PackageUrl,
                 IsDirect = group.Any(row => row.IsDirect),
-                PipelineRunId = group.Min(row => row.RunId)
+                PipelineRunId = group.Min(row => row.RunId),
+                PipelineRunNumber = group.MinBy(row => row.RunId)!.RunNumber
             })
             .OrderByDescending(row => row.IsDirect)
             .ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)

@@ -85,8 +85,9 @@ public sealed class ProductionSmokeTests : E2ETestBase
         if (projectCount > 0)
             await Expect(Page.GetByTestId("project-item").First).ToBeVisibleAsync(new() { Timeout = 30000 });
         else
-            await Expect(Page.GetByTestId("projects-empty").Or(Page.Locator(".omni-panel-menu")).First)
-                .ToBeVisibleAsync(new() { Timeout = 30000 });
+            // The global menu is on every page, so it proves nothing about the projects content: the page's own
+            // empty state is the only acceptable outcome of an environment that holds no project.
+            await Expect(Page.GetByTestId("projects-empty")).ToBeVisibleAsync(new() { Timeout = 30000 });
 
         var contentSecurityPolicies = await Page.EvaluateAsync<string[]>(
             """

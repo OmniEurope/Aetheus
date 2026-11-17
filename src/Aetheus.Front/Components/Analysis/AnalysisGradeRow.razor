@@ -1,19 +1,22 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* R1-38: one row of the grade block: label (with the OE help mark that explains its criterion), value and
-   grade on a single line; a click on the row opens more detail (a row of the block's OE accordion,
-   folded by default). *@
-<OmniAccordionItem Class="@($"analysis-grade-row analysis-grade-row--{Kind}")" data-testid="@TestId" Help="@Tooltip">
-    <HeaderContent>
-        <span class="analysis-grade-row-title">
+@* R-16: one line of the grade block, no accordion: label with the OE help mark that carries everything the
+   line can say (criterion, thresholds, measured value, evaluation date, cause), value and grade on a single
+   line. The muted hints stay visible under the label. *@
+<div class="@($"analysis-grade-row analysis-grade-row--{Kind}")" data-testid="@TestId">
+    <div class="analysis-grade-row-title">
+        <span class="analysis-grade-row-heading">
             <span class="analysis-grade-measure-label @(Limiting ? "analysis-grade-domain-limiting" : null)">@Label</span>
-            @Hints
+            <OmniTooltip Class="analysis-grade-row-help" Text="@Help" Focusable="true" MaxWidth="OmniTooltipWidth.Wide" CompactLength="0">
+                <span role="img" aria-label="@L["Help"]" data-testid="grade-row-help"><OmniIcon Name="OmniIconName.Question" Class="omni-u-text-muted" aria-hidden="true" /></span>
+            </OmniTooltip>
         </span>
-    </HeaderContent>
-    <SummaryContent>
-        <span class="analysis-grade-value">@Value</span>
-        <GradeBadge Value="@Grade" />
-    </SummaryContent>
-    <ChildContent>
-        <div class="analysis-grade-row-detail">@Details</div>
-    </ChildContent>
-</OmniAccordionItem>
+        @Hints
+    </div>
+    <span class="analysis-grade-value">@Value</span>
+    <span class="analysis-grade-row-grade">
+        @if (ShowGrade)
+        {
+            <GradeBadge Value="@Grade" Old="@GradeOld" Large="true" />
+        }
+    </span>
+</div>

@@ -215,7 +215,7 @@ public sealed class TotoConformanceSeederTests
         };
         db.Organizations.Add(organization);
         await db.SaveChangesAsync(ct);
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(ct);
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader()).SeedAsync(ct);
         var repository = new PipelineRepository(
             db,
             TimeProvider.System,

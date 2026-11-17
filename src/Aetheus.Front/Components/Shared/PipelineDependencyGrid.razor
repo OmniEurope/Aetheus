@@ -5,7 +5,7 @@
     MaxHeight="@(FillHeight ? null : AetheusGrid.ScrollMaxHeight)"
     ScrollMode="@(Virtualize ? OmniDataGridScrollMode.Virtual : OmniDataGridScrollMode.All)" VirtualizationOverscanCount="3" FillAvailableHeight="@FillHeight"
     ExpandMode="OmniDataGridRowMode.Single" RowRender="@OnRowRender" OnRowClick="@(args => OnRowClick(args.Item))"
-    Class="@GridCssClass">
+    KeyOf="@(pipeline => pipeline.Id)" @bind-ExpandedKeys="_expandedKeys" Class="@GridCssClass">
     <DetailTemplate Context="pipeline">
         @* One list, and only a row that launches other pipelines expands; its detail is those
            children, in YAML execution order. *@
@@ -46,6 +46,13 @@
         <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="PipelineDependencyDto" Property="Name" Title="@L["Pipeline"]" Filterable="true">
             <Template Context="pipeline">
                 <a href="@PipelineHref(pipeline.Id)" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@pipeline.Name</a>
+                @* R-11: a pipeline imported from the external repository cannot be edited in Aetheus. *@
+                @if (pipeline.ExternalImportCommit is { } importedCommit)
+                {
+                    <OmniTooltip Text="@L["ExternalPipelineImportedTooltip", DisplayFormatting.ShortSha(importedCommit)]">
+                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lock))" Fill="OmniFill.Tonal" Tone="OmniTone.Info">@L["ReadOnly"]</OmniBadge>
+                    </OmniTooltip>
+                }
                 <PipelineOwnerBadge OwnerUsername="@pipeline.OwnerUsername" OwnerInactive="@pipeline.OwnerInactive" />
             </Template>
         </OmniDataGridColumn>
@@ -66,6 +73,21 @@
                         <GradeBadge Value="@lastGrade" Title="@L["LastRunGrade"]" />
                     }
                 </div>
+            </Template>
+        </OmniDataGridColumn>
+        @* R-33: the date of the latest run sits next to the history, readable without hover (the tooltip adds
+           how long ago); a pipeline that never ran says so. *@
+        <OmniDataGridColumn TItem="PipelineDependencyDto" Title="@L["LastRun"]" Width="9rem" Key="@LastRunColumn" Value="@LastRunValue"
+            Sortable="true" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
+            <Template Context="pipeline">
+                @if (pipeline.RecentRuns.FirstOrDefault() is { } lastRun)
+                {
+                    <span class="pipeline-last-run" data-testid="pipeline-last-run" title="@RelativeTime.FormatAgo(L, lastRun.StartedAt)">@lastRun.StartedAt.ToString("g")</span>
+                }
+                else
+                {
+                    <OmniText Tone="OmniTextTone.Muted" Class="pipeline-last-run pipeline-last-run-never" data-testid="pipeline-last-run-never">@L["PipelineNeverRun"]</OmniText>
+                }
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PipelineDependencyDto" Property="TriggerType" Title="@L["Trigger"]" Width="8rem" Filterable="true"
@@ -130,12 +152,19 @@
                    a ghost icon. *@
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Class="pipeline-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetFavorite(pipeline.Id, !IsFavorite(pipeline.Id)))" Disabled="@PendingFavoritePipelineIds.Contains(pipeline.Id)" Class="@(IsFavorite(pipeline.Id) ? "pipeline-favorite-button active" : "pipeline-favorite-button")" title="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])" Label="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((IsFavorite(pipeline.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
-                    <OmniSplitButton Text="@L["Run"]" OnClick="@(() => RunPipeline(pipeline.Id, null))"
+                    <OmniSplitButton Text="@L["Run"]" OnClick="@(() => RunAsync(pipeline.Id, null))" Busy="@IsLaunching(pipeline.Id)" Class="@(IsLaunching(pipeline.Id) ? "btn-busy" : null)"
                         aria-label="@L["RunPipelineAction"]" title="@L["RunPipelineAction"]" Disabled="@(!CanWrite)" Variant="OmniButtonVariant.Primary"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-                        <OmniMenuItem OnClick="@(() => RunPipeline(pipeline.Id, "options"))">@L["RunWithOptions"]</OmniMenuItem>
+                        <OmniMenuItem OnClick="@(() => RunAsync(pipeline.Id, "options"))">@L["RunWithOptions"]</OmniMenuItem>
                     </ChildContent></OmniSplitButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
-                        <OmniMenuItem OnClick="@(() => EditPipeline(pipeline.Id))" Disabled="@(!CanWrite)" title="@(CanWrite ? null : L["InsufficientPermissions"].Value)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+                        @if (pipeline.ExternalImportCommit is null)
+                        {
+                            <OmniMenuItem OnClick="@(() => EditPipeline(pipeline.Id))" Disabled="@(!CanWrite)" title="@(CanWrite ? null : L["InsufficientPermissions"].Value)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+                        }
+                        else if (pipeline.ProjectId is { } importedProjectId)
+                        {
+                            <OmniMenuItem OnClick="@(() => SynchronizeAsync(pipeline, importedProjectId))" Disabled="@(!CanWrite)" title="@(CanWrite ? L["ExternalPipelineSynchronizeHint"].Value : L["InsufficientPermissions"].Value)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["ExternalPipelineSynchronize"]</ChildContent></OmniMenuItem>
+                        }
                         @if (FleetItem(pipeline.Id) is { Freshness: PipelineFleetFreshness.Outdated, LatestVersion: { } latestVersion })
                         {
                             <OmniMenuItem OnClick="@(() => UpdatePipelineTemplate(pipeline.Id, latestVersion))" Disabled="@(!CanWrite)" title="@TemplateStatusTitle(FleetItem(pipeline.Id)!)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["Update"]</ChildContent></OmniMenuItem>

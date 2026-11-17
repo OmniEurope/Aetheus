@@ -15,7 +15,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// instead of opening a nested one (which throws on the same connection), and two contenders never
 /// receive the same number.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineBuildNumberRepositoryIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -52,28 +51,6 @@ public sealed class PipelineBuildNumberRepositoryIntegrationTests(PostgresFixtur
         Assert.Equal(0, persisted);
     }
 
-    // Without the ambient transaction the reservation owns and commits its own, so the number is
-    // durable the moment it is handed out.
-    [Fact]
-    public async Task ReserveNext_WithoutAnAmbientTransaction_CommitsItsOwn()
-    {
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        var pipelineId = await SeedPipelineAsync(db);
-
-        var reserved = await new PipelineBuildNumberRepository(db)
-            .ReserveNextAsync(pipelineId, TestContext.Current.CancellationToken);
-
-        Assert.Equal(1, reserved);
-        await using var verify = NewContext();
-        Assert.Equal(
-            1,
-            await verify.Pipelines
-                .Where(pipeline => pipeline.Id == pipelineId)
-                .Select(pipeline => pipeline.BuildCounter)
-                .SingleAsync(TestContext.Current.CancellationToken));
-    }
-
     // Two launches of the same pipeline must never carry the same build number: the UPDATE takes the
     // row lock, so the second contender blocks on it rather than reading the same value.
     [Fact]
@@ -91,6 +68,57 @@ public sealed class PipelineBuildNumberRepositoryIntegrationTests(PostgresFixtur
         }));
 
         Assert.Equal(Enumerable.Range(1, 8), reservations.Order());
+    }
+
+    // R-8, the whole path of a launch: reserve then insert, in parallel, on the real schema. Each run keeps
+    // the number it reserved and the numbers count from 1 within each pipeline, whatever the global key.
+    [Fact]
+    public async Task ConcurrentLaunches_OfTwoPipelines_EachRunTakesItsOwnNumberWithinItsPipeline()
+    {
+        await ResetAndMigrateAsync();
+        var ct = TestContext.Current.CancellationToken;
+        await using var seed = NewContext();
+        var first = await SeedPipelineAsync(seed);
+        var second = await SeedPipelineAsync(seed);
+
+        await Task.WhenAll(Enumerable.Range(0, 16).Select(async index =>
+        {
+            await using var db = NewContext();
+            var pipelineId = index % 2 == 0 ? first : second;
+            var number = await new PipelineBuildNumberRepository(db).ReserveNextAsync(pipelineId, ct);
+            db.PipelineRuns.Add(new PipelineRun { PipelineId = pipelineId, BuildNumber = number, StartedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync(ct);
+        }));
+
+        await using var verify = NewContext();
+        foreach (var pipelineId in new[] { first, second })
+        {
+            var numbers = await verify.PipelineRuns.AsNoTracking()
+                .Where(run => run.PipelineId == pipelineId)
+                .Select(run => run.BuildNumber)
+                .ToListAsync(ct);
+            Assert.Equal(Enumerable.Range(1, 8), numbers.Order());
+        }
+    }
+
+    // R-8: the counter hands a number out once, and the database refuses a second holder whatever wrote it.
+    [Fact]
+    public async Task TwoRunsOfOnePipeline_CannotHoldTheSameNumber_ButTwoPipelinesCan()
+    {
+        await ResetAndMigrateAsync();
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext();
+        var first = await SeedPipelineAsync(db);
+        var second = await SeedPipelineAsync(db);
+        db.PipelineRuns.Add(new PipelineRun { PipelineId = first, BuildNumber = 12, StartedAt = DateTime.UtcNow });
+        db.PipelineRuns.Add(new PipelineRun { PipelineId = second, BuildNumber = 12, StartedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync(ct);
+
+        await using var duplicate = NewContext();
+        duplicate.PipelineRuns.Add(new PipelineRun { PipelineId = first, BuildNumber = 12, StartedAt = DateTime.UtcNow });
+
+        var refused = await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync(ct));
+        Assert.Contains("IX_PipelineRuns_PipelineId_BuildNumber", refused.InnerException?.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -76,4 +76,19 @@ public class SetPasswordTests : BunitContext
         Assert.NotNull(cut.Find(".password-setup-error"));
         Assert.Equal("/login/set-password", new Uri(Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().Uri).AbsolutePath);
     }
+
+    [Fact]
+    public async Task ANetworkFailure_FreesTheButton_AndSaysSo()
+    {
+        _handler.SetAsyncJsonResponse<object>(HttpMethod.Post, "api/auth/password-setup", _ => throw new HttpRequestException("offline"));
+        var cut = RenderAt("/login/set-password#token=the-token");
+
+        await SubmitAsync(cut, "Chosen-Password-2026!");
+
+        cut.Render();
+        Assert.Empty(cut.FindAll(".omni-busy"));
+        cut.Render();
+        Assert.Contains("SaveFailed", cut.Find(".password-setup-error").TextContent);
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Danger);
+    }
 }

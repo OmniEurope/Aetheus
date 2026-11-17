@@ -28,6 +28,46 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
                 && package.AllowAnonymousDownload, ct)
             .ConfigureAwait(false);
 
+    // Own reads over PipelineRun and its pipeline owner, as the Git module does for its clone token: nothing written.
+    public async Task<bool> IsRunAuthorizedAsync(int runId, int projectId, CancellationToken ct = default)
+        => await db.PipelineRuns
+            .AsNoTracking()
+            .AnyAsync(run => run.Id == runId
+                && run.Status == PipelineStatus.Running
+                && run.Pipeline.ProjectId == projectId
+                && db.Users.Any(user => user.Username == run.Pipeline.CreatedByUsername
+                    && user.IsActive
+                    && user.UserRoles.Any(userRole => userRole.Role.Name == RoleNames.Admin && userRole.Role.OrganizationId == null)), ct)
+            .ConfigureAwait(false);
+
+    public async Task<PackageRunOwnerState> GetRunOwnerStateAsync(int runId, int projectId, CancellationToken ct = default)
+    {
+        var run = await db.PipelineRuns
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == runId && candidate.Pipeline.ProjectId == projectId)
+            .Select(candidate => new
+            {
+                Owner = db.Users
+                    .Where(user => user.Username == candidate.Pipeline.CreatedByUsername)
+                    .Select(user => new
+                    {
+                        user.IsActive,
+                        IsAdmin = user.UserRoles.Any(userRole => userRole.Role.Name == RoleNames.Admin && userRole.Role.OrganizationId == null)
+                    })
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return run switch
+        {
+            null => PackageRunOwnerState.RunNotFound,
+            { Owner: null } => PackageRunOwnerState.OwnerMissing,
+            { Owner.IsActive: false } => PackageRunOwnerState.OwnerInactive,
+            { Owner.IsAdmin: false } => PackageRunOwnerState.OwnerNotAdmin,
+            _ => PackageRunOwnerState.Allowed
+        };
+    }
+
     public async Task<RegistryPackage?> GetPackageAsync(
         PackageRegistryKind kind, string normalizedName, CancellationToken ct = default)
         => await db.RegistryPackages
@@ -209,6 +249,13 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
 
     public async Task AddPackageAsync(RegistryPackage package, CancellationToken ct = default)
         => await db.RegistryPackages.AddAsync(package, ct).ConfigureAwait(false);
+
+    public void MarkPublished(RegistryPackage package)
+    {
+        var entry = db.Entry(package);
+        if (entry.State == EntityState.Unchanged)
+            entry.Property(item => item.UpdatedAt).IsModified = true;
+    }
 
     private static IQueryable<RegistryPackage> ApplySearch(
         IQueryable<RegistryPackage> query,

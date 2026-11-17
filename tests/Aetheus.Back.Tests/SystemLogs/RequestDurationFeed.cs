@@ -2,12 +2,12 @@
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using OmniEurope.Performance;
+using OmniEurope.Diagnostics;
 
 namespace Aetheus.Back.Tests.SystemLogs;
 
 /// <summary>
-/// Feeds an OmniEurope.Performance recorder the way ASP.NET Core does: the <c>http.server.request.duration</c>
+/// Feeds an OmniEurope.Diagnostics recorder the way ASP.NET Core does: the <c>http.server.request.duration</c>
 /// histogram of the <c>Microsoft.AspNetCore.Hosting</c> meter, created by the recorder's own meter factory
 /// (the recorder hears no other). A request is one measurement, in seconds, with the route template, the
 /// method and the status code as tags.

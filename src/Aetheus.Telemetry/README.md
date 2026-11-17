@@ -21,12 +21,12 @@ three-second timeout, sampling, and never blocks a request on network I/O.
 
 | Runtime | OpenTelemetry | Support |
 | --- | --- | --- |
-| .NET 10 | 1.17.x | required (OmniEurope.Performance targets .NET 10) |
+| .NET 10 | 1.17.x | required (OmniEurope.Diagnostics targets .NET 10) |
 
-## Request performance (measured by OmniEurope.Performance)
+## Request performance (measured by OmniEurope.Diagnostics)
 
 When telemetry is enabled, the package also exports how long each route takes to answer. The
-measurement is the collector of the `OmniEurope.Performance` package (nuget.org, EUPL-1.2), which
+measurement is the collector of the `OmniEurope.Diagnostics` package (nuget.org, EUPL-1.2), which
 listens to the ASP.NET Core `http.server.request.duration` instrument and keeps the requests of its
 window in memory (2 MiB at most, grouped by route template in lower case: no concrete path, identifier
 or query value). The window is 24 hours unless the host chose another, through
@@ -51,7 +51,7 @@ writes nothing, and a reader keeps each route's newest point.
 
 Aetheus shows them in the Performance tab of the application's Supervision. The window restarts with
 the process. Health probes and static assets are not measured. A host that wants the figures without
-the export uses `OmniEurope.Performance` directly (`AddOmniPerformance` for its page, or
+the export uses `OmniEurope.Diagnostics` directly (`AddOmniPerformance` for its page, or
 `AddOmniPerformanceCollector` and `RequestPerformanceRecorder.Summarize()` for a page of its own); with the
 export enabled too, both read the same collector.
 
@@ -88,6 +88,15 @@ données » setting: 15, 5 or 1 minute by profile). At startup, then every 15 mi
 (kept between 10 s and 1 h). Until it has an answer, and when the server gives none (an older Aetheus
 answers 404, a network failure), it keeps the OpenTelemetry default: 60 s, or `OTEL_METRIC_EXPORT_INTERVAL`
 in milliseconds. A version of the package that predates this keeps its own interval; Aetheus accepts both.
+
+## Export on request (1.2.2)
+
+Between two exports, every 30 seconds, the package asks `GET {metrics endpoint}/../configuration/export-request`
+with its ingest key whether a user asked, from the Supervision of Aetheus, for the telemetry now. Aetheus answers
+200 with a request identifier once, to the first poll after the request, then 204; the package then sends its
+metrics at once and keeps its periodic schedule. Any other answer (an older Aetheus answers 404, a network failure)
+changes nothing. Aetheus shows the request as received when the metrics export arrives; a package older than
+1.2.2 never asks, so the request stays unanswered and Aetheus says so.
 
 ## Refused ingest key
 

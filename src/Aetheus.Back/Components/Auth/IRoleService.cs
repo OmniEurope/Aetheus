@@ -15,11 +15,13 @@ public interface IRoleService
     /// <summary>The role, holders counted in <paramref name="organizationIds"/> only when given.</summary>
     Task<RoleDto?> GetRoleAsync(int id, IReadOnlyList<int>? organizationIds, CancellationToken ct = default);
 
-    /// <summary>The holders of the role for <paramref name="organizationIds"/> only.</summary>
+    /// <summary>The holders of the role for <paramref name="organizationIds"/> only. An organization administrator's
+    /// view: without their e-mails, and the search, the sort and the filters ignore the e-mail.</summary>
     Task<PaginatedResult<RoleUserDto>> GetUsersInRoleAsync(
         int roleId, PaginationRequest request, IReadOnlyList<int> organizationIds, CancellationToken ct = default);
 
-    /// <summary>The members of <paramref name="organizationIds"/> the role may be given to.</summary>
+    /// <summary>The members of <paramref name="organizationIds"/> the role may be given to. An organization
+    /// administrator's view: without their e-mails, and the search and the sort ignore the e-mail.</summary>
     Task<PaginatedResult<RoleUserDto>> GetUsersAvailableForRoleAsync(
         int roleId, PaginationRequest request, IReadOnlyList<int> organizationIds, CancellationToken ct = default);
     Task<RoleDto> CreateRoleAsync(CreateRoleRequest request, CancellationToken ct = default);

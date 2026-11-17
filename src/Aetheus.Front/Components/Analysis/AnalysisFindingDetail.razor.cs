@@ -18,7 +18,9 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
+    [Inject] private ProjectNavContextService ProjectNav { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
+    [Inject] private QualityChangeNotifier QualityChange { get; set; } = default!;
     [Parameter] public int Id { get; set; }
 
     /// <summary>The pipeline run the reader comes from (the Gate tab of that run). The page then
@@ -64,9 +66,7 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
     {
         _finding = await Api.Analysis.GetAnalysisFindingAsync(Id);
         if (_finding is null) return;
-        Breadcrumb.Set(
-            new BreadcrumbItem(L["AnalysisPortfolio"], "/analysis"),
-            new BreadcrumbItem(_finding.Title));
+        await SetProjectContextAsync(_finding);
         var occurrences = Api.Analysis.GetAnalysisFindingOccurrencesAsync(Id);
         var decisions = Api.Analysis.GetAnalysisFindingDecisionsAsync(Id);
         await Task.WhenAll(occurrences, decisions);
@@ -75,6 +75,24 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         UpdatePermission();
         await LoadExcerptAsync();
     }
+
+    /// <summary>R-21: a finding belongs to one project, so the page stays in it: the trail reads
+    /// Projects / project / Quality / finding, the menu keeps the project open and the back arrow leads to
+    /// the project's Quality page.</summary>
+    private async Task SetProjectContextAsync(AnalysisFindingDto finding)
+    {
+        string? projectName = null;
+        try { projectName = (await Api.Projects.GetProjectDetailAsync(finding.ProjectId))?.Name; }
+        catch (HttpRequestException) { projectName = null; }
+        ProjectNav.Set(finding.ProjectId);
+        Breadcrumb.SetProjectResource(
+            finding.ProjectId, projectName, [],
+            L["Projects"], L["Project"], L["AnalysisPortfolio"],
+            "quality", "/analysis", new BreadcrumbItem(finding.Title));
+    }
+
+    /// <summary>Where the back arrow leads: the Quality page of the finding's project.</summary>
+    private string? BackHref => _finding is null ? null : $"/projects/{_finding.ProjectId}/quality";
 
     /// <summary> The passage of the file under the location, read from the repository at the
     /// finding's commit (its branch when no commit was recorded). A file gone at that ref, a binary
@@ -116,10 +134,34 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
 
     private void OpenSourceFile(AnalysisFindingOccurrenceDto source) => Navigation.NavigateTo(SourceFileHref(source));
 
+    /// <summary>R-24: the finding is one of the CVE watch, whose accepted risk lasts 30, 90 or 180 days.</summary>
+    private bool IsCveWatchFinding =>
+        _finding?.LatestOccurrence?.ScannerKey == AcceptedRiskDuration.CveWatchScannerKey
+        || _occurrences.Any(occurrence => occurrence.ScannerKey == AcceptedRiskDuration.CveWatchScannerKey);
+
+    /// <summary>The length is asked, instead of a free date, when accepting the risk of a CVE-watch finding.</summary>
+    private bool AsksAcceptanceLength => IsCveWatchFinding && _decision.Status == AnalysisFindingStatus.Accepted;
+
+    private List<OmniOption<int>>? _acceptanceOptions;
+    private List<OmniOption<int>> AcceptanceOptions => _acceptanceOptions ??=
+        [.. AcceptedRiskDuration.AllowedDays.Select(days => new OmniOption<int>(days, L["AnalysisAcceptanceDays", days].Value))];
+
+    /// <summary>The acceptance in force, shown with how long it lasts. A finding that is open again (the acceptance
+    /// expired or was reverted) has none.</summary>
+    private AnalysisFindingDecisionDto? AcceptedDecision => _finding?.Status == AnalysisFindingStatus.Accepted
+        ? _decisions.Where(decision => decision.RevokedAt is null && decision.Status == AnalysisFindingStatus.Accepted)
+            .OrderByDescending(decision => decision.CreatedAt).FirstOrDefault()
+        : null;
+
+    /// <summary>The server stores UTC: a date read without a kind is UTC too, not local time.</summary>
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : value.ToUniversalTime();
+
     private async Task SaveDecisionAsync()
     {
         if (_finding is null) return;
-        if (_decision.ExpiresAt.HasValue && _decision.ExpiresAt.Value <= DateTime.Now)
+        var asksLength = AsksAcceptanceLength;
+        if (!asksLength && _decision.ExpiresAt.HasValue && _decision.ExpiresAt.Value <= DateTime.Now)
         {
             Toast.Error("Error", "AnalysisDecisionExpirationFuture");
             return;
@@ -132,15 +174,18 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
             {
                 Status = _decision.Status!.Value,
                 Reason = _decision.Reason,
-                ExpiresAt = _decision.ExpiresAt
+                ExpiresAt = asksLength ? null : _decision.ExpiresAt,
+                AcceptanceDays = asksLength ? _decision.AcceptanceDays : null
             });
             if (outcome.Value is not null)
             {
                 Toast.Success("Saved", "AnalysisDecisionSaved");
+                QualityChange.Notify();
                 await LoadAsync();
                 _decision.Status = null;
                 _decision.Reason = string.Empty;
                 _decision.ExpiresAt = null;
+                _decision.AcceptanceDays = AcceptedRiskDuration.DefaultDays;
             }
             else
             {
@@ -175,7 +220,10 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         try
         {
             if (await new AnalysisFindingDecisionRevert(Api, Dialog, Toast, L).RevertAsync(Id))
+            {
+                QualityChange.Notify();
                 await LoadAsync();
+            }
         }
         finally
         {
@@ -298,5 +346,6 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         [Required(ErrorMessage = "AnalysisDecisionOutcomeRequired")] public AnalysisFindingStatus? Status { get; set; }
         [Required, StringLength(2000, MinimumLength = 10)] public string Reason { get; set; } = string.Empty;
         public DateTime? ExpiresAt { get; set; }
+        public int AcceptanceDays { get; set; } = AcceptedRiskDuration.DefaultDays;
     }
 }

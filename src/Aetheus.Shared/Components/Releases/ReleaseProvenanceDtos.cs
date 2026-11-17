@@ -67,6 +67,8 @@ public sealed record ReleaseArtifactInputDto
     public string ArtifactName { get; init; } = string.Empty;
     public string? Sha256 { get; init; }
     public int SourcePipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int SourcePipelineRunNumber { get; init; }
     public int? SourceReleaseId { get; init; }
     public string? SourceReleaseVersion { get; init; }
     /// <summary>True when the consumed artifact is also one of this release's deliverables.</summary>
@@ -81,4 +83,6 @@ public sealed record ReleasePackageInputDto
     public bool IsDirect { get; init; }
     /// <summary>The run whose SBOM listed the package.</summary>
     public int PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int PipelineRunNumber { get; init; }
 }

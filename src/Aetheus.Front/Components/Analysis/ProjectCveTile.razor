@@ -1,0 +1,13 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-14: the tile of the project overview that sums up the open CVE of the CVE watch (count by severity) and leads to the CVE section of
+   the project's quality page. Nothing is drawn until the read answered, nor when it failed or the project is not readable: the overview
+   must not break for a side figure. *@
+@if (_project is not null)
+{
+    <OmniTileGrid Columns="4" MinColumnWidth="12rem" Class="project-cve-tile-row">
+        <OmniStatTile Value="@_project.OpenCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["CveProjectOpen"]" Detail="@DetailText"
+                      Href="@SectionHref" WrapTitle="true" data-testid="project-cve-tile">
+            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+        </OmniStatTile>
+    </OmniTileGrid>
+}

@@ -2,6 +2,7 @@
 using Aetheus.Agent.Core.Collectors;
 using Aetheus.Agent.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
@@ -65,6 +66,84 @@ public class ListeningPortsCollectorTests
         var only = Assert.Single(observed);
         Assert.Equal(8080, only.Port);
         Assert.Equal("tcp", only.Protocol);
+    }
+
+    // ACORE-003: success and the instant of the probe are carried per protocol, so a failed probe is not
+    // read as "nothing listens" and a measurement is dated by its own probe.
+    [Fact]
+    public async Task ScanAsync_ReportsOnlyTheProtocolWhoseProbeSucceeded()
+    {
+        NoDocker();
+        Probe("-ltnpH", "LISTEN 0 4096 0.0.0.0:8080 0.0.0.0:*\n");
+        Probe("Get-NetTCPConnection", "\"LocalAddress\",\"LocalPort\"\n\"0.0.0.0\",\"8080\"\n");
+        Probe("-lunpH", string.Empty, exitCode: 2);
+        Probe("Get-NetUDPEndpoint", string.Empty, exitCode: 2);
+
+        var scan = await Build().ScanAsync(CancellationToken.None);
+
+        Assert.Equal("tcp", Assert.Single(scan.Measured).Protocol);
+        Assert.Equal(8080, Assert.Single(scan.Ports).Port);
+    }
+
+    [Fact]
+    public async Task ScanAsync_AProbeThatListsNothing_IsStillAMeasurement()
+    {
+        NoDocker();
+        Probe("-ltnpH", string.Empty);
+        Probe("Get-NetTCPConnection", "\"LocalAddress\",\"LocalPort\"\n");
+        Probe("-lunpH", string.Empty);
+        Probe("Get-NetUDPEndpoint", "\"LocalAddress\",\"LocalPort\"\n");
+
+        var scan = await Build().ScanAsync(CancellationToken.None);
+
+        Assert.Empty(scan.Ports);
+        Assert.Equal(["tcp", "udp"], scan.Measured.Select(measurement => measurement.Protocol).Order());
+    }
+
+    [Fact]
+    public async Task ScanAsync_WhenEveryProbeFails_MeasuresNothing()
+    {
+        NoDocker();
+        Probe("-ltnpH", string.Empty, exitCode: 2);
+        Probe("Get-NetTCPConnection", string.Empty, exitCode: 2);
+        Probe("-lunpH", string.Empty, exitCode: 2);
+        Probe("Get-NetUDPEndpoint", string.Empty, exitCode: 2);
+
+        var scan = await Build().ScanAsync(CancellationToken.None);
+
+        Assert.False(scan.HasMeasurement);
+        Assert.Empty(scan.Ports);
+    }
+
+    [Fact]
+    public async Task ScanAsync_DatesEachProtocolByItsOwnProbe()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.Zero));
+        NoDocker();
+        Probe("-ltnpH", string.Empty);
+        Probe("Get-NetTCPConnection", "\"LocalAddress\",\"LocalPort\"\n");
+        // The UDP probe is slow: the clock moves while it runs, and only it is dated after that.
+        foreach (var marker in new[] { "-lunpH", "Get-NetUDPEndpoint" })
+        {
+            _shell
+                .RunExecAsync(
+                    Arg.Any<string>(),
+                    Arg.Is<IReadOnlyList<string>>(args => args.Any(arg => arg.Contains(marker, StringComparison.Ordinal))),
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<TimeSpan?>())
+                .Returns(_ =>
+                {
+                    time.Advance(TimeSpan.FromSeconds(5));
+                    return Task.FromResult(new ShellExecResult(0, "\"LocalAddress\",\"LocalPort\"\n", string.Empty));
+                });
+        }
+
+        var scan = await new ListeningPortsCollector(NullLogger<ListeningPortsCollector>.Instance, _shell, time)
+            .ScanAsync(CancellationToken.None);
+
+        var tcp = scan.Measured.Single(measurement => measurement.Protocol == "tcp");
+        var udp = scan.Measured.Single(measurement => measurement.Protocol == "udp");
+        Assert.Equal(TimeSpan.FromSeconds(5), udp.MeasuredAt - tcp.MeasuredAt);
     }
 
     [Fact]

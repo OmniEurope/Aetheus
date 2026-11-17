@@ -27,8 +27,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// payload by one query per item would show here as a command count that follows the size.
 /// Set <c>AETHEUS_HOTPATH_BENCH_OUT</c> to append the result lines to a file.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
+public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -68,7 +67,7 @@ public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
     public async Task R1_94_TaskClaimCompletionAndHeartbeat_ReportTheirCost()
     {
         await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        // The run reads its stored definition: the repository answers "no pipeline file".
+        // The run reads its stored definition: the project has no repository behind its clone URL.
         await using var factory = baseFactory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddSingleton<IGitCliService, NoPipelineFileGitCli>()));
         using var counter = new SqlCommandCounter();
@@ -357,7 +356,7 @@ public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var organizationId = await db.Organizations.Select(item => item.Id).FirstAsync(ct);
+        var organizationId = await db.Organizations.OrderBy(item => item.Id).Select(item => item.Id).FirstAsync(ct);
         var project = new Project { Name = $"hot-path-{Guid.NewGuid():N}", OrganizationId = organizationId, DefaultBranch = "main" };
         db.Projects.Add(project);
         await db.SaveChangesAsync(ct);
@@ -403,7 +402,7 @@ public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var organizationId = await db.Organizations.Select(item => item.Id).FirstAsync(ct);
+        var organizationId = await db.Organizations.OrderBy(item => item.Id).Select(item => item.Id).FirstAsync(ct);
         var suffix = Guid.NewGuid().ToString("N");
         var server = new Server
         {
@@ -419,7 +418,7 @@ public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
         var project = new Project
         {
             Name = $"hot-path-project-{suffix}",
-            RepositoryUrl = $"https://git.example/{suffix}.git",
+            RepositoryUrl = $"http://localhost:5300/git/1/{suffix}.git",
             OrganizationId = organizationId
         };
         db.AddRange(server, project);
@@ -440,7 +439,7 @@ public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
         var key = $"hot-path-{Guid.NewGuid():N}";
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var organizationId = await db.Organizations.Select(item => item.Id).FirstAsync(ct);
+        var organizationId = await db.Organizations.OrderBy(item => item.Id).Select(item => item.Id).FirstAsync(ct);
         var project = new Project { Name = $"hot-path-otlp-{Guid.NewGuid():N}", OrganizationId = organizationId };
         db.Projects.Add(project);
         await db.SaveChangesAsync(ct);
@@ -459,11 +458,5 @@ public sealed class ServerHotPathCostIntegrationTests(PostgresFixture fixture)
     {
         public Task<List<(string BranchName, string Version)>> ListReleaseBranchesAsync(string repositoryUrl, CancellationToken ct = default) =>
             Task.FromResult(new List<(string BranchName, string Version)>());
-
-        public Task<GitRemoteBranch> ResolveBranchCommitAsync(string repositoryUrl, string? branch, CancellationToken ct = default) =>
-            Task.FromResult(new GitRemoteBranch(branch ?? "main", new string('a', 40)));
-
-        public Task<string?> ReadPipelineYamlAsync(string repositoryUrl, string commit, string pipelineName, CancellationToken ct = default) =>
-            Task.FromResult<string?>(null);
     }
 }

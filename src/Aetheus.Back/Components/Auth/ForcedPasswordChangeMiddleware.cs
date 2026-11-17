@@ -14,6 +14,8 @@ public sealed class ForcedPasswordChangeMiddleware(RequestDelegate next)
     private static readonly (string Method, string Path)[] Allowed =
     [
         ("POST", "/api/users/me/change-password"),
+        // R-1: the seeded administrator's own account setup.
+        ("POST", "/api/users/me/account-setup"),
         ("GET", "/api/users/me"),
         ("POST", "/api/auth/renew"),
         ("POST", "/api/auth/token/refresh"),

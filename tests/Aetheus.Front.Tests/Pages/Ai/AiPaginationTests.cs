@@ -83,6 +83,30 @@ public sealed class AiPaginationTests : BunitContext
             && Uri.UnescapeDataString(request.Url).Contains("Filters[0].Value=False", StringComparison.Ordinal));
     }
 
+    /// <summary>R-12: the organization the site Admin chooses in the Administration switcher reaches the
+    /// profiles request; with no choice the request names no organization.</summary>
+    [Fact]
+    public async Task ProfilesGrid_SendsTheOrganizationChosenInTheSwitcher()
+    {
+        _handler.SetJsonResponse("api/organizations/administered", new List<AdministeredOrganizationDto>
+        {
+            new(1, "Acme", PermissionCatalog.OrganizationAdministrationKeys),
+            new(2, "Globex", PermissionCatalog.OrganizationAdministrationKeys)
+        });
+        var cut = Render<AiRunnerProfiles>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("#admin-scope-organization")));
+        await cut.InvokeAsync(() => cut.Instance.LoadDataAsync(new GridLoadArgs { Skip = 0, Top = 25 }));
+        Assert.DoesNotContain(_handler.RequestsSnapshot(), request => request.Url.Contains("organizationId=", StringComparison.Ordinal));
+
+        var dropDown = cut.FindComponent<AdministrationOrganizationSwitcher>().FindComponent<OmniDropDown<int>>();
+        await cut.InvokeAsync(() => dropDown.Instance.ValueChanged.InvokeAsync(2));
+        await cut.InvokeAsync(() => cut.Instance.LoadDataAsync(new GridLoadArgs { Skip = 0, Top = 25 }));
+
+        Assert.Contains(_handler.RequestsSnapshot(), request =>
+            request.Url.Contains("api/ai/profiles?", StringComparison.Ordinal)
+            && request.Url.Contains("organizationId=2", StringComparison.Ordinal));
+    }
+
     /// <summary>A header filter of the profiles grid reaches the API as a column filter.</summary>
     [Fact]
     public async Task ProfilesGrid_HeaderFilter_ReachesTheApi()

@@ -118,10 +118,11 @@ public sealed class PipelineProductionServerDefaultTests
     [Fact]
     public async Task ThePreparationOfALaunch_ResolvesTheDefaultFromTheEnvironmentCreatedAfterThePipeline()
     {
-        const string url = "https://github.com/example/w7.git";
+        // R-4: the project reads its code from its mirror, never from the external address.
+        const string url = "http://localhost:5300/git/7/w7.git";
         const string commit = "0123456789abcdef0123456789abcdef01234567";
         var repo = Substitute.For<IPipelineRepository>();
-        var gitCli = Substitute.For<IGitCliService>();
+        var pipelineGit = Substitute.For<IPipelineGitService>();
         var pipeline = new Pipeline
         {
             Id = 3,
@@ -133,11 +134,11 @@ public sealed class PipelineProductionServerDefaultTests
         repo.FindPipelineAsync(3, Ct).Returns(pipeline);
         repo.GetPipelineOrganizationIdAsync(3, Ct).Returns(1);
         repo.FindEnvironmentByNameAsync("prod", ProjectId, Ct).Returns(Production(ProjectId, "vps"));
-        gitCli.ResolveBranchCommitAsync(url, "main", Ct).Returns(new GitRemoteBranch("main", commit));
-        gitCli.ReadPipelineYamlAsync(url, commit, pipeline.Name, Ct).Returns((string?)null);
+        pipelineGit.GetPipelineSourceAsync(ProjectId, pipeline.Name, Ct, Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns(new PipelineSourceDto { RepositoryId = 4, CloneUrl = url, Branch = "main", CommitHash = commit });
         var sut = new PipelineRunPreparationService(
-            repo, Substitute.For<IPipelineGitService>(), new PipelineTemplateResolver(repo),
-            Substitute.For<IPipelineRunParameterResolver>(), gitCli, Substitute.For<IPipelineWorkspaceSourceResolver>(),
+            repo, pipelineGit, new PipelineTemplateResolver(repo),
+            Substitute.For<IPipelineRunParameterResolver>(), Substitute.For<IPipelineWorkspaceSourceResolver>(),
             new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
 
         var preparation = await sut.PrepareRunAsync(3, null, null, null, Ct);

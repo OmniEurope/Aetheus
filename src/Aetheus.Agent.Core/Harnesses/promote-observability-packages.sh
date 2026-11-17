@@ -4,6 +4,11 @@
 # the source checkout is data only and cannot replace the program that receives release secrets.
 set -eu
 
+# R-20: no failure is anonymous. Every refusal names its reason; a command that fails under set -e
+# without one is still reported by the EXIT trap below with the stage it interrupted.
+fail() { echo "$*" >&2; exit 1; }
+STAGE="checking the release inputs"
+
 ROOT="${AETHEUS_WORKING_DIR:-}"
 # A run definition from before PLAN-002 C8 still carries one PACKAGE_VERSION for the whole set. It
 # is honoured for one cycle as a constraint only: every candidate must then carry exactly it.
@@ -63,8 +68,8 @@ test "${#EXPECTED_FINGERPRINT}" -eq 64 || {
 }
 
 DOTNET="${DOTNET:-dotnet}"
-command -v "$DOTNET" >/dev/null
-command -v openssl >/dev/null
+command -v "$DOTNET" >/dev/null || fail "The .NET SDK executable '$DOTNET' is not available."
+command -v openssl >/dev/null || fail "openssl is required to read the signing container."
 # Resolve the pinned Node runtime from the agent's installation when PATH has none because this
 # embedded harness must not execute checkout scripts. See
 # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
@@ -77,12 +82,37 @@ if ! command -v node >/dev/null 2>&1; then
     break
   done
 fi
-command -v node >/dev/null
-SECRET_DIR="$(mktemp -d)"
+command -v node >/dev/null || fail "node is required to rewrite the candidate attestations."
+SECRET_DIR="$(mktemp -d)" || fail "No private temporary directory could be created."
 cleanup() { rm -rf "$SECRET_DIR"; }
-trap cleanup EXIT HUP INT TERM
+report_and_cleanup()
+{
+  EXIT_STATUS=$?
+  cleanup
+  if [ "$EXIT_STATUS" -ne 0 ]; then
+    echo "The observability promotion stopped with exit code $EXIT_STATUS while $STAGE." >&2
+  fi
+}
+trap report_and_cleanup EXIT
+trap cleanup HUP INT TERM
 umask 077
-printf '%s' "$AETHEUS_NUGET_SIGNING_PFX_BASE64" | base64 -d > "$SECRET_DIR/input.pfx"
+
+# R-20: the post-publication consumer restore targets every framework the packages ship, net11.0
+# included. Run 3373 published Aetheus.Telemetry and only then failed on a host SDK 10.0.202
+# (NETSDK1045). Refuse an SDK that cannot target them before anything is signed or published.
+STAGE="checking the .NET SDK"
+SDK_VERSION="$(cd "$SECRET_DIR" && "$DOTNET" --version)" \
+  || fail "The .NET SDK at $DOTNET does not report its version."
+SDK_MAJOR="${SDK_VERSION%%.*}"
+case "$SDK_MAJOR" in ''|*[!0-9]*) fail "The .NET SDK at $DOTNET reports an unreadable version '$SDK_VERSION'." ;; esac
+test "$SDK_MAJOR" -ge 11 || fail "The .NET SDK $SDK_VERSION at $DOTNET cannot target net11.0;" \
+  "the consumer verification of the net10.0 and net11.0 packages needs .NET SDK 11 or later." \
+  "Nothing was signed or published."
+echo "Using .NET SDK $SDK_VERSION ($DOTNET)."
+
+STAGE="reading the signing container"
+printf '%s' "$AETHEUS_NUGET_SIGNING_PFX_BASE64" | base64 -d > "$SECRET_DIR/input.pfx" \
+  || fail "AETHEUS_NUGET_SIGNING_PFX_BASE64 is not valid base64."
 
 # PKCS#12 containers are routinely written with the format's historical ciphers (RC2-40-CBC and
 # friends). OpenSSL 3 moved those to the legacy provider, so the default read fails with
@@ -107,15 +137,18 @@ read_signing_material() {
     echo ">>> The signing container uses a legacy PKCS#12 cipher; reopening it with OpenSSL's legacy provider."
     openssl pkcs12 -in "$SECRET_DIR/input.pfx" \
         -passin env:AETHEUS_NUGET_SIGNING_PFX_PASSWORD -nodes -legacy \
-        -out "$SECRET_DIR/signing.pem"
+        -out "$SECRET_DIR/signing.pem" \
+      || { echo "The signing container could not be opened with the legacy provider either." >&2; return 1; }
 }
-read_signing_material
+read_signing_material || fail "The signing certificate and key could not be read."
 
 # Re-exported with explicit modern PKCS#12 encryption so a legacy input is never propagated into the
 # container `dotnet nuget sign` consumes.
 openssl pkcs12 -export -in "$SECRET_DIR/signing.pem" -out "$SECRET_DIR/signing.pfx" -passout pass: \
-  -certpbe AES-256-CBC -keypbe AES-256-CBC -macalg sha256
-ACTUAL_FINGERPRINT="$(openssl x509 -in "$SECRET_DIR/signing.pem" -noout -fingerprint -sha256)"
+  -certpbe AES-256-CBC -keypbe AES-256-CBC -macalg sha256 \
+  || fail "The signing material could not be re-exported for dotnet nuget sign."
+ACTUAL_FINGERPRINT="$(openssl x509 -in "$SECRET_DIR/signing.pem" -noout -fingerprint -sha256)" \
+  || fail "The signing certificate fingerprint could not be read."
 ACTUAL_FINGERPRINT="${ACTUAL_FINGERPRINT#*=}"
 ACTUAL_FINGERPRINT="$(printf '%s' "$ACTUAL_FINGERPRINT" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
 test "$ACTUAL_FINGERPRINT" = "$EXPECTED_FINGERPRINT" || {
@@ -174,13 +207,17 @@ sign_candidate()
   ID="$2"
   OUT="$ROOT/.package-candidate/$KIND"
   PACKAGE="$OUT/$ID.$(version_of "$KIND").nupkg"
-  test -f "$PACKAGE"
-  (cd "$OUT" && sha256sum --check SHA256SUMS)
+  STAGE="signing the $KIND candidate"
+  test -f "$PACKAGE" || fail "The $KIND candidate has no $ID.$(version_of "$KIND").nupkg."
+  (cd "$OUT" && sha256sum --check SHA256SUMS) \
+    || fail "The $KIND candidate does not match its SHA256SUMS; it was altered after its build."
   "$DOTNET" nuget sign "$PACKAGE" \
     --certificate-path "$SECRET_DIR/signing.pfx" \
     --certificate-password "" \
-    --timestamper "http://timestamp.digicert.com"
-  verify_internal_nuget_signature "$PACKAGE"
+    --timestamper "http://timestamp.digicert.com" \
+    || fail "dotnet nuget sign failed for the $KIND candidate."
+  verify_internal_nuget_signature "$PACKAGE" \
+    || fail "The freshly signed $KIND candidate does not verify against the pinned author certificate."
 }
 
 sign_candidate telemetry Aetheus.Telemetry
@@ -191,7 +228,8 @@ sign_candidate web-analytics-dotnet Aetheus.WebAnalytics
 for KIND in telemetry web-analytics-dotnet
 do
   OUT="$ROOT/.package-candidate/$KIND"
-  node - "$OUT/provenance.json" <<'NODE'
+  STAGE="rewriting the $KIND attestation after signing"
+  node - "$OUT/provenance.json" <<'NODE' || fail "The $KIND provenance.json could not be rewritten after signing."
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const [output] = process.argv.slice(2);
@@ -209,25 +247,35 @@ fs.writeFileSync(output, `${JSON.stringify(provenance, null, 2)}\n`);
 NODE
   (cd "$OUT" && find . -maxdepth 1 -type f \
     ! -name SHA256SUMS ! -name source-commit -print \
-    | sort | while IFS= read -r file; do sha256sum "$file"; done > SHA256SUMS)
+    | sort | while IFS= read -r file; do sha256sum "$file"; done > SHA256SUMS) \
+    || fail "The $KIND SHA256SUMS could not be rewritten after signing."
 done
-(cd "$ROOT/.package-candidate/web-analytics-browser" && sha256sum --check SHA256SUMS)
+STAGE="checking the web-analytics-browser candidate"
+(cd "$ROOT/.package-candidate/web-analytics-browser" && sha256sum --check SHA256SUMS) \
+  || fail "The web-analytics-browser candidate does not match its SHA256SUMS; it was altered after its build."
 
 # Conflict/readability preflight the complete release set before the first write. The registry
 # cannot provide a cross-protocol transaction, so interruption recovery is a convergent saga:
-# immutable identical versions are accepted and conflicting bytes always fail closed.
+# immutable identical versions are accepted and conflicting bytes always fail closed. Signing is
+# timestamped, so a rerun re-signs the same content into different bytes: the publication harness
+# accepts an already-published NuGet version only when its signature verifies against the pinned
+# author AND every entry but .signature.p7s is identical to the candidate's (R-20).
 for KIND in telemetry web-analytics-dotnet web-analytics-browser
 do
+  STAGE="preflighting $KIND against the registry"
   AETHEUS_PUBLISH_PREFLIGHT_ONLY=true PACKAGE_VERSION="$(version_of "$KIND")" \
     AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT="$EXPECTED_FINGERPRINT" \
     WORKSPACE="$ROOT" DOTNET="$DOTNET" \
-    sh "$PUBLISH_SCRIPT" "$KIND"
+    sh "$PUBLISH_SCRIPT" "$KIND" \
+    || fail "The registry preflight refused $KIND; nothing of the release set was published."
 done
 for KIND in telemetry web-analytics-dotnet web-analytics-browser
 do
+  STAGE="publishing $KIND"
   PACKAGE_VERSION="$(version_of "$KIND")" \
     AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT="$EXPECTED_FINGERPRINT" \
-    WORKSPACE="$ROOT" DOTNET="$DOTNET" sh "$PUBLISH_SCRIPT" "$KIND"
+    WORKSPACE="$ROOT" DOTNET="$DOTNET" sh "$PUBLISH_SCRIPT" "$KIND" \
+    || fail "Publishing $KIND failed; a rerun converges on what is already published."
 done
 unset EXPECTED_FINGERPRINT
 echo "The complete optional-observability release set is published and byte-verified."

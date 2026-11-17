@@ -130,8 +130,8 @@ public sealed partial class MergeRoslynSecuritySarifFunction : IPipelineFunction
             // carried across and the index dropped rather than left pointing elsewhere.
             if (DeclaredRule(declared, entry["ruleIndex"]) is { } rule && RuleId(rule) is { } id)
                 rules.TryAdd(id, rule);
-            var copy = entry.DeepClone().AsObject();
-            copy.Remove("ruleIndex");
+            var copy = entry.DeepClone();
+            copy.AsObject().Remove("ruleIndex");
             results.Add(copy);
         }
     }

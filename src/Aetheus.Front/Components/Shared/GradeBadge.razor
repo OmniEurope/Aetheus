@@ -6,9 +6,14 @@
    same everywhere; a missing grade keeps a neutral dash so card rows do not shift. *@
 @if (Value is { } grade)
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="@VariantFor(grade)" Class="@($"grade-badge grade-badge--{grade.ToString().ToLowerInvariant()} {Class}".TrimEnd())" title="@Title">@grade.ToString()</OmniBadge>
+    <OmniBadge Size="@BadgeSize" Fill="OmniFill.Solid" Tone="@VariantFor(grade)" Class="@($"grade-badge grade-badge--{grade.ToString().ToLowerInvariant()} {Class}".TrimEnd())" title="@Title">@grade.ToString()</OmniBadge>
+    @if (Old)
+    {
+        @* R-12, R-20 (option B): a last known letter, not the grade of what is deployed now; the mark says so. *@
+        <OmniBadge Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="grade-badge-old" data-testid="grade-badge-old" title="@Title">@L["ProjectGradeOldBadge"]</OmniBadge>
+    }
 }
 else
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="@($"grade-badge grade-badge--none {Class}".TrimEnd())" title="@Title">-</OmniBadge>
+    <OmniBadge Size="@BadgeSize" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="@($"grade-badge grade-badge--none {Class}".TrimEnd())" title="@Title">-</OmniBadge>
 }

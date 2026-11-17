@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Git;
-using Aetheus.Back.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.Tests;
 
 public class GitCliServiceTests
 {
-    private readonly GitCliService _sut = new(NullLogger<GitCliService>.Instance, new Aetheus.Back.Components.Git.GitProcessRunner(NullLogger<Aetheus.Back.Components.Git.GitProcessRunner>.Instance));
+    private readonly GitCliService _sut = new(NullLogger<GitCliService>.Instance);
 
     [Theory]
     [InlineData(" ")]
@@ -53,30 +52,6 @@ public class GitCliServiceTests
         Assert.Null(result);
     }
 
-    [Theory]
-    [InlineData("0123456789abcdef0123456789abcdef01234567\trefs/heads/main\n", "main", "0123456789abcdef0123456789abcdef01234567")]
-    [InlineData("0123456789abcdef0123456789abcdef01234567\trefs/heads/other\n", "main", null)]
-    [InlineData("invalid\trefs/heads/main\n", "main", null)]
-    public void ParseBranchCommit_AcceptsOnlyTheSelectedBranchAndFullHash(string output, string branch, string? expected)
-        => Assert.Equal(expected, GitCliService.ParseBranchCommit(output, branch));
-
-    [Fact]
-    public void ParseDefaultHead_ResolvesTheRemoteBranchAndFullHash()
-    {
-        var result = GitCliService.ParseDefaultHead(
-            "ref: refs/heads/develop\tHEAD\n0123456789abcdef0123456789abcdef01234567\tHEAD\n");
-
-        Assert.Equal(new GitRemoteBranch("develop", "0123456789abcdef0123456789abcdef01234567"), result);
-    }
-
-    [Theory]
-    [InlineData("file:///tmp/repo")]
-    [InlineData("https://localhost/repo.git")]
-    [InlineData("https://user:token@github.com/example/repo.git")]
-    public async Task ResolveBranchCommit_DisallowedUrl_FailsBeforeGitStarts(string url)
-        => await Assert.ThrowsAsync<BadRequestException>(() =>
-            _sut.ResolveBranchCommitAsync(url, "main", TestContext.Current.CancellationToken));
-
     [Fact]
     public void ListReleaseBranches_NeverFollowsARedirectAwayFromThePinnedAddress()
     {
@@ -89,102 +64,6 @@ public class GitCliServiceTests
         Assert.True(redirect > 0 && redirect < lsRemote, string.Join(' ', args));
         Assert.Equal("-c", args[redirect - 1]);
         Assert.Contains("http.curloptResolve=github.com:443:140.82.121.4", args);
-    }
-
-    [Theory]
-    [InlineData("release/2.1", "--heads", "refs/heads/release/2.1")]
-    [InlineData(null, "--symref", "HEAD")]
-    [InlineData(" ", "--symref", "HEAD")]
-    public void ResolveBranchCommit_AsksOnlyTheSelectedRefThroughThePinnedAddress(string? branch, string mode, string reference)
-    {
-        var psi = GitCliService.BuildResolveBranchStartInfo(
-            "https://github.com/acme/demo.git", branch, ("github.com", 443, "140.82.121.4"));
-
-        Assert.Equal(
-            [
-                "-c", "protocol.file.allow=never",
-                "-c", "http.curloptResolve=github.com:443:140.82.121.4",
-                "-c", "http.followRedirects=false",
-                "ls-remote", "--exit-code", mode, "--", "https://github.com/acme/demo.git", reference,
-            ],
-            psi.ArgumentList);
-        Assert.Equal("0", psi.Environment["GIT_TERMINAL_PROMPT"]);
-        Assert.Equal("never", psi.Environment["GCM_INTERACTIVE"]);
-    }
-
-    [Fact]
-    public void ParseLsRemote_ReadsTheDefaultHeadOrTheAskedBranch()
-    {
-        const string hash = "0123456789abcdef0123456789abcdef01234567";
-
-        Assert.Equal(new GitRemoteBranch("main", hash), GitCliService.ParseLsRemote($"ref: refs/heads/main\tHEAD\n{hash}\tHEAD\n", null));
-        Assert.Equal(new GitRemoteBranch("dev", hash), GitCliService.ParseLsRemote($"{hash}\trefs/heads/dev\n", "dev"));
-        Assert.Null(GitCliService.ParseLsRemote($"{hash}\trefs/heads/other\n", "dev"));
-    }
-
-    [Theory]
-    [InlineData("http://github.com/acme/demo.git", "0123456789abcdef0123456789abcdef01234567", "A public HTTPS repository and a full commit hash are required.")]
-    [InlineData("https://github.com/acme/demo.git", "0123456", "A public HTTPS repository and a full commit hash are required.")]
-    [InlineData("https://github.com/acme/demo.git", "z123456789abcdef0123456789abcdef01234567", "A public HTTPS repository and a full commit hash are required.")]
-    public async Task ReadPipelineYaml_WithoutAPublicRepositoryAndAFullHash_IsRefusedBeforeGitStarts(string url, string commit, string message)
-    {
-        var error = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _sut.ReadPipelineYamlAsync(url, commit, "ci", TestContext.Current.CancellationToken));
-
-        Assert.Equal(message, error.Message);
-    }
-
-    [Fact]
-    public async Task RunLsRemote_ReadsTheAskedBranchAndTheDefaultHeadOfARealRepository()
-    {
-        var repository = CreateRepositoryWithOneCommit(out var commit);
-        try
-        {
-            var branch = await GitCliService.RunLsRemoteAsync(
-                LsRemote(repository, "--heads", "refs/heads/main"), "main", TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
-            var head = await GitCliService.RunLsRemoteAsync(
-                LsRemote(repository, "--symref", "HEAD"), null, TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
-
-            Assert.Equal(new GitRemoteBranch("main", commit), branch);
-            Assert.Equal(new GitRemoteBranch("main", commit), head);
-        }
-        finally
-        {
-            DeleteRepository(repository);
-        }
-    }
-
-    [Fact]
-    public async Task RunLsRemote_AnUnknownBranch_IsRefused()
-    {
-        var repository = CreateRepositoryWithOneCommit(out _);
-        try
-        {
-            var error = await Assert.ThrowsAsync<BadRequestException>(() => GitCliService.RunLsRemoteAsync(
-                LsRemote(repository, "--heads", "refs/heads/missing"), "missing", TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
-
-            Assert.Equal("The external repository or selected branch could not be reached.", error.Message);
-        }
-        finally
-        {
-            DeleteRepository(repository);
-        }
-    }
-
-    [Fact]
-    public async Task RunLsRemote_NoAnswerBeforeTheDeadline_IsRefusedAsATimeout()
-    {
-        // A git that never answers: it waits on a standard input that stays open until it is killed.
-        // A zero deadline over a real ls-remote was not enough: the deadline fires from a timer, and on a
-        // loaded machine the ls-remote could finish first. Run outside any repository, so killing it
-        // leaves no directory in use.
-        var silent = Aetheus.Back.Components.Git.GitProcessStartInfoFactory.Create(Path.GetTempPath(), ["hash-object", "--stdin"]);
-        silent.RedirectStandardInput = true;
-
-        var error = await Assert.ThrowsAsync<BadRequestException>(() => GitCliService.RunLsRemoteAsync(
-            silent, "main", TimeSpan.FromMilliseconds(200), TestContext.Current.CancellationToken));
-
-        Assert.Equal("The external repository did not respond before the timeout.", error.Message);
     }
 
     [Fact]

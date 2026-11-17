@@ -29,8 +29,8 @@ public sealed class PipelineEnvironmentLockDispatchTests
         var dispatcher = Substitute.For<IPipelineStepTaskDispatcher>();
         var environmentChecks = Substitute.For<IPipelineEnvironmentCheckGuard>();
         var locks = Substitute.For<IPipelineResourceLockRepository>();
-        repo.GetCompletedStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
-        repo.GetTerminalStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        repo.GetStageProgressAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineStageProgress([], []));
         repo.GetActiveStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         repo.GetSuccessfulStepOutputsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         repo.GetRunAffinityServerIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns((int?)null);

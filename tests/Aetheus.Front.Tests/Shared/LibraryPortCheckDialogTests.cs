@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Net.Http;
+using Aetheus.Front.Components.VariableLibraries;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
+using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
@@ -77,6 +81,8 @@ public sealed class LibraryPortCheckDialogTests : BunitContext
     [Fact]
     public void TheVerdict_ListsEachPortForTheChosenServer()
     {
+        // A port taken by another owner makes the dialog read the library's entries to offer the move.
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/variable-libraries/100/entries", Array.Empty<VariableEntryDto>());
         _handler.SetJsonResponse(HttpMethod.Post, CheckUrl, new PortCheckResultDto
         {
             ServerId = 7,
@@ -91,6 +97,86 @@ public sealed class LibraryPortCheckDialogTests : BunitContext
         Assert.Contains(_handler.RequestDetails, request => request.Method == "POST" && request.Url.EndsWith(CheckUrl, StringComparison.Ordinal)
             && request.Body!.Contains("\"serverId\":7", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain("LoadFailed", cut.Markup, StringComparison.Ordinal);
+    }
+
+    private const string PreviewUrl = "api/variable-libraries/100/ports/free-preview";
+    private const string ReallocateUrl = "api/variable-libraries/100/ports/reallocate";
+
+    private ImmediateDialogService Dialog => (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+
+    private IRenderedComponent<LibraryPortCheckDialog> CheckWithAConflict()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/variable-libraries/100/entries",
+        [
+            new VariableEntryDto { Id = 1, Key = "PORT_FRONT_BLUE", Value = "10000" },
+            new VariableEntryDto { Id = 2, Key = "PORT_BACK_BLUE", Value = "10001" }
+        ]);
+        _handler.SetJsonResponse(HttpMethod.Post, CheckUrl, new PortCheckResultDto
+        {
+            ServerId = 7,
+            ServerName = "vps2577917",
+            Entries =
+            [
+                new PortCheckEntryDto { Port = 10000, IsFree = false, OwnerProjectId = 99, ContextProjectId = 4 },
+                new PortCheckEntryDto { Port = 10001, IsFree = false, OwnerProjectId = 4, ContextProjectId = 4 }
+            ]
+        });
+        _handler.SetJsonResponse(HttpMethod.Post, PreviewUrl, new List<int> { 10006 });
+        _handler.SetJsonResponse(HttpMethod.Post, ReallocateUrl, new List<VariableEntryDto> { new() { Id = 1, Key = "PORT_FRONT_BLUE", Value = "10006" } });
+        var cut = Check();
+        cut.WaitForAssertion(() => Assert.Contains("PortReallocate", cut.Markup, StringComparison.Ordinal));
+        return cut;
+    }
+
+    private bool Posted(string url) => _handler.RequestsSnapshot().Any(request => request.Method == "POST"
+        && request.Url.EndsWith(url, StringComparison.Ordinal));
+
+    [Fact]
+    public void WithoutAnyConflict_SaysSoAndOffersNoReallocation()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, CheckUrl, new PortCheckResultDto
+        {
+            ServerId = 7,
+            ServerName = "vps2577917",
+            Entries = [new PortCheckEntryDto { Port = 10000, IsFree = false, OwnerProjectId = 4, ContextProjectId = 4 }]
+        });
+
+        var cut = Check();
+
+        cut.WaitForAssertion(() => Assert.Contains("PortCheckNoConflict", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("PortReallocate", cut.Markup, StringComparison.Ordinal);
+        Assert.False(Posted(ReallocateUrl));
+    }
+
+    [Fact]
+    public void AConflict_ListsEachChangeBeforeWritingAndWritesNothingWhenCancelled()
+    {
+        var cut = CheckWithAConflict();
+        Dialog.ConfirmResult = false;
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("PortReallocate", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.NotNull(Dialog.LastConfirmMessage));
+        Assert.Contains("PORT_FRONT_BLUE : 10000 → 10006", Dialog.LastConfirmMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("PORT_BACK_BLUE", Dialog.LastConfirmMessage, StringComparison.Ordinal);
+        Assert.False(Posted(ReallocateUrl));
+        Assert.Equal(0, Dialog.CloseCount);
+    }
+
+    [Fact]
+    public void AConflict_WhenConfirmed_WritesTheNewPortsAndClosesTheDialog()
+    {
+        var cut = CheckWithAConflict();
+        Dialog.ConfirmResult = true;
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("PortReallocate", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.True(Posted(ReallocateUrl)));
+        var post = Assert.Single(_handler.RequestDetails, request => request.Method == "POST"
+            && request.Url.EndsWith(ReallocateUrl, StringComparison.Ordinal));
+        Assert.Contains("\"PORT_FRONT_BLUE\"", post.Body, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.Equal(true, Dialog.LastCloseResult));
     }
 
     [Fact]

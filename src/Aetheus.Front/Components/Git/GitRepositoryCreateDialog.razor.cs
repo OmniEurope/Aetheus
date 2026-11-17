@@ -36,9 +36,19 @@ public partial class GitRepositoryCreateDialog
         if (result is not null)
         {
             Toast.Success("Created", result.Name);
-            Dialog.Close(true);
+            Dialog.Close(result.Id); // the id lets the caller open the repository page (R-31)
         }
     }
 
     private void Cancel() => Dialog.Close(false);
+
+    /// <summary>
+    /// R-31: the address of the page of the repository this dialog just created (<paramref name="dialogResult"/>
+    /// is its id), carrying where to come back to: <paramref name="returnUrl"/> when it is local, else the
+    /// page the user is on. Null when the dialog was cancelled.
+    /// </summary>
+    public static string? RepositoryPageHref(object? dialogResult, string? returnUrl, NavigationManager nav) =>
+        dialogResult is int repositoryId
+            ? LocalReturnUrl.Append($"/git-repositories/{repositoryId}", LocalReturnUrl.Validated(returnUrl) ?? LocalReturnUrl.Current(nav))
+            : null;
 }

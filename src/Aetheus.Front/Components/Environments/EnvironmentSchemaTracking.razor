@@ -1,18 +1,32 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @using Aetheus.Front.Components.Pipelines
 
-@* Recette R-18: the database's expand/contract tracking on a production environment page. The last gate verdict
+@* Recette R-18: the database's expand/contract tracking of an environment. The last gate verdict
    of a migrate step that ran on the environment's servers, and the contractions the plan still owes.
-   Recette R-81: only what this environment's own deployments recorded. Without a verdict the section is absent,
-   since the contraction plan is the one of Aetheus's own schema. *@
+   Recette R-81: only what this environment's own deployments recorded. Without a verdict the contraction plan
+   is the one of Aetheus's own schema and says nothing of this environment: R-10 shows an empty state in the tab
+   instead of an absent block (a tab never disappears), and nothing at all when the back could not answer. *@
 @if (_schema is { LastGate: { } lastGate } schema)
 {
     <OmniStack data-testid="environment-schema-tracking">
-        <OmniHeading Level="OmniHeadingLevel.H5">@L["EnvironmentSchemaTrackingTitle"]</OmniHeading>
+        @if (ShowTitle)
+        {
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["EnvironmentSchemaTrackingTitle"]</OmniHeading>
+        }
         <PipelineRunMigrationGate Gates="@(new[] { lastGate })" />
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-            <a href="@RunHref(lastGate)" data-testid="environment-schema-run-link">@string.Format(L["EnvironmentSchemaLastGateRun"].Value, lastGate.RunId)</a>
+            <a href="@RunHref(lastGate)" data-testid="environment-schema-run-link">@string.Format(L["EnvironmentSchemaLastGateRun"].Value, lastGate.RunNumber)</a>
         </OmniText>
         <SchemaPendingContractions Contractions="@schema.PendingContractions" />
+    </OmniStack>
+}
+else if (_schema is not null)
+{
+    <OmniStack data-testid="environment-schema-tracking-empty">
+        @if (ShowTitle)
+        {
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["EnvironmentSchemaTrackingTitle"]</OmniHeading>
+        }
+        <OmniEmptyState Title="@L["SchemaTrackingNoVerdictTitle"]" Description="@L["SchemaTrackingNoVerdictEnvironment"]" />
     </OmniStack>
 }

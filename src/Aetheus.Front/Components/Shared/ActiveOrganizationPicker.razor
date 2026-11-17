@@ -1,0 +1,31 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* R-33, R-34: the one selector of the active organization, shared by the account menu and by every page that needs an
+   organization. An OE drop-down of the organizations the user may work in (the service's list, which the server
+   answered); a site Admin also gets "all organizations" where OfferAll allows it. The service refuses a choice that
+   is not in its list, and the endpoints refuse an organization the caller does not belong to: this control only
+   narrows the choice. *@
+@if (ShowsAll)
+{
+    <OmniDropDown TValue="int?"
+                  Id="@Id"
+                  Options="@AllOptions"
+                  Value="@AllValue"
+                  ValueChanged="@OnChosenAsync"
+                  ValueExpression="@(() => AllValue)"
+                  Label="@L["Organization"]"
+                  Class="@Class" />
+}
+else
+{
+    <OmniDropDown TValue="int?"
+                  Id="@Id"
+                  Options="@Options"
+                  Value="@Orgs.Active?.Id"
+                  ValueChanged="@OnChosenAsync"
+                  ValueExpression="@(() => ActiveId)"
+                  AllowEmpty="@(Orgs.Active is null)"
+                  Placeholder="@L["Organization"]"
+                  Label="@L["Organization"]"
+                  Class="@Class" />
+}

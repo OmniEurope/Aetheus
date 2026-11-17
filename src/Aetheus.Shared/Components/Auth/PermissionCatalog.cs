@@ -74,6 +74,10 @@ public static class PermissionCatalog
         // Held on the organization itself: its own roles, and its own versions of the mail templates.
         new(PermissionKeys.OrganizationRolesManage, "org", null, null, null, Admins),
         new(PermissionKeys.OrganizationMailTemplatesManage, "org", null, null, null, Admins),
+        // R-28, least privilege: a Reader reads the organization's exclusion rules of the system logs, a
+        // Contributor (and the organization's administrator) edits them.
+        new(PermissionKeys.OrganizationLogRulesView, "org", null, null, null, Readers),
+        new(PermissionKeys.OrganizationLogRulesEdit, "org", null, null, null, Writers),
     ];
 
     /// <summary>The keys that open the Administration section to an organization's administrator: each one
@@ -97,7 +101,8 @@ public static class PermissionCatalog
         Find(key) ?? throw new ArgumentException($"'{key}' is not a permission of the catalogue.", nameof(key));
 
     /// <summary>The level key of a resource type and level, or null for a type the catalogue does not
-    /// offer to organization roles (agent pools and Docker hosts are a site Admin's).</summary>
+    /// offer a key for (Docker hosts are a site Admin's; agent pools, owned by an organization since R-12, are
+    /// granted through the level model only).</summary>
     public static string? LevelKey(ResourceType resourceType, Permission level) =>
         All.FirstOrDefault(definition => definition.ResourceType == resourceType && definition.Level == level)?.Key;
 

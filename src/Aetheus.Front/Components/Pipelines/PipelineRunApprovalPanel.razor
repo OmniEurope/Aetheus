@@ -18,6 +18,27 @@
             @* The environment's approval instructions, named as such for the approver. *@
             <div class="omni-u-mt-sm approval-instructions"><span class="approval-instructions-label">@L["ApprovalInstructionsForApprover"]</span> @Approval.EnvironmentInstructions</div>
         }
+        @* R-34: the release this deployment restores, which is not the head of the source branch the run checked
+           out. Older than that head, or already in production: said here, the click on Approve is the confirmation. *@
+        @if (Approval.Pending.DeployedRelease is { } release)
+        {
+            <div class="approval-release-warning" data-testid="approval-deployed-release">
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["ApprovalDeploysRelease"], ShortId.Shorten(release.Version)) <ShortId Value="@release.CommitHash" Href="@CommitHref(release, release.CommitHash)" Copyable="false" /></OmniText>
+                @if (release.NeedsConfirmation)
+                {
+                    <ul class="approval-release-warning-list">
+                        @if (release.IsBehindSourceHead)
+                        {
+                            <li data-testid="approval-warning-behind-head">@string.Format(L["ApprovalReleaseBehindHead"], release.SourceBranch) <ShortId Value="@release.SourceCommitHash" Href="@CommitHref(release, release.SourceCommitHash)" Copyable="false" /></li>
+                        }
+                        @if (release.IsAlreadyDeployed)
+                        {
+                            <li data-testid="approval-warning-already-deployed">@L["ApprovalReleaseAlreadyDeployed"]</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
         @* A newer Aetheus was deployed than the one this page runs. The approval that confirms a
            production switch is answered from the new version, after checking it works: the
            decision is offered again once the page is reloaded. *@

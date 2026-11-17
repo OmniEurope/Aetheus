@@ -232,7 +232,7 @@ public sealed class PipelineSourceBlockTests
             .Returns([]);
         var sut = new PipelineRunPreparationService(
             repo, pipelineGit, new PipelineTemplateResolver(repo), parameterResolver,
-            Substitute.For<IGitCliService>(), workspaceSources,
+            workspaceSources,
             new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
         return (sut, workspaceSources, pipeline);
     }

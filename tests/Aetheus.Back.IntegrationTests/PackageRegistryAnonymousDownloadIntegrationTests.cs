@@ -20,8 +20,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// package, the search endpoints and every publication keep answering 401. Closing the option
 /// restores the 401.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PackageRegistryAnonymousDownloadIntegrationTests(PostgresFixture fixture) : IDisposable
+public sealed class PackageRegistryAnonymousDownloadIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IDisposable
 {
     private const string NuGet = "/api/packages/nuget/";
     private const string Npm = "/api/packages/npm/";
@@ -179,7 +178,7 @@ public sealed class PackageRegistryAnonymousDownloadIntegrationTests(PostgresFix
             $"Publish {name} {version}: {response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
     }
 
-    private static MultipartFormDataContent NuGetPushContent(string id, string version)
+    internal static MultipartFormDataContent NuGetPushContent(string id, string version)
     {
         var nuspec = $"""
             <?xml version="1.0"?>
@@ -205,7 +204,7 @@ public sealed class PackageRegistryAnonymousDownloadIntegrationTests(PostgresFix
         return new MultipartFormDataContent { { file, "package", "package.nupkg" } };
     }
 
-    private static string NpmPublishDocument(string name, string version)
+    internal static string NpmPublishDocument(string name, string version)
     {
         using var output = new MemoryStream();
         using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))

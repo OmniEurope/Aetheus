@@ -16,6 +16,7 @@ internal static class ContainerImageDepsFiles
     private const string WhiteoutPrefix = ".wh.";
     private const string OpaqueMarker = ".wh..wh..opq";
     private const long MaxDepsBytes = 32L * 1024 * 1024;
+    private const long MaxManifestBytes = 4L * 1024 * 1024;
 
     /// <summary>Image path (no leading slash) to the file's text. An archive that is not a docker-archive, or that
     /// lacks a layer it lists, is refused with <see cref="InvalidDataException"/>.</summary>
@@ -54,6 +55,8 @@ internal static class ContainerImageDepsFiles
             cancellationToken.ThrowIfCancellationRequested();
             if (!IsFile(entry) || Normalize(entry.Name) != "manifest.json")
                 continue;
+            if (entry.Length > MaxManifestBytes)
+                throw new InvalidDataException($"The manifest.json of the image archive is {entry.Length} bytes, above the {MaxManifestBytes} bytes a docker-archive manifest may have.");
             using var text = new StreamReader(entry.DataStream!, Encoding.UTF8);
             return ParseLayerNames(text.ReadToEnd());
         }

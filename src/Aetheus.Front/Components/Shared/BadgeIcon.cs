@@ -24,6 +24,11 @@ internal static class BadgeIcon
     /// the "on" state (Check).</summary>
     public static RenderFragment ForState(OmniTone tone) => Of(StateNameFor(tone));
 
+    /// <summary>R-4: the icon of a badge that reports the severity of a security finding: the same as
+    /// <see cref="ForState"/>, except that the danger tone (critical) is a shield crossed out, because a bare cross
+    /// reads as "close".</summary>
+    public static RenderFragment ForSeverity(OmniTone tone) => Of(SeverityNameFor(tone));
+
     /// <summary>The icon fragment of one OE icon, ready for <c>OmniBadge.Icon</c>.</summary>
     public static RenderFragment Of(OmniIconName name) => Fragments.GetOrAdd(name, static icon => builder =>
     {
@@ -40,6 +45,9 @@ internal static class BadgeIcon
         OmniTone.Info => OmniIconName.Info,
         _ => OmniIconName.Tag
     };
+
+    internal static OmniIconName SeverityNameFor(OmniTone tone) =>
+        tone == OmniTone.Danger ? OmniIconName.ShieldX : StateNameFor(tone);
 
     internal static OmniIconName StateNameFor(OmniTone tone) => tone switch
     {

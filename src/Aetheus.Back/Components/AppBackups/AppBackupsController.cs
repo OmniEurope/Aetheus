@@ -58,6 +58,16 @@ public sealed class AppBackupsController(IBackupPolicyService service, IResource
         return dto is null ? NotFound() : Ok(dto);
     }
 
+    /// <summary>Replaces only the backup schedule of a policy (a move in the build planner, recette R-8). The right an
+    /// update that leaves what the agent reads untouched asks for: Write on the owning project.</summary>
+    [HttpPut("{id:int}/schedule")]
+    public async Task<ActionResult<BackupPolicyDto>> SetSchedule(int id, [FromBody] SetBackupScheduleRequest request, CancellationToken ct)
+    {
+        if (!await EnsurePolicyWriteAsync(id, ct)) return Forbid();
+        var dto = await service.SetScheduleAsync(id, request.ScheduleCron, ct);
+        return dto is null ? NotFound() : Ok(dto);
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {

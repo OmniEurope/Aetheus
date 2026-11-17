@@ -47,7 +47,7 @@ public sealed class PasswordSetupService(
     IAuthRepository authRepo,
     IMailTemplateRenderer templates,
     IEmailSender sender,
-    JwtOptions jwtOptions,
+    TokenHashKeys tokenHashKeys,
     TimeProvider timeProvider,
     IConfiguration configuration,
     IHttpContextAccessor httpContextAccessor,
@@ -148,7 +148,7 @@ public sealed class PasswordSetupService(
     {
         ArgumentNullException.ThrowIfNull(request);
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        if (await repo.TryClaimAsync(Hash(request.Token), now, ct).ConfigureAwait(false) is not { } userId)
+        if (await repo.TryClaimAsync(tokenHashKeys.HashCandidates(TokenHashPurpose.PasswordSetupToken, request.Token), now, ct).ConfigureAwait(false) is not { } userId)
             return false;
         var user = await repo.FindUserTrackedAsync(userId, ct).ConfigureAwait(false);
         if (user is null) return false;
@@ -184,7 +184,7 @@ public sealed class PasswordSetupService(
         await repo.AddAsync(new PasswordSetupToken
         {
             UserId = userId,
-            TokenHash = Hash(token),
+            TokenHash = tokenHashKeys.Hash(TokenHashPurpose.PasswordSetupToken, token),
             Purpose = purpose,
             CreatedAt = now,
             ExpiresAt = now + lifetime
@@ -217,8 +217,6 @@ public sealed class PasswordSetupService(
             Message = sent.Message
         });
     }
-
-    private string Hash(string token) => AuthTokenHelper.HashToken(jwtOptions.SigningKey, token);
 
     private async Task<string> CallerLanguageAsync(CancellationToken ct)
     {

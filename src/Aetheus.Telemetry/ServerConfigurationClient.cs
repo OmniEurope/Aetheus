@@ -37,6 +37,33 @@ internal sealed class ServerConfigurationClient(HttpClient http, Uri configurati
         }
     }
 
+    /// <summary> R-29: the export a user asked for from the Supervision of Aetheus (<c>GET
+    /// {configuration}/export-request</c>). Aetheus answers 200 with the request identifier once,
+    /// to the first poll after the request, and 204 otherwise. Null when nothing is pending or
+    /// anything else happens (an older Aetheus answers 404, a network failure): the package then
+    /// keeps its periodic exports. </summary>
+    internal async Task<string?> ReadExportRequestAsync(CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(configurationUri, "configuration/export-request"));
+        request.Headers.TryAddWithoutValidation(KeyHeader, ingestKey);
+        try
+        {
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+                return null;
+            var body = await response.Content.ReadFromJsonAsync<ExportRequestBody>(ct).ConfigureAwait(false);
+            return string.IsNullOrWhiteSpace(body?.RequestId) ? null : body.RequestId;
+        }
+        // Best effort, like the interval: an export request must never stop the application.
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or NotSupportedException
+            || (exception is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            return null;
+        }
+    }
+
+    private sealed record ExportRequestBody([property: JsonPropertyName("requestId")] string? RequestId);
+
     private sealed record ConfigurationBody(
         [property: JsonPropertyName("metricExportIntervalSeconds")] int? MetricExportIntervalSeconds);
 }

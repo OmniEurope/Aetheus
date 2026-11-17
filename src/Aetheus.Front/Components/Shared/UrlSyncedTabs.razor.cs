@@ -130,7 +130,11 @@ public partial class UrlSyncedTabs : ComponentBase, IDisposable
     {
         if (index == _index) return;
         _index = index;
-        _lastSelectedIndex = index;
+        // The tab the reader chose is the one a parent re-render must keep until the address catches up: Blazor
+        // applies NavigateTo asynchronously (the location handlers and the browser history answer later), and any
+        // render of the page in between (a hub push, a toast, a permission refresh) used to read the unbound
+        // SelectedIndex (its 0 default) as the page's own choice and snap the visible tab back to the first one.
+        _selectedSlug = SelectedKey;
         // First tab → clean URL (drop the param); others → ?tab=slug. NavigateTo pushes a history entry.
         var slug = index > 0 && index < Slugs.Count ? Slugs[index] : null;
         // Do not pre-acknowledge the slug here. SupplyParameterFromQuery must observe it as a real URL

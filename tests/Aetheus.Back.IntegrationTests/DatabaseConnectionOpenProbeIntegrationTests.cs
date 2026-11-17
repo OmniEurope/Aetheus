@@ -8,8 +8,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// makes sense (the Npgsql open includes its own resolution and connect, so it is at least the TCP connect).
 /// The unit tests cover the failure path with a socket that hangs up; only a real server proves the success path.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class DatabaseConnectionOpenProbeIntegrationTests(PostgresFixture fixture)
+public sealed class DatabaseConnectionOpenProbeIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task OpeningAFreshConnection_ReturnsEveryPhaseAndNoFailure()

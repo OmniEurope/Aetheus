@@ -144,4 +144,28 @@ public class TasksTests : BunitContext
 
         Assert.EndsWith("/tasks/7", Services.GetRequiredService<NavigationManager>().Uri);
     }
+
+    /// <summary>ADR-060: the list shows the number on the server, the key only until the backfill reaches the
+    /// task. The link keeps the integer until the step that switches addresses.</summary>
+    [Fact]
+    public void TheNumberColumn_ShowsTheNumber_OrTheKeyOfATaskNotNumberedYet()
+    {
+        _handler.SetJsonResponse("api/tasks", new PaginatedResult<ServerTaskDto>
+        {
+            Items =
+            [
+                new ServerTaskDto { Id = 31696, Number = 12, Name = "numbered", Status = TaskExecutionStatus.Success },
+                new ServerTaskDto { Id = 41, Name = "older", Status = TaskExecutionStatus.Success }
+            ],
+            TotalCount = 2
+        });
+
+        var cut = Render<TaskListView>();
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("a.pipeline-name-link").Count));
+        var links = cut.FindAll("a.pipeline-name-link");
+        Assert.Equal("12", links[0].TextContent);
+        Assert.Equal("/tasks/31696", links[0].GetAttribute("href"));
+        Assert.Equal("41", links[1].TextContent);
+    }
 }

@@ -117,6 +117,17 @@ public sealed class AppTelemetryController(
         return summary is null ? NotFound() : Ok(summary);
     }
 
+    [HttpGet("apps/{id:int}/web-analytics/visitors")]
+    public async Task<ActionResult<IReadOnlyList<AppWebAnalyticsVisitorDto>>> GetWebAnalyticsVisitors(
+        int id,
+        [FromQuery] int days = 30,
+        CancellationToken ct = default)
+    {
+        if (await GateAsync(id, Permission.Read, ct) is { } fail) return fail;
+        var visitors = await webAnalytics.GetVisitorsAsync(id, days, ct);
+        return visitors is null ? NotFound() : Ok(visitors);
+    }
+
     [HttpPut("apps/{id:int}/web-analytics/configuration")]
     public async Task<ActionResult<AppWebAnalyticsConfigurationDto>> ConfigureWebAnalytics(
         int id,

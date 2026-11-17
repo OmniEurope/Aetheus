@@ -136,7 +136,10 @@ public partial class ModuleLinksTab
             if (success)
             {
                 Toast.Success(L["AutoDetectComplete"]);
-                await ReloadLinksAsync();
+                // The detection answers no link: the server decides which rows appear, so the list is read again
+                // behind the rows, quietly (no bar).
+                if (_grid is not null) await _grid.RestoreRowsAsync();
+                else await LoadLinksAsync();
             }
             else
             {
@@ -184,7 +187,17 @@ public partial class ModuleLinksTab
             if (result is not null)
             {
                 Toast.Success(L["LinkCreated"]);
-                await ReloadLinksAsync();
+                // R-10: the link shows at once, derived from the answer as the server lists it (the target side
+                // of a link whose source is this tab's resource); the quiet read behind it confirms.
+                var row = new LinkedResourceDto
+                {
+                    LinkId = result.Id,
+                    Type = result.TargetType,
+                    Identifier = result.TargetIdentifier,
+                    IsAutoDetected = result.IsAutoDetected
+                };
+                if (_grid is not null) await _grid.ShowRowAsync(row);
+                else await LoadLinksAsync();
             }
             else
             {
@@ -197,13 +210,15 @@ public partial class ModuleLinksTab
         }
     }
 
-    private async Task DeleteLinkAsync(int linkId)
+    private async Task DeleteLinkAsync(LinkedResourceDto link)
     {
-        var success = await Api.Servers.DeleteModuleLinkAsync(ServerId, linkId);
+        var success = await Api.Servers.DeleteModuleLinkAsync(ServerId, link.LinkId);
         if (success)
         {
             Toast.Success(L["LinkDeleted"]);
-            await ReloadLinksAsync();
+            // R-10: the link leaves the grid at once, the quiet read behind it confirms.
+            if (_grid is not null) await _grid.HideRowAsync(link);
+            else await LoadLinksAsync();
         }
         else
         {

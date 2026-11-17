@@ -9,6 +9,7 @@ public sealed record PipelineRunsSummary(
     int SucceededCount,
     int FinishedCount,
     TimeSpan? AverageSuccessDuration,
+    TimeSpan? AverageActiveDuration,
     DateTime? LastSuccessAt,
     int? LatestGradeRunId = null,
     int? LastSuccessRunId = null)
@@ -42,6 +43,12 @@ public sealed record PipelineRunsSummary(
             .Select(run => run.CompletedAt!.Value - run.StartedAt)
             .Where(duration => duration > TimeSpan.Zero)
             .ToList();
+        // R-33: the same runs without the time they waited for an approval (a person, not the pipeline).
+        var activeDurations = finished
+            .Where(run => run.Status == PipelineStatus.Success)
+            .Select(run => run.CompletedAt!.Value - run.StartedAt - TimeSpan.FromSeconds(run.ApprovalWaitSeconds))
+            .Where(duration => duration > TimeSpan.Zero)
+            .ToList();
         var latestGraded = runs
             .OrderByDescending(run => run.StartedAt)
             .FirstOrDefault(run => run.GateGrade is not null);
@@ -57,6 +64,9 @@ public sealed record PipelineRunsSummary(
             AverageSuccessDuration: successDurations.Count == 0
                 ? null
                 : TimeSpan.FromSeconds(successDurations.Average(duration => duration.TotalSeconds)),
+            AverageActiveDuration: activeDurations.Count == 0
+                ? null
+                : TimeSpan.FromSeconds(activeDurations.Average(duration => duration.TotalSeconds)),
             LastSuccessAt: lastSuccess?.CompletedAt,
             LatestGradeRunId: latestGraded?.Id,
             LastSuccessRunId: lastSuccess?.Id);
@@ -69,8 +79,15 @@ public sealed record PipelineRunsSummary(
         ? $"{percent}% ({SucceededCount}/{FinishedCount})"
         : notAvailable;
 
-    /// <summary>Mean duration of the successful runs, or <paramref name="notAvailable"/> when none succeeded.</summary>
+    /// <summary>R-33: full mean duration of the successful runs (approval waits included), or
+    /// <paramref name="notAvailable"/> when none succeeded.</summary>
     public string AverageDurationLabel(string notAvailable) => AverageSuccessDuration is { } average
+        ? FormatDuration(average)
+        : notAvailable;
+
+    /// <summary>R-33: mean duration of the successful runs without their approval waits, or
+    /// <paramref name="notAvailable"/> when none succeeded.</summary>
+    public string AverageActiveDurationLabel(string notAvailable) => AverageActiveDuration is { } average
         ? FormatDuration(average)
         : notAvailable;
 

@@ -13,8 +13,6 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 internal static class PipelineReleaseArtifactRules
 {
-    internal const string NoRetainedArtifact = "has no retained artifact";
-
     /// <summary>The selectors resolved relative to the run's own commit.</summary>
     internal static bool IsCommitRelative(string selector) =>
         string.Equals(selector, "previous-published", StringComparison.OrdinalIgnoreCase)
@@ -27,7 +25,7 @@ internal static class PipelineReleaseArtifactRules
         || string.Equals(selector, "previous-deployed", StringComparison.OrdinalIgnoreCase)
         || string.Equals(selector, "current-deployed", StringComparison.OrdinalIgnoreCase);
 
-    internal static async Task<(PipelineArtifact? Artifact, string? Error)> FindAsync(
+    internal static async Task<(PipelineArtifact? Artifact, PipelineProblem? Error)> FindAsync(
         IArtifactRepository artifacts,
         int projectId,
         string? commitHash,
@@ -40,7 +38,7 @@ internal static class PipelineReleaseArtifactRules
         if (IsCommitRelative(selector))
         {
             if (!IsGitCommitHash(commitHash))
-                return (null, "the current run has no verified source commit.");
+                return (null, PipelineArtifactProblems.NoVerifiedCommit());
             artifact = string.Equals(selector, "previous-deployed", StringComparison.OrdinalIgnoreCase)
                 ? await artifacts.FindPreviousDeployedReleaseArtifactAsync(
                     projectId, commitHash!, artifactFilter, ct).ConfigureAwait(false)
@@ -53,7 +51,7 @@ internal static class PipelineReleaseArtifactRules
                 projectId, selector, artifactFilter, ct).ConfigureAwait(false);
         }
         return artifact is null
-            ? (null, $"release '{selector}' {NoRetainedArtifact} in this project.")
+            ? (null, PipelineArtifactProblems.ReleaseNotRetained(selector))
             : (artifact, null);
     }
 

@@ -128,6 +128,9 @@ internal static class DotnetTestCommandLine
             arguments.Add("--settings");
             arguments.Add(runSettings);
         }
+        if (request.RerunMethods.Count > 0)
+            foreach (var argument in FailedTestRerun.TestingPlatformFilter(request.RerunMethods))
+                arguments.Add(argument);
     }
 
     private static void AddVsTestArguments(ICollection<string> arguments, PipelineDotnetTestRequest request)
@@ -150,6 +153,11 @@ internal static class DotnetTestCommandLine
         arguments.Add("console;verbosity=minimal");
         arguments.Add("--logger");
         arguments.Add($"trx;LogFileName={request.TrxName}");
+        if (request.RerunMethods.Count > 0)
+        {
+            arguments.Add("--filter");
+            arguments.Add(FailedTestRerun.VsTestFilter(request.RerunMethods));
+        }
     }
 
     /// <summary>

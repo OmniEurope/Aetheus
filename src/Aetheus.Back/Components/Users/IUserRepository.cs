@@ -10,12 +10,14 @@ public interface IUserRepository
 
     /// <summary>
     /// Projected variant of <see cref="GetUsersPagedAsync"/> that returns <see cref="UserDto"/>
-    /// directly via a <c>.Select()</c> projection, avoiding loading full entity graphs.
+    /// directly via a <c>.Select()</c> projection, avoiding loading full entity graphs. Outside the site Admin's
+    /// view (<paramref name="siteAdminView"/> false) the e-mail is not returned, and the search, the sort and the
+    /// header filters ignore it.
     /// </summary>
     Task<(List<UserDto> Items, int TotalCount)> GetUsersPagedProjectedAsync(
         string? search, int page, int pageSize, CancellationToken ct = default,
         string? sortBy = null, bool sortDescending = false,
-        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null);
+        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null, bool siteAdminView = true);
 
     Task<User?> GetUserDetailAsync(int id, CancellationToken ct = default);
 
@@ -55,14 +57,6 @@ public interface IUserRepository
     /// fresh access token carrying the new stamp. Returns how many were revoked.
     /// </summary>
     Task<int> RevokeRefreshTokensAsync(int userId, DateTime revokedAt, CancellationToken ct = default);
-
-    /// <summary>
-    /// Audit AUD-05 (recette R1-50): serializes every change that can remove an active administrator
-    /// (role removal, deactivation, deletion) across requests and backend colours, so the "last active
-    /// administrator" count is read after the previous such change has committed. Dispose to release.
-    /// A provider without transactions (InMemory unit tests) gets a lock that does nothing.
-    /// </summary>
-    Task<IAsyncDisposable> LockAdministratorSetAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Names of the pipelines whose automated-run owner (<c>Pipeline.CreatedByUsername</c>) is

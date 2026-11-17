@@ -45,7 +45,12 @@ internal static class PipelineSetupDetectionText
         if (detection.HasDotNetTestProject == false && selectedTemplates.Contains(QaTemplate))
             warnings.Add(string.Format(localizer["PipelineSetupWarnNoTests"].Value, branchName));
 
-        if (selectedTemplates.Contains(PipelineSetupRoles.DeployProdTemplate))
+        // R-59: a repository read to the end with no browser test is declared none, which the QA pipeline accepts without a
+        // warning of its own: the wizard says it here, so the QA is never green with no browser test by silence.
+        if (detection.HasBrowserTests == false && selectedTemplates.Contains(QaTemplate))
+            warnings.Add(string.Format(localizer["PipelineSetupWarnNoBrowserTests"].Value, branchName));
+
+        if (selectedTemplates.Any(PipelineSetupRoles.IsDeployProdTemplate))
         {
             if (detection.HasComposeFile == false)
                 warnings.Add(string.Format(localizer["PipelineSetupWarnNoCompose"].Value, branchName));

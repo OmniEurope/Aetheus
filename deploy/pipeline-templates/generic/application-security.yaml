@@ -14,6 +14,14 @@ name: application-security-template
 trigger: manual
 variables:
   APPLICATION_CI_PIPELINE: application-ci
+  # "true" when the CI payload carries container images: turns on the image restore and the .NET runtime
+  # CVE check. APPLICATION_IMAGE_ARCHIVES lists the .tar.gz archives as the delivery contract names them,
+  # APPLICATION_IMAGE_TARS the same archives once unpacked (.tar), both separated by spaces.
+  APPLICATION_HAS_IMAGES: "false"
+  APPLICATION_IMAGE_ARCHIVES: ""
+  APPLICATION_IMAGE_TARS: ""
+  # Published by the Find JavaScript lockfiles stage.
+  APPLICATION_HAS_JAVASCRIPT_LOCKFILES: "false"
 
 stages:
   - name: Checkout
@@ -48,11 +56,34 @@ stages:
         artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
         timeout_seconds: 300
 
+  # The JavaScript dependency scan below reads npm, Yarn, pnpm and Bun lockfiles, and OSV-Scanner exits with an
+  # error when the checkout holds none (a .NET-only repository, say), so the scan runs only when one exists. The
+  # exclusions are the scanner's own (the checkout's .git, node_modules and the platform's work directories).
+  - name: Find JavaScript lockfiles
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Verify source]
+    steps:
+      - name: Look for JavaScript lockfiles
+        working_directory: "$(WORKSPACE)"
+        outputs: [APPLICATION_HAS_JAVASCRIPT_LOCKFILES]
+        shell: |
+          set -eu
+          if find . \( -path ./.git -o -path ./.claude -o -path ./.Codex -o -path ./.artifacts -o -path ./.pipeline-artifacts -o -name node_modules \) -prune \
+            -o -type f \( -name package-lock.json -o -name yarn.lock -o -name pnpm-lock.yaml -o -name bun.lock \) -print -quit | grep -q .; then
+            echo "##aetheus[setvariable name=APPLICATION_HAS_JAVASCRIPT_LOCKFILES]true"
+          else
+            echo "No npm, Yarn, pnpm or Bun lockfile in the checkout: the JavaScript dependency scan is skipped."
+            echo "##aetheus[setvariable name=APPLICATION_HAS_JAVASCRIPT_LOCKFILES]false"
+          fi
+        timeout_seconds: 60
+
   - name: Scan source
     group: Security
     execution_role: build
     os: linux
-    depends_on: [Restore CI manifest]
+    depends_on: [Restore CI manifest, Find JavaScript lockfiles]
     steps:
       - name: Scan secrets
         type: scanner
@@ -68,10 +99,95 @@ stages:
         scanner: trivy-dependencies
         retry_count: 1
         timeout_seconds: 1200
+      # A second, independent source for the JavaScript dependencies (recette R-2): OSV-Scanner walks the checkout for
+      # every npm, Yarn, pnpm and Bun lockfile and asks OSV.dev, while Trivy answers from its own database. Its report
+      # is a producer of the gate (key osv-javascript).
+      - name: Scan JavaScript dependencies
+        condition: "eq(variables['APPLICATION_HAS_JAVASCRIPT_LOCKFILES'], 'true')"
+        type: scanner
+        scanner: osv-javascript
+        retry_count: 1
+        timeout_seconds: 900
       - name: Scan IaC
         type: scanner
         scanner: trivy-iac
         timeout_seconds: 900
+
+  # Image evidence, only for a project whose CI payload carries container images (APPLICATION_HAS_IMAGES
+  # set to "true" together with the two archive lists above; a project without images skips every stage
+  # below and fails nothing). Trivy answers from GitHub advisories, which lag Microsoft's release metadata
+  # (recette R-3, R-5): the .NET runtime check compares the runtime each image ships with the metadata of
+  # its channel and fails when that metadata cannot be read, never passing silently. An image without a
+  # .NET runtime pack is a valid empty result, so a non-.NET project that ships images does not fail. The
+  # image scans themselves stay the project's own stages (this template cannot know the image names).
+  - name: Restore images
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Scan source]
+    condition: "eq(variables['APPLICATION_HAS_IMAGES'], 'true')"
+    steps:
+      - name: Restore exact CI image archive
+        type: restore-artifacts
+        artifact: ApplicationPayload-artifacts
+        artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
+        target_directory: .security-image-input
+        timeout_seconds: 1800
+
+  - name: Unpack images
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Restore images]
+    condition: "eq(variables['APPLICATION_HAS_IMAGES'], 'true')"
+    steps:
+      - name: Verify exact CI image provenance and prepare immutable images
+        type: aetheus
+        function: prepare-image-inputs
+        with:
+          images: "$(APPLICATION_IMAGE_ARCHIVES)"
+        timeout_seconds: 2400
+
+  - name: Check .NET runtime
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Unpack images]
+    condition: "eq(variables['APPLICATION_HAS_IMAGES'], 'true')"
+    steps:
+      - name: Compare the image .NET runtimes with the Microsoft security releases
+        type: aetheus
+        function: scan-dotnet-runtime-cve
+        with:
+          images: "$(APPLICATION_IMAGE_TARS)"
+          output: analysis/dotnet-runtime-cve.sarif
+        timeout_seconds: 300
+
+  - name: Publish .NET runtime findings
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Check .NET runtime]
+    condition: "eq(variables['APPLICATION_HAS_IMAGES'], 'true')"
+    steps:
+      - name: Publish the .NET runtime CVE findings
+        type: lint
+        analysis_category: container
+        target_files:
+          - analysis/dotnet-runtime-cve.sarif
+        timeout_seconds: 120
+
+  # Clean the image inputs only in a dependent stage because sibling steps may still be reading them.
+  - name: Remove bounded analysis material
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Publish .NET runtime findings]
+    condition: "eq(variables['APPLICATION_HAS_IMAGES'], 'true')"
+    steps:
+      - name: Remove bounded analysis material
+        working_directory: "$(WORKSPACE)"
+        shell: rm -rf .analysis-image .security-image-input
 
   # The generic grade counts open findings, never weighted (owner decision of 2026-10-17, ADR-030
   # amendment of that date): a project that wants the weighted score overrides this step in its own
@@ -80,12 +196,14 @@ stages:
   # the A whatever its severity (one rule per severity, so the lines add up to the findings of the run), and
   # the grade falls with the severity, never to an E: info, low and medium (B up to 5, C from 6, never
   # worse), high (a D from the first one, whatever the count), critical (F). A rule that stops its
-  # thresholds leaves the grade beyond the last one at the next grade.
+  # thresholds leaves the grade beyond the last one at the next grade. Every ladder is nevertheless written to its
+  # fifth threshold, with 1000000 for the ones that stop (the grade they keep): the production backend of the platform
+  # refused a ladder that stops short, and with it the whole grading of the pipeline (2026-10-27).
   - name: Grade security
     group: Security
     execution_role: build
     os: linux
-    depends_on: [Scan source]
+    depends_on: [Scan source, Remove bounded analysis material]
     steps:
       - name: Publish summaries and calculate the versioned security grade
         type: analysis-gate
@@ -112,22 +230,33 @@ stages:
               a: 0
               b: 0
               c: 0
+              d: 1000000
+              e: 1000000
             - key: grade.security.medium
               domain: security
               severity: medium
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
             - key: grade.security.low
               domain: security
               severity: low
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
             - key: grade.security.info
               domain: security
               severity: info
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
         timeout_seconds: 300

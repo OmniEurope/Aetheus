@@ -29,6 +29,11 @@ public class MonitoredApp
     public int RecoveryThreshold { get; set; } = 2;
     public bool Enabled { get; set; } = true;
 
+    /// <summary>R-47: the pipeline wizard configured the project's telemetry through this application. The project's
+    /// overview warns while the repository inventory does not list the telemetry NuGet package; probe-only applications
+    /// never asked for it, so they never warn.</summary>
+    public bool TelemetrySetupRequested { get; set; }
+
     public AppHealthStatus CurrentStatus { get; set; } = AppHealthStatus.Unknown;
     public DateTime? LastStatusChangeAt { get; set; }
     public DateTime? LastCheckedAt { get; set; }
@@ -61,6 +66,21 @@ public class MonitoredApp
     /// <summary>Data points rejected by the ingestion cardinality/rate caps (surfaced in the UI - no silent loss).</summary>
     public long IngestDroppedCount { get; set; }
     public DateTime? LastIngestAt { get; set; }
+
+    /// <summary>R-29: the last immediate probe a user asked for from the Supervision. A backend-probed app is probed at
+    /// once; an agent-probed app carries it in its probe configuration until the agent's next result arrives.</summary>
+    public DateTime? ProbeRequestedAt { get; set; }
+
+    /// <summary>R-29: the timestamp of the first probe sample ingested after <see cref="ProbeRequestedAt"/> (the answer to
+    /// the request, whatever the clock of the agent that took it); null while the request waits.</summary>
+    public DateTime? ProbeRequestResultAt { get; set; }
+
+    /// <summary>R-29: the last immediate telemetry export a user asked for. <see cref="TelemetryExportDeliveredAt"/>:
+    /// the application's telemetry package (1.2.2 or later) took the request; <see cref="TelemetryExportReceivedAt"/>:
+    /// the first metrics export that arrived after it took it.</summary>
+    public DateTime? TelemetryExportRequestedAt { get; set; }
+    public DateTime? TelemetryExportDeliveredAt { get; set; }
+    public DateTime? TelemetryExportReceivedAt { get; set; }
 
     public long AnalyticsRejectedCount { get; set; }
     public DateTime? AnalyticsLastIngestAt { get; set; }

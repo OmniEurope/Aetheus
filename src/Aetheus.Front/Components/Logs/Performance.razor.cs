@@ -17,6 +17,9 @@ public partial class Performance : IAsyncDisposable
     private const int BrowserCallsShown = 20;
 
     private ApiPerformanceReportDto? _report;
+    private TaskIdentityBackfillDto? _taskIdentity;
+    private PipelineRunIdentityBackfillDto? _runIdentity;
+    private List<DatabaseTableVolumeDto> _tables = [];
     private List<ClientApiCall> _browserCalls = [];
     private AetheusDataGrid<ApiCallTimingDto>? _slowestGrid;
     private AetheusDataGrid<ApiEndpointTimingDto>? _endpointsGrid;
@@ -55,7 +58,67 @@ public partial class Performance : IAsyncDisposable
         {
             SnapshotBrowserCalls();
         }
+        await LoadTaskIdentityAsync();
+        await LoadTablesAsync();
     }
+
+    /// <summary>A failed read keeps the last rows: the report does not depend on the catalog read.</summary>
+    private async Task LoadTablesAsync()
+    {
+        try
+        {
+            _tables = await Api.Security.GetDatabaseTablesAsync() ?? _tables;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            // The grid keeps what it showed.
+        }
+    }
+
+    private static string NumberText(long? value) =>
+        value is { } number ? number.ToString("N0", CultureInfo.CurrentCulture) : "-";
+
+    private static string KeyPercentText(double? percent) =>
+        percent is { } value ? value.ToString("0.0000", CultureInfo.CurrentCulture) : "-";
+
+    /// <summary>A failed read leaves the last figure (or no tile): the report does not depend on it.</summary>
+    private async Task LoadTaskIdentityAsync()
+    {
+        try
+        {
+            _taskIdentity = await Api.Pipelines.GetTaskIdentityBackfillAsync() ?? _taskIdentity;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            // The tile keeps what it showed; the next push reads it again.
+        }
+
+        try
+        {
+            _runIdentity = await Api.Pipelines.GetPipelineRunIdentityBackfillAsync() ?? _runIdentity;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            // Same: one tile failing leaves the other.
+        }
+    }
+
+    /// <summary>
+    /// One column per key figure (the four of the report, plus the identity backfill tiles when they are read), so a
+    /// window wide enough puts them in one row above the grid; page rule 3.page-scroll-with-grid, the grid keeps its
+    /// ten rows without the page scrolling. A phone keeps its single scrolling row (.tiles-scroll-row).
+    /// </summary>
+    private int TileColumns => Math.Min(6, 4 + (_taskIdentity is not null ? 1 : 0) + (_runIdentity is not null ? 1 : 0));
+
+    private string TaskIdentityRemainingText =>
+        _taskIdentity?.Remaining.ToString("N0", CultureInfo.CurrentCulture) ?? string.Empty;
+
+    private string TaskIdentityDetailText => L["TaskIdentityBackfillDetail", _taskIdentity?.Total ?? 0];
+
+    private string RunIdentityRemainingText =>
+        _runIdentity?.Remaining.ToString("N0", CultureInfo.CurrentCulture) ?? string.Empty;
+
+    private string RunIdentityDetailText => L["PipelineRunIdentityBackfillDetail", _runIdentity?.Total ?? 0];
 
     /// <summary>A push re-reads the report in place; a failure keeps the figures on screen for the next push.</summary>
     internal async Task ReloadFromPushAsync()
@@ -75,6 +138,7 @@ public partial class Performance : IAsyncDisposable
         {
             return;
         }
+        await LoadTaskIdentityAsync();
         SnapshotBrowserCalls();
         StateHasChanged();
     }
@@ -109,7 +173,7 @@ public partial class Performance : IAsyncDisposable
     private string? SlowestCallRouteText => SlowestCall is { } call ? string.Concat(call.Method, " ", call.Route) : null;
 
     /// <summary>The tab slugs, in the order of the tabs.</summary>
-    private static readonly string[] TabSlugs = ["slowest", "routes", "browser"];
+    private static readonly string[] TabSlugs = ["slowest", "routes", "browser", "tables"];
 
     /// <summary> The header of each table's export, the page's source and address, then the server
     /// window the page writes above the tabs, so a file read alone still says since when the

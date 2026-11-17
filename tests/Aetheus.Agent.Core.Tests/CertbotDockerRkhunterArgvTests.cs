@@ -33,11 +33,42 @@ public class CertbotDockerRkhunterArgvTests
     [Theory]
     [InlineData(OperationKind.CertbotRenewAll, "renew-all")]
     [InlineData(OperationKind.CertbotNormalize, "normalize")]
-    [InlineData(OperationKind.CertbotRenewalCheck, "renewal-check")]
     public void Certbot_AllLineageVerbs_Argv_OmitLineageName(OperationKind kind, string verb)
     {
         var argv = CertbotOperationExecutor.BuildManageArgv(kind, verb, "ignored");
         Assert.Equal(new[] { "-n", "/usr/local/lib/aetheus/aetheus-certbot-manage", verb }, argv);
+    }
+
+    // Recette R-19: the rehearsal names no certificate for the whole server, and each name of its target otherwise.
+    [Theory]
+    [InlineData("-", new string[0])]
+    [InlineData("random.example.com", new[] { "random.example.com" })]
+    [InlineData("a.example.com,b.example.com", new[] { "a.example.com", "b.example.com" })]
+    public void Certbot_RenewalCheck_Argv_HoldsNoNameForEveryLineage_AndEachNameForTargetedOnes(string target, string[] names)
+    {
+        var argv = CertbotOperationExecutor.BuildManageArgv(OperationKind.CertbotRenewalCheck, "renewal-check", target);
+        Assert.Equal(new[] { "-n", "/usr/local/lib/aetheus/aetheus-certbot-manage", "renewal-check" }.Concat(names), argv);
+    }
+
+    [Theory]
+    [InlineData("-", true)]
+    [InlineData("random.example.com", true)]
+    [InlineData("a.example.com,b.example.com", true)]
+    [InlineData("a.example.com,a.example.com", false)]
+    [InlineData("a.example.com,", false)]
+    [InlineData("a.example.com b.example.com", false)]
+    [InlineData("--force-renewal", false)]
+    [InlineData("../etc", false)]
+    [InlineData("a.example.com\n", false)]
+    public void Certbot_RenewalCheck_Target_IsTheDashOrDistinctCertificateNames(string target, bool valid) =>
+        Assert.Equal(valid, OperationTargetValidator.IsValid(OperationKind.CertbotRenewalCheck, target));
+
+    [Fact]
+    public void Certbot_RenewalCheck_Target_IsRefusedAbove64Names()
+    {
+        var names = Enumerable.Range(0, CertbotRenewalCheckTarget.MaxNames + 1).Select(i => $"c{i}.example.com");
+        Assert.False(OperationTargetValidator.IsValid(OperationKind.CertbotRenewalCheck, CertbotRenewalCheckTarget.Of(names)));
+        Assert.True(OperationTargetValidator.IsValid(OperationKind.CertbotRenewalCheck, CertbotRenewalCheckTarget.Of(names.Take(CertbotRenewalCheckTarget.MaxNames))));
     }
 
     [Theory]

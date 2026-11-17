@@ -33,8 +33,8 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
         var checker = new PipelineRequirementsChecker(_pipelines, _libraries, _vaults);
         var readiness = new PipelineSetupReadinessService(
             _templates, _pipelines, _git, Substitute.For<IGitLightRepository>(), _resolver, checker,
-            Substitute.For<IProjectConfigRepositoryService>(),
-            NullLogger<PipelineSetupReadinessService>.Instance);
+            Substitute.For<IProjectConfigRepositoryService>(), ReadinessVariableResolver.Create(),
+            Substitute.For<IPipelineSetupServerRepository>(), NullLogger<PipelineSetupReadinessService>.Instance);
         _sut = new PipelineRequirementsProvisioner(
             readiness, _pipelines, checker, _resolver, _libraries, _vaults,
             NullLogger<PipelineRequirementsProvisioner>.Instance);
@@ -76,8 +76,10 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
 
     public static TheoryData<string, string, string[], string[]> ChangedTemplates => new()
     {
-        { "application-deploy-prod", "generic/application-deploy-prod.yaml", ["wordmorrow.share", "wordmorrow.prod"], ["wordmorrow.prod"] },
-        { "application-release-fast", "generic/application-release-fast.yaml", ["wordmorrow.share", "wordmorrow.prod"], [] },
+        // R-11: the libraries and the vault of a production deployment are its common core's (the two deployment templates
+        // extend it); the readiness reading a template that extends is proved in PipelineSetupReadinessServiceTests.
+        { "application-deploy-prod", "generic/application-deploy-prod-core-v1.yaml", ["wordmorrow.share", "wordmorrow.prod"], ["wordmorrow.prod"] },
+        { "application-release-fast", "generic/application-release-fast.yaml", ["wordmorrow.share", "wordmorrow.prod"], ["wordmorrow.prod"] },
         { "application-qa", "generic/application-qa.yaml", ["wordmorrow.share", "wordmorrow.qa"], ["wordmorrow.qa"] },
         { "publish-observability-packages", "generic/publish-observability-packages.yaml", [], ["wordmorrow.package"] }
     };

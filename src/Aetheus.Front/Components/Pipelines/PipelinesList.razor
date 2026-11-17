@@ -40,7 +40,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <ZoneVeil />
 }
 else
 {
@@ -91,6 +91,9 @@ else
                     }
                 </OmniStack>
             }
+            <PipelineTemplatesBulkUpdate ProjectId="@ProjectId" Visible="@ShowsBulkTemplateUpdate" Updated="@ReloadGrid" />
+            @* R-24: what runs now, between the chips and the catalogue; absent when nothing runs. *@
+            <PipelinesRunningNow Runs="@_activeRuns" GroupByProject="@IsGlobal" ServerId="@ServerId" />
             @if (FilteredCatalog.Count == 0)
             {
                 <EmptyState Icon="account_tree" Title="@L["NoPipelinesFound"]" Description="@L["EmptyPipelinesHint"]">
@@ -108,7 +111,8 @@ else
                     SetFavorite="@SetFavoriteAsync" FavoritePipelineIds="@_favoritePipelineIds"
                     PendingFavoritePipelineIds="@_pendingFavoritePipelineIds"
                     FleetItems="@_fleetItems" FleetAvailable="@_fleetAvailable"
-                    GroupByProject="@IsGlobal" FillHeight="true" Virtualize="true" CanWrite="@_canWrite" ServerId="@ServerId" />
+                    GroupByProject="@IsGlobal" FillHeight="true" Virtualize="true" CanWrite="@_canWrite" ServerId="@ServerId"
+                    ExternalSynchronized="@ReloadGrid" />
             }
         </div>
     }

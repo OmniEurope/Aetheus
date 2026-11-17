@@ -11,7 +11,7 @@
             @foreach (var approval in Approvals.Items)
             {
                 <li>
-                    <OmniLink Href="@($"/pipelines/runs/{approval.PipelineRunId}")">@($"{approval.PipelineName} #{approval.PipelineRunId}")</OmniLink>
+                    <OmniLink Href="@($"/pipelines/runs/{approval.PipelineRunId}")">@($"{approval.PipelineName} #{approval.PipelineRunNumber}")</OmniLink>
                     <span class="omni-u-text-muted">
                         @(approval.Scope == ApprovalScope.Pipeline
                             ? string.Format(L["PendingPipelineApprovalLine"].Value, approval.StageName, approval.RequestedAt.ToLocalTime().ToString("g"))

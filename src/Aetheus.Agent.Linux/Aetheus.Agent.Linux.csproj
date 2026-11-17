@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <Version Condition="'$(Version)' == ''">1.2.0</Version>
     <!-- This project is shipped as a self-contained tarball to agent hosts, so the runtime it
          embeds is a delivered artifact, not a build detail. Pin it to the same single source of
          truth as the production images; without this it silently inherits whatever runtime the

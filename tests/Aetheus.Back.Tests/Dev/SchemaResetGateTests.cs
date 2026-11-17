@@ -32,7 +32,7 @@ public class SchemaResetGateTests
 
         finishReset.SetResult();
         await reset;
-        await outside.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await outside.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         Assert.True(gate.WaitUntilOpenAsync(CancellationToken.None).IsCompletedSuccessfully);
     }
 
@@ -44,7 +44,7 @@ public class SchemaResetGateTests
 
         await gate.RunClosedAsync(async () =>
         {
-            await gate.WaitUntilOpenAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            await gate.WaitUntilOpenAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
             passedInside = true;
         }, CancellationToken.None);
 

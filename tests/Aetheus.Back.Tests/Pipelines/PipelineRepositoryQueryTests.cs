@@ -351,6 +351,30 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Single(await _repo.GetContinuableFailedStepsInRunAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
+    /// <summary>R-10: the cancellation check reads one column, and the answer is the same as when the whole run was
+    /// loaded for it: true only for the run that carries the marker, false for another run or a missing one.</summary>
+    [Fact]
+    public async Task IsRunCancellationRequestedAsync_ReadsTheMarkerOfThatRunOnly()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _db.PipelineRuns.AddRange(
+            new PipelineRun
+            {
+                Id = 41,
+                PipelineId = 1,
+                Status = PipelineStatus.Running,
+                AdditionalVariablesJson = $"{{\"{PipelineRunHelpers.CancellationRequestedVariable}\":\"true\",\"KEEP\":\"value\"}}"
+            },
+            new PipelineRun { Id = 42, PipelineId = 1, Status = PipelineStatus.Running, AdditionalVariablesJson = "{\"KEEP\":\"value\"}" },
+            new PipelineRun { Id = 43, PipelineId = 1, Status = PipelineStatus.Running });
+        await _db.SaveChangesAsync(ct);
+
+        Assert.True(await _repo.IsRunCancellationRequestedAsync(41, ct));
+        Assert.False(await _repo.IsRunCancellationRequestedAsync(42, ct));
+        Assert.False(await _repo.IsRunCancellationRequestedAsync(43, ct));
+        Assert.False(await _repo.IsRunCancellationRequestedAsync(999, ct));
+    }
+
     /// <summary>The rollback stages count as having rolled back only when they ran and all of their
     /// steps succeeded.</summary>
     [Fact]
@@ -434,6 +458,7 @@ public class PipelineRepositoryQueryTests : IDisposable
     public async Task GetComplexityTrendAsync_ReturnsTrendRowForRunWithMetrics()
     {
         var run = new PipelineRun { Id = 1, PipelineId = 5, Status = PipelineStatus.Success, StartedAt = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc) };
+        _db.Pipelines.Add(new Pipeline { Id = 5, Name = "trend", YamlDefinition = "y" });
         _db.PipelineRuns.Add(run);
         _db.RunMetrics.AddRange(
             new RunMetric { PipelineRunId = 1, PipelineRun = run, Key = "complexity.cyclomatic.avg", Value = 3.5 },
@@ -718,7 +743,8 @@ public class PipelineRepositoryQueryTests : IDisposable
     [Fact]
     public async Task ExplicitPoolSelector_IsScopedToPipelineOrganization()
     {
-        var pool = new AgentPool { Id = 1, Name = "shared-pool" };
+        // R-12: the pool is organization 10's; a link left from before R-12 to a server of 20 is never used.
+        var pool = new AgentPool { Id = 1, Name = "shared-pool", OrganizationId = 10 };
         var foreign = new Server { Id = 1, Name = "foreign", Hostname = "foreign", OrganizationId = 20, Status = ServerStatus.Online, PipelineRunnerEnabled = true, AgentProtocolVersion = AgentProtocol.CurrentVersion, AgentCapabilitiesJson = "[\"pipeline.build\"]" };
         var owned = new Server { Id = 2, Name = "owned", Hostname = "owned", OrganizationId = 10, Status = ServerStatus.Online, PipelineRunnerEnabled = true, AgentProtocolVersion = AgentProtocol.CurrentVersion, AgentCapabilitiesJson = "[\"pipeline.build\"]" };
         _db.AgentPoolServers.AddRange(

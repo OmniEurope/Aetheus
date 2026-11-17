@@ -23,10 +23,14 @@ internal sealed class NpmRegistryService(
         string routePackageName,
         JsonDocument publishDocument,
         string publishedBy,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool observabilityPackagesOnly = false)
     {
         routePackageName = DecodePackageName(routePackageName);
         NpmPackageInspector.ValidatePackageName(routePackageName);
+        if (observabilityPackagesOnly
+            && !PackageRegistryDefaults.IsObservabilityPackage(PackageRegistryKind.Npm, routePackageName))
+            throw new BadRequestException($"A pipeline run token may not publish npm package {routePackageName}.");
         var root = publishDocument.RootElement;
         var documentName = ReadRequiredString(root, "name");
         if (!string.Equals(routePackageName, documentName, StringComparison.Ordinal))

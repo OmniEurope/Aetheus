@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Aetheus.Agent.Core.Functions;
 
@@ -120,21 +121,23 @@ public sealed class VerifyNMinusOneAgentContractFunction : IPipelineFunction
     /// ships one, else <c>dotnet Aetheus.Agent.Linux.dll</c>, its output in <c>agent.log</c>.</summary>
     private IBackgroundProcess Start(PipelineFunctionContext context, AgentProof proof, string temporary, AgentContractSession session)
     {
-        var settings = new
+        // A JsonObject, not an anonymous type: aetheus-fn is published trimmed, where reflection-based
+        // JsonSerializer.Serialize of an anonymous type is switched off (IL2026) and would throw.
+        var settings = new JsonObject
         {
-            Aetheus = new
+            ["Aetheus"] = new JsonObject
             {
-                ServerUrl = proof.BackendUrl,
-                Name = $"qa-agent-nminus1-{session.RegistrationTokenId}",
-                RegistrationToken = session.RegistrationToken,
-                WorkDirectory = Path.Combine(temporary, "work"),
-                PollingIntervalSeconds = 1,
-                HeartbeatIntervalSeconds = 1,
-                HeartbeatCollectionTimeoutSeconds = 10,
-                MaxConcurrentTasks = 1
+                ["ServerUrl"] = proof.BackendUrl,
+                ["Name"] = $"qa-agent-nminus1-{session.RegistrationTokenId}",
+                ["RegistrationToken"] = session.RegistrationToken,
+                ["WorkDirectory"] = Path.Combine(temporary, "work"),
+                ["PollingIntervalSeconds"] = 1,
+                ["HeartbeatIntervalSeconds"] = 1,
+                ["HeartbeatCollectionTimeoutSeconds"] = 10,
+                ["MaxConcurrentTasks"] = 1
             }
         };
-        File.WriteAllText(Path.Combine(temporary, "appsettings.json"), JsonSerializer.Serialize(settings, AgentEvidence.Indented));
+        File.WriteAllText(Path.Combine(temporary, "appsettings.json"), settings.ToJsonString(AgentEvidence.Indented));
         var native = Path.Combine(temporary, AgentExecutable);
         var startInfo = FunctionShell.IsExecutable(native)
             ? FunctionShell.StartInfo(context, native, temporary)

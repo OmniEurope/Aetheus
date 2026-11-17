@@ -2,6 +2,7 @@
 using System.Reflection;
 using Aetheus.Front.Components.VariableLibraries;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
@@ -71,6 +72,56 @@ public class VariableLibraryEditAsyncTests : BunitContext
 
         // Create POSTs to the collection endpoint (distinguishes success from the null/error path).
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/variable-libraries"));
+    }
+
+    [Theory]
+    [InlineData("/projects/3/overview", "http://localhost/projects/3/overview")]
+    [InlineData("https://evil.example/x", "http://localhost/variable-libraries/99")]
+    [InlineData(null, "http://localhost/variable-libraries/99")]
+    public async Task R32_OnSubmit_NewLibrary_ReturnsToTheLocalReturnAddress(string? returnUrl, string expected)
+    {
+        SetupProjects();
+        _handler.SetJsonResponse("api/variable-libraries", new VariableLibraryDetailDto
+        {
+            Id = 99,
+            Name = "new-lib",
+            RowVersion = Guid.NewGuid(),
+            Entries = []
+        });
+        var nav = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        nav.NavigateTo("http://localhost/variable-libraries/new"
+            + (returnUrl is null ? string.Empty : "?returnUrl=" + Uri.EscapeDataString(returnUrl)));
+        var cut = Render<VariableLibraryEdit>();
+        var model = typeof(VariableLibraryEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
+        model.GetType().GetProperty("Name")!.SetValue(model, "new-lib");
+
+        var method = typeof(VariableLibraryEdit).GetMethod("OnSubmit", Priv)!;
+        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
+
+        Assert.Equal(expected, nav.Uri);
+    }
+
+    /// <summary>R-24: a library created from a missing key's link opens on that key (to ask for the value), not back on
+    /// the page that sent the user, which stays the return address of the page.</summary>
+    [Fact]
+    public async Task R24_OnSubmit_NewLibraryForAMissingKey_OpensTheLibraryOnThatKey()
+    {
+        SetupProjects();
+        _handler.SetJsonResponse("api/variable-libraries", new VariableLibraryDetailDto
+        {
+            Id = 99,
+            Name = "new-lib",
+            RowVersion = Guid.NewGuid(),
+            Entries = []
+        });
+        var nav = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        nav.NavigateTo("http://localhost/variable-libraries/new?key=API_HOST&returnUrl=" + Uri.EscapeDataString("/projects/3/overview"));
+        var cut = Render<VariableLibraryEdit>();
+        cut.Find("#Name").Input("new-lib");
+        await cut.Find("form").SubmitAsync();
+
+        cut.WaitForAssertion(() => Assert.Equal(
+            $"http://localhost/variable-libraries/99?key=API_HOST&returnUrl={Uri.EscapeDataString("/projects/3/overview")}", nav.Uri));
     }
 
     // ── Test 2: Existing library - OnSubmit updates ──────────────────────────

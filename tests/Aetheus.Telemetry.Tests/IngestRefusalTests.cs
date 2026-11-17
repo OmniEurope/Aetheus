@@ -158,6 +158,10 @@ public sealed class IngestRefusalTests
             Assert.True(provider.ForceFlush(10_000));
         }
 
+        // ForceFlush is no proof that a request left: the SDK's wait polls once a second and returns as soon as the batch
+        // is taken from its queue, which an export still serialising or sending (a loaded machine) has already done.
+        // Shutdown joins the export thread, so every export has ended when it returns true.
+        Assert.True(provider.Shutdown(30_000));
         Assert.Equal(1, transport.Calls);
 
         var failing = new StubTransport(HttpStatusCode.ServiceUnavailable);
@@ -172,6 +176,9 @@ public sealed class IngestRefusalTests
             source.StartActivity("work")?.Dispose();
             Assert.True(retrying.ForceFlush(30_000));
         }
+
+        // Same reason as above: wait for the exports themselves, not for the queue to be taken.
+        Assert.True(retrying.Shutdown(30_000));
 
         // A server error never suspends the key: every batch still reaches the network.
         Assert.True(failing.Calls >= 3, $"a 503 must not suspend the key, saw {failing.Calls} request(s) for 3 batches");

@@ -1,0 +1,8 @@
+DOMPurify 3.1.7 (bundled inside src/Aetheus.Front/wwwroot/lib/monaco-editor/min/vs/editor/editor.main.js)
+
+(c) Cure53 and other contributors
+Released under the Apache license 2.0 and Mozilla Public License 2.0
+(notice carried by the vendored file; Aetheus redistributes it under the Apache License 2.0)
+Upstream license: https://github.com/cure53/DOMPurify/blob/3.1.7/LICENSE
+
+The full Apache License 2.0 text is in Apache-2.0.txt in this folder.

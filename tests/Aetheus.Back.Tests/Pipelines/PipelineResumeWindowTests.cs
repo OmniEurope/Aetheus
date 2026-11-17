@@ -449,6 +449,38 @@ public sealed class PipelineResumeWindowTests : IDisposable
     }
 
     [Fact]
+    public async Task ADefinitionWithoutAConfirmation_NeverReadsTheApprovals()
+    {
+        // Every ordinary run asks at each completion, with only the cleanup left. No stage of it can raise a
+        // confirmation, so none can have timed out and the approvals (a join on the environment) stay unread.
+        var repo = Substitute.For<IPipelineRepository>();
+        var window = new PipelineResumeWindow(repo, _hub, _clock, NullLogger.Instance);
+        var plain = YamlParsingHelper.ParseAndValidate(
+            "name: plain\nstages:\n  - name: Build\n    steps:\n      - name: compile\n        shell: build.sh\n")!;
+
+        var parked = await window.TryParkAsync(
+            new PipelineRun { Id = RunId, PipelineId = PipelineId }, plain,
+            [new PipelineStepRun { StageName = PipelineRunHelpers.SystemCleanupStage }], Ct);
+
+        Assert.False(parked);
+        await repo.DidNotReceive().GetApprovalsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ADefinitionWithAConfirmation_StillReadsTheApprovals()
+    {
+        var repo = Substitute.For<IPipelineRepository>();
+        var window = new PipelineResumeWindow(repo, _hub, _clock, NullLogger.Instance);
+
+        var parked = await window.TryParkAsync(
+            new PipelineRun { Id = RunId, PipelineId = PipelineId }, YamlParsingHelper.ParseAndValidate(DeployYaml)!,
+            [new PipelineStepRun { StageName = PipelineRunHelpers.SystemCleanupStage }], Ct);
+
+        Assert.False(parked);
+        await repo.Received(1).GetApprovalsAsync(RunId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void AWaitingRun_IsNotTerminal()
     {
         Assert.False(PipelineStatus.AwaitingResume.IsTerminal());

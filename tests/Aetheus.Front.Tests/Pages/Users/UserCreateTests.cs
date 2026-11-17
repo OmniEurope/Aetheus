@@ -126,4 +126,30 @@ public class UserCreateTests : BunitContext
         var error = (string?)typeof(UserCreate).GetField("_error", Priv)!.GetValue(cut.Instance);
         Assert.Equal("Username 'jdoe' is already taken.", error);
     }
+
+    [Fact]
+    public async Task OnSubmit_ANetworkFailure_FreesTheButton_AndSaysSo()
+    {
+        _handler.SetAsyncJsonResponse<UserDto>(HttpMethod.Post, "api/users", _ => throw new HttpRequestException("offline"));
+        var cut = RenderFilled();
+
+        await SubmitAsync(cut);
+
+        cut.Render();
+        Assert.Empty(cut.FindAll(".omni-busy"));
+        Assert.Contains("SaveFailed", cut.Markup);
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Danger);
+    }
+
+    [Fact]
+    public async Task OnSubmit_AnUnexpectedFailure_StillFreesTheButton()
+    {
+        _handler.SetAsyncJsonResponse<UserDto>(HttpMethod.Post, "api/users", _ => throw new InvalidOperationException("boom"));
+        var cut = RenderFilled();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => SubmitAsync(cut));
+
+        cut.Render();
+        Assert.Empty(cut.FindAll(".omni-busy"));
+    }
 }

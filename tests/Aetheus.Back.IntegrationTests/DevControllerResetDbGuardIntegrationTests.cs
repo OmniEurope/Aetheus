@@ -8,8 +8,7 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>The destructive reset endpoint must reject databases without the _e2e suffix. The
 /// disposable integration database verifies refusal without dropping its contents.</summary>
-[Collection(PostgresCollection.Name)]
-public sealed class DevControllerResetDbGuardIntegrationTests(PostgresFixture fixture)
+public sealed class DevControllerResetDbGuardIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task ResetDb_OnNonE2eDatabase_IsRefused_AndDropsNothing()

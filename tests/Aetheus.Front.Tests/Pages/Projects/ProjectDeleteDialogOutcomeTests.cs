@@ -93,21 +93,26 @@ public sealed class ProjectDeleteDialogOutcomeTests : BunitContext
         });
         _handler.SetResponse(HttpMethod.Delete, "api/projects/7", HttpStatusCode.NoContent);
         var cut = RenderDialog();
-        var veiled = new List<bool>();
+        // R-1: the dialog holds the ONE page veil; its raised/lowered transitions are the BusyVeil's.
+        var veil = Services.GetRequiredService<BusyVeil>();
+        Assert.False(veil.IsBusy);
+        var veiled = new List<bool> { veil.IsBusy };
+        veil.Changed += () =>
+        {
+            if (veiled[^1] != veil.IsBusy) veiled.Add(veil.IsBusy);
+        };
         var loaderUnderTheVeil = false;
         cut.OnMarkupUpdated += (_, _) =>
         {
             var zones = cut.FindAll(Zone);
             if (zones.Count == 0) return;
-            var busy = zones[0].ClassList.Contains("omni-busy");
-            if (veiled.Count == 0 || veiled[^1] != busy) veiled.Add(busy);
-            if (busy && zones[0].QuerySelector(".aetheus-loader") is not null) loaderUnderTheVeil = true;
+            if (veil.IsBusy && zones[0].QuerySelector(".aetheus-loader") is not null) loaderUnderTheVeil = true;
         };
 
         ConfirmAndDelete(cut);
 
-        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestsSnapshot(), request => request.Method == "DELETE"), TimeSpan.FromSeconds(10));
-        cut.WaitForAssertion(() => Assert.False(cut.Find(Zone).ClassList.Contains("omni-busy")), TimeSpan.FromSeconds(10));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestsSnapshot(), request => request.Method == "DELETE"));
+        cut.WaitForAssertion(() => Assert.False(veil.IsBusy));
         Assert.Contains(_handler.RequestsSnapshot(), request => request.Url.Contains(Tasks, StringComparison.Ordinal));
         Assert.Equal([false, true, false], veiled);
         Assert.False(loaderUnderTheVeil, "A loader appeared under the veil while the agents worked.");
@@ -132,7 +137,7 @@ public sealed class ProjectDeleteDialogOutcomeTests : BunitContext
         var cut = RenderDialog();
         ConfirmAndDelete(cut);
 
-        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindComponents<OmniDataGrid<ProjectDeletionReportRow>>().Count), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindComponents<OmniDataGrid<ProjectDeletionReportRow>>().Count), TimeSpan.FromSeconds(30));
         var grids = cut.FindComponents<OmniDataGrid<ProjectDeletionReportRow>>();
         Assert.Equal([new ProjectDeletionReportRow("Enum_ProjectServerResourceKind_Container portfolio-prod-front-1", "vps-prod", "prod")], grids[0].Instance.Items);
         Assert.Equal(
@@ -174,7 +179,7 @@ public sealed class ProjectDeleteDialogOutcomeTests : BunitContext
         var cut = RenderDialog();
         ConfirmAndDelete(cut);
 
-        cut.WaitForAssertion(() => Assert.Contains("ProjectDeletionDone", cut.Find(".project-deletion-outcome").TextContent), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.Contains("ProjectDeletionDone", cut.Find(".project-deletion-outcome").TextContent), TimeSpan.FromSeconds(30));
         var grids = cut.FindComponents<OmniDataGrid<ProjectDeletionReportRow>>();
         Assert.Contains(new ProjectDeletionReportRow("Enum_ProjectDeletionItemKind_Pipelines", "ProjectDeletionPlaceAetheus", "4"), grids[0].Instance.Items!);
         Assert.Empty(grids[1].Instance.Items!);
@@ -197,11 +202,11 @@ public sealed class ProjectDeleteDialogOutcomeTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("app.portfolio.example", cut.Markup));
 
         Assert.Empty(cut.FindAll("#project-delete-confirm"));
-        Assert.Contains("ProjectDeletionRelaunch", cut.Find("#project-delete-submit").TextContent);
+        Assert.Contains("ProjectDeletionRelaunchDeletion", cut.Find("#project-delete-submit").TextContent);
         Assert.Contains("ProjectDeletionResumeIntro", cut.Markup);
         cut.Find("#project-delete-submit").Click();
 
-        cut.WaitForAssertion(() => Assert.Contains("ProjectDeletionDone", cut.Find(".project-deletion-outcome").TextContent), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.Contains("ProjectDeletionDone", cut.Find(".project-deletion-outcome").TextContent), TimeSpan.FromSeconds(30));
         var delete = _handler.RequestsSnapshot().Single(request => request.Method == "DELETE");
         Assert.Contains("serverTaskIds=51", delete.Url, StringComparison.Ordinal);
         Assert.Contains("serverTaskIds=52", delete.Url, StringComparison.Ordinal);

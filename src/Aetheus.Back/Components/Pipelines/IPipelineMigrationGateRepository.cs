@@ -11,6 +11,9 @@ public interface IPipelineMigrationGateRepository
     /// <summary>The run's verdicts, oldest first.</summary>
     Task<List<PipelineMigrationGateVerdict>> ListForRunAsync(int runId, CancellationToken ct = default);
 
+    /// <summary>R-8: the number a person reads for the run; 0 for an unknown run. Read alone so a verdict never loads its run aggregate.</summary>
+    Task<int> GetRunNumberAsync(int runId, CancellationToken ct = default);
+
     Task<bool> EnvironmentExistsAsync(int environmentId, CancellationToken ct = default);
 
     /// <summary>

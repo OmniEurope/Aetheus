@@ -1,0 +1,21 @@
+{
+  "name": "aetheus-quality-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "license": "EUPL-1.2",
+  "scripts": {
+    "lint": "eslint src/Aetheus.Front/wwwroot/js/**/*.js",
+    "test:coverage": "nyc --reporter=cobertura --reporter=text-summary node --test tests/js/*.test.cjs tests/js/*.test.mjs",
+    "duplication": "jscpd . --reporters json --output .analysis-duplication",
+    "docs:build": "node docs-site/src/build.mjs",
+    "docs:check": "node docs-site/src/build.mjs && node docs-site/src/check-links.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "jscpd": "5.4.2",
+    "jsdom": "29.1.1",
+    "nyc": "18.0.0"
+  }
+}

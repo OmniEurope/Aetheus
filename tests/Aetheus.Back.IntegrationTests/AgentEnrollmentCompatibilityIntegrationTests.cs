@@ -5,8 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class AgentEnrollmentCompatibilityIntegrationTests(PostgresFixture fixture)
+public sealed class AgentEnrollmentCompatibilityIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task RegisterCurrentAgent_ImmediatelyExposesProtocolAndRequiredCapabilities()

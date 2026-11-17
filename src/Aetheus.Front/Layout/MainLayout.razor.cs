@@ -50,6 +50,16 @@ public partial class MainLayout : IAsyncDisposable
     // The set-password page is framed like the login page whether or not the visitor holds a session.
     private bool OnSetPasswordPage => RouteAccessPolicy.IsSetPasswordPath(Nav.ToBaseRelativePath(Nav.Uri));
     private bool AuthenticatedChromeReady => Auth.IsAuthenticated && _authenticatedSessionReady && !OnSetPasswordPage;
+
+    /// <summary>R-36: a signed-in session that is not started yet (after a sign-in or an account switch). A forced password
+    /// change never starts one (SITE-SEC-001), so it never waits for it.</summary>
+    private bool SessionBootstrapping =>
+        Auth.IsAuthenticated && !Auth.MustChangePassword && !AuthenticatedChromeReady && !OnSetPasswordPage;
+
+    /// <summary>R-36, loading level 2: the veil of the content area is up while an action or a page read holds the
+    /// <see cref="BusyVeil"/>, or while the session starts.</summary>
+    private bool ContentVeilBusy => Veil.IsBusy || SessionBootstrapping;
+
     private bool CanAccessCurrentRoute => RouteAccessPolicy.CanAccess(
         Nav.ToBaseRelativePath(Nav.Uri),
         Auth.IsAuthenticated,
@@ -77,9 +87,6 @@ public partial class MainLayout : IAsyncDisposable
     private string? _devLabel;
     private LoggedErrorBoundary? _errorBoundary;
     private bool _userMenuOpen;
-    private int ActiveOrganizationId => Orgs.Active?.Id ?? 0;
-    private IReadOnlyList<OmniOption<int>> ActiveOrganizationOptions =>
-        Orgs.Available.Select(organization => new OmniOption<int>(organization.Id, organization.Name)).ToArray();
     private string _version = "dev";
     internal bool _newVersionAvailable;
     private ApplicationVersionMonitor? _versionMonitor;
@@ -340,6 +347,13 @@ public partial class MainLayout : IAsyncDisposable
 
         // Authenticated but flagged for a forced password change: gate ALL navigation onto the
         // mandatory change-password screen until a fresh token (without the claim) is issued.
+        // R-1: the seeded administrator of a fresh install is held on its account setup instead.
+        if (Auth.MustSetUpAccount)
+        {
+            if (!uri.StartsWith("account/setup", StringComparison.OrdinalIgnoreCase))
+                Nav.NavigateTo(LoginRedirect.ToAccountSetup(Nav));
+            return;
+        }
         if (Auth.MustChangePassword
             && !uri.StartsWith("account/change-password", StringComparison.OrdinalIgnoreCase))
             Nav.NavigateTo(LoginRedirect.ToChangePassword(Nav));
@@ -381,9 +395,9 @@ public partial class MainLayout : IAsyncDisposable
         // reconnect race during logout and per-user state leaking into a same-runtime re-login.
         await RealtimeSession.StopAsync();
         ResetConnectionLostState();
-        // While the token is still held, so the server forgets the mailbox passwords it keeps for
-        // us.
-        await Api.Auth.NotifyLogoutAsync();
+        // While the token is still held, so the server revokes our refresh token and forgets the
+        // mailbox passwords it keeps for us.
+        await Api.Auth.NotifyLogoutAsync(await Auth.CurrentRefreshTokenAsync());
         await Auth.LogoutAsync();
         Nav.NavigateTo("/login");
     }
@@ -507,7 +521,6 @@ public partial class MainLayout : IAsyncDisposable
     {
         _countdown.Stop();
         _manualReconnecting = true;
-        StateHasChanged();
 
         var outcome = await TaskTracker.ReconnectAsync();
         _manualReconnecting = false;
@@ -525,7 +538,6 @@ public partial class MainLayout : IAsyncDisposable
 
         // TaskTracker schedules subsequent attempts and drives the countdown through
         // OnReconnectAttempt when this immediate attempt cannot reconnect.
-        StateHasChanged();
     }
 
     private void DisposeManagedState()
@@ -577,11 +589,8 @@ public partial class MainLayout : IAsyncDisposable
 
     private void OnOrgsChanged() => InvokeAsync(StateHasChanged);
 
-    /// <summary>R-99: the page body is veiled while an action started from a confirmation runs.</summary>
+    /// <summary>R-1: the page veil (OmniPageVeil) follows the shared BusyVeil.</summary>
     private void OnVeilChanged() => InvokeAsync(StateHasChanged);
-
-    /// <summary>R-99: OE's veil on the page body while an action started from a confirmation runs.</summary>
-    private string BusyClass => Veil.IsBusy ? "omni-busy" : string.Empty;
 
     internal Task OnActiveOrgChanged(object value)
     {

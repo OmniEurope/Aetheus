@@ -60,7 +60,6 @@ public class FormFieldHelpAndRequiredMarkGuardTests
     private static readonly Dictionary<string, string> BareLabelAllowList = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Components/Logs/SystemLogs.razor"] = "filter toolbar",
-        ["Components/Projects/AppTelemetryPanel.razor"] = "application selector of a read-only view",
         ["Components/Servers/ServerDetailSections/DockerRelationsGraph.razor"] = "graph filter",
         ["Components/Shared/AppMetricsView.razor"] = "chart filters",
         ["Components/Pipelines/PipelineLaunchDialog.razor"] = "form to migrate (R-30 rule 8)",

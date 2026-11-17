@@ -65,11 +65,37 @@ internal static class PipelineRunLogView
         foreach (var step in failedSteps)
         {
             // Lines streamed while the step ran are not its history; it is read all the same.
-            if (step.TaskId is not { } taskId || logs.HasSnapshot(taskId)) continue;
-            try { logs.ApplySnapshot(taskId, await api.Monitoring.GetTaskLogsAsync(taskId) ?? [], requested: null); }
-            catch (HttpRequestException) { logs.Lines[taskId] = []; }
+            if (step.TaskId is not { } taskId || logs.IsFinalRead(taskId)) continue;
+            // R-21: a log read while the step ran (the live tail) is read again once the step is over,
+            // else its last lines, the real error, stay missing.
+            try
+            {
+                var snapshot = logs.HasSnapshot(taskId)
+                    ? await api.Monitoring.GetTaskLogTailAsync(taskId, PipelineRunLogWindow.LiveWindow)
+                    : await api.Monitoring.GetTaskLogsAsync(taskId);
+                logs.ApplySnapshot(taskId, snapshot ?? [], requested: logs.HasSnapshot(taskId) ? PipelineRunLogWindow.LiveWindow : null);
+                logs.MarkFinalRead(taskId);
+            }
+            catch (HttpRequestException) { if (!logs.HasSnapshot(taskId)) logs.Lines[taskId] = []; }
         }
     }
+
+    /// <summary>R-21: a step that is over has its log read again when the read held was made while it ran.</summary>
+    public static bool IsOver(PipelineStepRunDto step) =>
+        step.Status is TaskExecutionStatus.Success or TaskExecutionStatus.Failed
+            or TaskExecutionStatus.Timeout or TaskExecutionStatus.Cancelled;
+
+    /// <summary>
+    /// R-34: a step the backend runs itself (advance-branch) creates no agent task, so it has no task log; its one line
+    /// of account travels in its output variables. Shown as the step's log, never as "logs not retained". Null for
+    /// a step that has a task, or that wrote no such line.
+    /// </summary>
+    public static string? BackendStepLine(PipelineStepRunDto step) =>
+        step.TaskId is null
+        && step.OutputVariables.TryGetValue(PipelineStepOutputs.BranchAdvanceOutcome, out var line)
+        && !string.IsNullOrWhiteSpace(line)
+            ? line
+            : null;
 
     // N8FJ: an empty log panel has three distinct causes - spell out which one instead of a flat "No logs".
     public static string GetEmptyLogsReason(PipelineStepRunDto step, IStringLocalizer<AppStrings> l)

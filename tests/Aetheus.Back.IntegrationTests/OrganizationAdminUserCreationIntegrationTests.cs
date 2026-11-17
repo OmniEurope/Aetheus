@@ -15,8 +15,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// create nothing. An e-mail already used says no more than the existing "add member" flow. The site Admin
 /// is unchanged.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class OrganizationAdminUserCreationIntegrationTests(PostgresFixture fixture)
+public sealed class OrganizationAdminUserCreationIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

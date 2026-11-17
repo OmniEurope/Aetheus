@@ -15,6 +15,10 @@ public interface IPipelineSetupServerRepository
     /// <summary>Attaches the agent server to the project, once: an attachment already there is kept. Returns whether a new
     /// one was written.</summary>
     Task<bool> AttachAgentServerAsync(int projectId, int serverId, CancellationToken ct = default);
+
+    /// <summary>R-36: the names of the agent servers attached to the project, by name, for the chained launch that must
+    /// choose the deployment server when none was given.</summary>
+    Task<List<string>> ListProjectServerNamesAsync(int projectId, CancellationToken ct = default);
 }
 
 public sealed class PipelineSetupServerRepository(AppDbContext db, TimeProvider timeProvider) : IPipelineSetupServerRepository
@@ -31,6 +35,14 @@ public sealed class PipelineSetupServerRepository(AppDbContext db, TimeProvider 
             .ConfigureAwait(false);
         return [.. rows.Select(row => (row.Id, row.Name))];
     }
+
+    public Task<List<string>> ListProjectServerNamesAsync(int projectId, CancellationToken ct = default) =>
+        db.ProjectServers.AsNoTracking()
+            .Where(link => link.ProjectId == projectId && link.Server != null)
+            .Select(link => link.Server!.Name)
+            .Distinct()
+            .OrderBy(name => name)
+            .ToListAsync(ct);
 
     public async Task<bool> AttachAgentServerAsync(int projectId, int serverId, CancellationToken ct = default)
     {

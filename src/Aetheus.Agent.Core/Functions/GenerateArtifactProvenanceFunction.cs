@@ -28,7 +28,7 @@ public sealed class GenerateArtifactProvenanceFunction : IPipelineFunction
         new("coverage", ["coverage"]),
         new("qaRuntime",
         [
-            "tests/Aetheus.Back.IntegrationTests/bin/Release/net10.0",
+            "tests/Aetheus.Back.IntegrationTests/bin/Release/net11.0",
             "tests/Aetheus.Back.IntegrationTests/obj/project.assets.json",
             "tests/Aetheus.Back.IntegrationTests/obj/Aetheus.Back.IntegrationTests.csproj.nuget.g.props",
             "tests/Aetheus.Back.IntegrationTests/obj/Aetheus.Back.IntegrationTests.csproj.nuget.g.targets",

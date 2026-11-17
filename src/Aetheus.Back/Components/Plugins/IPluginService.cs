@@ -9,7 +9,7 @@ public interface IPluginService
     Task<PluginFilterValuesDto> GetFilterValuesAsync(CancellationToken ct = default);
 
     Task<PaginatedResult<PluginRegistrationDto>> GetPluginsPageAsync(
-        PaginationRequest request, CancellationToken ct = default);
+        PaginationRequest request, CancellationToken ct = default, int? organizationId = null);
     Task<PluginRegistrationDto?> GetPluginAsync(int id, CancellationToken ct = default);
     Task<PluginRegistrationDto> RegisterPluginAsync(RegisterPluginRequest request, CancellationToken ct = default);
     Task<PluginRegistrationDto?> UpdatePluginAsync(int id, UpdatePluginRequest request, CancellationToken ct = default);

@@ -10,7 +10,9 @@
 </OmniPageHeader>
 
 @* Separate project tiles and pipeline runs into tabs; filter the grid through its column headers. *@
-<UrlSyncedTabs Slugs="@(new[] { "projects", "runs" })" Class="analysis-portfolio-tabs" RenderAllPanels="true">
+@* R-15: the third tab is the CVE watch; ?tab=cve-watch is the address the CVE mails link to. Its content is only
+   built once the tab was shown, so the other tabs do not pay for its two reads. *@
+<UrlSyncedTabs Slugs="@(new[] { "projects", "runs", "cve-watch" })" Class="analysis-portfolio-tabs" RenderAllPanels="true" Change="@OnTabChanged">
     <Tabs>
 <OmniTabsItem Key="projects" Title="@L["Projects"]"><Icon><OmniIcon Name="OmniIconName.Folder" /></Icon><ChildContent>
 @if (_projectSummaries.Count == 0)
@@ -23,11 +25,11 @@ else
     <OmniTileGrid Columns="3" Class="analysis-portfolio-projects" role="group" aria-label="@L["Projects"]">
         @foreach (var project in _projectSummaries)
         {
-            <OmniCard Class="analysis-portfolio-project-card">
+            @* R-20: the whole tile is one link to the project quality (OmniCard Href), so the name is plain text. *@
+            <OmniCard Href="@($"projects/{project.ProjectId}/quality")" Class="analysis-portfolio-project-card">
                 <div class="analysis-portfolio-project-heading">
                     <div>
-                        <OmniLink Href="@($"projects/{project.ProjectId}/quality")"
-                                    Class="analysis-portfolio-project-name">@project.ProjectName</OmniLink>
+                        <OmniText Element="OmniTextElement.Span" Class="analysis-portfolio-project-name">@project.ProjectName</OmniText>
                         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0 analysis-portfolio-organization">
                             @project.OrganizationName
                         </OmniText>
@@ -45,7 +47,7 @@ else
                     <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{project.CriticalCount} {L["Critical"]}")</NumberBadge>
                     <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@($"{project.HighCount} {L["High"]}")</NumberBadge>
                 </div>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0 analysis-portfolio-last-run">
                     @L["AnalysisLastRun"]: @(project.LastAnalysisAt?.ToString("g") ?? L["Never"])
                 </OmniText>
             </OmniCard>
@@ -62,7 +64,7 @@ else
                 VirtualData="@(() => new OmniDataGridResult<AnalysisPortfolioRowDto>(_rows, _count))"
                 PageSize="25" Density="OmniDensity.Compact" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" VirtualizationOverscanCount="3">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="AnalysisPortfolioRowDto" Property="PipelineRunId" Title="@L["PipelineRun"]" Width="7rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" ><Template Context="item">@if (item.PipelineRunId.HasValue) { <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"pipelines/runs/{item.PipelineRunId}")">@($"#{item.PipelineRunId}")</OmniLink></span> }</Template></OmniDataGridColumn>
+        <OmniDataGridColumn Frozen="true" TItem="AnalysisPortfolioRowDto" Property="PipelineRunNumber" Title="@L["AnalysisScan"]" Width="11rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" ><Template Context="item">@* R-21: the identifier of the run that wrote the report, linked to its page, behind an icon naming the source. *@@if (item.Source == AnalysisScanSource.CveWatch) { <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.ShieldCheck))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral" title="@L["CveWatchTab"]">@L.Localize(item.Source)</OmniBadge><span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@CveWatchRunNumber.Href(item.AnalysisReportId)">@CveWatchRunNumber.Format(item.AnalysisReportId)</OmniLink></span></OmniStack> } else if (item.PipelineRunId.HasValue) { <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Play))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral" title="@L["PipelineRun"]">@L.Localize(item.Source)</OmniBadge><span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"pipelines/runs/{item.PipelineRunId}")">@($"#{item.PipelineRunNumber}")</OmniLink></span></OmniStack> }</Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="OrganizationName" Title="@L["Organization"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Organizations" FilterSearchable="true" ><Template Context="item"><EntityNameLink Kind="EntityNameKind.Organization" Id="item.OrganizationId" Name="@item.OrganizationName" /></Template></OmniDataGridColumn>
         <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="AnalysisPortfolioRowDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Projects" FilterSearchable="true" ><Template Context="item">@* SITE-FUNC-HOME-CAPABILITY-001: the link goes to the project, not to the run the row opens. *@<span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"projects/{item.ProjectId}/quality")">@item.ProjectName</OmniLink></span></Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true" ><Template Context="item"><EntityNameLink Kind="EntityNameKind.Pipeline" Id="item.PipelineId" Name="@item.PipelineName" /></Template></OmniDataGridColumn>
@@ -77,6 +79,12 @@ else
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="CompletedAt" Title="@L["Date"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
     </Columns>
 </AetheusDataGrid>
+</ChildContent></OmniTabsItem>
+<OmniTabsItem Key="cve-watch" Title="@L["CveWatchTab"]"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>
+@if (_cveWatchShown)
+{
+    <CveWatchTab Projects="@_projectSummaries" />
+}
 </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>

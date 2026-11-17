@@ -84,6 +84,7 @@ public class TaskLogsController(
     }
 
     [HttpPost("batch")]
+    [RelaxedCommitDurability]
     [Authorize(Policy = "AgentToken")]
     public async Task<IActionResult> AppendLogs([FromBody] List<AppendLogRequest> requests, CancellationToken ct)
     {

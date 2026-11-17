@@ -29,6 +29,44 @@ public static class AnalysisModuleExtensions
         services.AddScoped<IAnalysisFindingDecisionService, AnalysisFindingDecisionService>();
         services.AddScoped<Aetheus.Back.Components.Analysis.IProjectAnalysisGradeReader, ProjectAnalysisGradeRepository>();
         services.AddScoped<AnalysisPolicyEngine>();
+        // The vulnerability watch (lower layer) announces each matching pass; the findings of its matches are
+        // published here, through reports that belong to no run.
+        services.AddScoped<CveWatchReportRepository>();
+        services.AddScoped<CveWatchReportPublisher>();
+        services.AddScoped<CveWatchPublication>();
+        services.AddScoped<Services.DomainEvents.IDomainEventHandler<Aetheus.Back.Components.VulnerabilityWatch.VulnerabilityMatchesChangedEvent>>(
+            provider => provider.GetRequiredService<CveWatchPublication>());
+        services.AddScoped<CveWatchQueryRepository>();
+        services.AddScoped<CveWatchRecommendationRepository>();
+        services.AddScoped<CveWatchRegistryVersions>();
+        services.AddScoped<CveWatchEndOfLife>();
+        services.AddScoped<CveWatchRecommendationService>();
+        services.AddScoped<ICveWatchQueryService, CveWatchQueryService>();
+        services.AddScoped<CveWatchOverviewRepository>();
+        services.AddScoped<CveWatchRunRepository>();
+        services.AddScoped<CveWatchProjectRepository>();
+        services.AddScoped<ICveWatchOverviewService, CveWatchOverviewService>();
+        // The fix of a match: branch, lock file through a run, pull request, follow-up of what becomes of them.
+        services.AddScoped<CveRemediationRepository>();
+        services.AddScoped<CveRemediationGit>();
+        services.AddScoped<CveRemediationLockRun>();
+        services.AddScoped<CveRemediationLedger>();
+        services.AddScoped<CveRemediationFollowUp>();
+        services.AddScoped<ICveRemediationService, CveRemediationService>();
+        services.AddScoped<Services.DomainEvents.IDomainEventHandler<Aetheus.Back.Components.Pipelines.Events.PipelineRunCompletedEvent>>(
+            provider => provider.GetRequiredService<CveRemediationFollowUp>());
+        services.AddScoped<Services.DomainEvents.IDomainEventHandler<Aetheus.Back.Components.Git.Events.GitBranchMovedEvent>>(
+            provider => provider.GetRequiredService<CveRemediationFollowUp>());
+        // Registered after the publication, which the dispatcher runs first: only a match that has its finding is announced.
+        services.AddScoped<CveWatchAnnouncementRepository>();
+        services.AddScoped<CveWatchHostAnnouncementRepository>();
+        services.AddScoped<CveWatchAnnouncement>();
+        // The nightly mail of what is still open: one hour for the platform's daily mails, the daily recap's.
+        services.AddScoped<CveWatchDigest>();
+        services.AddScoped<CveWatchDigestSchedule>();
+        services.AddHostedService<CveWatchDigestSchedulerService>();
+        services.AddScoped<Services.DomainEvents.IDomainEventHandler<Aetheus.Back.Components.VulnerabilityWatch.VulnerabilityMatchesChangedEvent>>(
+            provider => provider.GetRequiredService<CveWatchAnnouncement>());
         services.AddScoped<DependencyTrackOutboxRepository>();
         services.AddScoped<IDependencyTrackOutbox, DependencyTrackOutbox>();
         services.AddScoped<IDependencyTrackSubmissionProcessor, AnalysisContinuousTracker>();
@@ -44,6 +82,8 @@ public static class AnalysisModuleExtensions
             client.Timeout = TimeSpan.FromMinutes(5);
         });
         services.AddHostedService<AnalysisExpirationNotificationService>();
+        services.AddScoped<AnalysisDecisionExpiry>();
+        services.AddHostedService<AnalysisDecisionExpiryService>();
         services.AddHostedService<DependencyTrackOutboxWorker>();
         services.AddHostedService<AnalysisContinuousSyncService>();
         services.AddHostedService<AnalysisOperationalMonitorService>();

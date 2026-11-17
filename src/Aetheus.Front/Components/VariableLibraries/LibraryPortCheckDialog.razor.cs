@@ -21,6 +21,66 @@ public partial class LibraryPortCheckDialog
 
     private string ObservationText(PortCheckEntryDto entry) => PortCheckDialog.FormatObservation(L, entry);
 
+    private List<VariableEntryDto> _conflicting = [];
+
+    private static bool IsConflict(PortCheckEntryDto entry) =>
+        entry.Verdict is PortCheckVerdict.TakenByAnotherOwner or PortCheckVerdict.ListeningUndeclared;
+
+    /// <summary>The library's <c>PORT_</c> entries whose port is held by another owner or seen listening for
+    /// somebody else: what the check offers to move to free ports.</summary>
+    private async Task FindConflictsAsync(PortCheckResultDto result)
+    {
+        var badPorts = result.Entries
+            .Where(IsConflict)
+            .Select(entry => entry.Port)
+            .ToHashSet();
+        var entries = badPorts.Count == 0 ? [] : await LibraryPortTargets.TryReadPortEntriesAsync(Api, LibraryId) ?? [];
+        _conflicting = [.. entries.Where(entry => LibraryPortTargets.TryReadPort(entry, out var port) && badPorts.Contains(port))];
+    }
+
+    /// <summary>Moves the conflicting keys to free ports: the new ports are previewed and listed
+    /// (<c>KEY : old → new</c>), and nothing is written until the operator confirms.</summary>
+    private async Task ReallocateAsync()
+    {
+        if (_serverId is not { } serverId || _conflicting.Count == 0) return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var request = new AllocateLibraryPortsRequest { ServerId = serverId, Keys = [.. _conflicting.Select(entry => entry.Key)] };
+            var preview = await Api.Variables.PreviewFreeLibraryPortsAsync(LibraryId, request);
+            if (preview.Value is not { } fresh || fresh.Count != _conflicting.Count)
+            {
+                _error = string.IsNullOrWhiteSpace(preview.Error?.Message) ? L["PortAllocateFailed"].Value : preview.Error.Message;
+                return;
+            }
+
+            var lines = _conflicting.Select((entry, index) => $"{entry.Key} : {entry.Value} → {fresh[index]}");
+            var message = L["PortReallocateConfirm"].Value + "\n" + string.Join("\n", lines);
+            var confirmed = await Dialog.Confirm(message, L["PortReallocate"].Value,
+                new OmniConfirmOptions { OkButtonText = L["PortReallocate"].Value, CancelButtonText = L["GoBack"].Value });
+            if (confirmed is not true) return;
+
+            var outcome = await Api.Variables.ReallocateLibraryPortsAsync(LibraryId, request);
+            if (outcome.Value is null)
+            {
+                _error = string.IsNullOrWhiteSpace(outcome.Error?.Message) ? L["PortAllocateFailed"].Value : outcome.Error.Message;
+                return;
+            }
+
+            Dialog.Close(true);
+        }
+        catch (HttpRequestException)
+        {
+            _error = L["PortAllocateFailed"].Value;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         if (await LibraryPortTargets.TryLoadAsync(Api, LibraryId) is not { } targets)
@@ -55,6 +115,7 @@ public partial class LibraryPortCheckDialog
             }
 
             _result = outcome.Value;
+            await FindConflictsAsync(outcome.Value);
         }
         catch (HttpRequestException)
         {

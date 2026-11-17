@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
+using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Tasks;
@@ -82,11 +83,26 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         return (items, totalCount);
     }
 
+    public Task<IReadOnlyDictionary<int, int>> GetRunNumbersAsync(IEnumerable<int> runIds, CancellationToken ct = default) =>
+        PipelineRunNumbers.ReadAsync(db, runIds, ct);
+
     public async Task<ServerTask?> GetTaskWithServerAsync(int id, CancellationToken ct = default)
     {
         return await db.Tasks.AsNoTracking().Include(t => t.Server)
             .FirstOrDefaultAsync(t => t.Id == id, ct).ConfigureAwait(false);
     }
+
+    public Task<int?> GetTaskIdByUidAsync(Guid uid, CancellationToken ct = default) =>
+        db.Tasks.AsNoTracking()
+            .Where(t => t.Uid == uid)
+            .Select(t => (int?)t.Id)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<TaskIdentityBackfillDto> GetIdentityBackfillProgressAsync(CancellationToken ct = default) => new()
+    {
+        Total = await db.Tasks.CountAsync(ct).ConfigureAwait(false),
+        Remaining = await db.Tasks.CountAsync(t => t.Uid == null || t.Number == 0, ct).ConfigureAwait(false)
+    };
 
     public async Task<ServerTask?> FindTaskAsync(int id, CancellationToken ct = default)
     {
@@ -357,6 +373,13 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         CancellationToken ct = default) =>
         _leases.TryStartTaskWithLeaseAsync(task, agentSessionId, fencingToken, startedAt, ct);
 
+    public Task<DateTime?> GetStartedAtUnderLeaseAsync(
+        int taskId,
+        string agentSessionId,
+        long fencingToken,
+        CancellationToken ct = default) =>
+        _leases.GetStartedAtUnderLeaseAsync(taskId, agentSessionId, fencingToken, ct);
+
     public Task<bool> TryReleaseAssignedTaskWithLeaseAsync(
         ServerTask task,
         string agentSessionId,
@@ -378,9 +401,11 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         int exitCode,
         DateTime completedAt,
         string environmentVariables,
+        string? stepOutputVariablesJson,
         CancellationToken ct = default) =>
         _leases.TryCompleteTaskWithLeaseAsync(
-            task, agentSessionId, fencingToken, status, exitCode, completedAt, environmentVariables, ct);
+            task, agentSessionId, fencingToken, status, exitCode, completedAt, environmentVariables,
+            stepOutputVariablesJson, ct);
 
     public async Task<ServerTask> AddTaskAsync(ServerTask task, CancellationToken ct = default)
     {
@@ -441,8 +466,9 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
     {
         // Heartbeat liveness and task-poller liveness are independent. A runner that still sends
         // monitoring heartbeats but no longer calls /tasks/claim must not keep its queue forever.
-        // AcquireAgentSessionLeaseAsync renews this dedicated polling lease on every claim request,
-        // including empty polls, so an active busy runner retains its queued work.
+        // AcquireAgentSessionLeaseAsync keeps this dedicated polling lease live on every claim request,
+        // including empty polls (it rewrites the lease once less than 90 s of its 120 s is left, see
+        // TaskLeaseRepository.AgentSessionLeaseRenewalSlack), so an active busy runner retains its queued work.
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var cutoff = now - threshold;
         // Include retired servers in timeout reconciliation so pending work cannot wait forever

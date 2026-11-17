@@ -34,7 +34,7 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
     {
         await LoadAsync();
         _adminRt = new AdminEntitySubscription(HubFactory);
-        await _adminRt.StartAsync(
+        _ = _adminRt.StartAsync(
             AdminEntities.PackageRegistry,
             () => InvokeAsync(() => _realtimeReload.RequestAsync(RefreshFromPushAsync)));
     }

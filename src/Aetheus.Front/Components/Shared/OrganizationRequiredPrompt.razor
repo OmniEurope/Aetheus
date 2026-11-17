@@ -1,0 +1,15 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* R-34: what a page that needs an active organization shows while there is none: its message and the organization
+   selector itself, not a dead end. Choosing one makes it the active organization (the page follows its change). A
+   user who belongs to no organization has nothing to choose: the message stands alone. *@
+<EmptyState Icon="@Icon" Title="@Message">
+    <ActionContent>
+        @if (Orgs.Available.Count > 0)
+        {
+            <div class="organization-required-picker" data-testid="organization-required-picker">
+                <ActiveOrganizationPicker OfferAll="false" OnSelected="@OnSelectedAsync" />
+            </div>
+        }
+    </ActionContent>
+</EmptyState>

@@ -1,0 +1,31 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-26: what the pipeline wizard prepared for the project's telemetry and audience, item by item, until dismissed. *@
+@if (_result is not null)
+{
+    <OmniCard data-testid="collection-setup-result">
+        <HeaderContent><strong>@L["CollectionSetupTitle"]</strong></HeaderContent>
+        <ChildContent>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CollectionSetupIntro"]</OmniText>
+                @foreach (var item in _result.Items)
+                {
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
+                               data-testid="collection-setup-item" data-kind="@item.Kind" data-outcome="@item.Outcome">
+                        <OmniBadge Icon="@(BadgeIcon.ForState(Tone(item.Outcome)))" Fill="OmniFill.Solid" Tone="@Tone(item.Outcome)">@OutcomeText(item.Outcome)</OmniBadge>
+                        <OmniText>@ItemLabel(item.Kind)</OmniText>
+                        @if (!string.IsNullOrWhiteSpace(item.Detail))
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="collection-setup-detail">@item.Detail</OmniText>
+                        }
+                    </OmniStack>
+                }
+            </OmniStack>
+        </ChildContent>
+        <FooterContent>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniLink Href="@($"/projects/{ProjectId}/monitoring")">@L["CollectionSetupOpenMonitoring"]</OmniLink>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Dismiss" data-testid="collection-setup-dismiss"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Close"]</span></ChildContent></OmniButton>
+            </OmniStack>
+        </FooterContent>
+    </OmniCard>
+}

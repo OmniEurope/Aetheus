@@ -72,8 +72,8 @@ public partial class PipelineEdit : IAsyncDisposable
     private MonacoEditor? _monacoEditor;
     private bool _suggestionsNeeded;
     private bool _showDiff;
-    // The pipeline whose read-only definition is peeked beside the editor (Ctrl+Click on a `pipeline:` ref).
-    private string? _peekName;
+    // The pipeline or template version whose read-only definition is peeked beside the editor (Ctrl+Click on a ref).
+    private readonly PipelineDefinitionPeekTarget _peek = new();
     private string _savedYaml = string.Empty;
     private List<PipelineTemplateSummaryDto> _templates = [];
     private string? _baseTemplateYaml;
@@ -86,6 +86,9 @@ public partial class PipelineEdit : IAsyncDisposable
     private PipelineFleetItemDto? _fleetItem;
 
     private string BackHref => PipelineRunPresentation.EditBackHref(ProjectId, ServerId);
+
+    /// <summary>R-11: imported read-only from an external repository mirror; the page offers no edit entry point.</summary>
+    private bool IsImported => _pipeline?.ExternalImportCommit is not null;
 
     private bool HasTemplateReference => PipelineTemplateReferenceHelper.Parse(_model.YamlDefinition) is not null;
     private bool HasLegacyTemplateReference =>
@@ -226,7 +229,7 @@ public partial class PipelineEdit : IAsyncDisposable
         _libraryNames = [];
         _vaultNames = [];
         _fleetItem = null;
-        _peekName = null;
+        _peek.Close();
         _savedYaml = string.Empty;
         _yamlValid = null;
         _showDiff = false;
@@ -291,6 +294,9 @@ public partial class PipelineEdit : IAsyncDisposable
         }
         _loading = false;
         _suggestionsNeeded = true;
+        // The live-update hubs are a refresh channel: the page is drawn from what was read, never after
+        // the hubs have started (a start that stalls kept a loaded pipeline on its loader, E2E 2026-11-02).
+        StateHasChanged();
         await EnsureHubAsync();
         await _liveRuns!.SyncGroupsAsync();
     }
@@ -311,18 +317,8 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private void ApplyPipelineModel(PipelineDto pipeline)
     {
-        _model = new PipelineModel
-        {
-            Name = pipeline.Name,
-            Description = pipeline.Description,
-            YamlDefinition = pipeline.YamlDefinition,
-            ProjectId = pipeline.ProjectId,
-            SourceBranch = pipeline.SourceBranch ?? _source?.Branch
-                ?? _projects.FirstOrDefault(project => project.Id == pipeline.ProjectId)?.DefaultBranch,
-            EnvironmentId = pipeline.EnvironmentId,
-            ProjectServerId = pipeline.ProjectServerId,
-            AiRunnerProfileId = pipeline.AiRunnerProfileId
-        };
+        _model = PipelineModel.From(
+            pipeline, _source?.Branch ?? _projects.FirstOrDefault(project => project.Id == pipeline.ProjectId)?.DefaultBranch);
         _savedYaml = pipeline.YamlDefinition;
         _savedSourceBranch = _model.SourceBranch;
     }
@@ -493,20 +489,20 @@ public partial class PipelineEdit : IAsyncDisposable
         }
     }
 
-    // Ctrl+Click on a `pipeline: <name>` ref in the editor opens that pipeline's read-only definition peek.
-    private void OnEditorPipelineRef(string name) => _peekName = name;
+    // Ctrl+Click on a `pipeline: <name>` ref opens that pipeline's read-only definition peek; R-35: on an
+    // `extends: <template>@<version>` ref, that template version in the same peek.
+    private void OnEditorPipelineRef(string name) => _peek.ShowPipeline(name);
+
+    private void OnEditorTemplateRef(string reference) => _peek.ShowTemplate(reference);
 
     private async Task OnValidateYaml()
     {
         if (string.IsNullOrWhiteSpace(_model.YamlDefinition)) return;
 
         _validating = true;
-        StateHasChanged();
-
         _yamlValid = await YamlEditor.ValidateAsync(_model.YamlDefinition, _monacoEditor);
 
         _validating = false;
-        StateHasChanged();
     }
 
     private async Task LoadAutocompleteSuggestionsAsync(int? projectId)
@@ -599,7 +595,7 @@ public partial class PipelineEdit : IAsyncDisposable
             Id.Value,
             () => _runs.Where(run => run.Status is PipelineStatus.Running or PipelineStatus.Pending)
                 .Select(run => run.Id).ToArray(),
-            ReloadRunsAsync,
+            () => ReloadRunsAsync(),
             InvokeAsync);
         await _liveRuns.StartAsync();
         // Changed elsewhere: reloaded when nothing is being edited, otherwise a banner (never overwritten).
@@ -617,8 +613,9 @@ public partial class PipelineEdit : IAsyncDisposable
         StateHasChanged();
     }
 
-    private async Task ReloadRunsAsync()
+    private async Task ReloadRunsAsync(bool refreshGrid = true, Task? shown = null)
     {
+        if (shown is not null) await shown;
         if (Id is null || _deleting) return;
         var (pipeline, forbidden) = await Api.Pipelines.LookUpPipelineAsync(Id.Value);
         if (pipeline is null)
@@ -627,7 +624,7 @@ public partial class PipelineEdit : IAsyncDisposable
             StateHasChanged();
             return;
         }
-        await RefreshRunsAsync();
+        if (refreshGrid) await RefreshRunsAsync();
         _pipeline = pipeline;
         if (_liveRuns is not null) await _liveRuns.SyncGroupsAsync();
         StateHasChanged();
@@ -645,9 +642,16 @@ public partial class PipelineEdit : IAsyncDisposable
     {
         var coordinator = new PipelineRunCommandCoordinator(Api, Dialog, Toast, L, Js, Veil);
         if (!await coordinator.ConfirmCancellationAsync()) return;
-        await coordinator.CancelAsync(run);
-        await ReloadRunsAsync();
+        // R-10: the run shows cancelled at once (the answer of the cancel); a refusal leaves the row and reads nothing.
+        // A run already finished (404) was a stale row: the runs are read again, so the row shows its real state.
+        var outcome = await coordinator.CancelAsync(run);
+        if (outcome == PipelineRunCancelOutcome.Accepted) await ShowRunAsync(run with { Status = PipelineStatus.Cancelled });
+        else if (outcome == PipelineRunCancelOutcome.NoLongerCancellable) await ReloadRunsAsync();
     }
+
+    /// <summary>Draws a run as an action answered it, and reads the pipeline behind it; the grid reads the runs in the background.</summary>
+    private async Task ShowRunAsync(PipelineRunDto run) =>
+        await ReloadRunsAsync(refreshGrid: _runsGrid is null, shown: _runsGrid?.ShowRowAsync(run));
 
     private Task OnRun() => OnRunAsync(null);
     private async Task OnRunWithOptionsAsync()
@@ -671,7 +675,8 @@ public partial class PipelineEdit : IAsyncDisposable
         {
             // The launch is busy on the Run button only, and the run appears in this page grid.
             var launcher = new PipelineRunLauncher(Api, RunGate, RunDialogs, Nav, Toast, L) { OpenLaunchedRun = false };
-            if (await launch(launcher) is not null) await ReloadRunsAsync();
+            // R-10: the launched run shows at once as the trigger answered it; the read behind it confirms.
+            if (await launch(launcher) is { } launched) await ShowRunAsync(launched.TriggeredRun);
         }
         finally { _running = false; }
     }

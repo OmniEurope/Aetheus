@@ -138,11 +138,23 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        // The pipelines' options (12), the three languages of the quality pipeline (R-105) and the deployment after the
-        // candidate (R-72, offered by default since the candidate and the deployment are both ticked), all of the same kind.
-        var options = cut.FindAll("[data-testid^='setup-option-']");
+        // The pipelines' options (12), the three languages of the quality pipeline (R-105), the deployment after the
+        // candidate (R-72, offered by default since the candidate and the deployment are both ticked), the approval before the
+        // production deployment (R-60, offered since the deployment pipeline is created), all of the same kind. The
+        // container-images tile of R-5 is gone (R-51, user decision of 2026-11-03), and the telemetry of the application
+        // (R-47, ticked by default) and its audience (R-26, ticked when there is a web front) are offered for an application, as are
+        // the automatic dependency updates (PLAN-007, R-9, ticked by default) and the expand/contract model (R-13, unticked).
+        // The two production strategy tiles (R-26) are radio cards of their own group, not check boxes.
+        var options = cut.FindAll("[data-testid^='setup-option-']:not([data-testid^='setup-option-strategy-'])");
 
-        Assert.Equal(16, options.Count);
+        Assert.Equal(21, options.Count);
+        Assert.Equal(2, cut.FindAll("[data-testid^='setup-option-strategy-'][role='radio']").Count);
+        // R-13: the expand/contract model, offered for an application that declares a database (the Database part is ticked by default).
+        Assert.Contains(options, option => option.GetAttribute("data-testid") == "setup-option-expand-contract");
+        Assert.Contains(options, option => option.GetAttribute("data-testid") == "setup-option-audience");
+        Assert.Contains(options, option => option.GetAttribute("data-testid") == "setup-option-deploy-approval");
+        Assert.Contains(options, option => option.GetAttribute("data-testid") == "setup-option-telemetry");
+        Assert.Empty(cut.FindAll("[data-testid='setup-option-container-images']"));
         Assert.All(options, option =>
         {
             Assert.Contains("omni-selectable-card", option.ClassName, StringComparison.Ordinal);
@@ -161,10 +173,11 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        var options = cut.FindAll("[data-testid^='setup-option-']");
+        var options = cut.FindAll("[data-testid^='setup-option-']:not([data-testid^='setup-option-strategy-'])");
 
         Assert.NotEmpty(options);
         Assert.All(options, option => AssertHeadThenDescription(option, expectBox: true));
+        Assert.All(cut.FindAll("[data-testid^='setup-option-strategy-']"), option => AssertHeadThenDescription(option, expectBox: false));
     }
 
     /// <summary>R-4: the architecture cards (radio) follow the same layout, without the box.</summary>
@@ -233,7 +246,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         await Choose(cut, "package");
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        Assert.Equal(["CI", "Quality", "Security", "Packages"], OptionTitles(cut));
+        Assert.Equal(["CI", "Packages", "PipelineSetupDependencyUpdates", "Quality", "Security"], OptionTitles(cut));
 
         var requests = await FinishFromCapabilitiesAsync(cut, wizard);
 
@@ -253,7 +266,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
 
     /// <summary>An external repository gets the one pipeline that needs no file in it.</summary>
     [Fact]
-    public async Task External_ProposesAndCreatesOnlyTheMinimalSecurityPipeline()
+    public async Task External_ProposesAndCreatesTheSecurityAndTheQualityPipelines()
     {
         var (cut, wizard) = await OpenArchitectureStepAsync();
 
@@ -262,26 +275,152 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         Assert.Empty(cut.FindAll("[data-testid='setup-shape']"));
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        Assert.Equal(["ExternalSecurityPipeline"], OptionTitles(cut));
+        // R-34, R-12: security and quality are each offered as a minimal and a complete tile; the minimal security and the complete
+        // quality (the one an external repository always had) are the ticked ones.
+        Assert.Equal(["ExternalSecurityPipeline", "ExternalSecurityCompletePipeline", "ExternalQualityMinimalPipeline", "ExternalQualityPipeline"],
+            OptionTitles(cut));
+        Assert.Equal(["true", "false", "false", "true"], new[]
+        {
+            "external-security", "external-security-complete", "external-quality-minimal", "external-quality"
+        }.Select(key => cut.Find($"[data-testid='setup-option-{key}']").GetAttribute("aria-checked")).ToArray());
         Assert.True(wizard.Instance.CanAdvance);
 
         var requests = await FinishFromCapabilitiesAsync(cut, wizard);
 
-        var request = Assert.Single(requests);
-        Assert.Equal("atlas-security", request.Name);
+        Assert.Equal(["atlas-quality", "atlas-security"], requests.Select(request => request.Name).Order());
+        var request = requests.Single(item => item.Name == "atlas-security");
         Assert.Contains("extends: application-security-external@1", request.YamlDefinition, StringComparison.Ordinal);
         Assert.Contains("APPLICATION_HAS_FRONTEND: \"false\"", request.YamlDefinition, StringComparison.Ordinal);
         Assert.Contains("APPLICATION_HAS_BACKEND: \"false\"", request.YamlDefinition, StringComparison.Ordinal);
     }
 
+    /// <summary>R-34: the quality of an external repository reuses the quality template with no CI evidence to restore (no CI
+    /// pipeline of ours builds it), and asks no project command it could not run.</summary>
     [Fact]
-    public async Task External_WithItsOnlyPipelineUnchecked_CannotGoOn()
+    public async Task External_Quality_ReusesTheQualityTemplate_WithoutRestoringCiEvidence()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        var quality = (await FinishFromCapabilitiesAsync(cut, wizard)).Single(request => request.Name == "atlas-quality");
+
+        Assert.Contains("extends: application-quality@1", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("- name: Restore CI evidence\n    remove: true", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("APPLICATION_CI_PIPELINE", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("APPLICATION_QUALITY_COMMANDS", quality.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task External_Quality_OfARepositoryWithoutDotNet_DeclaresNoDotNetCommand()
+    {
+        _detection = new PipelineSetupDetectionDto { HasDotNetProject = false, HasPython = true, HasJava = true };
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        var quality = (await FinishFromCapabilitiesAsync(cut, wizard)).Single(request => request.Name == "atlas-quality");
+
+        Assert.Contains("APPLICATION_QUALITY_COMMANDS: \"\"", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("- name: Measure complexity\n    remove: true", quality.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task External_Quality_IsNotOffered_WhenTheRepositoryHoldsNoLanguageItAnalyses()
+    {
+        _detection = new PipelineSetupDetectionDto { HasDotNetProject = false, HasPython = false, HasJava = false };
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        Assert.Equal(["ExternalSecurityPipeline", "ExternalSecurityCompletePipeline"], OptionTitles(cut));
+        var request = Assert.Single(await FinishFromCapabilitiesAsync(cut, wizard));
+        Assert.Equal("atlas-security", request.Name);
+    }
+
+    /// <summary>R-12: the complete security of an external repository is the security template without the CI manifest to restore, and
+    /// replaces the minimal one (one pipeline, never both).</summary>
+    [Fact]
+    public async Task External_CompleteSecurity_ExtendsTheSecurityTemplate_WithoutRestoringACiManifest_AndReplacesTheMinimalOne()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        await Toggle(cut, "external-security-complete");
+
+        Assert.Equal("true", cut.Find("[data-testid='setup-option-external-security-complete']").GetAttribute("aria-checked"));
+        Assert.Equal("false", cut.Find("[data-testid='setup-option-external-security']").GetAttribute("aria-checked"));
+        var requests = await FinishFromCapabilitiesAsync(cut, wizard);
+        var security = Assert.Single(requests, request => request.Name == "atlas-security");
+        Assert.Contains("extends: application-security@1", security.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("application-security-external", security.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("- name: Restore CI manifest\n    remove: true", security.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("APPLICATION_CI_PIPELINE", security.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task External_MinimalAndCompleteSecurity_AreExclusive_AndEitherCanBeLeftOut()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        await Toggle(cut, "external-security-complete");
+        await Toggle(cut, "external-security");
+        Assert.Equal("true", cut.Find("[data-testid='setup-option-external-security']").GetAttribute("aria-checked"));
+        Assert.Equal("false", cut.Find("[data-testid='setup-option-external-security-complete']").GetAttribute("aria-checked"));
+
+        await Toggle(cut, "external-security");
+        Assert.Equal("false", cut.Find("[data-testid='setup-option-external-security']").GetAttribute("aria-checked"));
+        var request = Assert.Single(await FinishFromCapabilitiesAsync(cut, wizard));
+        Assert.Equal("atlas-quality", request.Name);
+    }
+
+    /// <summary>R-12: the minimal quality of an external repository declares no command to run (only the platform's complexity and
+    /// lint of the languages found), the complete one keeps the repository's tests with coverage; either is one pipeline.</summary>
+    [Fact]
+    public async Task External_MinimalQuality_DeclaresNoCommand_AndReplacesTheCompleteOne()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        await Toggle(cut, "external-quality-minimal");
+
+        Assert.Equal("true", cut.Find("[data-testid='setup-option-external-quality-minimal']").GetAttribute("aria-checked"));
+        Assert.Equal("false", cut.Find("[data-testid='setup-option-external-quality']").GetAttribute("aria-checked"));
+        var requests = await FinishFromCapabilitiesAsync(cut, wizard);
+        var quality = Assert.Single(requests, request => request.Name == "atlas-quality");
+        Assert.Contains("extends: application-quality@1", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("APPLICATION_QUALITY_COMMANDS: \"\"", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("- name: Restore CI evidence\n    remove: true", quality.YamlDefinition, StringComparison.Ordinal);
+        Assert.Equal(2, requests.Length);
+    }
+
+
+    [Fact]
+    public async Task External_Quality_CanBeUnticked_KeepingTheSecurity()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await Choose(cut, "external");
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        await Toggle(cut, "external-quality");
+
+        var request = Assert.Single(await FinishFromCapabilitiesAsync(cut, wizard));
+        Assert.Equal("atlas-security", request.Name);
+    }
+
+    [Fact]
+    public async Task External_WithBothPipelinesUnchecked_CannotGoOn()
     {
         var (cut, wizard) = await OpenArchitectureStepAsync();
         await Choose(cut, "external");
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
         await Toggle(cut, "external-security");
+        await Toggle(cut, "external-quality");
 
         Assert.False(wizard.Instance.CanAdvance);
     }
@@ -358,6 +497,10 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         Assert.False(PipelineSetupArchitecture.IsComplete(null, true, true, true));
         Assert.False(PipelineSetupArchitecture.Proposes(PipelineArchitecture.External, "security"));
         Assert.True(PipelineSetupArchitecture.Proposes(PipelineArchitecture.External, "external-security"));
+        Assert.True(PipelineSetupArchitecture.Proposes(PipelineArchitecture.External, "external-security-complete"));
+        Assert.True(PipelineSetupArchitecture.Proposes(PipelineArchitecture.External, "external-quality-minimal"));
+        Assert.False(PipelineSetupArchitecture.Proposes(PipelineArchitecture.Application, "external-quality-minimal"));
+        Assert.False(PipelineSetupArchitecture.Proposes(PipelineArchitecture.External, "expand-contract"));
         Assert.False(PipelineSetupArchitecture.Proposes(PipelineArchitecture.Application, "external-security"));
         Assert.False(PipelineSetupArchitecture.Proposes(PipelineArchitecture.Package, "production"));
         Assert.True(PipelineSetupArchitecture.Proposes(PipelineArchitecture.Application, "rollback"));
@@ -453,10 +596,12 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
             .ToArray();
     }
 
+    private PipelineSetupDetectionDto? _detection;
+
     private void NothingMissing() => _handler.SetJsonResponse(
         HttpMethod.Post,
         "api/pipelines/setup/readiness",
-        new PipelineSetupReadinessDto { RepositoryInspected = true, InspectedBranch = "develop" });
+        new PipelineSetupReadinessDto { RepositoryInspected = true, InspectedBranch = "develop", Detection = _detection ?? new() });
 
     private static List<PipelineTemplateSummaryDto> TemplateCatalog() =>
     [
@@ -464,7 +609,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         {
             "application-ci", "application-quality", "application-security", "application-qa",
             "application-qa-extended", "application-security-history", "application-security-external",
-            "application-candidate", "application-nightly", "application-deploy-prod", "application-release-fast",
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back", "application-release-fast",
             "package-telemetry", "package-web-analytics-dotnet", "package-web-analytics-browser",
             "publish-observability-packages"
         }.Select(name => new PipelineTemplateSummaryDto

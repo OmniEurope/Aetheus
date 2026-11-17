@@ -16,7 +16,11 @@
 #     the run says on its error stream that no disposable environment was deployed.
 #   - V E2E suite: the browser tests need what only the project knows (its URLs, its mail catcher...), so they
 #     run only from APPLICATION_QA_E2E_COMMANDS, with QA_FRONT_URL and QA_BACK_URL pointing at the stack;
-#     without it the run says the browser tests were not run.
+#     without it the run says the browser tests were not run. The setup wizard writes the command of the Playwright or
+#     Cypress tests it finds in the repository, or `none` when it read the repository and found none (recette R-59):
+#     `none` is a declared choice, the run says no browser test is declared and raises no warning. With
+#     APPLICATION_QA_E2E_IMAGE set (the wizard writes it), the commands run in that browser image on the host's
+#     network, with the sealed source mounted: the agent needs Docker and nothing else (recette R-20).
 #   - On a first release there is no V-1: the rollback is attested as not exercised, never reported as done.
 #
 # The disposable stack's environment: every variable the Compose file reads gets the value of the run (the
@@ -44,10 +48,32 @@ variables:
   APPLICATION_PERFORMANCE_ENABLED: "${{ parameters.performance }}"
   # The project's production Compose file, written by the setup wizard; empty, no stack is deployed.
   COMPOSE_FILE: ""
-  # The project's browser end-to-end commands, run against the deployed stack; empty, none run.
+  # The project's browser end-to-end commands, run against the deployed stack; empty, none run and the run warns;
+  # `none`, the project declares it has no browser test: none run, no warning.
   APPLICATION_QA_E2E_COMMANDS: ""
+  # The browser image those commands run in (recette R-20), written by the setup wizard with the commands: an official,
+  # pinned Playwright or Cypress image that carries the browser and its system libraries. Empty, the commands run on the
+  # agent itself, which then needs the browser's libraries.
+  APPLICATION_QA_E2E_IMAGE: ""
   # Published by the Find pinned SDK stage.
-  APPLICATION_DOTNET_PINNED: "false"
+  APPLICATION_DOTNET_SDK_NEEDED: "false"
+  # run_tests, in the commands below, runs one test command. Its output streams to the log as usual (a copy is kept in
+  # TEST_LOG, which its caller removes); when it fails, the tests that failed (name and message, as the runner printed
+  # them) are repeated at the end of the step, each line marked ERROR so the run page's failed-step card shows them:
+  # the runner prints a failure where it happens, far above the summary, and the card otherwise holds only the exit
+  # code (recette R-72). The exit code is the runner's own. The comments live here, out of the commands, which a
+  # Windows test harness hands to Git's bash.exe on a command line that launcher cuts at 8191 characters.
+  # PLAN-006 (owner decision of 2026-11-05), as the platform's own QA does for its integration suite: the failed tests
+  # of a test project run once more, alone, through a filter on their test methods (run_test_project below). A test
+  # that passes on that rerun is flaky: named in the log and in .pipeline-test-results/flaky-tests.txt of the workspace,
+  # published as QA_CURRENT_INTEGRATION_FLAKY_TESTS (step "Name the flaky V integration tests") and graded by the
+  # candidate (grade-candidate-from-gates), it no longer fails the QA on its own; a test that fails twice still does.
+  # Nothing is rerun above 20 failed tests (a break, not flakiness), nor when a failed test names no fully qualified
+  # method (Namespace.Class.Method) a filter can carry: the first failures then stand. The rerun is graded from its TRX,
+  # where every rerun method must have passed and none failed: VSTest always writes one; on Microsoft.Testing.Platform
+  # the filter (--filter-method) is xunit v3's, so an xunit v3 project writes xunit's own TRX and any other the TRX
+  # report extension's, without which its rerun fails and the first failures stand. In the awk program, "none" is an
+  # unset variable: the empty string.
   APPLICATION_QA_COMMANDS: |
     # Default QA of a .NET repository: the tests run again on the exact source sealed in the payload, unpacked
     # into a clean directory, so a payload that does not build or does not pass on its own is refused.
@@ -62,6 +88,9 @@ variables:
       exit 1
     fi
     export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+    # PLAN-006: the flaky tests of the single rerun below, in the workspace (the tests run in .pipeline-qa-source).
+    FLAKY_LIST="$PWD/.pipeline-test-results/flaky-tests.txt"
+    rm -f "$FLAKY_LIST"
     rm -rf .pipeline-qa-source
     mkdir -p .pipeline-qa-source
     tar -xzf .pipeline-artifacts/source.tar.gz -C .pipeline-qa-source
@@ -76,6 +105,69 @@ variables:
     fi
     TEST_RUNNER=vstest
     if grep -qs 'Microsoft.Testing.Platform' global.json; then TEST_RUNNER=mtp; fi
+    # run_tests: recette R-72, see the comment above this variable.
+    run_tests() {
+      TEST_LOG="$(mktemp)"
+      TEST_RC="$TEST_LOG.rc"
+      { if "$@"; then echo 0 > "$TEST_RC"; else echo "$?" > "$TEST_RC"; fi; } | tee "$TEST_LOG"
+      TEST_STATUS="$(cat "$TEST_RC")"
+      if test "$TEST_STATUS" -ne 0; then
+        echo "ERROR The tests that failed (repeated from the run above):" >&2
+        # show 1: a Microsoft.Testing.Platform block ("failed Name (3ms)", message indented, ends at the first
+        # stack frame or unindented line); show 2: a VSTest block ("  Failed Name [3 ms]", ends at its stack trace).
+        awk '
+          /^(failed|error|timeout|canceled) / { count++; show = (count <= 20) ? 1 : 0; if (show) print "ERROR " $0; next }
+          /^ +Failed [^ ]/ { count++; show = (count <= 20) ? 2 : 0; if (show) print "ERROR " $0; next }
+          show == 1 && /^ +from / { next }
+          show == 1 && (/^ +at / || /^[^ ]/) { show = 0; next }
+          show == 2 && /^ +Stack Trace:/ { show = 0; next }
+          show && NF { print "ERROR " $0 }
+          END { if (count > 20) print "ERROR " (count - 20) " more failed test(s) are not repeated here: see the run above." }
+        ' "$TEST_LOG" >&2
+      fi
+      rm -f "$TEST_RC"
+      return "$TEST_STATUS"
+    }
+    run_test_project() {
+      PROJECT="$1"; FIRST_STATUS=0
+      if test "$TEST_RUNNER" = mtp; then
+        run_tests "$DOTNET" test --project "$PROJECT" --configuration Release --no-build || FIRST_STATUS=$?
+      else
+        run_tests "$DOTNET" test "$PROJECT" --configuration Release --no-build || FIRST_STATUS=$?
+      fi
+      FIRST_LOG="$TEST_LOG"
+      if test "$FIRST_STATUS" -eq 0 || { test "$TEST_RUNNER" = mtp && test "$FIRST_STATUS" -eq 8; }; then rm -f "$FIRST_LOG"; return "$FIRST_STATUS"; fi
+      FAILED="$(awk '/^(failed|error|timeout|canceled) / || /^ +Failed [^ ]/ { n = $0; sub(/^ *([Ff]ailed|error|timeout|canceled) /, none, n); sub(/[( \[].*$/, none, n)
+        if (n !~ /^[A-Za-z0-9_][A-Za-z0-9_.+`]*$/ || n !~ /[A-Za-z0-9_`]\.[A-Za-z0-9_]/) n = "-"; print n }' "$FIRST_LOG")"
+      rm -f "$FIRST_LOG"
+      COUNT="$(printf '%s\n' "$FAILED" | grep -c . || true)"
+      METHODS="$(printf '%s\n' "$FAILED" | grep . | sort -u || true)"
+      if test -z "$METHODS" || test "$COUNT" -gt 20 || printf '%s\n' "$METHODS" | grep -qx -- -; then
+        echo "WARNING: $PROJECT: $COUNT failed test(s), not rerun: the failures stand." >&2
+        return "$FIRST_STATUS"
+      fi
+      echo "$PROJECT: rerunning its $COUNT failed test(s) once: $(printf '%s\n' "$METHODS" | tr '\n' ' ')"
+      RERUN_DIR="$(mktemp -d)"; RERUN_STATUS=0
+      if test "$TEST_RUNNER" = mtp; then
+        TRX=--report-trx; if grep -qi 'xunit\.v3' "$PROJECT"; then TRX=--report-xunit-trx; fi
+        set -- --filter-method; for M in $METHODS; do set -- "$@" "$M"; done
+        "$DOTNET" test --project "$PROJECT" --configuration Release --no-build --results-directory "$RERUN_DIR" "$TRX" "$TRX-filename" rerun.trx "$@" || RERUN_STATUS=$?
+      else
+        FILTER="$(printf '%s\n' "$METHODS" | awk '{ if (NR > 1) printf "|"; printf "FullyQualifiedName=%s", $0 }')"
+        "$DOTNET" test "$PROJECT" --configuration Release --no-build --results-directory "$RERUN_DIR" --logger "trx;LogFileName=rerun.trx" --filter "$FILTER" || RERUN_STATUS=$?
+      fi
+      T="$RERUN_DIR/rerun.trx"; VERDICT=flaky; Q='"'
+      if test "$RERUN_STATUS" -ne 0 || ! test -s "$T" || grep -qE 'outcome="(Failed|Error|Timeout|Aborted)"' "$T"; then VERDICT=failed; fi
+      for M in $METHODS; do
+        P="$(printf '%s' "$M" | sed 's/[.+]/[&]/g')"
+        grep -E "testName=$Q$P[$Q(]" "$T" 2>/dev/null | grep -q 'outcome="Passed"' || VERDICT=failed
+      done
+      rm -rf "$RERUN_DIR"
+      if test "$VERDICT" = failed; then echo "$PROJECT: the rerun did not pass: the failures stand." >&2; return "$FIRST_STATUS"; fi
+      mkdir -p "$(dirname "$FLAKY_LIST")"
+      for M in $METHODS; do echo "WARNING: Flaky test in $PROJECT: $M failed, then passed on its rerun." >&2; printf '%s\n' "$M" >> "$FLAKY_LIST"; done
+      return 0
+    }
     printf '%s\n' "$SOLUTIONS" | while IFS= read -r SOLUTION; do
       echo ">>> $SOLUTION"
       "$DOTNET" restore "$SOLUTION" -p:Configuration=Release
@@ -92,11 +184,7 @@ variables:
         fi
         TESTED=1
         # Exit code 8 of Microsoft.Testing.Platform (no test ran) fails the step like any other failure.
-        if test "$TEST_RUNNER" = mtp; then
-          "$DOTNET" test --project "$PROJECT" --configuration Release --no-build
-        else
-          "$DOTNET" test "$PROJECT" --configuration Release --no-build
-        fi
+        run_test_project "$PROJECT" || exit $?
       done
       # A QA that validated nothing is never reported green.
       if test "$TESTED" -eq 0; then
@@ -104,6 +192,17 @@ variables:
         exit 1
       fi
     done
+  # Read by the steps that build V-1. .qa-env carries the SDK of V's global.json (DOTNET_SDK_VERSION, the build
+  # argument of the image), but V-1 is built from its own sealed source, which may pin another SDK (V moved to a new
+  # .NET major): the image must then be built with V-1's pin, or the restore stops on "Install the [x] .NET SDK"
+  # (Wordmorrow candidate run 3291). Compose prefers a variable of the shell to the same name in --env-file, so the
+  # pin of V-1 is exported after the isolation; a V-1 without a pin keeps the value of .qa-env.
+  APPLICATION_QA_V1_SDK: |
+    QA_V1_SDK_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' global.json 2>/dev/null | head -n 1)"
+    if test -n "$QA_V1_SDK_VERSION"; then
+      DOTNET_SDK_VERSION="$QA_V1_SDK_VERSION"; export DOTNET_SDK_VERSION
+      echo ">>> V-1 is built with the SDK its own global.json pins: $QA_V1_SDK_VERSION"
+    fi
   # Read from the workspace by every step that runs Docker Compose on the stack. Compose prefers a variable of the
   # shell to the same name in --env-file, so a run variable or library entry of the same name (an empty DOMAIN of
   # the qa library, say) would replace the value written for the disposable stack: each name of .qa-env is
@@ -139,7 +238,7 @@ variables:
   # Hosts are formulas over the library entries, so a domain is written once (ADR-043). The QA domain may be
   # empty: the disposable stack is reached on the runner's loopback.
   APP_HOST: "$(HOST_PREFIX:-)$(APP_SUBDOMAIN:suffix=.)$(DOMAIN:-)"
-  API_HOST: "$(HOST_PREFIX:-)$(API_SUBDOMAIN).$(DOMAIN:-)"
+  API_HOST: "$(HOST_PREFIX:-)$(API_SUBDOMAIN:suffix=.)$(DOMAIN:-)"
   PUBLIC_APP_URL: "https://$(APP_HOST)"
   PUBLIC_API_URL: "https://$(API_HOST)"
 
@@ -191,7 +290,8 @@ stages:
         timeout_seconds: 60
 
   # The SDK global.json pins, read from the sealed source and resolved as the platform's own QA does
-  # (ensure-dotnet-sdk): a runner without .NET installs it under the agent's home.
+  # (ensure-dotnet-sdk): a runner without .NET installs it under the agent's home. A .NET source without
+  # global.json (R-30) gets the SDK channel of its TargetFramework, read from the project files of the seal.
   - name: Find pinned SDK
     group: QA
     execution_role: build
@@ -200,18 +300,27 @@ stages:
     steps:
       - name: Look for the SDK manifest of the sealed source
         working_directory: "$(WORKSPACE)"
-        outputs: [APPLICATION_DOTNET_PINNED]
+        outputs: [APPLICATION_DOTNET_SDK_NEEDED]
         shell: |
           set -eu
-          rm -rf .pipeline-qa-sdk
+          rm -rf .pipeline-qa-sdk .pipeline-qa-sdk.list
           mkdir -p .pipeline-qa-sdk
-          if test -s .pipeline-artifacts/source.tar.gz \
-            && tar -xzf .pipeline-artifacts/source.tar.gz -C .pipeline-qa-sdk ./global.json 2>/dev/null \
-            && grep -q '"version"' .pipeline-qa-sdk/global.json; then
-            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]true"
+          # Only the files that name the SDK come out of the seal: the manifest and the project files.
+          if test -s .pipeline-artifacts/source.tar.gz; then
+            tar -tzf .pipeline-artifacts/source.tar.gz \
+              | grep -E '(^|/)(global\.json|Directory\.Build\.props|[^/]+\.(csproj|fsproj|vbproj|sln|slnx))$' > .pipeline-qa-sdk.list || true
+            if test -s .pipeline-qa-sdk.list; then
+              tar -xzf .pipeline-artifacts/source.tar.gz -C .pipeline-qa-sdk -T .pipeline-qa-sdk.list
+            fi
+          fi
+          if test -s .pipeline-qa-sdk/global.json && grep -q '"version"' .pipeline-qa-sdk/global.json; then
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]true"
+          elif test -s .pipeline-qa-sdk.list; then
+            echo "No global.json in the sealed source pins an SDK: the SDK channel of the repository's TargetFramework is provided."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]true"
           else
-            echo "No global.json in the sealed source pins an SDK: the dotnet of the runner's PATH is used."
-            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]false"
+            echo "No global.json and no .NET project in the sealed source: the dotnet of the runner's PATH is used."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]false"
           fi
         timeout_seconds: 120
 
@@ -220,13 +329,14 @@ stages:
     execution_role: build
     os: linux
     depends_on: [Find pinned SDK]
-    condition: "eq(variables['APPLICATION_DOTNET_PINNED'], 'true')"
+    condition: "eq(variables['APPLICATION_DOTNET_SDK_NEEDED'], 'true')"
     steps:
       - name: Resolve the pinned .NET SDK
         type: aetheus
         function: ensure-dotnet-sdk
         with:
           global_json: .pipeline-qa-sdk/global.json
+          project_root: .pipeline-qa-sdk
         timeout_seconds: 900
 
   - name: V integration suite
@@ -361,6 +471,14 @@ stages:
               fi
               # The application and environment names (container names are often built from them) say
               # which stack this is; everything else is a throwaway value of the right shape.
+              # Contract, relied on by projects (user request relayed from Wordmorrow, 2026-11-10), to keep stable, for a
+              # name the pipeline's own variables give no value:
+              #  (a) an environment name (ENV, ENVIRONMENT, APP_ENV, DEPLOY_ENV) that the Compose file references without a
+              #      default receives "qa";
+              #  (b) a *PASSWORD* variable that the Compose file references without a default receives a random throwaway
+              #      value (also *SECRET*, *KEY*, *TOKEN*, *SALT*), written to .qa-env, which a project's E2E command reads
+              #      from "$WORKSPACE/.qa-env". Wordmorrow relies on both: its stack recognises itself from ENV=qa, and its
+              #      E2E command reads WORDMORROW_QA_ADMIN_PASSWORD from .qa-env.
               case "$NAME" in
                 APPNAME|APP_NAME|PROJECT_NAME) VALUE="$STACK" ;;
                 ENV|ENVIRONMENT|APP_ENV|DEPLOY_ENV) VALUE="qa" ;;
@@ -384,6 +502,16 @@ stages:
           echo ">>> Front: ${FRONT_URL_VALUE:-none}, back: ${BACK_URL_VALUE:-none}"
           echo "##aetheus[setvariable name=QA_STACK_DEPLOYED]true"
         timeout_seconds: 600
+      # PLAN-006: the tests that failed and then passed on their project's single rerun (the default QA's
+      # flaky-tests.txt, which a project's own commands may write too) did not fail the V integration suite, so they
+      # are published by name: the candidate grades them (grade-candidate-from-gates). An absent list publishes nothing.
+      - name: Name the flaky V integration tests
+        type: aetheus
+        function: publish-failed-tests
+        with:
+          variable: QA_CURRENT_INTEGRATION_FLAKY_TESTS
+          sources: .pipeline-test-results/flaky-tests.txt
+        timeout_seconds: 60
 
   - name: Deploy V-1
     group: QA
@@ -405,6 +533,7 @@ stages:
           CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
           eval "$APPLICATION_QA_ENV_ISOLATION"
           cd .qa-v1
+          eval "$APPLICATION_QA_V1_SDK"
           eval "$APPLICATION_QA_BUILDX_SETUP"
           if ! docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" up -d --build --remove-orphans --wait --wait-timeout 900; then
             docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" ps -a >&2 || true
@@ -490,18 +619,59 @@ stages:
         shell: |
           set -eu
           if test -z "${APPLICATION_QA_E2E_COMMANDS:-}"; then
-            echo "WARNING: no browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed V." >&2
+            echo "WARNING: no browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed V. Set it in this pipeline's variables, or to none when the project has no browser test." >&2
             # Recette R-23 (W8): a stderr line alone left the run a silent success. The control plane puts the
             # RUN_WARNING output on the run page and on the candidate that triggered this run, said in the user's
             # language through its name (resource LaunchProblem_RunWarning_QaE2eCommandMissing).
-            echo "##aetheus[setvariable name=RUN_WARNING]No browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed version."
+            echo "##aetheus[setvariable name=RUN_WARNING]No browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed version. Set it in this pipeline's variables, or to none when the project has no browser test."
             echo "##aetheus[setvariable name=RUN_WARNING_CODE]QaE2eCommandMissing"
             exit 0
           fi
-          QA_FRONT_URL="$(cat .qa-front-url 2>/dev/null || true)" \
-          QA_BACK_URL="$(cat .qa-back-url 2>/dev/null || true)" \
-          QA_SOURCE="$WORKSPACE/.qa-v" \
-            sh -eu -c "$APPLICATION_QA_E2E_COMMANDS"
+          # Recette R-59: `none` is the project's declared choice (the setup wizard writes it when it read the repository
+          # and found no Playwright or Cypress test): no browser test was declared, the run says so and does not warn.
+          if test "$APPLICATION_QA_E2E_COMMANDS" = none; then
+            echo "No browser end-to-end test is declared for this project (APPLICATION_QA_E2E_COMMANDS is none): none was run against the deployed V."
+            exit 0
+          fi
+          QA_FRONT_URL="$(cat .qa-front-url 2>/dev/null || true)"
+          QA_BACK_URL="$(cat .qa-back-url 2>/dev/null || true)"
+          if test -z "${APPLICATION_QA_E2E_IMAGE:-}"; then
+            # The commands read DOTNET from the environment: the SDK the "Pinned SDK" stage resolved, else the agent's dotnet.
+            if test -n "${DOTNET:-}"; then
+              echo ">>> .NET SDK of the browser tests: $DOTNET, resolved by the Pinned SDK stage."
+            else
+              echo ">>> .NET SDK of the browser tests: the dotnet of the agent PATH, because the Pinned SDK stage resolved none."
+            fi
+            QA_FRONT_URL="$QA_FRONT_URL" QA_BACK_URL="$QA_BACK_URL" QA_SOURCE="$WORKSPACE/.qa-v" \
+              sh -eu -c "$APPLICATION_QA_E2E_COMMANDS"
+          else
+            # Recette R-20: the browser and its system libraries (libgbm, libnss...) come with the image, as they do for the
+            # platform's own browser tests (the Playwright image of deploy/docker/Dockerfile.e2e), so nothing is installed
+            # on the agent. The stack publishes its ports on the host: the container shares the host's network to reach
+            # them. It runs as the agent's own user so the files it writes in the sealed source stay removable by the agent.
+            command -v docker >/dev/null 2>&1 || { echo "Docker is not available on this agent: the browser tests run in the image $APPLICATION_QA_E2E_IMAGE." >&2; exit 1; }
+            echo ">>> Browser tests in $APPLICATION_QA_E2E_IMAGE against front $QA_FRONT_URL, back ${QA_BACK_URL:-none}"
+            # The sealed source's global.json may pin an SDK the image does not ship: the container builds with the SDK the
+            # "Pinned SDK" stage resolved for this run (DOTNET), its real directory mounted read-only, DOTNET and DOTNET_ROOT
+            # naming it and PATH starting with it. Without a resolved SDK (no .NET file in the source) the image's dotnet stays.
+            COMMANDS="$APPLICATION_QA_E2E_COMMANDS"
+            SDK_BIN=""
+            if test -n "${DOTNET:-}"; then SDK_BIN="$(readlink -f "$DOTNET" 2>/dev/null || true)"; fi
+            set --
+            if test -n "$SDK_BIN" && test -x "$SDK_BIN"; then
+              echo ">>> .NET SDK of the browser tests: $SDK_BIN, resolved by the Pinned SDK stage and mounted read-only, the SDK the sealed source selects (not the image's)."
+              set -- -v "$(dirname "$SDK_BIN"):/pipeline-dotnet:ro" -e DOTNET=/pipeline-dotnet/dotnet -e DOTNET_ROOT=/pipeline-dotnet
+              COMMANDS="PATH=\"/pipeline-dotnet:\$PATH\"; export PATH; $COMMANDS"
+            else
+              echo ">>> .NET SDK of the browser tests: the image's own, because the Pinned SDK stage resolved none (no .NET file in the sealed source)."
+            fi
+            docker run --rm --init --network host --ipc host --pids-limit 1024 \
+              --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+              -v "$WORKSPACE/.qa-v:/src" -w /src \
+              -e HOME=/tmp -e QA_SOURCE=/src -e "QA_FRONT_URL=$QA_FRONT_URL" -e "QA_BACK_URL=$QA_BACK_URL" \
+              -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 "$@" \
+              "$APPLICATION_QA_E2E_IMAGE" sh -eu -c "$COMMANDS"
+          fi
         timeout_seconds: 7200
 
   # The rollback proof: V-1's code brought back on the database V migrated, then probed again.
@@ -529,6 +699,7 @@ stages:
           CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
           eval "$APPLICATION_QA_ENV_ISOLATION"
           cd .qa-v1
+          eval "$APPLICATION_QA_V1_SDK"
           eval "$APPLICATION_QA_BUILDX_SETUP"
           if ! docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" up -d --build --remove-orphans --wait --wait-timeout 900; then
             docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" logs --no-color --tail 100 >&2 || true
@@ -572,3 +743,21 @@ stages:
           rm -rf .qa-v .qa-v1 .pipeline-qa-source .pipeline-qa-sdk
           rm -f .qa-env .qa-env.tmp .qa-ports .qa-front-url .qa-back-url
         timeout_seconds: 900
+
+  # A QA stack of an earlier run that never reached its teardown (a cancelled or killed run) still holds its containers,
+  # networks and volumes: they are removed here, the current and newer runs kept. Only when this run deployed a stack,
+  # which is when the identity stage named the project the leftovers are searched under (<project>-qa).
+  - name: Remove earlier QA leftovers
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Tear down QA stack]
+    condition: "eq(variables['QA_STACK_DEPLOYED'], 'true')"
+    steps:
+      - name: Remove the Compose leftovers of earlier QA runs
+        type: aetheus
+        function: prune-stale-qa-compose
+        with:
+          project_prefix: "$(QA_APP)-qa"
+          run_id: "$(BUILD_BUILDID)"
+        timeout_seconds: 600

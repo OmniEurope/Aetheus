@@ -8,7 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Users;
 
-public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IDomainEventDispatcher domainEvents, IOrganizationRoleAssignmentService roleAssignments) : IUserService
+public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IDomainEventDispatcher domainEvents, IOrganizationRoleAssignmentService roleAssignments, IPostgresLeaderLease lease) : IUserService
 {
     private readonly UserPipelineOwnershipGuard _pipelineOwnership = new(repo, audit, domainEvents);
 
@@ -35,7 +35,7 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         ArgumentNullException.ThrowIfNull(organizationIds);
         var (page, pageSize) = request.Normalize();
         var (items, totalCount) = await repo.GetUsersPagedProjectedAsync(
-            request.Search, page, pageSize, ct, request.SortBy, request.SortDescending, request.Filters, organizationIds)
+            request.Search, page, pageSize, ct, request.SortBy, request.SortDescending, request.Filters, organizationIds, siteAdmin)
             .ConfigureAwait(false);
 
         return new PaginatedResult<UserDto>
@@ -144,31 +144,36 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         var roleChange = DescribeRoleChange(user, requestedRolesList);
         // AUD-05: a change that can remove an active administrator holds the administrator-set lock
         // until its commit, so two such changes never both pass the "last administrator" count.
-        await using var administratorSet =
-            await LockAdministratorSetWhenLosingOneAsync(roleChange, deactivating, ct).ConfigureAwait(false);
-        await EnsureSecurityChangeAllowedAsync(user, roleChange, deactivating, ct).ConfigureAwait(false);
         var previousUsername = user.Username;
         var renamed = !string.Equals(previousUsername, normalized, StringComparison.Ordinal);
         var forcedChangeArmed = !user.MustChangePassword && request.MustChangePassword;
-        if (deactivating)
-            await _pipelineOwnership.EnsureOwnedPipelinesHandledAsync(
-                user.Id, user.Username, request.TransferPipelinesToUsername, request.ForceWithOwnedPipelines,
-                "Deactivated", ct).ConfigureAwait(false);
-        await ApplyUpdateAsync(
-            user, request, normalized, email, requestedRolesList, roleChange,
-            endsSessions: deactivating || renamed || forcedChangeArmed, ct).ConfigureAwait(false);
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await lease.RunSerializedWhenAsync(LosesAnAdministrator(roleChange, deactivating), AdministratorSetLockName, async token =>
+        {
+            await EnsureSecurityChangeAllowedAsync(user, roleChange, deactivating, token).ConfigureAwait(false);
+            if (deactivating)
+                await _pipelineOwnership.EnsureOwnedPipelinesHandledAsync(
+                    user.Id, user.Username, request.TransferPipelinesToUsername, request.ForceWithOwnedPipelines,
+                    "Deactivated", token).ConfigureAwait(false);
+            await ApplyUpdateAsync(
+                user, request, normalized, email, requestedRolesList, roleChange,
+                endsSessions: deactivating || renamed || forcedChangeArmed, token).ConfigureAwait(false);
+            await repo.SaveChangesAsync(token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         var organizationRolesChanged = await ReplaceOrganizationRolesAsync(user.Id, request, ct).ConfigureAwait(false);
         InvalidateIdentityCaches(user, previousUsername, renamed, forcedChangeArmed);
         return await PublishUpdatedUserAsync(user, organizationRolesChanged, roleChange, deactivating, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Audit AUD-05 (recette R1-50): the ADR-029 serialized-operation name every change that can remove an active
+    /// administrator (role removal, deactivation, deletion) runs under, its save included, across requests and
+    /// backend colours, so the "last active administrator" count is read after the previous such change committed.
+    /// </summary>
+    internal const string AdministratorSetLockName = "aetheus:administrator-set";
+
     // The administrator-set lock is held only by a change that can remove an active administrator.
-    private async Task<IAsyncDisposable?> LockAdministratorSetWhenLosingOneAsync(
-        RoleChange roleChange, bool deactivating, CancellationToken ct) =>
-        roleChange.WasAdmin && (roleChange.LosingAdmin || deactivating)
-            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
-            : null;
+    private static bool LosesAnAdministrator(RoleChange roleChange, bool deactivating) =>
+        roleChange.WasAdmin && (roleChange.LosingAdmin || deactivating);
 
     // Everything that follows the saved update: the notifications, the announcement of a new site
     // administrator and the end of a deactivated user's sessions.
@@ -333,21 +338,21 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         var userDetail = await repo.GetUserDetailAsync(id, ct).ConfigureAwait(false);
         var removesAdministrator = userDetail is not null && userDetail.IsActive
             && userDetail.UserRoles.Any(ur => ur.Role.Name == "Admin");
-        await using var administratorSet = removesAdministrator
-            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
-            : null;
-        if (removesAdministrator)
-        {
-            var admins = await repo.CountActiveAdminsAsync(ct).ConfigureAwait(false);
-            if (admins <= 1)
-                throw new BadRequestException("Cannot delete the last active administrator.");
-        }
-
-        await _pipelineOwnership.EnsureOwnedPipelinesHandledAsync(
-            user.Id, user.Username, transferPipelinesTo, forceWithOwnedPipelines, "Deleted", ct).ConfigureAwait(false);
-
         var name = user.Username;
-        await repo.RemoveUserAsync(user, ct).ConfigureAwait(false);
+        await lease.RunSerializedWhenAsync(removesAdministrator, AdministratorSetLockName, async token =>
+        {
+            if (removesAdministrator)
+            {
+                var admins = await repo.CountActiveAdminsAsync(token).ConfigureAwait(false);
+                if (admins <= 1)
+                    throw new BadRequestException("Cannot delete the last active administrator.");
+            }
+
+            await _pipelineOwnership.EnsureOwnedPipelinesHandledAsync(
+                user.Id, user.Username, transferPipelinesTo, forceWithOwnedPipelines, "Deleted", token).ConfigureAwait(false);
+
+            await repo.RemoveUserAsync(user, token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         await audit.LogAsync("Deleted", "User", id, name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(AdminEntities.User, id, EntityChangeOps.Deleted, ct).ConfigureAwait(false);
         await EndSessionAsync(id, UserSessionEndReasons.Deleted, ct).ConfigureAwait(false);
@@ -404,8 +409,11 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         var isAdmin = caller?.IsInRole("Admin") == true;
         var isSystem = caller is null;
 
+        // R-1: a seeded administrator still to set up replaces its password only together with its name and
+        // address (account setup); a password change alone would keep the public default address.
         var allowed = isSelf
-            ? !string.IsNullOrEmpty(request.CurrentPassword)
+            ? !user.MustSetUpAccount
+                && !string.IsNullOrEmpty(request.CurrentPassword)
                 && BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash)
             : isAdmin || isSystem;
         return (allowed, isSelf, isAdmin);
@@ -513,18 +521,18 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
 
         // Mirror DeleteUserAsync's F-13 guard: never leave the platform without an active admin.
         var removesAdministrator = user.IsActive && string.Equals(target.Role.Name, "Admin", StringComparison.Ordinal);
-        await using var administratorSet = removesAdministrator
-            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
-            : null;
-        if (removesAdministrator)
+        await lease.RunSerializedWhenAsync(removesAdministrator, AdministratorSetLockName, async token =>
         {
-            var admins = await repo.CountActiveAdminsAsync(ct).ConfigureAwait(false);
-            if (admins <= 1)
-                throw new BadRequestException("Cannot remove the last active administrator from the Admin role.");
-        }
+            if (removesAdministrator)
+            {
+                var admins = await repo.CountActiveAdminsAsync(token).ConfigureAwait(false);
+                if (admins <= 1)
+                    throw new BadRequestException("Cannot remove the last active administrator from the Admin role.");
+            }
 
-        user.UserRoles.Remove(target);
-        await PersistRoleChangeAsync(user, ct).ConfigureAwait(false);
+            user.UserRoles.Remove(target);
+            await PersistRoleChangeAsync(user, token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         return true;
     }
 

@@ -6,6 +6,7 @@ using Aetheus.Front.Components.AiTasks;
 using AngleSharp.Dom;
 using Bunit;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Ai;
 
@@ -640,7 +641,7 @@ public sealed class AiDialogTests : BunitContext
         var footer = cut.Find(".dialog-footer");
         Assert.Single(footer.QuerySelectorAll(".omni-split-button"));
         Assert.Equal(3, footer.QuerySelectorAll("button.omni-button, .omni-split-button__main").Length);
-        Assert.False(cut.Find(".ai-profile-model-zone").ClassList.Contains("omni-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Contains("AiModelListFailed", cut.Find("#ai-profile-model-field-help-content").TextContent, StringComparison.Ordinal);
 
         await cut.Find(".omni-split-button__toggle").ClickAsync(new());
@@ -648,12 +649,11 @@ public sealed class AiDialogTests : BunitContext
             .Single(entry => entry.TextContent.Contains("AiModelListRefresh", StringComparison.Ordinal));
         var click = item.ClickAsync(new());
 
-        // While the provider is read: the veil lies over the model field, which stays mounted under it.
+        // While the provider is read: the page veil is held, and the model field stays mounted.
         cut.WaitForAssertion(() =>
         {
             var zone = cut.Find(".ai-profile-model-zone");
-            Assert.True(zone.ClassList.Contains("omni-busy"));
-            Assert.Equal("true", zone.GetAttribute("aria-busy"));
+            Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
             Assert.NotNull(zone.QuerySelector("#ai-profile-model"));
         });
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
@@ -671,7 +671,7 @@ public sealed class AiDialogTests : BunitContext
         });
         await click;
 
-        cut.WaitForAssertion(() => Assert.False(cut.Find(".ai-profile-model-zone").ClassList.Contains("omni-busy")));
+        cut.WaitForAssertion(() => Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy));
         Assert.Equal(["claude-haiku-5", "claude-sonnet-6"], OpenSuggestions(cut));
         // The test localizer echoes keys: the last error is gone from the "?" now that the read succeeded.
         var help = cut.Find("#ai-profile-model-field-help-content").TextContent;

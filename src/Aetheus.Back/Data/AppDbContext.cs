@@ -51,6 +51,7 @@ public class AppDbContext(
     public DbSet<PortsentryBlockedIp> PortsentryBlockedIps => Set<PortsentryBlockedIp>();
     public DbSet<PortsentryWhitelistIp> PortsentryWhitelistIps => Set<PortsentryWhitelistIp>();
     public DbSet<RkhunterState> RkhunterStates => Set<RkhunterState>();
+    public DbSet<ServerRebootSchedule> ServerRebootSchedules => Set<ServerRebootSchedule>();
     public DbSet<SecurityUpdatesState> SecurityUpdatesStates => Set<SecurityUpdatesState>();
     public DbSet<FirewallState> FirewallStates => Set<FirewallState>();
     public DbSet<BackupPolicy> BackupPolicies => Set<BackupPolicy>();
@@ -93,9 +94,11 @@ public class AppDbContext(
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
     public DbSet<ProjectSubscription> ProjectSubscriptions => Set<ProjectSubscription>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
+    public DbSet<UserPipelineNotificationPreference> UserPipelineNotificationPreferences => Set<UserPipelineNotificationPreference>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<MailTemplate> MailTemplates => Set<MailTemplate>();
     public DbSet<OrganizationMailTemplate> OrganizationMailTemplates => Set<OrganizationMailTemplate>();
+    public DbSet<SystemLogExclusionRule> SystemLogExclusionRules => Set<SystemLogExclusionRule>();
     public DbSet<ServiceConnection> ServiceConnections => Set<ServiceConnection>();
     public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
     public DbSet<TestResult> TestResults => Set<TestResult>();
@@ -147,6 +150,19 @@ public class AppDbContext(
     public DbSet<AnalysisPolicyException> AnalysisPolicyExceptions => Set<AnalysisPolicyException>();
     public DbSet<AnalysisEvaluation> AnalysisEvaluations => Set<AnalysisEvaluation>();
     public DbSet<AnalysisTrackingProject> AnalysisTrackingProjects => Set<AnalysisTrackingProject>();
+    public DbSet<VulnerabilityAdvisory> VulnerabilityAdvisories => Set<VulnerabilityAdvisory>();
+    public DbSet<VulnerabilityAffectedPackage> VulnerabilityAffectedPackages => Set<VulnerabilityAffectedPackage>();
+    public DbSet<VulnerabilityFeedState> VulnerabilityFeedStates => Set<VulnerabilityFeedState>();
+    public DbSet<VulnerabilityFeedPass> VulnerabilityFeedPasses => Set<VulnerabilityFeedPass>();
+    public DbSet<VulnerabilityKevEntry> VulnerabilityKevEntries => Set<VulnerabilityKevEntry>();
+    public DbSet<VulnerabilityEndOfLifeCycle> VulnerabilityEndOfLifeCycles => Set<VulnerabilityEndOfLifeCycle>();
+    public DbSet<ProjectInventory> ProjectInventories => Set<ProjectInventory>();
+    public DbSet<ProjectInventoryItem> ProjectInventoryItems => Set<ProjectInventoryItem>();
+    public DbSet<VulnerabilityMatch> VulnerabilityMatches => Set<VulnerabilityMatch>();
+    public DbSet<ServerHostInventory> ServerHostInventories => Set<ServerHostInventory>();
+    public DbSet<ServerVulnerabilityFinding> ServerVulnerabilityFindings => Set<ServerVulnerabilityFinding>();
+    public DbSet<VulnerabilityRemediation> VulnerabilityRemediations => Set<VulnerabilityRemediation>();
+    public DbSet<DependencyUpdate> DependencyUpdates => Set<DependencyUpdate>();
     public DbSet<AnalysisVulnerabilityObservation> AnalysisVulnerabilityObservations => Set<AnalysisVulnerabilityObservation>();
     public DbSet<DastExecutionLease> DastExecutionLeases => Set<DastExecutionLease>();
     public DbSet<DependencyTrackOutboxItem> DependencyTrackOutboxItems => Set<DependencyTrackOutboxItem>();
@@ -179,9 +195,19 @@ public class AppDbContext(
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         PrepareTrackedEntities();
-        return await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (!ServerTaskNumbering.HasNewTasks(this))
+            return await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var transaction = await ServerTaskNumbering.BeginAsync(this, cancellationToken).ConfigureAwait(false);
+        await ServerTaskNumbering.ReserveAsync(this, cancellationToken).ConfigureAwait(false);
+        var saved = await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return saved;
     }
 
+    /// <summary>No production path saves synchronously. A task saved here gets its <c>Uid</c>, and its number
+    /// from <c>TaskIdentityBackfillService</c>: the reservation needs the asynchronous path.</summary>
     public override int SaveChanges()
     {
         PrepareTrackedEntities();
@@ -195,29 +221,38 @@ public class AppDbContext(
         foreach (var entry in ChangeTracker.Entries())
         {
             if (entry.State == EntityState.Added)
-            {
-                if (entry.Metadata.FindProperty("CreatedAt") is not null)
-                    entry.Property("CreatedAt").CurrentValue = now;
-                if (entry.Metadata.FindProperty("Timestamp") is not null
-                    && entry.Entity is not Entities.ServerMetric  // ServerMetric.Timestamp is collector-sourced
-                    && entry.Entity is not Entities.AppHealthSample // AppHealthSample.Timestamp is probe-sourced (moment of check)
-                    && entry.Entity is not Entities.AppMetricSample // AppMetricSample.Timestamp is emit-sourced (OTLP data point)
-                    && entry.Entity is not Entities.AppLogEntry     // AppLogEntry.Timestamp is emit-sourced (OTLP log record)
-                    && entry.Entity is not Entities.AuditLog)     // AuditLog.Timestamp is hash-covered, set pre-insert (F-003)
-                    entry.Property("Timestamp").CurrentValue = now;
-                if (entry.Metadata.FindProperty("LastUpdated") is not null)
-                    entry.Property("LastUpdated").CurrentValue = now;
-                if (entry.Metadata.FindProperty("UpdatedAt") is not null)
-                    entry.Property("UpdatedAt").CurrentValue = now;
-            }
+                StampAdded(entry, now);
             else if (entry.State == EntityState.Modified)
-            {
-                if (entry.Metadata.FindProperty("UpdatedAt") is not null)
-                    entry.Property("UpdatedAt").CurrentValue = now;
-                if (entry.Metadata.FindProperty("LastUpdated") is not null)
-                    entry.Property("LastUpdated").CurrentValue = now;
-            }
+                StampModified(entry, now);
         }
+    }
+
+    private static void StampAdded(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, DateTime now)
+    {
+        if (entry.Metadata.FindProperty("CreatedAt") is not null)
+            entry.Property("CreatedAt").CurrentValue = now;
+        // ADR-060: the same instant as CreatedAt, as the backfill derives it for older rows.
+        if (entry.Entity is ServerTask task)
+            task.Uid ??= ServerTaskUid.From(now);
+        // A run has no CreatedAt: it is created at its StartedAt, which the backfill reads for older rows.
+        if (entry.Entity is PipelineRun run)
+            run.Uid ??= PipelineRunUid.From(run.StartedAt);
+        if (entry.Metadata.FindProperty("Timestamp") is not null
+            && entry.Entity is not Entities.ServerMetric  // ServerMetric.Timestamp is collector-sourced
+            && entry.Entity is not Entities.AppHealthSample // AppHealthSample.Timestamp is probe-sourced (moment of check)
+            && entry.Entity is not Entities.AppMetricSample // AppMetricSample.Timestamp is emit-sourced (OTLP data point)
+            && entry.Entity is not Entities.AppLogEntry     // AppLogEntry.Timestamp is emit-sourced (OTLP log record)
+            && entry.Entity is not Entities.AuditLog)     // AuditLog.Timestamp is hash-covered, set pre-insert (F-003)
+            entry.Property("Timestamp").CurrentValue = now;
+        StampModified(entry, now);
+    }
+
+    private static void StampModified(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, DateTime now)
+    {
+        if (entry.Metadata.FindProperty("UpdatedAt") is not null)
+            entry.Property("UpdatedAt").CurrentValue = now;
+        if (entry.Metadata.FindProperty("LastUpdated") is not null)
+            entry.Property("LastUpdated").CurrentValue = now;
     }
 
     private void RejectModifiedTemplateVersions()

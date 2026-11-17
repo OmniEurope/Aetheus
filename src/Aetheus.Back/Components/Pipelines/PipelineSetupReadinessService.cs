@@ -13,9 +13,12 @@ public sealed partial class PipelineSetupReadinessService(
     IPipelineTemplateResolver templateResolver,
     IPipelineRequirementsChecker requirements,
     IProjectConfigRepositoryService configRepository,
+    IPipelineVariableResolver variableResolver,
+    IPipelineSetupServerRepository projectServers,
     ILogger<PipelineSetupReadinessService> logger) : IPipelineSetupReadinessService
 {
-    private readonly PipelineEnvTemplateNames _envTemplateNames = new(configRepository, git, logger);
+    /// <summary>R-44: one per verdict, so the variables it resolves and the sample files it reads are kept for that verdict only.</summary>
+    private PipelineUndefinedVariablesCheck NewUndefinedVariablesCheck() => new(variableResolver, new(configRepository, git, logger), requirements, logger);
 
     /// <summary>
     /// The generic templates require no file of the project (ADR-050): its commands are declared in its
@@ -34,11 +37,11 @@ public sealed partial class PipelineSetupReadinessService(
     {
         ArgumentNullException.ThrowIfNull(templateNames);
 
-        var definitions = await LoadSelectedDefinitionsAsync(templateNames, projectId, ct).ConfigureAwait(false);
+        var definitions = await LoadSelectedDefinitionsAsync(templateNames, projectId, organizationId, ct).ConfigureAwait(false);
         // The wizard writes no command: the templates' defaults are what the new pipelines will run.
         // Nothing exists yet to link to: a template is named by its own definition.
         var owners = definitions.Select(definition => ((int?)null, definition.Name)).ToList();
-        return await CheckDefinitionsAsync(definitions, owners, new HashSet<string>(), projectId, organizationId, ct).ConfigureAwait(false);
+        return await CheckDefinitionsAsync(definitions, owners, new HashSet<string>(), projectId, organizationId, false, ct).ConfigureAwait(false);
     }
 
     public async Task<int?> FindPipelineProjectIdAsync(int pipelineId, CancellationToken ct = default) =>
@@ -58,7 +61,8 @@ public sealed partial class PipelineSetupReadinessService(
         // The commands a pipeline declares itself in its own YAML: their template default does not run.
         var ownCommands = new HashSet<string>(StringComparer.Ordinal);
         int? owningOrganizationId = null;
-        foreach (var (id, name, yaml) in await pipelines.GetPipelineDefinitionsForProjectAsync(projectId, ct).ConfigureAwait(false))
+        var projectPipelines = await pipelines.GetPipelineDefinitionsForProjectAsync(projectId, ct).ConfigureAwait(false);
+        foreach (var (id, name, yaml) in projectPipelines)
         {
             if (pipelineId is { } only && id != only) continue;
             owningOrganizationId ??= await pipelines.GetPipelineOrganizationIdAsync(id, ct).ConfigureAwait(false);
@@ -74,7 +78,69 @@ public sealed partial class PipelineSetupReadinessService(
         // No pipeline, nothing a run could need: an empty verdict rather than a "no repository" for a
         // project that has not asked for anything yet.
         if (definitions.Count == 0) return new PipelineSetupReadinessDto();
-        return await CheckDefinitionsAsync(definitions, owners, ownCommands, projectId, organizationId, ct).ConfigureAwait(false);
+        // R-9: only pipelines that exist can have a variable undefined; a template the wizard has not created yet has none.
+        var readiness = await CheckDefinitionsAsync(definitions, owners, ownCommands, projectId, organizationId, true, ct).ConfigureAwait(false);
+        // R-36: an on_success follow-up the launch would refuse for want of a deployment server is said before the run.
+        // Any other required parameter of the follow-up that nothing supplies is said the same way.
+        readiness.Checks.AddRange(await CheckChainedFollowUpsAsync(
+            projectPipelines, definitions, owners, projectId, owningOrganizationId, ct).ConfigureAwait(false));
+        return readiness;
+    }
+
+    /// <summary>R-21: the id of the follow-up each <c>upstream &gt; target</c> item names, by item, so the item links to it.</summary>
+    private static Dictionary<string, int> FollowUpIds(
+        IEnumerable<string> refused, IReadOnlyList<(int Id, string Name, string Yaml)> projectPipelines)
+    {
+        const string separator = " > ";
+        var ids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in refused)
+        {
+            var target = item[(item.LastIndexOf(separator, StringComparison.Ordinal) + separator.Length)..];
+            var match = projectPipelines.FirstOrDefault(pipeline => string.Equals(pipeline.Name, target, StringComparison.OrdinalIgnoreCase));
+            if (match.Id != 0) ids[item] = match.Id;
+        }
+        return ids;
+    }
+
+    /// <summary>R-36: the pipelines checked that start another one on success, against the target as a launch reads it
+    /// (its <c>extends:</c> expanded) and the servers of the project. A warning: the upstream run itself is not at risk.</summary>
+    private async Task<List<PipelineSetupReadinessCheckDto>> CheckChainedFollowUpsAsync(
+        IReadOnlyList<(int Id, string Name, string Yaml)> projectPipelines, IReadOnlyList<PipelineYamlDefinition> definitions,
+        IReadOnlyList<(int? Id, string Name)> owners, int projectId, int? organizationId, CancellationToken ct)
+    {
+        var checks = new List<PipelineSetupReadinessCheckDto>();
+        var upstream = definitions.Select((definition, index) => (owners[index].Name, definition))
+            .Where(pair => pair.definition.OnSuccess.Count > 0)
+            .ToList();
+        if (upstream.Count == 0) return checks;
+        var wanted = upstream.SelectMany(pair => pair.definition.OnSuccess)
+            .Select(trigger => trigger.Pipeline?.Trim() ?? string.Empty).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var targets = new Dictionary<string, PipelineYamlDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (_, name, yaml) in projectPipelines)
+            if (wanted.Contains(name) && await ResolveDefinitionAsync(yaml, organizationId, ct).ConfigureAwait(false) is { } target)
+                // R-20: a launch reads the follow-up with the server of the project's production environment as the default
+                // of deployServer (R-63); the verdict reads it the same way, or it warns of a refusal the launch would not make.
+                targets[name] = await PipelineProductionServerDefault.ApplyAsync(pipelines, target, projectId, ct).ConfigureAwait(false);
+        var refused = PipelineChainedDeployServer.FindRefusedFollowUps(
+            upstream, targets, await projectServers.ListProjectServerNamesAsync(projectId, ct).ConfigureAwait(false));
+        if (refused.Count > 0)
+            checks.Add(new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.ChainedDeployServerMissing,
+                // R-21: an error, not a discreet note; each item links to the follow-up pipeline, where the default is set.
+                Severity = PipelineSetupReadinessSeverity.Error,
+                Items = refused,
+                ItemIds = FollowUpIds(refused, projectPipelines)
+            });
+        var unsupplied = PipelineChainedRequiredParameters.FindUnsupplied(upstream, targets);
+        if (unsupplied.Count > 0)
+            checks.Add(new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.ChainedRequiredParameterMissing,
+                Severity = PipelineSetupReadinessSeverity.Warning,
+                Items = unsupplied
+            });
+        return checks;
     }
 
     /// <summary>
@@ -105,6 +171,7 @@ public sealed partial class PipelineSetupReadinessService(
         IReadOnlySet<string> ownCommands,
         int projectId,
         int? organizationId,
+        bool existingPipelines,
         CancellationToken ct)
     {
         // R3-67: the names the project's runs will read, `${{ project.slug }}.share` already this
@@ -118,7 +185,10 @@ public sealed partial class PipelineSetupReadinessService(
         // of what an installation must provide, rather than two inferences of the same answer.
         await CheckDeclaredRequirementsAsync(definitions, projectId, organizationId, checks, ct)
             .ConfigureAwait(false);
-        await CheckEmptyValuesAsync(definitions, owners, projectId, checks, ct).ConfigureAwait(false);
+        var undefinedVariables = NewUndefinedVariablesCheck();
+        await CheckEmptyValuesAsync(definitions, owners, projectId, undefinedVariables, checks, ct).ConfigureAwait(false);
+        if (existingPipelines && await undefinedVariables.CheckAsync(definitions, owners, projectId, ct).ConfigureAwait(false) is { } undefined)
+            checks.Add(undefined);
         await CheckRunnersAsync(stages, organizationId, checks, ct).ConfigureAwait(false);
         await CheckEnvironmentsAsync(stages, projectId, checks, ct).ConfigureAwait(false);
         var (inspected, branch, repositoryId) = await CheckAdapterScriptsAsync(stages, projectId, checks, ct).ConfigureAwait(false);
@@ -148,6 +218,7 @@ public sealed partial class PipelineSetupReadinessService(
     private async Task<List<PipelineYamlDefinition>> LoadSelectedDefinitionsAsync(
         IReadOnlyList<string> templateNames,
         int projectId,
+        int? requestOrganizationId,
         CancellationToken ct)
     {
         var projectOrganizationId = await pipelines.GetPipelineOwnerOrganizationIdAsync(
@@ -176,10 +247,33 @@ public sealed partial class PipelineSetupReadinessService(
                 continue;
             }
 
+            // R-11: a template that extends another (the deployment templates extend their common core) holds none of the
+            // stages, libraries or vaults a run reads: it is read as a run reads it, extended.
+            if (!string.IsNullOrWhiteSpace(definition.Extends)
+                && await ResolveExtendedAsync(template, projectOrganizationId ?? requestOrganizationId ?? found.OrganizationId, ct)
+                    .ConfigureAwait(false) is { } extended)
+                definition = extended;
             definitions.Add(definition);
         }
 
         return definitions;
+    }
+
+    /// <summary>The template with its <c>extends:</c> applied; null (the template is read as it is stored) when its base
+    /// cannot be resolved, which the template editor already surfaces.</summary>
+    private async Task<PipelineYamlDefinition?> ResolveExtendedAsync(PipelineTemplateDto template, int organizationId, CancellationToken ct)
+    {
+        try
+        {
+            return (await templateResolver.ResolveAsync(template.YamlContent, organizationId, parameters: null, ct)
+                .ConfigureAwait(false)).Definition;
+        }
+        catch (BadRequestException exception)
+        {
+            logger.LogWarning(exception,
+                "Setup readiness read template '{Template}' without its base: it does not resolve.", template.Name);
+            return null;
+        }
     }
 
     /// <summary>
@@ -193,11 +287,13 @@ public sealed partial class PipelineSetupReadinessService(
         List<PipelineSetupReadinessCheckDto> checks,
         CancellationToken ct)
     {
-        var unsatisfied = new List<PipelineRequirementOutcome>();
-        foreach (var definition in definitions)
-            unsatisfied.AddRange((await requirements
-                .CheckAsync(DeclaredAndReadResources(definition), projectId, organizationId, ct).ConfigureAwait(false))
-                .Where(outcome => !outcome.Satisfied));
+        // R-44: the findings below name each missing library, vault, environment or capability once, so the
+        // declarations of every definition are checked together, one lookup per kind for the whole project rather
+        // than one set per pipeline. The union keeps the order in which the pipelines first name each item.
+        var unsatisfied = (await requirements
+            .CheckAsync(UnionOfDeclaredResources(definitions), projectId, organizationId, ct).ConfigureAwait(false))
+            .Where(outcome => !outcome.Satisfied)
+            .ToList();
         if (unsatisfied.Count == 0) return;
 
         void Report(string kind, PipelineSetupReadinessKind reported)
@@ -236,6 +332,7 @@ public sealed partial class PipelineSetupReadinessService(
         List<PipelineYamlDefinition> definitions,
         IReadOnlyList<(int? Id, string Name)> owners,
         int projectId,
+        PipelineUndefinedVariablesCheck undefinedVariables,
         List<PipelineSetupReadinessCheckDto> checks,
         CancellationToken ct)
     {
@@ -270,7 +367,8 @@ public sealed partial class PipelineSetupReadinessService(
             // value to fill as one read as $(NAME), the run refusing it by name.
             var consumedKeys = PipelineUnresolvedVariableGuard.FindConsumedEmptyLibraryKeys(definition, emptyLibraryKeys).Keys.ToList();
             if (emptyLibraryKeys.Count > 0)
-                consumedKeys.AddRange((await _envTemplateNames.ReadAsync(definition, projectId, ct).ConfigureAwait(false))
+                // R-25: a sample read only by a step that will not run on this launch's variables asks for nothing.
+                consumedKeys.AddRange((await undefinedVariables.ReadSampleNamesAsync(definition, projectId, ct).ConfigureAwait(false))
                     .Where(name => emptyLibraryKeys.Contains(name) && !consumedKeys.Contains(name, StringComparer.OrdinalIgnoreCase))
                     .ToList());
             foreach (var key in consumedKeys)
@@ -344,6 +442,20 @@ public sealed partial class PipelineSetupReadinessService(
     /// (<c>variable_libraries:</c>, <c>vaults:</c>), the same list the project overview warns about, so
     /// the wizard creates what a run of the template loads.
     /// </summary>
+    internal static PipelineRequiresDefinition UnionOfDeclaredResources(IEnumerable<PipelineYamlDefinition> definitions)
+    {
+        var all = definitions.Select(DeclaredAndReadResources).ToList();
+        List<string> Union(Func<PipelineRequiresDefinition, IEnumerable<string>> select) =>
+            [.. all.SelectMany(select).Distinct(StringComparer.OrdinalIgnoreCase)];
+        return new PipelineRequiresDefinition
+        {
+            Libraries = Union(requires => requires.Libraries),
+            Vaults = Union(requires => requires.Vaults),
+            Environments = Union(requires => requires.Environments),
+            Capabilities = Union(requires => requires.Capabilities)
+        };
+    }
+
     private static PipelineRequiresDefinition DeclaredAndReadResources(PipelineYamlDefinition definition)
     {
         var declared = definition.Requires ?? new PipelineRequiresDefinition();

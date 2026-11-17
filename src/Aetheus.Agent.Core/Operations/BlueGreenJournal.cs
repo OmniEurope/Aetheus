@@ -62,7 +62,20 @@ internal sealed class BlueGreenJournal(BlueGreenContext context)
     internal bool TryOpen(string previousLive, string idle, string revision, out string error) =>
         TryOpen(previousLive, idle, revision, ownerRun: null, out error);
 
-    internal bool TryOpen(string previousLive, string idle, string revision, string? ownerRun, out string error)
+    internal bool TryOpen(string previousLive, string idle, string revision, string? ownerRun, out string error) =>
+        TryOpen(previousLive, idle, revision, ownerRun, upstream: null, out error);
+
+    /// <summary>
+    /// Opens a transaction and records the upstream configuration it may have to put back.
+    /// ACORE-007: the record is written BEFORE the state reaches PREPARED. A crash between the two
+    /// used to leave a PREPARED journal with no snapshot, and the undo read "no snapshot" as "there
+    /// was no configuration" and deleted the live one. Now a PREPARED journal always says which:
+    /// <c>upstream.before</c> holds the previous configuration, or <c>upstream.none</c> states that
+    /// there was none. <paramref name="upstream"/> null records neither (callers that do not move
+    /// traffic); an undo then finds no record and leaves the configuration alone.
+    /// </summary>
+    internal bool TryOpen(
+        string previousLive, string idle, string revision, string? ownerRun, UpstreamRecord? upstream, out string error)
     {
         error = string.Empty;
         // A directory with no `state` file at all is not a transaction. TryOpen writes `state` last,
@@ -86,9 +99,23 @@ internal sealed class BlueGreenJournal(BlueGreenContext context)
         WriteAtomic(IdlePath, idle);
         WriteAtomic(RevisionPath, revision);
         if (!string.IsNullOrWhiteSpace(ownerRun)) WriteAtomic(OwnerRunPath, ownerRun.Trim());
+        if (upstream is { } record)
+        {
+            if (record.PreviousConf is { } previousConf) WritePrivateAtomic(UpstreamSnapshotPath, previousConf);
+            else WriteAtomic(NoUpstreamMarkerPath, "no upstream configuration before this transaction");
+        }
         WriteAtomic(StatePath, Prepared);
         return true;
     }
+
+    /// <summary>The upstream configuration serving when the transaction opened; null when there was none.</summary>
+    internal sealed record UpstreamRecord(string? PreviousConf);
+
+    internal const string UpstreamSnapshotFileName = "upstream.before";
+    internal const string NoUpstreamMarkerFileName = "upstream.none";
+
+    private string UpstreamSnapshotPath => Path.Combine(context.JournalDir, UpstreamSnapshotFileName);
+    private string NoUpstreamMarkerPath => Path.Combine(context.JournalDir, NoUpstreamMarkerFileName);
 
     internal void MarkSwitched() => WriteAtomic(StatePath, Switched);
 

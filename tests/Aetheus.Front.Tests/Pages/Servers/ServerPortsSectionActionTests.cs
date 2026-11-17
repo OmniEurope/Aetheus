@@ -25,6 +25,7 @@ public sealed class ServerPortsSectionActionTests : BunitContext
         _handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "/projects", new List<ProjectDto> { new() { Id = 7, Name = "Portfolio" } });
+        _handler.SetJsonResponse(HttpMethod.Post, "/ports/check", new PortCheckResultDto { ServerId = 1 });
         _handler.SetJsonResponse(HttpMethod.Get, "/ports/range", new PortRangeDto
         {
             From = PortRegistryLimits.DefaultRangeFrom,
@@ -226,6 +227,40 @@ public sealed class ServerPortsSectionActionTests : BunitContext
         cut.WaitForAssertion(() => Assert.True(Toasted(OmniSeverity.Danger, "PortReservationFailed")));
         Assert.False(Toasted(OmniSeverity.Success, "PortReservationReleased"));
         Assert.Equal(loadsBefore, RegistryLoads);
+    }
+
+    [Fact]
+    public void Release_Confirmed_TheRowLeavesAtOnce_BeforeTheReadBehindItEnds()
+    {
+        _handler.SetResponse(HttpMethod.Delete, "/ports/3", HttpStatusCode.NoContent);
+        Dialog.ConfirmResult = true;
+        var cut = Render(Reserved(3, 15432, "postgres-holder"), Reserved(4, 15433, "kept-holder"));
+        var gate = new TaskCompletionSource<List<PortReservationDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "/ports", _ => gate.Task);
+
+        ButtonLabelled(cut, "PortRelease").Click();
+
+        // The read behind the row is held: the row left from the answer of the deletion alone.
+        cut.WaitForAssertion(() => Assert.DoesNotContain("postgres-holder", cut.Markup, StringComparison.Ordinal));
+        Assert.Contains("kept-holder", cut.Markup, StringComparison.Ordinal);
+        gate.SetResult([Reserved(4, 15433, "kept-holder")]);
+    }
+
+    [Fact]
+    public void Add_TheClaimShowsAtOnceWithItsProjectName_BeforeTheReadBehindItEnds()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "/ports", Reserved(5, 10031, "added-holder") with { ProjectId = 7 });
+        var cut = Render();
+        var gate = new TaskCompletionSource<List<PortReservationDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "/ports", _ => gate.Task);
+        cut.Find(PortField).Change("10031");
+        FillHolder(cut, "added-holder");
+
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Contains("10031", cut.Find("table, [role=grid]").TextContent, StringComparison.Ordinal));
+        Assert.Contains("Portfolio", cut.Markup, StringComparison.Ordinal);
+        gate.SetResult([Reserved(5, 10031, "added-holder") with { ProjectId = 7, ProjectName = "Portfolio" }]);
     }
 
     [Fact]

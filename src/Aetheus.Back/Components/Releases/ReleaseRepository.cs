@@ -23,8 +23,6 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
 
         query = ApplyColumnFilters(query, columnFilters, releaseIds);
 
-        var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
-
         var items = await query
             .Include(r => r.Project)
             .Include(r => r.Artifacts)
@@ -40,11 +38,15 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
                 .OrderByDescending(r => r.PublishedAt != null)
                 .ThenByDescending(r => r.PublishedAt)
                 .ThenByDescending(r => r.Id))
+            // A user-chosen sort key has ties (a status, a branch): the id as last key keeps the pages disjoint.
+            .ThenByKey(r => r.Id, descending: true)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+        // The page proves the total when it is the last one; only a full page costs a COUNT.
+        var totalCount = await query.CountGivenPageAsync(page, pageSize, items.Count, ct).ConfigureAwait(false);
         return (items, totalCount);
     }
 
@@ -131,12 +133,21 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
         if (projectIds.Count == 0) return [];
         // Superseded means "was deployed, then replaced", so the newest of them is the release
         // production ran just before the live one: the same order the retention window uses.
-        var previous = (await db.Releases.AsNoTracking()
-                .Where(release => projectIds.Contains(release.ProjectId) && release.Status == ReleaseStatus.Superseded)
-                .Select(release => new { release.Id, release.ProjectId, At = release.PublishedAt ?? release.DetectedAt })
-                .ToListAsync(ct).ConfigureAwait(false))
+        // One row per project, picked by the database: a project keeps every release it ever superseded, and
+        // reading them all to keep the newest one grew with the retention, not with the page.
+        var previous = await db.Releases.AsNoTracking()
+            .Where(release => projectIds.Contains(release.ProjectId) && release.Status == ReleaseStatus.Superseded)
             .GroupBy(release => release.ProjectId)
-            .ToDictionary(group => group.Key, group => group.OrderByDescending(release => release.At).First().Id);
+            .Select(group => new
+            {
+                ProjectId = group.Key,
+                ReleaseId = group
+                    .OrderByDescending(release => release.PublishedAt ?? release.DetectedAt)
+                    .ThenByDescending(release => release.Id)
+                    .Select(release => release.Id)
+                    .First()
+            })
+            .ToDictionaryAsync(row => row.ProjectId, row => row.ReleaseId, ct).ConfigureAwait(false);
         if (previous.Count == 0) return [];
 
         // A deploy step rewrites the live release's PipelineRunId to the run that deployed it.
@@ -322,11 +333,13 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
         IReadOnlyList<GridFilter>? columnFilters = null, IReadOnlyCollection<int>? releaseIds = null)
     {
         var query = ApplyColumnFilters(ReleasesForServerQuery(serverId), columnFilters, releaseIds);
-        var total = await query.CountAsync(ct).ConfigureAwait(false);
         var items = await query.OrderByProperty(sortBy, sortDescending, OrderForDisplay)
+            .ThenByKey(release => release.Id, descending: true)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct).ConfigureAwait(false);
+        // The set of the server's projects is the costly part of the query: count it only for a full page.
+        var total = await query.CountGivenPageAsync(page, pageSize, items.Count, ct).ConfigureAwait(false);
         return (items, total);
     }
 

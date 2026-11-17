@@ -336,6 +336,124 @@ public sealed class ServerCertbotConventionTests : BunitContext
             && request.Body!.Contains($"\"action\":{(int)CertbotAction.RenewalCheck}", StringComparison.Ordinal)));
     }
 
+    private static CertbotDataDto ThreeCertificatesToSort() => new()
+    {
+        IsInstalled = true,
+        HelperVersion = CertbotHelperVersion.Current,
+        Certificates =
+        [
+            Certificate("b-mid", CertbotRenewalConvention.Conforming, "webroot", "/w") with { ExpiryDate = new DateTime(2026, 12, 5, 0, 0, 0, DateTimeKind.Utc), Domains = ["zeta.example.com"] },
+            Certificate("c-late", CertbotRenewalConvention.Conforming, "webroot", "/w") with { ExpiryDate = new DateTime(2027, 1, 20, 0, 0, 0, DateTimeKind.Utc), Domains = ["alpha.example.com"] },
+            Certificate("a-early", CertbotRenewalConvention.Conforming, "webroot", "/w") with { ExpiryDate = new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc), Domains = ["mid.example.com"] }
+        ]
+    };
+
+    private static string RowOrder(IRenderedComponent<PageHeaderOutletHost> cut) =>
+        string.Join(',', cut.FindAll("tr[data-omni-row-index]").Select(row => row.TextContent.Trim()[..1]));
+
+    /// <summary>R-49: the Expiration and Domains columns sort; dates sort as dates, domains alphabetically.</summary>
+    [Theory]
+    [InlineData("ExpiryDate", "a,b,c", "c,b,a")]
+    [InlineData("Domains", "c,a,b", "b,a,c")]
+    public void R49_TheExpiryAndDomainsColumns_Sort(string column, string ascending, string descending)
+    {
+        var cut = Render(ThreeCertificatesToSort());
+
+        cut.Find($"th[data-omni-col='{column}'] .omni-data-grid__sort").Click();
+        Assert.Equal(ascending, RowOrder(cut));
+
+        cut.Find($"th[data-omni-col='{column}'] .omni-data-grid__sort").Click();
+        Assert.Equal(descending, RowOrder(cut));
+    }
+
+    [Fact]
+    public void R49_TheRenewalColumn_HasASortControl_AndOnlyTheActionsColumnHasNone()
+    {
+        var cut = Render(ThreeCertificatesToSort());
+
+        var withoutSort = cut.FindAll("thead th").Where(th => th.QuerySelector(".omni-data-grid__sort") is null).ToList();
+        Assert.Single(withoutSort);
+        Assert.Contains("Actions", withoutSort[0].TextContent, StringComparison.Ordinal);
+    }
+
+    private static CertbotDataDto OneFailure() => new()
+    {
+        IsInstalled = true,
+        HelperVersion = CertbotHelperVersion.Current,
+        RenewalCheckedAt = new DateTime(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc),
+        RenewalCheckSucceeded = false,
+        RenewalCheckFailures = [new CertbotRenewalFailureDto { Name = "random.example.com", Reason = "pending" }],
+        Certificates =
+        [
+            Certificate("random.example.com", CertbotRenewalConvention.Conforming, "webroot", "/var/www/aetheus-acme"),
+            Certificate("fine.example.com", CertbotRenewalConvention.Conforming, "webroot", "/var/www/aetheus-acme")
+        ]
+    };
+
+    [Fact]
+    public void R19_RetestFailed_PostsTheRenewalCheckFailedActionWithoutAName()
+    {
+        var cut = Render(OneFailure());
+
+        Assert.False(cut.FindMenuItem("CertbotRetestFailed")!.HasAttribute("disabled"));
+        cut.FindMenuItem("CertbotRetestFailed")!.Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request =>
+            request.Method == "POST" && request.Url.Contains("api/servers/10/certbot/action")
+            && request.Body!.Contains($"\"action\":{(int)CertbotAction.RenewalCheckFailed}", StringComparison.Ordinal)
+            && !request.Body.Contains("\"certificateName\":\"", StringComparison.Ordinal)));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(true)]
+    public void R19_RetestFailed_IsNotOfferedWhenNothingFailed(bool? succeeded)
+    {
+        var certbot = OneFailure() with { RenewalCheckSucceeded = succeeded, RenewalCheckFailures = [] };
+
+        var cut = Render(certbot);
+
+        Assert.Null(cut.FindMenuItem("CertbotRetestFailed"));
+        Assert.NotNull(cut.FindMenuItem("CertbotRenewalCheck"));
+    }
+
+    [Fact]
+    public void R19_RetestFailed_IsNotOfferedWhenTheFailedCertificateIsGone()
+    {
+        var certbot = OneFailure() with { Certificates = [Certificate("fine.example.com", CertbotRenewalConvention.Conforming, "webroot", "/var/www/aetheus-acme")] };
+
+        var cut = Render(certbot);
+
+        Assert.Null(cut.FindMenuItem("CertbotRetestFailed"));
+    }
+
+    [Fact]
+    public void R19_OnAHelperThatCannotTakeNames_TheTargetedTestsAreDisabled_NotSilentlyBroadened()
+    {
+        var cut = Render(OneFailure() with { HelperVersion = CertbotHelperVersion.TargetedRenewalCheck - 1 });
+
+        Assert.True(cut.FindMenuItem("CertbotRetestFailed")!.HasAttribute("disabled"));
+        Assert.False(cut.FindMenuItem("CertbotRenewalCheck")!.HasAttribute("disabled"));
+        cut.FindAll("tbody .omni-overflow-menu__trigger")[1].Click();
+        Assert.True(cut.Find(".certbot-retest-one").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void R19_EachRowMenuOffersToRetestThatCertificateAlone()
+    {
+        var cut = Render(OneFailure());
+
+        cut.FindAll("tbody .omni-overflow-menu__trigger")[1].Click();
+        var item = cut.Find(".certbot-retest-one");
+        Assert.Equal("CertbotRetestOne", item.TextContent.Trim());
+        item.Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request =>
+            request.Method == "POST" && request.Url.Contains("api/servers/10/certbot/action")
+            && request.Body!.Contains($"\"action\":{(int)CertbotAction.RenewalCheck}", StringComparison.Ordinal)
+            && request.Body.Contains("\"certificateName\":\"fine.example.com\"", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void Normalize_AsksForConfirmationThenPostsTheNormalizeAction()
     {

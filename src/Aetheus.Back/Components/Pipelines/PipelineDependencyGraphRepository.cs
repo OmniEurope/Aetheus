@@ -94,12 +94,15 @@ internal sealed class PipelineDependencyGraphRepository(AppDbContext db)
         ProjectName = pipeline.Project != null ? pipeline.Project.Name : null,
         TriggerType = pipeline.TriggerType,
         YamlDefinition = pipeline.YamlDefinition,
+        ExternalImportPath = pipeline.ExternalImportPath,
+        ExternalImportCommit = pipeline.ExternalImportCommit,
         RecentRuns = pipeline.Runs
             .OrderByDescending(run => run.StartedAt)
             .Take(5)
             .Select(run => new PipelineRunSummaryDto
             {
                 Id = run.Id,
+                BuildNumber = run.BuildNumber,
                 Status = run.Status,
                 StartedAt = run.StartedAt,
                 CompletedAt = run.CompletedAt

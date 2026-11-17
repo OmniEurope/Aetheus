@@ -30,7 +30,7 @@ public class AuthServiceRefreshTokenTests
 
         _sut = new AuthService(
             _repo, config, Substitute.For<IAuditService>(),
-            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
+            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }),
             Substitute.For<IMemoryCache>(), Substitute.For<IOrganizationService>(),
             Substitute.For<ITotpService>(), TimeProvider.System,
             Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), _domainEvents, Substitute.For<ILogger<AuthService>>());
@@ -43,12 +43,12 @@ public class AuthServiceRefreshTokenTests
         new() { Id = id, Username = "bob", IsActive = true, UserRoles = [] };
 
     private void Stored(RefreshToken token) =>
-        _repo.FindRefreshTokenByHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(token);
+        _repo.FindRefreshTokenByHashAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>()).Returns(token);
 
     [Fact]
     public async Task RefreshToken_NotFound_ReturnsNull()
     {
-        _repo.FindRefreshTokenByHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindRefreshTokenByHashAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns((RefreshToken?)null);
 
         Assert.Null(await _sut.RefreshTokenAsync("plaintext", ct: TestContext.Current.CancellationToken));
@@ -204,7 +204,7 @@ public class AuthServiceRefreshTokenTests
     {
         var ct = TestContext.Current.CancellationToken;
 
-        _repo.FindRefreshTokenByHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((RefreshToken?)null);
+        _repo.FindRefreshTokenByHashAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>()).Returns((RefreshToken?)null);
         Assert.Equal(RefreshRejectionCodes.UnknownToken, (await _sut.RefreshTokenWithReasonAsync("x", ct)).RejectionCode);
 
         Stored(new RefreshToken { Id = 20, UserId = 5, ExpiresAt = DateTime.UtcNow.AddDays(1), RevokedAt = DateTime.UtcNow.AddHours(-1), User = ActiveUser(5) });
@@ -226,10 +226,13 @@ public class AuthServiceRefreshTokenTests
     [Fact]
     public async Task Logout_AnnouncesTheEndOfTheUsersSession()
     {
-        await _sut.LogoutAsync(42, TestContext.Current.CancellationToken);
+        await _sut.LogoutAsync(42, null, TestContext.Current.CancellationToken);
 
         await _domainEvents.Received(1).DispatchAsync(
             new Aetheus.Back.Components.Users.Events.UserSessionEndedEvent(42, Aetheus.Back.Components.Users.Events.UserSessionEndReasons.Logout),
             Arg.Any<CancellationToken>());
+        // No token was sent: nothing is looked up, nothing revoked.
+        await _repo.DidNotReceive().FindRefreshTokenByHashAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().RevokeRefreshTokenAsync(Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 }

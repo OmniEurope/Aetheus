@@ -13,6 +13,7 @@ public partial class PluginManagement : IAsyncDisposable
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
+    [Inject] private AdministrationScopeService Scope { get; set; } = default!;
 
     private List<PluginRegistrationDto> _plugins = [];
     private AetheusDataGrid<PluginRegistrationDto>? _grid;
@@ -54,7 +55,7 @@ public partial class PluginManagement : IAsyncDisposable
         // registering a plugin), so the management view reflects changes without a manual reload. RT4M.
         _adminRt = new AdminEntitySubscription(HubFactory);
         // The grid refreshes in place (page, sort and filters kept, new rows highlighted).
-        await _adminRt.StartAsync(AdminEntities.Plugin, () => InvokeAsync(async () =>
+        _ = _adminRt.StartAsync(AdminEntities.Plugin, () => InvokeAsync(async () =>
         {
             await LoadFilterValuesAsync();
             if (_grid is not null) await _grid.Refresh();
@@ -69,7 +70,8 @@ public partial class PluginManagement : IAsyncDisposable
         try
         {
             var result = await Api.Settings.GetPluginsPageAsync(
-                _currentPage, _pageSize, _search, _sortBy, _sortDescending, filters: _columnFilters);
+                _currentPage, _pageSize, _search, _sortBy, _sortDescending, filters: _columnFilters,
+                organizationId: Scope.SelectedFor(null));
             _plugins = result.Items;
             _totalCount = result.TotalCount;
         }
@@ -93,7 +95,8 @@ public partial class PluginManagement : IAsyncDisposable
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest("Name");
-        return Api.Settings.GetPluginsPageAsync(page, pageSize, _search, sortBy, sortDescending, filters: args.ToApiFilters());
+        return Api.Settings.GetPluginsPageAsync(page, pageSize, _search, sortBy, sortDescending, filters: args.ToApiFilters(),
+            organizationId: Scope.SelectedFor(null));
     }
 
     internal async Task OnLoadDataAsync(GridLoadArgs args)
@@ -110,17 +113,40 @@ public partial class PluginManagement : IAsyncDisposable
         return ReloadGridAsync();
     }
 
+    /// <summary>R-12: the Administration organization switcher narrows the list to one organization's plugins.</summary>
+    private Task OnOrganizationChangedAsync()
+    {
+        _currentPage = 1;
+        return ReloadGridAsync();
+    }
+
     // The grid scrolls (remote virtualization) and only shows what it fetched itself, so a change
     // goes through it: a new search or a registration from the first row, a toggle in place.
     private Task ReloadGridAsync() => _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadPageAsync();
-    private Task RefreshGridAsync() => _grid is not null ? _grid.Refresh() : LoadPageAsync();
 
     // X4D8: the register form now lives in PluginRegisterDialog. Reload the list when it reports success.
     private async Task OpenRegisterDialog()
     {
         var result = await Dialog.OpenAsync<PluginRegisterDialog>(
             L["Register"], new Dictionary<string, object?>(), PluginRegisterDialog.OmniDialogOptions());
-        if (result is true) await ReloadGridAsync();
+        // R-10: the dialog hands back the plugin the server registered; the grid draws it at once.
+        if (result is PluginRegistrationDto registered) await ShowPluginAsync(registered);
+    }
+
+    // The new plugin goes where the name sort puts it, else on top; the quiet read behind it confirms.
+    private async Task ShowPluginAsync(PluginRegistrationDto plugin)
+    {
+        if (_grid is null)
+        {
+            await LoadPageAsync();
+            return;
+        }
+
+        var sign = _sortDescending ? -1 : 1;
+        Comparison<PluginRegistrationDto>? order = string.Equals(_sortBy, "Name", StringComparison.OrdinalIgnoreCase)
+            ? (left, right) => sign * string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase)
+            : null;
+        await _grid.ShowRowAsync(plugin, order);
     }
 
     private async Task TogglePlugin(PluginRegistrationDto plugin)
@@ -135,7 +161,8 @@ public partial class PluginManagement : IAsyncDisposable
         });
         if (result is not null)
         {
-            await RefreshGridAsync();
+            // R-10: the row shows what the save answered; the quiet read behind it confirms.
+            await ShowPluginAsync(result);
             Toast.Success("Saved", "Saved");
         }
         else
@@ -144,7 +171,7 @@ public partial class PluginManagement : IAsyncDisposable
         }
     }
 
-    private async Task UnregisterPlugin(int id)
+    private async Task UnregisterPlugin(PluginRegistrationDto plugin)
     {
         var confirmed = await Dialog.Confirm(L["DeleteConfirm"].Value, L["Unregister"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Unregister"].Value, CancelButtonText = L["GoBack"].Value });
@@ -152,10 +179,12 @@ public partial class PluginManagement : IAsyncDisposable
 
         await Veil.RunAsync(async () =>
         {
-            var success = await Api.Settings.UnregisterPluginAsync(id);
+            var success = await Api.Settings.UnregisterPluginAsync(plugin.Id);
             if (success)
             {
-                await ReloadGridAsync();
+                // R-10: the plugin leaves the grid at once; the quiet read behind it confirms.
+                if (_grid is not null) await _grid.HideRowAsync(plugin);
+                else await LoadPageAsync();
                 Toast.Success("Deleted", "PluginUnregistered");
             }
             else

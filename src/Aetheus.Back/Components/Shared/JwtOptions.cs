@@ -46,6 +46,11 @@ public static class AetheusClaimTypes
     /// </summary>
     public const string MustChangePassword = "aetheus:mcp";
 
+    /// <summary>R-1: present (value "true"), beside <see cref="MustChangePassword"/>, on a token of the seeded
+    /// administrator that must first become its holder's own account. The Front leads to the account setup
+    /// page instead of the plain password change; the middleware holds both through MustChangePassword.</summary>
+    public const string MustSetUpAccount = "aetheus:setup";
+
     /// <summary> The opaque identifier the application declares to its own audience measurement for
     /// a signed-in visitor. A keyed hash of the account identifier: it says nothing of the account
     /// and cannot be turned back into it without the signing key. The measurement hashes it again

@@ -25,6 +25,7 @@ internal static class BreadcrumbRouteResolver
             ["certbot"] = "Certbot",
             ["configuration"] = "Configuration",
             ["cron"] = "Cron",
+            ["cve-sources"] = "CveSourcesTitle",
             ["dashboards"] = "Dashboards",
             ["docker"] = "Docker",
             ["environments"] = "Environments",
@@ -53,7 +54,7 @@ internal static class BreadcrumbRouteResolver
             ["rkhunter"] = "RKHunter",
             ["roles"] = "Roles",
             ["servers"] = "Servers",
-            ["services"] = "Services",
+            ["services"] = "ServerApplicationsManagement",
             ["service-connections"] = "ServiceConnections",
             ["settings"] = "Settings",
             ["system-logs"] = "SystemLogs",
@@ -153,6 +154,12 @@ internal static class BreadcrumbRouteResolver
 
     private static void AddPipelinePath(List<BreadcrumbItem> items, string[] segments, int offset, Func<string, string> localize)
     {
+        // R-36: the planner is a global entry of the menu, so its trail is the planner alone, not Pipelines > planner.
+        if (segments.Length > offset + 1 && segments[offset + 1].Equals("schedule", StringComparison.OrdinalIgnoreCase))
+        {
+            items.Add(new BreadcrumbItem(localize("PipelineSchedule")));
+            return;
+        }
         items.Add(new BreadcrumbItem(localize("Pipelines"), segments.Length > offset + 1 ? "/pipelines" : null));
         if (segments.Length == offset + 1) return;
         var second = segments[offset + 1];
@@ -262,8 +269,16 @@ internal static class BreadcrumbRouteResolver
     private static void AddAnalysisPath(List<BreadcrumbItem> items, string[] segments, int offset, Func<string, string> localize)
     {
         items.Add(new BreadcrumbItem(localize("AnalysisPortfolio"), segments.Length > offset + 1 ? "/analysis" : null));
-        if (segments.Length > offset + 1)
-            items.Add(new BreadcrumbItem(localize("AnalysisFindingDetail"), IsLoading: true));
+        if (segments.Length <= offset + 1) return;
+        // R-22: /analysis/cve-watch/runs/{id} is the page of one run of the CVE watch, not a finding.
+        if (segments[offset + 1].Equals("cve-watch", StringComparison.OrdinalIgnoreCase))
+        {
+            items.Add(new BreadcrumbItem(localize("CveWatchTab"), "/analysis?tab=cve-watch"));
+            if (segments.Length > offset + 3) items.Add(new BreadcrumbItem(localize("CveWatchRunBreadcrumb"), IsLoading: true));
+            return;
+        }
+
+        items.Add(new BreadcrumbItem(localize("AnalysisFindingDetail"), IsLoading: true));
     }
 
     private static void AddGenericPath(List<BreadcrumbItem> items, string[] segments, int offset, Func<string, string> localize)

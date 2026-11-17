@@ -12,7 +12,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// inside a transaction. The InMemory unit provider neither enforces the FKs nor supports
 /// <c>ExecuteDelete</c>, so this is the only layer that proves the manual cascade actually works.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ServerRemovalCascadeIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

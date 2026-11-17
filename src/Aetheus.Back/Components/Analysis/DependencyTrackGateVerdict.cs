@@ -37,7 +37,19 @@ internal static class DependencyTrackGateVerdict
         return gate with
         {
             Status = AnalysisGateStatus.Error,
-            MissingProducers = [.. gate.MissingProducers, dependencyTrackState]
+            MissingProducers = [.. gate.MissingProducers, dependencyTrackState],
+            // Recette R-21: the state (missing, pending, failed) is the reason; the SBOM is the evidence.
+            ErrorCauses =
+            [
+                .. gate.ErrorCauses,
+                new AnalysisGateErrorCauseDto
+                {
+                    Kind = AnalysisGateErrorCauseKind.DependencyTrack,
+                    PipelineRunId = runId,
+                    ScannerKey = "dependency-track",
+                    Detail = dependencyTrackState["dependency-track:".Length..]
+                }
+            ]
         };
     }
 }

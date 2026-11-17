@@ -15,6 +15,8 @@ public partial class WizardCapabilitiesStep
     [Parameter] public EventCallback<bool> IncludePatchManagementChanged { get; set; }
     [Parameter] public bool IncludeFirewallManagement { get; set; }
     [Parameter] public EventCallback<bool> IncludeFirewallManagementChanged { get; set; }
+    [Parameter] public bool IncludeHostReboot { get; set; }
+    [Parameter] public EventCallback<bool> IncludeHostRebootChanged { get; set; }
     [Parameter] public bool IncludeDocker { get; set; }
     [Parameter] public EventCallback<bool> IncludeDockerChanged { get; set; }
     [Parameter] public bool DevModeInsecureTls { get; set; }
@@ -35,5 +37,5 @@ public partial class WizardCapabilitiesStep
 
     // No actionable module selected → the agent has no role (blocked when leaving this step). A
     // deployment-only host (just a deploy target, no CI/CD runner, no server admin) is a valid role.
-    private bool NoActionableModule => !IncludePipelineRunner && !IncludeServerManagement && !IncludeDeploymentAgent && !IncludePatchManagement && !IncludeFirewallManagement;
+    private bool NoActionableModule => !IncludePipelineRunner && !IncludeServerManagement && !IncludeDeploymentAgent && !IncludePatchManagement && !IncludeFirewallManagement && !IncludeHostReboot;
 }

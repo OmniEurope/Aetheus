@@ -9,8 +9,13 @@
 # Unset every repository-local variable git itself declares, not a hand-kept subset.
 unset $(git rev-parse --local-env-vars)
 
-# The unit suites the CI gate blocks on, run before the code can reach a shared branch.
-# Without this, a red test only surfaced hours later in nightly: commit ad1b1f15 pushed a
-# broken architecture test to develop because pre-commit only builds, and nightly 1955 was
-# the first thing to notice.
+# The full suite (`ylaunch -ta`: unit, integration and E2E) runs before the code can reach a
+# shared branch (user decision 2026-11-10: a push leads to production, so everything is replayed
+# first; this replaces the former "-ta green before a candidate" rule). Before that decision only
+# the unit suites ran here; even they were added because commit ad1b1f15 pushed a broken
+# architecture test to develop and nightly 1955 was the first thing to notice.
+# The hook builds against the published OmniEurope.Blazor package, like CI (user decision
+# 2026-11-10): the test-all task sets UseLocalOmniEurope=false, which MSBuild reads from the
+# environment, so no build of the hook compiles the local OE sources (their shared obj folder made
+# two concurrent runs collide). Daily ylaunch builds keep the local sources.
 dotnet husky run --group pre-push

@@ -28,6 +28,8 @@
         <OmniAlert Severity="OmniSeverity.Danger">@L["LoadError"]</OmniAlert>
     }
 
+    <PipelineTemplatesBulkUpdate ProjectId="@_projectId" Visible="@ShowsBulkTemplateUpdate" Updated="@RefreshAsync" />
+
     <AetheusDataGrid FullHeight="true" @ref="_grid" RowClick="@(item => Nav.NavigateTo($"/pipelines/{item.PipelineId}"))" Data="@_items" TItem="PipelineFleetItemDto" Count="@_totalCount"
                 LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading" PageSize="25"
                 Virtualize="@AetheusGrid.RemoteVirtualization"

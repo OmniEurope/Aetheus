@@ -6,6 +6,20 @@ public class ServerTask
 {
     public int Id { get; set; }
     public int ServerId { get; set; }
+
+    /// <summary>
+    /// ADR-060: the public identifier, a UUID v7 taken from <see cref="CreatedAt"/> so the unique index stays
+    /// chronological. Set on every insert by <c>AppDbContext</c>. Null only on a row written by the previous
+    /// version, until <c>TaskIdentityBackfillService</c> reaches it. <see cref="Id"/> stays the internal key.
+    /// </summary>
+    public Guid? Uid { get; set; }
+
+    /// <summary>
+    /// ADR-060: the number shown to a human, unique within <see cref="ServerId"/> and reserved from
+    /// <see cref="Server.TaskCounter"/>. 0 means not numbered yet.
+    /// </summary>
+    public int Number { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string Command { get; set; } = string.Empty;
     public ExecutorType Executor { get; set; } = ExecutorType.Shell;
@@ -51,6 +65,21 @@ public class ServerTask
     public string? AssignedScannerManifestSha256 { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>
+    /// R-12: when the agent reported that a task the control plane had cancelled while it was running has
+    /// stopped (its process tree is gone). Null until then, and for every task that was not cancelled
+    /// while running. The scheduler holds a run's cleanup back while such a task is unacknowledged.
+    /// </summary>
+    public DateTime? StopAcknowledgedAt { get; set; }
+
+    /// <summary>
+    /// R-12: when the scheduler stopped waiting for this cancelled task's stop acknowledgement because the
+    /// maximum wait elapsed without one. Not an acknowledgement: <see cref="StopAcknowledgedAt"/> stays null.
+    /// It makes the "proceeding without the acknowledgement" warning fire once per task, and keeps later
+    /// passes of the run from waiting on, or reporting, the same task again.
+    /// </summary>
+    public DateTime? StopWaitExpiredAt { get; set; }
 
     // Navigation
     public Server Server { get; set; } = null!;

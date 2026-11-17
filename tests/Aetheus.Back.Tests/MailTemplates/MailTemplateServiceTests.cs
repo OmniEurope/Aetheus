@@ -50,7 +50,7 @@ public sealed class MailTemplateServiceTests
         var template = await _sut.GetAsync(MailTemplateKind.NotificationChannelTest, "fr", Ct);
 
         Assert.False(template.IsCustomized);
-        Assert.Contains("{{ChannelName}}", template.Subject, StringComparison.Ordinal);
+        Assert.Equal("Aetheus - Test", template.Subject);
         Assert.Equal(["ChannelName", "InboxUrl"], template.Variables.Select(variable => variable.Name));
         Assert.Equal("Équipe exploitation", template.Variables[0].SampleValue);
         Assert.Equal([MailTemplateVariableKind.Text, MailTemplateVariableKind.Link], template.Variables.Select(variable => variable.Kind));
@@ -144,7 +144,7 @@ public sealed class MailTemplateServiceTests
         _repository.FindUserEmailAsync(7, Arg.Any<CancellationToken>()).Returns("admin@example.org");
         _sender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Sent("no-reply@example.org"));
 
-        var result = await _sut.SendTestAsync(MailTemplateKind.NotificationChannelTest, "fr", Draft("Essai {{ChannelName}}", "<p>Canal {{ChannelName}}</p>"), 7, Ct);
+        var result = await _sut.SendTestAsync(MailTemplateKind.NotificationChannelTest, "fr", Draft("Essai {{ChannelName}}", "<p>Canal {{ChannelName}}</p>"), 7, null, Ct);
 
         Assert.Equal(NotificationTestStatus.Sent, result.Status);
         Assert.Equal("admin@example.org", result.To);
@@ -160,7 +160,7 @@ public sealed class MailTemplateServiceTests
     {
         _repository.FindUserEmailAsync(7, Arg.Any<CancellationToken>()).Returns((string?)null);
 
-        var result = await _sut.SendTestAsync(MailTemplateKind.NotificationChannelTest, "en", Draft(), 7, Ct);
+        var result = await _sut.SendTestAsync(MailTemplateKind.NotificationChannelTest, "en", Draft(), 7, null, Ct);
 
         Assert.Equal(NotificationTestStatus.NotConfigured, result.Status);
         Assert.Equal(MailTemplateService.NoAddressMessage, result.Message);
@@ -173,7 +173,7 @@ public sealed class MailTemplateServiceTests
         _repository.FindUserEmailAsync(7, Arg.Any<CancellationToken>()).Returns("admin@example.org");
         _sender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Failed("550 mailbox unavailable"));
 
-        var result = await _sut.SendTestAsync(MailTemplateKind.NotificationChannelTest, "en", Draft(), 7, Ct);
+        var result = await _sut.SendTestAsync(MailTemplateKind.NotificationChannelTest, "en", Draft(), 7, null, Ct);
 
         Assert.Equal(NotificationTestStatus.Failed, result.Status);
         Assert.Equal("550 mailbox unavailable", result.Message);

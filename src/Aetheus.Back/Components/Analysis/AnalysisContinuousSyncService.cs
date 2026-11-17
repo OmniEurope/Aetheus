@@ -10,21 +10,14 @@ public sealed class AnalysisContinuousSyncService(
     IOptions<DependencyTrackOptions> options,
     TimeProvider timeProvider,
     ILogger<AnalysisContinuousSyncService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:analysis-continuous-sync")
 {
     private readonly DependencyTrackOptions _options = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (!_options.Enabled) return;
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync(
-                "aetheus:analysis-continuous-sync", RunLeaderLoopAsync, stoppingToken).ConfigureAwait(false);
-    }
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        _options.Enabled ? base.ExecuteAsync(stoppingToken) : Task.CompletedTask;
 
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(
             TimeSpan.FromMinutes(Math.Clamp(_options.SyncIntervalMinutes, 5, 1440)), timeProvider);

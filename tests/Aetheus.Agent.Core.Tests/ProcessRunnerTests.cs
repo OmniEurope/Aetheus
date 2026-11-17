@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Operations;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -135,5 +136,86 @@ public sealed class ProcessRunnerTests
         Assert.True(result.TimedOut);
         Assert.True(pid.Task.IsCompletedSuccessfully);
         Assert.True(HasExited(await pid.Task));
+    }
+
+    // ACORE-001: the stop of a cancelled run is acknowledged only with a proof that the tree exited.
+    private static async Task<Exception?> CancelRunWhoseStopProofIs(bool proven)
+    {
+        using var taskCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var pid = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var run = ProcessRunner.RunAsync(
+            PidThenSleep(),
+            timeoutSeconds: 120,
+            (message, _) =>
+            {
+                if (int.TryParse(message.Trim(), out var value)) pid.TrySetResult(value);
+                return Task.CompletedTask;
+            },
+            NullLogger.Instance,
+            taskCts.Token,
+            stopTree: async (process, _) =>
+            {
+                // The seam stands for a tree the runner could (or could not) prove stopped; the real
+                // child is still killed so the test leaves nothing behind.
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None);
+                return proven;
+            });
+        await pid.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        await taskCts.CancelAsync();
+
+        return await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RunAsync_CancellationWithoutProofThatTheTreeStopped_ReportsNonTermination()
+    {
+        var thrown = await CancelRunWhoseStopProofIs(proven: false);
+
+        Assert.IsType<ProcessTreeNotTerminatedException>(thrown);
+    }
+
+    [Fact]
+    public async Task RunAsync_CancellationWithProofThatTheTreeStopped_IsAPlainCancellation()
+    {
+        var thrown = await CancelRunWhoseStopProofIs(proven: true);
+
+        Assert.IsAssignableFrom<OperationCanceledException>(thrown);
+        Assert.IsNotType<ProcessTreeNotTerminatedException>(thrown);
+    }
+
+    [Fact]
+    public async Task StopTreeAsync_RefusedKillLeavingTheChildRunning_ReportsNoProof()
+    {
+        using var child = Process.Start(PidThenSleep())!;
+        try
+        {
+            var proven = await ProcessRunner.StopTreeAsync(
+                child,
+                NullLogger.Instance,
+                kill: _ => throw new UnauthorizedAccessException("EPERM"),
+                killWait: TimeSpan.FromSeconds(1));
+
+            Assert.False(proven);
+            Assert.False(HasExited(child.Id));
+        }
+        finally
+        {
+            child.Kill(entireProcessTree: true);
+            await child.WaitForExitAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task StopTreeAsync_KillThatEndsTheChild_ReportsProof()
+    {
+        using var child = Process.Start(PidThenSleep())!;
+
+        var proven = await ProcessRunner.StopTreeAsync(child, NullLogger.Instance);
+
+        Assert.True(proven);
+        Assert.True(child.HasExited);
     }
 }

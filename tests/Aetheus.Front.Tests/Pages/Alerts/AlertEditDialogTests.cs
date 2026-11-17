@@ -16,7 +16,18 @@ public class AlertEditDialogTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
 
-    public AlertEditDialogTests() => _handler = BunitTestHelper.RegisterServices(this);
+    public AlertEditDialogTests()
+    {
+        _handler = BunitTestHelper.RegisterServices(this);
+        // The dialog loads the server list for its mandatory server selector.
+        _handler.SetJsonResponse(HttpMethod.Get, "api/servers?page=1&pageSize=100", new PaginatedResult<ServerDto>
+        {
+            Items = [new ServerDto { Id = 3, Name = "web-0" }],
+            TotalCount = 1,
+            Page = 1,
+            PageSize = 100
+        });
+    }
 
     /// <summary>
     /// Registers a spy OmniDialogService (lazy factory so the provider isn't built early) that records the
@@ -50,6 +61,7 @@ public class AlertEditDialogTests : BunitContext
         {
             Id = 7,
             Name = "CPU High",
+            ServerId = 3,
             Metric = MetricType.Cpu,
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 88,
@@ -106,6 +118,7 @@ public class AlertEditDialogTests : BunitContext
         {
             Id = 7,
             Name = "CPU High",
+            ServerId = 3,
             Metric = MetricType.Cpu,
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 88,
@@ -138,6 +151,51 @@ public class AlertEditDialogTests : BunitContext
         Assert.DoesNotContain(Notifications.Toasts(), m => m.Severity == OmniSeverity.Success);
     }
 
+    // F-FRONT-017: a rule without a server is never evaluated, so the server is mandatory at creation.
+    [Fact]
+    public void Submit_CreateMode_WithoutServer_IsRefused_AndSendsNoPost()
+    {
+        var cut = Render<AlertEditDialog>();
+        cut.Find("input#oe-pages-alerts-alerteditdialog-1").Input("Disk High");
+
+        cut.Find("form").Submit();
+
+        Assert.DoesNotContain(_handler.Requests, r => r.Method == "POST");
+        Assert.Contains(Notifications.Toasts(), m => m.Severity == OmniSeverity.Warning);
+    }
+
+    [Fact]
+    public void Submit_CreateMode_WithServerChosenInTheSelector_PostsThatServerId()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/servers?page=1&pageSize=100", new PaginatedResult<ServerDto>
+        {
+            Items = [new ServerDto { Id = 11, Name = "web-1" }, new ServerDto { Id = 12, Name = "web-2" }],
+            TotalCount = 2,
+            Page = 1,
+            PageSize = 100
+        });
+        _handler.SetJsonResponse(HttpMethod.Post, "api/alerts", new AlertRuleDto { Id = 42, Name = "Disk High", ServerId = 12 });
+        var cut = Render<AlertEditDialog>();
+        cut.Find("input#oe-pages-alerts-alerteditdialog-1").Input("Disk High");
+        PickServer(cut, "web-2");
+
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() =>
+        {
+            var post = Assert.Single(_handler.RequestDetails, r => r.Method == "POST" && r.Url.Contains("api/alerts"));
+            Assert.Contains("\"serverId\":12", post.Body!.Replace(" ", string.Empty), StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    private static void PickServer(IRenderedComponent<AlertEditDialog> cut, string serverName)
+    {
+        cut.WaitForAssertion(() => Assert.Contains(serverName, cut.Markup));
+        var selector = cut.Find("select#oe-formfield-pages-alerts-alerteditdialog-3");
+        selector.Change(selector.QuerySelectorAll("option")
+            .First(option => option.TextContent.Contains(serverName, StringComparison.Ordinal)).GetAttribute("value"));
+    }
+
     private OmniOverlayService Notifications => Services.GetRequiredService<OmniOverlayService>();
 
     private static void SetModelName(AlertEditDialog instance, string name)
@@ -145,6 +203,7 @@ public class AlertEditDialogTests : BunitContext
         var modelField = typeof(AlertEditDialog).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var model = (UpdateAlertRuleRequest)modelField.GetValue(instance)!;
         model.Name = name;
+        model.ServerId ??= 3;
     }
 
     private async Task InvokeSubmit(IRenderedComponent<AlertEditDialog> cut)
@@ -180,15 +239,18 @@ public class AlertEditDialogTests : BunitContext
         var model = typeof(AlertEditDialog).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(cut.Instance)!;
         model.GetType().GetProperty("Name")!.SetValue(model, "Disk High");
+        PickServer(cut, "web-0");
 
         var submit = typeof(AlertEditDialog).GetMethod("SubmitAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)submit.Invoke(cut.Instance, [])!);
 
         // A valid name routes through Ui.RunAsync → a real create POST to api/alerts…
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/alerts"));
-        // …and on a non-null result the dialog closes with `true` so the list reloads.
+        // …and on a non-null result the dialog closes with the saved rule (R-10: it was `true` before), so the list draws it at once.
         Assert.True(Spy().Closed);
-        Assert.Equal(true, Spy().LastResult);
+        var saved = Assert.IsType<AlertRuleDto>(Spy().LastResult);
+        Assert.Equal(1, saved.Id);
+        Assert.Equal("Disk High", saved.Name);
     }
 
     [Fact]
@@ -199,6 +261,7 @@ public class AlertEditDialogTests : BunitContext
         {
             Id = 7,
             Name = "CPU High",
+            ServerId = 3,
             Metric = MetricType.Cpu,
             Operator = ComparisonOperator.GreaterThan,
             Threshold = 88,
@@ -213,9 +276,11 @@ public class AlertEditDialogTests : BunitContext
         var submit = typeof(AlertEditDialog).GetMethod("SubmitAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)submit.Invoke(cut.Instance, [])!);
 
-        // Edit mode issues a PUT to the per-id route and closes with `true`.
+        // Edit mode issues a PUT to the per-id route and closes with the saved rule (R-10: it was `true` before).
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.Contains("api/alerts/7"));
         Assert.True(Spy().Closed);
-        Assert.Equal(true, Spy().LastResult);
+        var saved = Assert.IsType<AlertRuleDto>(Spy().LastResult);
+        Assert.Equal(7, saved.Id);
+        Assert.Equal(88, saved.Threshold);
     }
 }

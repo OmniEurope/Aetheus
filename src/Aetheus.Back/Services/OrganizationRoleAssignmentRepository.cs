@@ -29,10 +29,6 @@ public interface IOrganizationRoleAssignmentRepository
 
     /// <summary>How many Owners the organization has, read from the database (not the tracked rows).</summary>
     Task<int> CountOwnersAsync(int organizationId, CancellationToken ct);
-
-    /// <summary>Serializes every change that can remove an organization's Owner until the handle is
-    /// disposed, after the caller saved: two such changes never both pass the last-Owner count.</summary>
-    Task<IAsyncDisposable> LockOwnersAsync(CancellationToken ct);
 }
 
 public sealed class OrganizationRoleAssignmentRepository(AppDbContext db) : IOrganizationRoleAssignmentRepository
@@ -107,9 +103,6 @@ public sealed class OrganizationRoleAssignmentRepository(AppDbContext db) : IOrg
     public Task<int> CountOwnersAsync(int organizationId, CancellationToken ct) =>
         db.OrganizationMembers.AsNoTracking()
             .CountAsync(member => member.OrganizationId == organizationId && member.Role == OrganizationRole.Owner, ct);
-
-    public Task<IAsyncDisposable> LockOwnersAsync(CancellationToken ct) =>
-        PostgresSessionLock.AcquireAsync(db, "aetheus:organization-owners", ct);
 
     /// <summary>Saves; two requests giving the same role at once hit the unique index, which is a 409
     /// for the later one (the state it asked for exists), never a 500.</summary>

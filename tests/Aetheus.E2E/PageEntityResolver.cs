@@ -19,6 +19,9 @@ internal sealed class PageEntityResolver(IPage page, string backendUrl)
 {
     // The article opened from the home page and the settings tab that every administrator has.
     private const string HelpArticleKey = "dashboard";
+
+    /// <summary>The CISA catalogue feed always exists while the watch is on, so its page has a key to open.</summary>
+    private const string CveSourceKey = "kev";
     private const string SettingsTabKey = "security";
     private const int GitGraphProbeLimit = 10;
 
@@ -70,9 +73,11 @@ internal sealed class PageEntityResolver(IPage page, string backendUrl)
         await ResolveMailAccountAsync(servers.Items);
         await ResolveAlertOccurrenceAsync();
         await ResolveAnalysisFindingAsync();
+        await ResolveCveWatchRunAsync();
         await ResolveGitObjectsAsync(repositoryId);
 
         _values[PageEntity.HelpArticleKey] = HelpArticleKey;
+        _values[PageEntity.CveSourceKey] = CveSourceKey;
         _values[PageEntity.SettingsTab] = SettingsTabKey;
         return new ResolvedEntities(_values, _missing);
     }
@@ -174,11 +179,42 @@ internal sealed class PageEntityResolver(IPage page, string backendUrl)
 
     private async Task ResolveAnalysisFindingAsync()
     {
-        // The portfolio lists the findings a project carries; empty means that nothing was analysed.
-        var portfolio = await ListAsync("analysis/portfolio");
+        // The portfolio lists the reports with their project and finding count; the findings of such a project come from
+        // api/analysis/projects/{projectId}/findings, the list the quality section of the project page reads.
+        var portfolio = await ListAsync("analysis/portfolio?pageSize=200");
+        var projectIds = portfolio.Items
+            .Where(row => row.TryGetProperty("findingCount", out var count) && count.ValueKind == JsonValueKind.Number && count.GetInt32() > 0)
+            .Select(row => row.GetProperty("projectId").GetInt64())
+            .Distinct()
+            .Order()
+            .ToList();
+        var problem = portfolio.Problem;
+        foreach (var projectId in projectIds)
+        {
+            var findings = await ListAsync($"analysis/projects/{projectId.ToString(CultureInfo.InvariantCulture)}/findings?page=1&pageSize=200");
+            if (MinId(findings.Items) is { } finding)
+            {
+                Set(PageEntity.AnalysisFinding, finding, string.Empty);
+                return;
+            }
+            problem = findings.Problem;
+        }
         Set(PageEntity.AnalysisFinding, null, portfolio.Items.Count == 0
-            ? "the analysis portfolio is empty, so no analysis finding is seeded"
-            : "the portfolio has rows but no API the harness uses lists finding identifiers");
+            ? $"the analysis portfolio is empty, so no analysis finding is seeded{problem}"
+            : $"no project of the portfolio lists a finding{problem}");
+    }
+
+    private async Task ResolveCveWatchRunAsync()
+    {
+        // A watch run is a report of the portfolio whose source is the CVE watch (R-21), its number the report's.
+        var portfolio = await ListAsync("analysis/portfolio?pageSize=200");
+        var runs = portfolio.Items
+            .Where(row => row.TryGetProperty("source", out var source)
+                && (source.ValueKind == JsonValueKind.String ? source.GetString() == "CveWatch" : source.ValueKind == JsonValueKind.Number && source.GetInt32() == 1))
+            .Select(row => row.GetProperty("analysisReportId").GetInt64())
+            .ToList();
+        Set(PageEntity.CveWatchRun, runs.Count == 0 ? null : runs.Min(),
+            $"the CVE watch has written no report in the seeded data{portfolio.Problem}");
     }
 
     private async Task ResolveGitObjectsAsync(long? repositoryId)

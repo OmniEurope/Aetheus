@@ -90,6 +90,9 @@ public class ReleaseService(
         if (project is null) throw new NotFoundException("Project not found");
         if (string.IsNullOrWhiteSpace(project.RepositoryUrl))
             throw new BadRequestException("Project has no repository URL");
+        // R-4: an external address without a project mirror is never listed straight from the remote.
+        if (ExternalRepositoryAddress.IsUnmirrored(project.RepositoryUrl))
+            throw ExternalRepositoryMirrorRequirement.Refusal();
 
         var branches = await gitService.ListReleaseBranchesAsync(project.RepositoryUrl, ct).ConfigureAwait(false);
 
@@ -347,19 +350,23 @@ public class ReleaseService(
             var deployedReleases = deployed
                 ? await repo.GetDeployedProjectReleasesAsync(projectId, ct).ConfigureAwait(false)
                 : [];
+            var existingByVersion = await repo.FindByVersionAsync(projectId, version, ct).ConfigureAwait(false);
+            // What this recording supersedes, kept on the new release so the demotion of this same run can put it back.
+            var supersededByThisRun = deployedReleases.Where(r => r.Id != existingByVersion?.Id).MaxBy(r => r.Id);
             foreach (var deployedRelease in deployedReleases)
                 deployedRelease.Status = ReleaseStatus.Superseded;
             if (deployedReleases.Count > 0)
                 await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
             var releaseStatus = deployed ? ReleaseStatus.Deployed : ReleaseStatus.Published;
-            var existingByVersion = await repo.FindByVersionAsync(projectId, version, ct).ConfigureAwait(false);
             if (ReleaseRunOutcome.IsLiveBeforeThisRun(existingByVersion, deployed, pipelineRunId))
                 return (await MapToDtoAsync(existingByVersion, ct).ConfigureAwait(false), false);
             if (existingByVersion is not null)
             {
+                var demotesThisRun = !deployed && existingByVersion.Status == ReleaseStatus.Deployed;
                 ReleaseRunOutcome.RecordSourceIdentity(existingByVersion, deployed, commitHash, tagName, branchName);
                 existingByVersion.Status = releaseStatus;
+                if (supersededByThisRun is not null) existingByVersion.SupersededReleaseId = supersededByThisRun.Id;
                 existingByVersion.PublishedAt = timeProvider.GetUtcNow().UtcDateTime;
                 existingByVersion.ArchivedAt = null;
                 existingByVersion.PipelineRunId = pipelineRunId;
@@ -371,6 +378,8 @@ public class ReleaseService(
                     existingByVersion.BlockingTestCount = assuranceVerdict.BlockingTestCount;
                 }
                 await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+                if (demotesThisRun)
+                    await RestoreSupersededByDemotedRunAsync(existingByVersion, pipelineRunId, ct).ConfigureAwait(false);
                 await LinkRunArtifactsToReleaseAsync(
                     existingByVersion, retainedArtifactRunId, validatedArtifacts, ct).ConfigureAwait(false);
                 if (retainedArtifactRunId != pipelineRunId)
@@ -397,6 +406,7 @@ public class ReleaseService(
                 TagName = tagName ?? $"v{version}",
                 BuildNumber = maxBuildNumber + 1,
                 PublishedAt = now,
+                SupersededReleaseId = supersededByThisRun?.Id,
                 AssuranceGrade = assuranceVerdict?.Grade,
                 Deployable = assuranceVerdict?.Deployable,
                 BlockingTestCount = assuranceVerdict?.BlockingTestCount
@@ -492,6 +502,27 @@ public class ReleaseService(
             $"from={rollback.SourceRelease.Version}; to={rollback.TargetRelease.Version}; run={rollback.PipelineRunId}; restoreDatabase={rollback.RestoreDatabase}", ct).ConfigureAwait(false);
         await BroadcastStatusAsync(rollback.SourceRelease, ct).ConfigureAwait(false);
         await BroadcastStatusAsync(rollback.TargetRelease, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The demoted release's run had superseded the previously deployed release; the rollback
+    /// put that one back on the host, so it is Deployed again. Only while it is still Superseded and no
+    /// other release of the project is Deployed, and only once per recording.</summary>
+    private async Task RestoreSupersededByDemotedRunAsync(Release demoted, int pipelineRunId, CancellationToken ct)
+    {
+        if (demoted.SupersededReleaseId is not { } previousId) return;
+        demoted.SupersededReleaseId = null;
+        var previous = await repo.FindReleaseAsync(previousId, ct).ConfigureAwait(false);
+        var stillDeployed = await repo.GetDeployedProjectReleasesAsync(demoted.ProjectId, ct).ConfigureAwait(false);
+        if (previous is not { Status: ReleaseStatus.Superseded } || previous.ProjectId != demoted.ProjectId || stillDeployed.Count > 0)
+        {
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            return;
+        }
+        previous.Status = ReleaseStatus.Deployed;
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        if (audit is not null) await audit.LogAsync("ReleaseStatusRestored", "Release", previous.Id,
+            $"version={previous.Version}; from={ReleaseStatus.Superseded}; to={ReleaseStatus.Deployed}; superseded=none; run={pipelineRunId}; reason=run {pipelineRunId} was rolled back, its demoted release {demoted.Version} gives the deployment back", ct).ConfigureAwait(false);
+        await BroadcastStatusAsync(previous, ct).ConfigureAwait(false);
     }
 
     private async Task BroadcastStatusAsync(Release release, CancellationToken ct)

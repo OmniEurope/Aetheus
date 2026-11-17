@@ -77,7 +77,6 @@ public partial class Logs : IAsyncDisposable
             .ToList();
         _logs.Clear();
         _logs.AddRange(merged);
-        StateHasChanged();
     }
 
     private void ResetWatchState(int nextWatchId)

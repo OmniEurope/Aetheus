@@ -22,7 +22,7 @@ internal static class MailTemplateCatalog
         MailTemplateKind.NotificationChannelTest => [Text(ChannelName), Link(InboxUrl)],
         MailTemplateKind.NotificationEvent =>
         [
-            Text(Event), Text(Summary), Text(Intro), Text(Context), Text(Project), Text(LinkLabel), Link(NotificationMailVariables.Link),
+            Text(Event), Text(Summary), Text(EventWord), Text(SubjectLine), Text(Intro), Text(Context), Text(Project), Text(LinkLabel), Link(NotificationMailVariables.Link),
             Link(InboxUrl), Text(SentAt), Block(StatusBanner), Block(ApprovalActions), Block(ContextLink), Block(Details), Block(LinkNote)
         ],
         MailTemplateKind.DailyRecap => [Text(Date), Text(Period), Link(SettingsUrl), Block(Tiles), Block(Sections)],

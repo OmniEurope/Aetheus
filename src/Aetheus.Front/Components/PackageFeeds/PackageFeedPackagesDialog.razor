@@ -1,7 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-@* R-99: OE's veil lies over the dialog while a package is being removed; its content stays mounted under it. *@
-<OmniStack Class="@(_removing ? "omni-busy" : null)" aria-busy="@(_removing ? "true" : "false")" data-testid="package-feed-packages-zone">
+@* R-99, R-1: the page veil is held while a package is being removed; the dialog's content stays mounted. *@
+<VeilHold Busy="@_removing" />
+<OmniStack data-testid="package-feed-packages-zone">
 <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["PackageName"]" @bind-Value="_newPackage" Placeholder="@L["PackageName"]" Class="omni-u-grow" />
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newPackage)" Class="@(_adding ? "btn-busy" : null)" Busy="@(_adding)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>

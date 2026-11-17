@@ -62,11 +62,11 @@
 <OmniCard>
     @if (_analyticsLoading)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else
     {
-        <OmniStack Gap="OmniSpacing.Medium">
+        <OmniStack Gap="OmniSpacing.Small">
             <OmniSwitch @bind-Value="_analyticsEnabled" Disabled="@(!CanWrite)">@L["EnableWebAnalytics"]</OmniSwitch>
             <OmniSwitch @bind-Value="_analyticsPublicIngestEnabled" Disabled="@(!CanWrite)">@L["EnablePublicWebAnalyticsIngest"]</OmniSwitch>
             <OmniFormField Label="@L["AnalyticsSiteId"]" For="analytics-site-id" Required="true">
@@ -152,18 +152,25 @@
 
 @if (CanWrite)
 {
-    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
+    @* R-28: the add button is the end content of the last field, so it sits on the control's line (a field keeps
+       the height of its error line below the control, which dropped a button aligned to the stack's bottom);
+       on a narrow screen whole fields wrap, never the button alone. *@
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.Start" data-testid="metric-threshold-form">
         <OmniFormField Label="@L["Metric"]" For="analytics-threshold-metric" Required="true">
             <OmniTextBox Id="analytics-threshold-metric" @bind-Value="_newThreshold.MetricName"
                            Class="w-rem-16" />
         </OmniFormField>
         <OmniFormField Label="@L["Operator"]" For="analytics-threshold-operator">
-            <OmniDropDown Id="analytics-threshold-operator" name="analytics-threshold-operator" @bind-Value="_newThreshold.Operator" Options="@(_operators.ToOptions(item => item, item => item))" Class="w-rem-12" />
+            <OmniDropDown Id="analytics-threshold-operator" name="analytics-threshold-operator" @bind-Value="_newThreshold.Operator" Options="@(_operators.ToOptions(item => item, item => L.Localize(item)))" Class="w-rem-12" />
         </OmniFormField>
         <OmniFormField Label="@L["Threshold"]" For="analytics-threshold-value">
-            <OmniNumeric Id="analytics-threshold-value" @bind-Value="_newThreshold.Threshold" Class="w-rem-8" />
+            <ChildContent>
+                <OmniNumeric Id="analytics-threshold-value" @bind-Value="_newThreshold.Threshold" Class="w-rem-8" />
+            </ChildContent>
+            <EndContent>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddThresholdAsync" title="@L["AddThreshold"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
+            </EndContent>
         </OmniFormField>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddThresholdAsync" title="@L["AddThreshold"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
     </OmniStack>
 }
 </OmniStack>

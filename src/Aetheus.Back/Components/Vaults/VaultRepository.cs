@@ -120,6 +120,30 @@ public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaul
             .ConfigureAwait(false);
     }
 
+    public async Task<List<(int Id, string Name, string Key)>> FindKeyHoldersWithCrossAccessAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default)
+    {
+        // Same reach as FindByNamesWithCrossAccessAsync (the run's own project only), and only the key names leave the
+        // database: the encrypted values are never selected.
+        var found = await db.Vaults
+            .AsNoTracking()
+            .Where(v => v.ProjectId == projectId
+                || (v.ProjectId == null && v.EnvironmentId != null && v.Environment!.ProjectId == projectId)
+                || (v.ProjectId == null && v.ProjectServerId != null && v.ProjectServer!.ProjectId == projectId)
+                || (v.ProjectId == null && v.EnvironmentId == null && v.ProjectServerId == null))
+            .SelectMany(v => v.Secrets.Where(s => keys.Contains(s.Key)).Select(s => new
+            {
+                v.Id,
+                v.Name,
+                s.Key,
+                Own = v.ProjectId == projectId
+            }))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return [.. found.OrderByDescending(item => item.Own).ThenBy(item => item.Name, StringComparer.Ordinal)
+            .Select(item => (item.Id, item.Name, item.Key))];
+    }
+
     public async Task<List<string>> GetVaultNamesAsync(int? projectId, List<int>? accessibleIds = null, CancellationToken ct = default)
     {
         var query = db.Vaults
@@ -184,6 +208,9 @@ public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaul
         db.VaultSecretVersions.AddRange(versions);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
+
+    public async Task<int> CountSecretVersionsAsync(int secretId, CancellationToken ct = default) =>
+        await db.VaultSecretVersions.CountAsync(v => v.VaultSecretId == secretId, ct).ConfigureAwait(false);
 
     public async Task<List<VaultSecretVersion>> GetSecretVersionsAsync(int secretId, CancellationToken ct = default)
     {

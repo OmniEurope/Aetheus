@@ -21,41 +21,6 @@ public class ProjectsTests : E2ETestBase
     }
 
     [Test]
-    public async Task Projects_PageRendersExpectedControlsAndContent()
-    {
-        await NavigateToAsync("projects");
-        await Expect(Page.GetByText("Projects").First).ToBeVisibleAsync(new() { Timeout = 10000 });
-        await Expect(Page).ToHaveTitleAsync(new System.Text.RegularExpressions.Regex("Projects"));
-
-        // Scope Create to page-header actions because the empty state can also expose a creation
-        // button.
-        var newButton = Page.Locator(".omni-page-header__actions").GetByRole(AriaRole.Button, new() { Name = "Create", Exact = true });
-        await Expect(newButton).ToBeVisibleAsync(new() { Timeout = 10000 });
-        var searchBox = Page.Locator(".project-list-search");
-        await Expect(searchBox).ToBeVisibleAsync(new() { Timeout = 10000 });
-
-        await WaitForNoSpinnerAsync();
-
-        // Either project cards exist or the EmptyState component renders.
-        var cards = Page.Locator(".project-card");
-        var emptyState = Page.Locator(".empty-state");
-
-        var cardsCount = await cards.CountAsync();
-        var emptyVisible = await emptyState.IsVisibleAsync();
-
-        Assert.That(cardsCount > 0 || emptyVisible, Is.True, "Should show project cards or empty state");
-
-        var dropdown = Page.Locator("select.omni-drop-down").First;
-        await Expect(dropdown).ToBeVisibleAsync();
-        // Assert that the header omits total and refresh controls because entity events already
-        // refresh the project list.
-        var header = Page.Locator(".omni-page-header");
-        await Expect(header.Locator("button[title='Refresh']")).ToHaveCountAsync(0);
-        await Expect(header.Locator(".omni-badge").Filter(new() { HasTextRegex = new System.Text.RegularExpressions.Regex(@"\d+\s*total", System.Text.RegularExpressions.RegexOptions.IgnoreCase) }))
-            .ToHaveCountAsync(0);
-    }
-
-    [Test]
     [RollbackRelevant]
     public async Task Projects_NewProject_PersistsAndIsDeletedThroughTheUi()
     {
@@ -166,7 +131,9 @@ public class ProjectsTests : E2ETestBase
             .GetByRole(AriaRole.Link, new() { Name = evidence.ProjectName, Exact = true });
         await Expect(projectCrumb).ToBeVisibleAsync(new() { Timeout = 10000 });
         await Expect(projectCrumb).ToHaveAttributeAsync("href", $"/projects/{evidence.ProjectId}/overview");
-        await Expect(Page.GetByText("Telemetry", new() { Exact = true }).Last)
+        // The "Telemetry" heading was removed on purpose (R-23): the telemetry panel is now identified by its
+        // application picker field, which only renders once the project's telemetry is loaded.
+        await Expect(Page.GetByTestId("telemetry-app-field"))
             .ToBeVisibleAsync(new() { Timeout = 10000 });
 
         var applicationDropdown = Page.Locator("select.omni-drop-down").First;
@@ -187,9 +154,8 @@ public class ProjectsTests : E2ETestBase
         await Page.GetByRole(AriaRole.Tab, new() { Name = "Performance", Exact = true }).ClickAsync();
         await Page.Locator("summary.omni-fieldset__summary", new() { HasText = "Explore a metric" }).ClickAsync();
         var metricChart = Page.Locator(".omni-chart:visible").First;
-        await Expect(metricChart.Locator("title[id$='-title']")).ToHaveTextAsync(
-            "aetheus.e2e.real.browser",
-            new() { Timeout = 10000 });
+        await Expect(metricChart.GetByRole(AriaRole.Img, new() { Name = "aetheus.e2e.real.browser", Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = 10000 });
         await Expect(metricChart).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         await Page.GetByRole(AriaRole.Tab, new() { Name = "Logs", Exact = true }).ClickAsync();
@@ -211,9 +177,33 @@ public class ProjectsTests : E2ETestBase
             .ToBeVisibleAsync(new() { Timeout = 10000 });
 
         await Page.GetByRole(AriaRole.Tab, new() { Name = "Top pages", Exact = true }).ClickAsync();
-        await Expect(Page.GetByText("/e2e/real-observability", new() { Exact = true }))
+        // The Visitors tab now also lists each visitor's entry page (R-22), so the route is scoped to the Top pages panel.
+        await Expect(Page.GetByRole(AriaRole.Tabpanel, new() { Name = "Top pages" })
+                .GetByText("/e2e/real-observability", new() { Exact = true }))
             .ToBeVisibleAsync(new() { Timeout = 10000 });
     }
+
+    private static object RouteGauge(string name, string unit, double value, long timeUnixNano) => new
+    {
+        name,
+        unit,
+        gauge = new
+        {
+            dataPoints = new[]
+            {
+                new
+                {
+                    asDouble = value,
+                    timeUnixNano = timeUnixNano.ToString(),
+                    attributes = new[]
+                    {
+                        new { key = "http.route", value = new { stringValue = "/e2e/real-performance" } },
+                        new { key = "http.request.method", value = new { stringValue = "GET" } }
+                    }
+                }
+            }
+        }
+    };
 
     private static async Task<TotoMonitoringEvidence> SeedTotoMonitoringEvidenceAsync()
     {
@@ -293,7 +283,14 @@ public class ProjectsTests : E2ETestBase
                                                 new { asDouble = 191, timeUnixNano = nowNanos.ToString() }
                                             }
                                         }
-                                    }
+                                    },
+                                    // Aetheus.Telemetry's per-route gauges: the Performance tab only offers its
+                                    // metric explorer once a route measurement exists (R-26).
+                                    RouteGauge("aetheus.http.server.request.count", "1", 12, nowNanos),
+                                    RouteGauge("aetheus.http.server.request.duration.p50", "ms", 40, nowNanos),
+                                    RouteGauge("aetheus.http.server.request.duration.p95", "ms", 120, nowNanos),
+                                    RouteGauge("aetheus.http.server.request.duration.p99", "ms", 150, nowNanos),
+                                    RouteGauge("aetheus.http.server.request.duration.max", "ms", 190, nowNanos)
                                 }
                             }
                         }

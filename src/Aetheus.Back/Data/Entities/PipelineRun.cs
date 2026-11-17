@@ -5,6 +5,14 @@ namespace Aetheus.Back.Data.Entities;
 public class PipelineRun
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// ADR-060: the public identifier, a UUID v7 taken from <see cref="StartedAt"/>. Null on a row of an
+    /// older version, until <c>PipelineRunIdentityBackfillService</c> reaches it. <see cref="Id"/> stays
+    /// the internal key and <see cref="BuildNumber"/> the number a person reads.
+    /// </summary>
+    public Guid? Uid { get; set; }
+
     public int PipelineId { get; set; }
     public PipelineStatus Status { get; set; } = PipelineStatus.Pending;
     public DateTime StartedAt { get; set; }
@@ -45,7 +53,9 @@ public class PipelineRun
     /// Per-pipeline sequential build number reserved from <see cref="Pipeline.BuildCounter"/> at
     /// launch, exposed to steps as <c>BUILD_PIPELINE_RUNNUMBER</c>. Unlike the globally monotonic
     /// run id (<c>BUILD_BUILDID</c>) this increments by exactly one per run of the same pipeline,
-    /// which is what an application version pattern needs. 0 for runs created before it existed.
+    /// which is what an application version pattern needs, and the run number a person reads (R-8,
+    /// <c>#12</c>): unique within its pipeline, while <see cref="Id"/> stays the technical key of URLs,
+    /// logs and seals. Runs older than the counter were numbered by <c>NumberPipelineRunsPerPipeline</c>.
     /// </summary>
     public int BuildNumber { get; set; }
 

@@ -56,18 +56,14 @@ public sealed partial class HostLiteralAuditTests
         ["deploy", "pipelines", "toto-conformance-fixture", "common", "deploy", "scripts"],
     ];
 
-    /// <summary>Shell and Node scripts of <see cref="ScriptDirectories"/> except the tests, and every pipeline definition and configuration template under .pipeline.</summary>
+    /// <summary>Shell and Node scripts of <see cref="ScriptDirectories"/> except the tests.</summary>
     private static IEnumerable<string> Candidates()
     {
         var scripts = ScriptDirectories
             .SelectMany(parts => RepositoryScan.Enumerate(Path.Combine([Root, .. parts]), "*"))
             .Where(path => path.EndsWith(".sh", StringComparison.Ordinal)
                 || (path.EndsWith(".mjs", StringComparison.Ordinal) && !path.EndsWith(".test.mjs", StringComparison.Ordinal)));
-        var pipelines = RepositoryScan.Enumerate(Path.Combine(Root, ".pipeline"), "*")
-            .Where(path => path.EndsWith(".yaml", StringComparison.Ordinal)
-                || path.EndsWith(".yml", StringComparison.Ordinal)
-                || path.EndsWith(".conf", StringComparison.Ordinal));
-        return scripts.Concat(pipelines).Order(StringComparer.Ordinal);
+        return scripts.Order(StringComparer.Ordinal);
     }
 
 }

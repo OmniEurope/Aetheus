@@ -5,6 +5,7 @@ using Aetheus.Back.Components.Organizations;
 using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Data.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -27,7 +28,7 @@ public class AuthServiceBasicAuthTests
 
         _sut = new AuthService(
             _repo, config, Substitute.For<IAuditService>(),
-            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
+            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }),
             _cache, Substitute.For<IOrganizationService>(),
             Substitute.For<ITotpService>(), TimeProvider.System,
             Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
@@ -136,5 +137,27 @@ public class AuthServiceBasicAuthTests
 
         // Second call served from cache - only one DB roundtrip.
         await _repo.Received(1).GetSecurityStampAsync(1, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task IsSecurityStampValid_DeactivatedUserWithUnchangedStamp_ReturnsFalse()
+    {
+        // R-49: the per-request check reads the stamp through the real repository; an account switched off
+        // without a stamp rotation (database edit, script) must still be refused.
+        var options = new DbContextOptionsBuilder<Aetheus.Back.Data.AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var db = new Aetheus.Back.Data.AppDbContext(options);
+        db.Users.Add(new User { Id = 1, Username = "bob", IsActive = false, SecurityStamp = "stamp-abc", UserRoles = [] });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var config = new ConfigurationBuilder().Build();
+        var sut = new AuthService(
+            new AuthRepository(db, TimeProvider.System), config, Substitute.For<IAuditService>(),
+            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }),
+            new MemoryCache(new MemoryCacheOptions()), Substitute.For<IOrganizationService>(),
+            Substitute.For<ITotpService>(), TimeProvider.System,
+            Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
+
+        Assert.False(await sut.IsSecurityStampValidAsync(1, "stamp-abc", ct: TestContext.Current.CancellationToken));
     }
 }

@@ -49,10 +49,13 @@ public sealed class LoadingIndicatorAuditTests
         var loader = File.ReadAllText(loaderFile);
 
         Assert.Matches(@"<OmniLogoLoader\b", loader);
-        // The animated splash plane uses CSS keyframes.
+        // The animated splash plane uses CSS keyframes. R-36: the drawing lives in AetheusMark, shared by the loader and the veils.
         Assert.Matches(@"<OmniLogoLoader\b[^>]*\bAnimatedMark=""true""", loader);
-        Assert.Contains("class=\"p-ship\"", loader, StringComparison.Ordinal);
+        Assert.Contains("<AetheusMark", loader, StringComparison.Ordinal);
+        var mark = File.ReadAllText(Path.Combine(frontDir, "Components", "Shared", "AetheusMark.razor"));
+        Assert.Contains("class=\"p-ship\"", mark, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"<(animate|animateTransform|animateMotion|set)\b", loader);
+        Assert.DoesNotMatch(@"<(animate|animateTransform|animateMotion|set)\b", mark);
 
         var direct = RepositoryScan.Enumerate(frontDir, "*.razor")
             .Where(file => !string.Equals(file, loaderFile, StringComparison.OrdinalIgnoreCase))

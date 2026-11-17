@@ -34,15 +34,15 @@ public interface IPermissionRepository
 
     /// <summary>
     /// Returns the ids of the resources of the given <paramref name="resourceType"/> owned by one of
-    /// <paramref name="orgIds"/>, directly (Server, Project, PipelineTemplate) or through their project
+    /// <paramref name="orgIds"/>, directly (Server, Project, PipelineTemplate, AgentPool) or through their project
     /// (Pipeline, Release, Environment, VariableLibrary, Vault, ServiceConnection). Empty for the types
-    /// no organization owns (AgentPool, Docker) and for resources without a project.
+    /// no organization owns (Docker) and for resources without a project.
     /// </summary>
     Task<List<int>> GetResourceIdsByOrganizationsAsync(ResourceType resourceType, List<int> orgIds, CancellationToken ct = default);
 
     /// <summary>
     /// The organization that owns the resource, or null when it does not exist or no organization owns
-    /// it (an AgentPool, or a resource without a project).
+    /// it (Docker, or a resource without a project).
     /// </summary>
     Task<int?> GetResourceOrganizationIdAsync(ResourceType resourceType, int resourceId, CancellationToken ct = default);
 

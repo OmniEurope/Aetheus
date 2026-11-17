@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net.Http;
+using Aetheus.Shared.Components.ExternalRepos;
 using Markdig;
 
 namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
@@ -22,6 +23,8 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     private bool _loadingRecentCommits = true;
     private bool _gitStateLoaded;
     private bool _hasGitRepository;
+    private bool _externalSourceUnread;
+    private bool _readsFromMirror;
     private GitLightRepoDto? _primaryGitRepository;
     private HubConnection? _pipelineHub;
     private readonly TrailingReloadCoalescer _pipelineReload = new(500);
@@ -70,7 +73,21 @@ public partial class ProjectOverviewSection : IAsyncDisposable
         }
     }
 
-    private static readonly string[] TabSlugs = ["overview", "readme", "changelog"];
+    /// <summary>The slugs of the tabs actually rendered, in their order (<see cref="UrlSyncedTabs"/> maps them by position).</summary>
+    private string[] TabSlugs => ShowExpandContractTab
+        ? ["overview", "expand-contract", "readme", "changelog"]
+        : ["overview", "readme", "changelog"];
+
+    /// <summary>
+    /// R-13 (user decision 2026-11-09): the expand/contract tracking tab is shown for a project that has at least one environment
+    /// AND a database, the two together, so never for a package; and for a project whose migration gate is on, which the setup
+    /// wizard's expand/contract choice or the project's settings turned on. A database is what a pipeline declares
+    /// (<see cref="PipelineTemplateReferenceHelper.DeclaresDatabase"/>): the project holds no other trace of one.
+    /// </summary>
+    private bool ShowExpandContractTab => Project is { } project
+        && (project.MigrationGateEnabled
+            || (project.EnvironmentCount > 0
+                && project.Pipelines.Any(pipeline => PipelineTemplateReferenceHelper.DeclaresDatabase(pipeline.YamlDefinition))));
 
     // F-bis: "Métriques · dernière release" - coverage (CoverageSummary) and LOC (RunMetric "loc.total")
     // of the run that produced the project's most recent release. Null when the latest release has no
@@ -108,13 +125,33 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     /// never keeps it up on its own, otherwise a project that legitimately shares no variables
     /// would carry a permanent "getting started" card.
     /// </summary>
-    private bool ShowGettingStarted => Project is not null && _gitStateLoaded
+    private bool ShowGettingStarted => Project is not null && _gitStateLoaded && !_gettingStartedFinished
         && (!GettingStartedComplete || _gettingStartedLastShow);
+
+    // R-33: the user ended the preparation for this project ("Terminer la préparation"); the list never comes back.
+    private bool _gettingStartedFinished;
+
+    /// <summary>
+    /// R-33: a project whose pipelines all extend the external security analysis scans a repository it does
+    /// not build or deploy, so it needs neither an environment nor a server. The kind is not stored on the
+    /// project; it is read from the pipelines' template references: the external security analysis (R-12: or the complete
+    /// security the wizard also offers an external repository, written without a CI manifest), with at most the quality
+    /// pipeline the wizard also offers an external repository (R-34). False while the project has no pipeline.
+    /// </summary>
+    private bool IsExternalApplication => Project is { Pipelines.Count: > 0 } project
+        && project.Pipelines.Any(pipeline => TemplateIs(pipeline, DeliveryTemplateNames.SecurityExternal)
+            || TemplateIs(pipeline, DeliveryTemplateNames.Security))
+        && project.Pipelines.All(pipeline => TemplateIs(pipeline, DeliveryTemplateNames.SecurityExternal)
+            || TemplateIs(pipeline, DeliveryTemplateNames.Security)
+            || TemplateIs(pipeline, DeliveryTemplateNames.Quality));
+
+    private static bool TemplateIs(PipelineDto pipeline, string templateName) =>
+        DeliveryTemplateNames.Is(PipelineTemplateReferenceHelper.Parse(pipeline.YamlDefinition)?.Name, templateName);
 
     // R71: a library a pipeline still waits for keeps the library step « À faire », so the list is not finished.
     private bool GettingStartedComplete => Project is not null
-        && _hasGitRepository && Project.EnvironmentCount > 0 && HasServer && Project.Pipelines.Count > 0
-        && _unmet.Count == 0;
+        && _hasGitRepository && Project.Pipelines.Count > 0 && _unmet.Count == 0
+        && (IsExternalApplication || (Project.EnvironmentCount > 0 && HasServer));
 
     /// <summary>
     /// Recette R3-67: a finished checklist is shown one last time, saying so, then never again for
@@ -129,6 +166,7 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     private async Task ResolveGettingStartedLastShowAsync(int projectId)
     {
         _gettingStartedLastShow = false;
+        _gettingStartedFinished = await Preferences.GetAsync<bool>(PreferenceKeys.GettingStartedFinished(projectId));
         if (!_gitStateLoaded || !GettingStartedComplete) return;
         if (await Preferences.GetAsync<bool>(PreferenceKeys.GettingStartedClosed(projectId))) return;
 
@@ -141,14 +179,22 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     /// preference is already written by the first visit; it is written again so the choice never
     /// depends on that earlier write). An unfinished checklist has no such button.
     /// </summary>
-    private EventCallback GettingStartedDone => GettingStartedComplete
-        ? EventCallback.Factory.Create(this, HideGettingStartedAsync)
-        : default;
+    private EventCallback GettingStartedDone => EventCallback.Factory.Create(this, HideGettingStartedAsync);
+
+    /// <summary>R-33: an unfinished list carries "Terminer la préparation" instead of "Done"; it hides the list for good.</summary>
+    private string GettingStartedDoneLabel => GettingStartedComplete ? L["Done"] : L["GettingStartedFinish"];
 
     private async Task HideGettingStartedAsync()
     {
         _gettingStartedLastShow = false;
-        await Preferences.SetAsync(PreferenceKeys.GettingStartedClosed(Project!.Id), true);
+        if (GettingStartedComplete)
+        {
+            await Preferences.SetAsync(PreferenceKeys.GettingStartedClosed(Project!.Id), true);
+            return;
+        }
+
+        _gettingStartedFinished = true;
+        await Preferences.SetAsync(PreferenceKeys.GettingStartedFinished(Project!.Id), true);
     }
 
     /// <summary>Runner availability includes servers attached directly or through project
@@ -156,13 +202,17 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     private bool HasServer => Project is not null
         && (Project.ServerCount > 0 || Project.EnvironmentServerCount > 0);
 
-    private string GitOnboardingHref => _hasGitRepository
+    // R-31/R-32: a step that creates something (repository, environment, library) comes back to this page
+    // once the user is done, through the validated returnUrl those pages already follow.
+    private string GitOnboardingHref => _externalSourceUnread
+        ? $"/projects/{Project!.Id}/external-repo"
+        : _hasGitRepository
         ? $"/git-repositories?projectId={Project!.Id}"
-        : $"/git-repositories?projectId={Project!.Id}&create=true";
+        : LocalReturnUrl.Append($"/git-repositories?projectId={Project!.Id}&create=true", LocalReturnUrl.Current(Nav));
 
     private string EnvironmentOnboardingHref => Project!.EnvironmentCount > 0
         ? $"/projects/{Project.Id}/environments"
-        : $"/environments/new?projectId={Project.Id}";
+        : LocalReturnUrl.Append($"/environments/new?projectId={Project.Id}", LocalReturnUrl.Current(Nav));
 
     // Attaching a server to a project happens in the project's own Servers section, so both the
     // done and the to-do action land there; installing a brand-new agent is one click further.
@@ -170,7 +220,7 @@ public partial class ProjectOverviewSection : IAsyncDisposable
 
     private string LibraryOnboardingHref => Project!.LibraryCount > 0
         ? $"/projects/{Project.Id}/libraries"
-        : $"/variable-libraries/new?projectId={Project.Id}";
+        : LocalReturnUrl.Append($"/variable-libraries/new?projectId={Project.Id}", LocalReturnUrl.Current(Nav));
 
     private string PipelineOnboardingHref => Project!.Pipelines.Count > 0
         ? $"/projects/{Project.Id}/pipelines"
@@ -181,16 +231,23 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     /// the repository list fetched by <see cref="LoadGitDataAsync"/> and the project's own counters.
     /// The project exists by construction here, so no row can be blocked.
     /// </summary>
-    private IReadOnlyList<OnboardingStep> GettingStartedSteps =>
+    private IReadOnlyList<OnboardingStep> GettingStartedSteps => IsExternalApplication
+        ? [.. AllGettingStartedSteps.Where((_, index) => index is not (EnvironmentStepIndex or ServerStepIndex))] // R-33
+        : AllGettingStartedSteps;
+
+    private const int EnvironmentStepIndex = 1;
+    private const int ServerStepIndex = 2;
+
+    private IReadOnlyList<OnboardingStep> AllGettingStartedSteps =>
     [
         new OnboardingStep
         {
             Title = L["CreateGitRepository"],
-            Description = L["CreateGitRepositoryHint"],
+            Description = _externalSourceUnread ? L["CreateGitRepositoryExternalHint"] : L["CreateGitRepositoryHint"],
             Icon = "commit",
             State = _hasGitRepository ? OnboardingStepState.Done : OnboardingStepState.Todo,
             Href = GitOnboardingHref,
-            ActionLabel = _hasGitRepository ? L["GitRepositories"] : L["CreateGitRepository"]
+            ActionLabel = _externalSourceUnread ? L["ExternalRepository"] : _hasGitRepository ? L["GitRepositories"] : L["CreateGitRepository"]
         },
         new OnboardingStep
         {
@@ -248,26 +305,22 @@ public partial class ProjectOverviewSection : IAsyncDisposable
             Nav.NavigateTo($"/git-repositories?projectId={Project.Id}&create=true");
     }
 
-    private string? RepositoryDisplayUrl => !string.IsNullOrWhiteSpace(Project?.RepositoryUrl)
-        ? Project.RepositoryUrl
-        : _primaryGitRepository?.CloneUrl;
+    // R-4: the address shown is where the code is read from: the project's repository (its mirror for an external source)
+    // before an external address nothing reads; that address alone is shown under its own term, with the mirror notice.
+    private string? RepositoryDisplayUrl => _primaryGitRepository?.CloneUrl is { Length: > 0 } cloneUrl
+        && (string.IsNullOrWhiteSpace(Project?.RepositoryUrl) || ExternalRepositoryAddress.IsUnmirrored(Project.RepositoryUrl))
+        ? cloneUrl
+        : !string.IsNullOrWhiteSpace(Project?.RepositoryUrl) ? Project.RepositoryUrl : _primaryGitRepository?.CloneUrl;
+
+    private string RepositoryUrlTerm => _primaryGitRepository is null && ExternalRepositoryAddress.IsUnmirrored(Project?.RepositoryUrl)
+        ? L["ExternalRepositoryAddressNotRead"]
+        : L["RepositoryUrl"];
+
+    private EventCallback ProjectMirrored => EventCallback.Factory.Create(this, () => Project is null ? Task.CompletedTask : LoadGitDataAsync(Project.Id));
 
     private string? RepositoryDisplayBranch => !string.IsNullOrWhiteSpace(Project?.DefaultBranch)
         ? Project.DefaultBranch
         : _primaryGitRepository?.DefaultBranch;
-
-    /// <summary>Branch and latest activity share a row built only from available values, avoiding
-    /// dangling separators.</summary>
-    private string RepositoryActivityLabel => JoinHalves(
-        string.IsNullOrWhiteSpace(RepositoryDisplayBranch) ? null : L["DefaultBranch"].Value,
-        Project?.LastGitUpdateAt is null ? null : L["LastGitUpdate"].Value);
-
-    private string RepositoryActivityValue => JoinHalves(
-        RepositoryDisplayBranch,
-        Project?.LastGitUpdateAt is { } at ? RelativeTime.FormatAgo(L, at) : null);
-
-    private static string JoinHalves(string? first, string? second) =>
-        string.Join(" · ", new[] { first, second }.Where(part => !string.IsNullOrWhiteSpace(part)));
 
     protected override async Task OnInitializedAsync()
     {
@@ -287,6 +340,8 @@ public partial class ProjectOverviewSection : IAsyncDisposable
         _loadingRecentCommits = true;
         _gitStateLoaded = false;
         _hasGitRepository = false;
+        _externalSourceUnread = false;
+        _readsFromMirror = false;
         _primaryGitRepository = null;
         _readmeHtml = null;
         _readmeBranch = null;
@@ -442,7 +497,12 @@ public partial class ProjectOverviewSection : IAsyncDisposable
             return;
         }
 
-        _hasGitRepository = repositories.Count > 0 || !string.IsNullOrWhiteSpace(Project?.RepositoryUrl);
+        // R-69: an external source whose mirror holds no commit is not a repository done: the step stays to do and leads to
+        // the external repository, instead of showing "done" beside "no recent commit".
+        var source = ProjectSourceRepositories.Of(repositories);
+        _externalSourceUnread = source.ExternalSource && source.Readable is null;
+        _readsFromMirror = source.OwnIsExternal;
+        _hasGitRepository = !_externalSourceUnread && (repositories.Count > 0 || !string.IsNullOrWhiteSpace(Project?.RepositoryUrl));
         _primaryGitRepository = repositories.FirstOrDefault(repository => !repository.IsEmpty)
             ?? repositories.FirstOrDefault();
         _gitStateLoaded = true;

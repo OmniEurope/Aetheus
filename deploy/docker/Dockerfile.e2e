@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: EUPL-1.2
 # Runtime image for the QA E2E suite. CI already compiled tests/Aetheus.E2E and transfers its
 # bin/obj tree; this Dockerfile deliberately contains no `dotnet build` so QA executes that exact output.
-ARG PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright/dotnet:v1.63.0-noble@sha256:aa3eaf29a65df8c93fc32ab20cf9359f4d8ecc53e6e89f79378647ace87b46b3
+ARG PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright/dotnet:v1.64.1-noble@sha256:6955861f6e17b2580c00f0970198e446f006cdae6c34fb8f9ad5318aaab50da0
 FROM ${PLAYWRIGHT_IMAGE}
 
 ARG DOTNET_INSTALLER_URL=https://raw.githubusercontent.com/dotnet/install-scripts/da3ce11ba63f3dbb0fb835d41bda2665d5c48e84/src/dotnet-install.sh
 ARG DOTNET_INSTALLER_SHA256=082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e
 RUN curl -fsSL "$DOTNET_INSTALLER_URL" -o /tmp/di.sh \
     && echo "$DOTNET_INSTALLER_SHA256  /tmp/di.sh" | sha256sum -c - \
-    && bash /tmp/di.sh --version 10.0.403 --install-dir /usr/lib/dotnet-10 \
+    && bash /tmp/di.sh --version 11.0.100 --install-dir /usr/lib/dotnet-10 \
     && ln -sf /usr/lib/dotnet-10/dotnet /usr/local/bin/dotnet
 ENV DOTNET_ROOT=/usr/lib/dotnet-10
 WORKDIR /src
@@ -22,9 +22,9 @@ COPY Directory.Build.props Directory.Packages.props NuGet.config ./
 COPY tests/Aetheus.E2E/ tests/Aetheus.E2E/
 # `dotnet test --no-build --no-restore` otherwise exits successfully without running anything when
 # .dockerignore or artifact collection silently drops the CI output. Refuse to build a fake-green runner.
-RUN test -s tests/Aetheus.E2E/bin/Release/net10.0/Aetheus.E2E.dll \
-    && test -s tests/Aetheus.E2E/bin/Release/net10.0/Aetheus.E2E.deps.json \
-    && test -s tests/Aetheus.E2E/bin/Release/net10.0/Aetheus.E2E.runtimeconfig.json \
+RUN test -s tests/Aetheus.E2E/bin/Release/net11.0/Aetheus.E2E.dll \
+    && test -s tests/Aetheus.E2E/bin/Release/net11.0/Aetheus.E2E.deps.json \
+    && test -s tests/Aetheus.E2E/bin/Release/net11.0/Aetheus.E2E.runtimeconfig.json \
     && test -s tests/Aetheus.E2E/obj/project.assets.json \
     && chown -R pwuser:pwuser /src
 USER pwuser

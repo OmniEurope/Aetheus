@@ -2,6 +2,19 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
+/// <summary>What the server answered to a run cancellation, as the screen has to act on it.</summary>
+internal enum PipelineRunCancelOutcome
+{
+    /// <summary>The cancellation was recorded.</summary>
+    Accepted,
+
+    /// <summary>The run is finished or gone (404): the screen showed a stale row, which has to be read again.</summary>
+    NoLongerCancellable,
+
+    /// <summary>Any other refusal (forbidden, server error): said in a toast, the row stays as it is.</summary>
+    Refused
+}
+
 internal sealed class PipelineRunCommandCoordinator(
     ApiClient api,
     OmniDialogService dialog,
@@ -35,16 +48,31 @@ internal sealed class PipelineRunCommandCoordinator(
         return confirmed == true;
     }
 
-    public async Task CancelAsync(PipelineRunDto run)
+    /// <summary>Cancels the run and says the answer in a toast; the outcome tells the caller whether the row has to be read again.</summary>
+    internal async Task<PipelineRunCancelOutcome> CancelAsync(PipelineRunDto run)
     {
+        var outcome = PipelineRunCancelOutcome.Refused;
         await veil.RunAsync(async () =>
         {
             var status = await api.Pipelines.CancelPipelineRunAsync(run.Id);
             if (status.Success)
+            {
+                outcome = PipelineRunCancelOutcome.Accepted;
                 toast.Info("RunCancelled", "RunCancelledDetail");
+            }
+            else if (status.NotFound)
+            {
+                // A run already finished (404) is an expected race with a stale list, not a failure: a warning that
+                // names it, nothing reported as a client error.
+                outcome = PipelineRunCancelOutcome.NoLongerCancellable;
+                toast.Warning("CancelRun", "RunNoLongerCancellable");
+            }
             else if (status.Forbidden)
                 toast.Error("PipelineRunFailed", "PipelineRunForbidden");
+            else
+                toast.Error("PipelineRunFailed", "Error");
         });
+        return outcome;
     }
 
     public Task ShowVariablesAsync(PipelineRunDto run) =>
@@ -56,8 +84,8 @@ internal sealed class PipelineRunCommandCoordinator(
     public Task ShowParametersAsync(PipelineRunDto run) =>
         dialog.OpenAsync<PipelineRunParametersDialog>(
             localizer["RunParameters"].Value,
-            new Dictionary<string, object?> { { "Parameters", run.Parameters } },
-            new OmniDialogOptions { Width = "600px", AutoFocusFirstElement = false });
+            new Dictionary<string, object?> { { "Parameters", run.Parameters }, { "RunId", run.Id } },
+            new OmniDialogOptions { Width = "900px", AutoFocusFirstElement = false });
 
     public async Task CopyLogsAsync(IReadOnlyCollection<TaskLogDto> logs)
     {

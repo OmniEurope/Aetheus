@@ -10,7 +10,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>PostgreSQL tests verify translation of retirement filters, environment-link navigation
 /// and watchdog exclusion.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ServerRetirementIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

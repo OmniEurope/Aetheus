@@ -4,34 +4,36 @@
     <OmniDataAnnotationsValidator Localizer="@L" />
 
     <OmniStack Gap="OmniSpacing.Large">
-        <OmniFormField Label="@L["Name"]" For="oe-formfield-pages-pipelines-templateeditdialog-1">
-            <OmniTextBox Id="oe-formfield-pages-pipelines-templateeditdialog-1" @bind-Value="_model.Name" Disabled="@IsEdit"
-                           />
-        </OmniFormField>
-        <ValidationMessage For="@(() => _model.Name)" />
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniFormField Label="@L["Name"]" For="oe-formfield-pages-pipelines-templateeditdialog-1">
+                <OmniTextBox Id="oe-formfield-pages-pipelines-templateeditdialog-1" @bind-Value="_model.Name" Disabled="@IsEdit"
+                               />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.Name)" />
 
-        <OmniFormField Label="@L["Category"]" For="oe-formfield-pages-pipelines-templateeditdialog-2">
-            <OmniTextBox Id="oe-formfield-pages-pipelines-templateeditdialog-2" @bind-Value="_model.Category"
-                           />
-        </OmniFormField>
-        <ValidationMessage For="@(() => _model.Category)" />
+            <OmniFormField Label="@L["Category"]" For="oe-formfield-pages-pipelines-templateeditdialog-2">
+                <OmniTextBox Id="oe-formfield-pages-pipelines-templateeditdialog-2" @bind-Value="_model.Category"
+                               />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.Category)" />
 
-        <OmniFormField Label="@L["Description"]" For="oe-formfield-pages-pipelines-templateeditdialog-3">
-            <OmniTextArea Id="oe-formfield-pages-pipelines-templateeditdialog-3" @bind-Value="_model.Description" Rows="2"
-                            />
-        </OmniFormField>
+            <OmniFormField Label="@L["Description"]" For="oe-formfield-pages-pipelines-templateeditdialog-3">
+                <OmniTextArea Id="oe-formfield-pages-pipelines-templateeditdialog-3" @bind-Value="_model.Description" Rows="2"
+                                />
+            </OmniFormField>
 
-        <OmniFormField Label="@L["YAML"]" For="oe-formfield-pages-pipelines-templateeditdialog-4">
-            <OmniTextArea Id="oe-formfield-pages-pipelines-templateeditdialog-4" @bind-Value="_model.YamlContent" Rows="10" Class="text-mono"
-                            />
-        </OmniFormField>
-        <ValidationMessage For="@(() => _model.YamlContent)" />
+            <OmniFormField Label="@L["YAML"]" For="oe-formfield-pages-pipelines-templateeditdialog-4">
+                <OmniTextArea Id="oe-formfield-pages-pipelines-templateeditdialog-4" @bind-Value="_model.YamlContent" Rows="10" Class="text-mono"
+                                />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.YamlContent)" />
 
-        <OmniFormField Label="@L["ChangelogEntry"]" For="oe-formfield-pages-pipelines-templateeditdialog-5">
-            <OmniTextBox Id="oe-formfield-pages-pipelines-templateeditdialog-5" @bind-Value="_model.ChangelogEntry" Placeholder="@L["DescribeChanges"]"
-                           />
-        </OmniFormField>
-        <ValidationMessage For="@(() => _model.ChangelogEntry)" />
+            <OmniFormField Label="@L["ChangelogEntry"]" For="oe-formfield-pages-pipelines-templateeditdialog-5">
+                <OmniTextBox Id="oe-formfield-pages-pipelines-templateeditdialog-5" @bind-Value="_model.ChangelogEntry" Placeholder="@L["DescribeChanges"]"
+                               />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.ChangelogEntry)" />
+        </OmniStack>
 
         @if (IsEdit)
         {

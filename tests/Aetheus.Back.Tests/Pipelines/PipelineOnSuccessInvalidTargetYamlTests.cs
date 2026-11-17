@@ -23,7 +23,7 @@ namespace Aetheus.Back.Tests.Pipelines;
 /// </summary>
 public sealed class PipelineOnSuccessInvalidTargetYamlTests
 {
-    private const string Url = "https://git.example/aetheus.git";
+    private const string Url = "http://localhost:5300/git/7/aetheus.git";
     private const string Commit = "0123456789abcdef0123456789abcdef01234567";
     private const string BrokenTargetYaml =
         "name: aetheus-deploy-prod\ntrigger: manual\nparameters:\n  - name: scope\n    description: Diagnostic : liste\nstages: []\n";
@@ -36,7 +36,7 @@ public sealed class PipelineOnSuccessInvalidTargetYamlTests
 
     public PipelineOnSuccessInvalidTargetYamlTests()
     {
-        var gitCli = Substitute.For<IGitCliService>();
+        var targetGit = Substitute.For<IPipelineGitService>();
         var target = new Pipeline
         {
             Id = 3,
@@ -46,20 +46,24 @@ public sealed class PipelineOnSuccessInvalidTargetYamlTests
             CreatedByUsername = "admin",
             YamlDefinition = "name: aetheus-deploy-prod\nstages: []\n"
         };
-        gitCli.ResolveBranchCommitAsync(Url, "main", Arg.Any<CancellationToken>()).Returns(new GitRemoteBranch("main", Commit));
-        gitCli.ReadPipelineYamlAsync(Url, Commit, target.Name, Arg.Any<CancellationToken>()).Returns(BrokenTargetYaml);
+        // R-4: the target's definition is read from its project mirror at the pinned commit.
+        targetGit.GetPipelineSourceAsync(7, target.Name, Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns(new PipelineSourceDto { RepositoryId = 4, CloneUrl = Url, Branch = "main", CommitHash = Commit });
+        targetGit.ReadProjectPipelineYamlAtRevisionAsync(7, target.Name, Commit, Arg.Any<CancellationToken>(), Arg.Any<int?>())
+            .Returns(BrokenTargetYaml);
         _repo.FindPipelineAsync(3, Arg.Any<CancellationToken>()).Returns(target);
         _repo.FindPipelineByNameAndProjectAsync("aetheus-deploy-prod", 7, Arg.Any<CancellationToken>()).Returns(target);
         _repo.GetPipelineOrganizationIdAsync(3, Arg.Any<CancellationToken>()).Returns(1);
 
         var preparations = new PipelineRunPreparationService(
-            _repo, Substitute.For<IPipelineGitService>(), new PipelineTemplateResolver(_repo),
-            Substitute.For<IPipelineRunParameterResolver>(), gitCli, Substitute.For<IPipelineWorkspaceSourceResolver>(),
+            _repo, targetGit, new PipelineTemplateResolver(_repo),
+            Substitute.For<IPipelineRunParameterResolver>(), Substitute.For<IPipelineWorkspaceSourceResolver>(),
             new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
         var coordinator = new PipelineTriggerStepCoordinator(
             _repo, Substitute.For<IPipelineGitService>(), preparations, Substitute.For<IPipelineRunParameterResolver>(),
             Substitute.For<IPipelineCheckpointReuseService>(), Substitute.For<IResourceAuthorizationService>(),
-            Substitute.For<IAuditService>(), new FakeTimeProvider(), NullLogger<PipelineTriggerStepCoordinator>.Instance);
+            Substitute.For<IAuditService>(), Substitute.For<IPipelineSetupServerRepository>(), new FakeTimeProvider(),
+            NullLogger<PipelineTriggerStepCoordinator>.Instance);
         var runService = Substitute.For<IPipelineRunService>();
         runService.TriggerChainedRunAsync(Arg.Any<int>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>())
             .Returns(call => coordinator.TriggerChainedRunAsync(
@@ -69,7 +73,7 @@ public sealed class PipelineOnSuccessInvalidTargetYamlTests
             NullLogger<PipelineRunCompletedDownstreamHandler>.Instance);
 
         var upstream = new Pipeline { Id = 24, Name = "aetheus-candidate", YamlDefinition = UpstreamYaml };
-        var run = new PipelineRun { Id = 99, PipelineId = 24, YamlSnapshot = UpstreamYaml, Pipeline = upstream };
+        var run = new PipelineRun { Id = 99, BuildNumber = 12, PipelineId = 24, YamlSnapshot = UpstreamYaml, Pipeline = upstream };
         _repo.GetPipelineRunWithPipelineAsync(99, Arg.Any<CancellationToken>()).Returns(run);
         _repo.GetPipelineProjectIdAsync(upstream, Arg.Any<CancellationToken>()).Returns(7);
     }
@@ -94,7 +98,7 @@ public sealed class PipelineOnSuccessInvalidTargetYamlTests
             "pipeline.launch-refused",
             Arg.Is<string>(payload => payload.Contains("\"PipelineRunId\":99")
                 && payload.Contains("\"PipelineName\":\"aetheus-deploy-prod\"")
-                && payload.Contains("on_success:aetheus-candidate#99")
+                && payload.Contains("on_success:aetheus-candidate#12")
                 && payload.Contains("found invalid mapping")),
             Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>());
         await _launcher.DidNotReceiveWithAnyArgs().TriggerPreparedRunAsync(default!, default, default, TestContext.Current.CancellationToken, default);

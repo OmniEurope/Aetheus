@@ -90,7 +90,7 @@ public class ServerCertbotSectionExtendedTests : BunitContext
     public void TheGridFiltersInlineUnderItsHeader()
     {
         var cut = RenderSection();
-        // ShowHeaderFilterMenu="false": the filter row is rendered and no column header holds a filter button,
+        // FilterPlacement="Row": the filter row is rendered and no column header holds a filter button,
         // except the Expiry column, whose AdvancedFilter adds the From and To range menu (R-52, OE 1.10.0).
         Assert.Single(cut.FindAll("tr.omni-data-grid__filters"));
         var menu = Assert.Single(cut.FindAll(".omni-data-grid__filter-menu"));

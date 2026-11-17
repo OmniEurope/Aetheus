@@ -16,7 +16,8 @@ namespace Aetheus.Agent.Linux.Collectors;
 /// </summary>
 internal static class LinuxKernelLog
 {
-    private const string KmsgPath = "/dev/kmsg";
+    // Null-terminated UTF-8 path handed to open(2) as bytes: no string marshalling to specify (CA2101).
+    private static readonly byte[] KmsgPath = "/dev/kmsg\0"u8.ToArray();
     private const int ORdOnly = 0;
     private const int ONonBlock = 0x800; // O_NONBLOCK on x86_64 and aarch64
     private const int EAgain = 11;
@@ -77,7 +78,7 @@ internal static class LinuxKernelLog
     [SuppressMessage("Security", "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes",
         Justification = "libc on Linux; the attribute only constrains the Windows DLL search order.")]
     [DllImport("libc", SetLastError = true)]
-    private static extern int open([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags);
+    private static extern int open(byte[] path, int flags);
 
     [SuppressMessage("Security", "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes",
         Justification = "libc on Linux; the attribute only constrains the Windows DLL search order.")]

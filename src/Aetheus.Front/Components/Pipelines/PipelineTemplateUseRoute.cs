@@ -25,6 +25,7 @@ internal static class PipelineTemplateUseRoute
         "application-candidate",
         "application-nightly",
         "application-deploy-prod",
+        "application-deploy-prod-front-back",
         "application-promotion",
         "application-release-fast",
         "application-light",

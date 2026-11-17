@@ -1,22 +1,22 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@page "/tasks/{TaskId:int}"
+@page "/tasks/{TaskKey}"
 
-<PageTitle>@($"{L["Task"]} #{TaskId}") - Aetheus</PageTitle>
+<PageTitle>@TaskLabel - Aetheus</PageTitle>
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else if (_task is null)
 {
-    <OmniPageHeader Title="@($"{L["Task"]} #{TaskId}")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+    <OmniPageHeader Title="@TaskLabel" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("task_alt")" /></Icon>
     </OmniPageHeader>
     <OmniAlert Severity="OmniSeverity.Warning">@L["TaskNotFound"]</OmniAlert>
 }
 else
 {
-    <OmniPageHeader Title="@($"{L["Task"]} #{_task.Id}")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+    <OmniPageHeader Title="@TaskLabel" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("task_alt")" /></Icon>
         <Badges>
             <OmniBadge Icon="@(BadgeIcon.ForState(TaskListView.GetTaskBadge(_task.Status)))" Fill="OmniFill.Solid" Tone="@TaskListView.GetTaskBadge(_task.Status)">@L.Localize(_task.Status)</OmniBadge>
@@ -60,7 +60,7 @@ else
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Source"]</OmniText>
                     @if (_task.PipelineRunId is { } pipelineRunId)
                     {
-                        <a href="@($"/pipelines/runs/{pipelineRunId}")" class="detail-value-link">@($"{L["PipelineRun"]} #{pipelineRunId}")</a>
+                        <a href="@($"/pipelines/runs/{pipelineRunId}")" class="detail-value-link">@PipelineRunPresentation.Label(L["PipelineRun"].Value, _task.PipelineRunNumber)</a>
                     }
                     else
                     {

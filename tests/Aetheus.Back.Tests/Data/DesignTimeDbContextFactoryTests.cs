@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace Aetheus.Back.Tests.DataSeed;
@@ -51,6 +52,15 @@ public sealed class DesignTimeDbContextFactoryTests
 
         Assert.Contains("AETHEUS_DESIGN_CONNECTION", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("Password=", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreateDbContext_MigrationBundle_OutlivesTheNpgsqlDefaultCommandTimeout()
+    {
+        using var context = new DesignTimeDbContextFactory().CreateDbContext(
+            ["--design-connection", "Host=design;Database=aetheus_bundle;Username=build"]);
+
+        Assert.Equal(1800, context.Database.GetCommandTimeout());
     }
 
     private static IConfiguration BuildConfiguration(params (string Key, string Value)[] values) =>

@@ -1,7 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R-116: while the journal is being read, OE's busy veil lies over the whole tab (the toolbar and the
-   previous journal stay mounted underneath); no loader is added beside the button. *@
-<OmniStack Class="@(Pending ? (_content is null ? "omni-busy action-veil-placeholder" : "omni-busy") : null)" aria-busy="@(Pending ? "true" : "false")" title="@(Pending ? L["MailWaitingForTask"].Value : null)">
+@* Recette R-116, R-1: while the journal is being read, the page veil is held (the toolbar and the previous
+   journal stay mounted); no loader is added beside the button. *@
+<VeilHold Busy="@Pending" />
+<OmniStack Class="@(Pending && _content is null ? "action-veil-placeholder" : null)" title="@(Pending ? L["MailWaitingForTask"].Value : null)">
     <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniDropDown aria-label="@L["SelectLogType"]" @bind-Value="_unit" Options="@(Units.ToOptions(item => (string)item, item => item))" TValue="string" Placeholder="@L["SelectLogType"]" Class="w-rem-10" />
         <OmniNumeric aria-label="@L["Lines"]" @bind-Value="_lines" Minimum="10" Maximum="2000" TValue="int" Class="w-rem-6" />

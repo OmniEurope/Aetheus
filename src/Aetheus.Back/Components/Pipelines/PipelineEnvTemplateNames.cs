@@ -15,11 +15,18 @@ internal sealed class PipelineEnvTemplateNames(
 {
     /// <summary>The names every sample the definition's steps name asks for. A sample that cannot be read adds nothing: a
     /// missing file is reported by the run, not guessed here.</summary>
-    public async Task<IReadOnlyCollection<string>> ReadAsync(PipelineYamlDefinition definition, int projectId, CancellationToken ct)
+    /// <remarks>R-25: given the <paramref name="launchVariables"/> the launch resolves, a step (or its stage) whose condition
+    /// is certainly false on them is skipped and its sample is not asked for (a blue-green only step, on a replace
+    /// deployment); a condition that cannot be decided keeps the sample.</remarks>
+    public async Task<IReadOnlyCollection<string>> ReadAsync(
+        PipelineYamlDefinition definition, int projectId, CancellationToken ct,
+        IReadOnlyDictionary<string, string>? launchVariables = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        var deferred = PipelineUnresolvedVariableGuard.BuildDeferredNames(definition);
         var paths = YamlParsingHelper.FlattenJobs(definition)
-            .SelectMany(stage => stage.Steps)
+            .SelectMany(stage => stage.Steps.Where(step => launchVariables is null
+                || !PipelineStepReach.NeverRuns(stage, step, launchVariables, deferred)))
             .Select(step => step.EnvTemplate)
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => PipelineRunHelpers.SubstituteVariables(path!, definition.Variables).Trim())
@@ -35,15 +42,34 @@ internal sealed class PipelineEnvTemplateNames(
         return names;
     }
 
+    /// <summary>R-44: every definition of a project reads the same few sample files, and a readiness pass reads each
+    /// definition more than once. The answers are kept for the life of this instance, which the readiness creates once
+    /// per verdict, so a sample is read once however many pipelines name it (null answers included).</summary>
+    private readonly Dictionary<(int ProjectId, string Path), string?> _templates = [];
+
+    private readonly Dictionary<int, List<GitLightRepoDto>> _repositories = [];
+
     private async Task<string?> ReadTemplateAsync(int projectId, string path, CancellationToken ct)
+    {
+        if (_templates.TryGetValue((projectId, path), out var cached)) return cached;
+        return _templates[(projectId, path)] = await ReadTemplateUncachedAsync(projectId, path, ct).ConfigureAwait(false);
+    }
+
+    private async Task<List<GitLightRepoDto>> SourceRepositoriesAsync(int projectId, CancellationToken ct)
+    {
+        if (_repositories.TryGetValue(projectId, out var cached)) return cached;
+        return _repositories[projectId] = (await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false))
+            .Where(item => !item.IsAdditionalSource && !item.IsConfiguration && !item.IsEmpty)
+            .ToList();
+    }
+
+    private async Task<string?> ReadTemplateUncachedAsync(int projectId, string path, CancellationToken ct)
     {
         if (await configRepository.ReadAsync(projectId, path, null, null, ct).ConfigureAwait(false) is { } fromConfiguration)
             return fromConfiguration;
 
         // Not in the configuration repository: the project's own source, on its default branch.
-        var repositories = (await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false))
-            .Where(item => !item.IsAdditionalSource && !item.IsConfiguration && !item.IsEmpty)
-            .ToList();
+        var repositories = await SourceRepositoriesAsync(projectId, ct).ConfigureAwait(false);
         if (repositories.Count == 0) return null;
         var repository = repositories[0];
         var branch = string.IsNullOrWhiteSpace(repository.DefaultBranch) ? "main" : repository.DefaultBranch;

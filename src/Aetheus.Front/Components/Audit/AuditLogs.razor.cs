@@ -52,7 +52,7 @@ public partial class AuditLogs : IAsyncDisposable
             Cache.Seed<PaginatedResult<AuditLogDto>>(CacheKey(1, 20), ApplyLogs);
             await LoadData(new GridLoadArgs());
             _liveEntries = new AdminEntitySubscription(HubFactory);
-            await _liveEntries.StartAsync(AdminEntities.AuditLog,
+            _ = _liveEntries.StartAsync(AdminEntities.AuditLog,
                 () => InvokeAsync(() => _liveReload.RequestAsync(RefreshData)));
         }
         catch (HttpRequestException)
@@ -116,7 +116,6 @@ public partial class AuditLogs : IAsyncDisposable
     private async Task VerifyChainAsync()
     {
         _verifyingChain = true;
-        StateHasChanged();
         try
         {
             _chainResult = await Api.Monitoring.VerifyAuditChainAsync();

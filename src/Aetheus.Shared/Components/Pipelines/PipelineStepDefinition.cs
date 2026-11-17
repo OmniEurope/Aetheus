@@ -177,6 +177,11 @@ public sealed record PipelineStepDefinition
     /// fed by a run that collected nothing reports a clean score for a measurement nobody made.</summary>
     public bool CollectCoverage { get; init; }
 
+    /// <summary>Run the tests a <c>type: dotnet-test</c> step saw fail once more, alone and without
+    /// coverage. A test that passes on the rerun is flaky: named in <c>flaky-tests.txt</c> of the results
+    /// directory, it no longer counts in the published status; a test that fails twice still does.</summary>
+    public bool RerunFailedTests { get; init; }
+
     /// <summary>A runsettings file, relative to the workspace.</summary>
     public string? RunSettings { get; init; }
 

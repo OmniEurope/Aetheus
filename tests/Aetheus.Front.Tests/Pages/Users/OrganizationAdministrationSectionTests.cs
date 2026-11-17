@@ -190,6 +190,25 @@ public class OrganizationAdministrationSectionTests : BunitContext
     }
 
     [Fact]
+    public async Task AFailedLoad_IsRetriedByTheNextCall_InsteadOfLeavingTheListEmpty()
+    {
+        var handler = Register(AllOrganizationKeys);
+        var calls = 0;
+        handler.SetAsyncJsonResponse(HttpMethod.Get, "api/organizations/administered", _ =>
+            ++calls == 1
+                ? throw new HttpRequestException("offline")
+                : Task.FromResult(new List<AdministeredOrganizationDto> { new(1, "Acme", AllOrganizationKeys) }));
+        var scope = Services.GetRequiredService<AdministrationScopeService>();
+
+        await scope.EnsureLoadedAsync(Xunit.TestContext.Current.CancellationToken);
+        Assert.Empty(scope.Organizations);
+
+        await scope.EnsureLoadedAsync(Xunit.TestContext.Current.CancellationToken);
+        Assert.Equal(2, calls);
+        Assert.Equal(["Acme"], scope.Organizations.Select(organization => organization.Name));
+    }
+
+    [Fact]
     public async Task TheScope_RefusesAnOrganizationTheUserDoesNotAdminister()
     {
         var handler = Register(AllOrganizationKeys);

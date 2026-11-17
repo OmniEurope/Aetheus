@@ -8,7 +8,7 @@ public sealed class MetricsCleanupService(
     IConfiguration configuration,
     ILogger<MetricsCleanupService> logger,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : PeriodicBackgroundService(TimeSpan.FromHours(6), leaderLease, "aetheus:metrics-cleanup")
+    IPostgresLeaderLease leaderLease) : PeriodicBackgroundService(TimeSpan.FromHours(6), leaderLease, "aetheus:metrics-cleanup")
 {
     protected override Task ExecuteIterationAsync(CancellationToken ct) => CleanupExpiredMetricsAsync(ct);
 

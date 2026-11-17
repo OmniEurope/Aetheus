@@ -148,7 +148,7 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>
         {
-            new() { Id = 12, PipelineId = 7, PipelineName = "Build", Status = PipelineStatus.Success }
+            new() { Id = 12, BuildNumber = 12, PipelineId = 7, PipelineName = "Build", Status = PipelineStatus.Success }
         });
         Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>().Seed(PreferenceKeys.PipelineListView, "runs");
 
@@ -337,7 +337,7 @@ public class PipelinesListTests : BunitContext
             [new PipelineDependencyDto { Id = 8, Name = "Project pipeline", ProjectId = 3, TriggerType = PipelineTriggerType.Webhook }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>
         {
-            new() { Id = 14, PipelineId = 8, PipelineName = "Project pipeline", Status = PipelineStatus.Success }
+            new() { Id = 14, BuildNumber = 14, PipelineId = 8, PipelineName = "Project pipeline", Status = PipelineStatus.Success }
         });
 
         var cut = RenderList(projectId: 3);
@@ -411,7 +411,7 @@ public class PipelinesListTests : BunitContext
         ]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>
         {
-            new() { Id = 12, PipelineId = 10, PipelineName = "deploy", ProjectName = "Aetheus", Status = PipelineStatus.Success }
+            new() { Id = 12, BuildNumber = 12, PipelineId = 10, PipelineName = "deploy", ProjectName = "Aetheus", Status = PipelineStatus.Success }
         });
 
         var cut = RenderList();
@@ -498,7 +498,7 @@ public class PipelinesListTests : BunitContext
         var before = _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies"));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>
         {
-            new() { Id = 123, PipelineId = 999, PipelineName = "Live pipeline", Status = PipelineStatus.Running }
+            new() { Id = 123, BuildNumber = 123, PipelineId = 999, PipelineName = "Live pipeline", Status = PipelineStatus.Running }
         });
         var method = typeof(PipelinesList).GetMethod("OnPipelineHubEvent", Priv)!;
 

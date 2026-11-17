@@ -47,6 +47,6 @@ public class ForcedPasswordChangeTests : E2ETestBase
 
         await Page.WaitForURLAsync($"{FrontendUrl}/account/change-password");
         await Expect(Page.Locator("#NewPassword")).ToBeVisibleAsync(new() { Timeout = 15000 });
-        await Expect(Page.Locator(".session-bootstrap-loader")).ToHaveCountAsync(0);
+        await Expect(Page.Locator(".site-content-veil")).ToHaveCountAsync(0);
     }
 }

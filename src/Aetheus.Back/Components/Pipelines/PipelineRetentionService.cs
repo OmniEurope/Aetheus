@@ -10,17 +10,9 @@ public sealed class PipelineRetentionService(
     IConfiguration configuration,
     ILogger<PipelineRetentionService> logger,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:pipeline-retention")
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync("aetheus:pipeline-retention", RunLeaderLoopAsync, stoppingToken).ConfigureAwait(false);
-    }
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(12));
 

@@ -34,10 +34,13 @@ public class PipelineDeadlockRecheckTests
         var repo = Substitute.For<IPipelineRepository>();
         var finalizer = Substitute.For<IPipelineRunFinalizer>();
         repo.HasActiveArtifactCollectionAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
-        repo.GetCompletedStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult(completedStages()));
-        repo.GetTerminalStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult(completedStages()));
+        // One read answers both sets: here the stages are completed and terminal alike.
+        repo.GetStageProgressAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                var stages = completedStages();
+                return Task.FromResult(new PipelineStageProgress(stages, [.. stages]));
+            });
         repo.HasAnyFailedStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
         // The decisive part of the window: the last step is already gone from the running set.
         repo.HasAnyRunningStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())

@@ -17,8 +17,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// its checksum. The authentication boundaries are the registry's: no token is challenged, a read-only
 /// token reads but cannot deploy, a path that leaves the layout is refused.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class MavenRegistryHttpIntegrationTests(PostgresFixture fixture) : IDisposable
+public sealed class MavenRegistryHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IDisposable
 {
     private const string Root = "/api/packages/maven/";
     private readonly string _storage = Path.Combine(Path.GetTempPath(), "aetheus-maven-it", Guid.NewGuid().ToString("N"));

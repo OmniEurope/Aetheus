@@ -200,8 +200,8 @@ public partial class TaskListView : IAsyncDisposable
     }
 
     /// <summary>The export writes the source the cell links to.</summary>
-    private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is { } pipelineRunId
-        ? $"{L["PipelineRun"]} #{pipelineRunId}"
+    private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is not null
+        ? PipelineRunPresentation.Label(L["PipelineRun"].Value, task.PipelineRunNumber)
         : $"{L["Server"]}: {GetSourceServerName(task)}";
     private Func<ServerTaskDto, object?>? _sourceExport;
 }

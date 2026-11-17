@@ -36,6 +36,8 @@ public sealed class PipelineRepositoryDefinitionGuardTests : IDisposable
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
     private readonly PipelineService _sut;
     private readonly Pipeline _existing;
+    private readonly List<GitLightRepoDto> _repositories =
+        [new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "w6", DefaultBranch = Branch }];
 
     public PipelineRepositoryDefinitionGuardTests()
     {
@@ -49,8 +51,11 @@ public sealed class PipelineRepositoryDefinitionGuardTests : IDisposable
         GitFixtureGuard.AssertOwnedBy(_bare, _bare);
 
         var gitService = Substitute.For<IGitLightService>();
-        gitService.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(
-            [new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "w6", DefaultBranch = Branch }]);
+        var repositories = _repositories;
+        gitService.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(repositories);
+        // The stored list, which the reads of a definition ask for.
+        gitService.GetAccessibleRepositoriesAsync(
+            Arg.Is<List<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 7 })), Arg.Any<CancellationToken>()).Returns(repositories);
         gitService.ResolveDiskPath(7, "w6").Returns(_bare);
         var sender = Substitute.For<IEmailSenderConfigurationResolver>();
         sender.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderResolution());
@@ -114,6 +119,30 @@ public sealed class PipelineRepositoryDefinitionGuardTests : IDisposable
         Assert.Equal(RepositoryYaml, _existing.YamlDefinition);
         Assert.Equal(Branch, _existing.SourceBranch);
         await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Decision 2026-11-10 (point 4): the same repository, now the mirror of an external one. A
+    /// settings-only save (what a fleet update or the Parameters tab sends) keeps Aetheus's stored definition instead
+    /// of adopting the mirror's file, an edit is stored without being refused over the mirror's content, and the
+    /// mirror is never written.</summary>
+    [Fact]
+    public async Task Decision20261110_AMirrorSourcedPipeline_NeverAdoptsTheMirrorsFile()
+    {
+        await SeedRepositoryAsync(RepositoryYaml);
+        _repositories[0] = new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "w6", DefaultBranch = Branch, IsExternalMirror = true };
+        var before = await CommitCountAsync();
+
+        await _sut.UpdatePipelineAsync(1, Request(AetheusYaml), TestContext.Current.CancellationToken);
+        Assert.Equal(AetheusYaml, _existing.YamlDefinition);
+
+        var edited = AetheusYaml.Replace("dotnet build", "dotnet build -c Release", StringComparison.Ordinal);
+        await _sut.UpdatePipelineAsync(1, Request(edited), TestContext.Current.CancellationToken);
+        Assert.Equal(edited, _existing.YamlDefinition);
+
+        Assert.Equal(RepositoryYaml, await RepositoryFileAsync());
+        Assert.Equal(before, await CommitCountAsync());
+        var definition = await _sut.GetRepositoryDefinitionAsync(1, Branch, null, TestContext.Current.CancellationToken);
+        Assert.False(definition!.Exists);
     }
 
     [Fact]

@@ -14,7 +14,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>The PostgreSQL budget sweep removes oldest telemetry until within budget while
 /// preserving analysis totals, grades and latest reports, leaving under-budget projects
 /// unchanged.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ProjectStorageBudgetIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime Now = new(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);

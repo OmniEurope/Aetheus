@@ -68,6 +68,33 @@ internal sealed class PipelineRunLineageRepository(AppDbContext db) : IPipelineR
             .Select(run => new PipelineRunWindow(run.StartedAt, run.CompletedAt))
             .FirstOrDefaultAsync(ct);
 
+    public async Task<int?> GetUpstreamBuildNumberAsync(int runId, CancellationToken ct = default)
+    {
+        var triggering = await db.PipelineStepRuns.AsNoTracking()
+            .Where(step => step.TriggeredRunId == runId)
+            .OrderBy(step => step.Id)
+            .Select(step => (int?)step.PipelineRun.BuildNumber)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (triggering is not null) return triggering;
+
+        // A follow-up run names its parent only in its launch variables.
+        var launchVariables = await db.PipelineRuns.AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => run.AdditionalVariablesJson)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        var variables = PipelineRunHelpers.DeserializeResolvedVariables(launchVariables);
+        if (!variables.TryGetValue("UPSTREAM_RUN_ID", out var parent)
+            || !int.TryParse(parent, out var parentRunId))
+            return null;
+        return await db.PipelineRuns.AsNoTracking()
+            .Where(run => run.Id == parentRunId)
+            .Select(run => (int?)run.BuildNumber)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
     public Task<List<PipelineRunLinkDto>> GetDownstreamRunsAsync(
         int runId, DateTime startedFromUtc, DateTime startedToUtc, CancellationToken ct = default)
     {

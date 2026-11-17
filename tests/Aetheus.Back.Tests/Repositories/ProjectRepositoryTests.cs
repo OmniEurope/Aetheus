@@ -710,6 +710,19 @@ public class ProjectRepositoryTests : IDisposable
                 EvaluatedAt = now.AddMinutes(-1),
                 CreatedAt = now.AddMinutes(-1)
             });
+        // R-12, R-20: the list letter is the sealed verdict of the deployed release (here D), not the
+        // analysis grade of the run tree (F, the worst of its domains).
+        _db.Releases.Add(new Release
+        {
+            ProjectId = project.Id,
+            Version = "1.0.0",
+            Status = ReleaseStatus.Deployed,
+            PipelineRunId = parentRun.Id,
+            CreatedByPipelineRunId = parentRun.Id,
+            PublishedAt = now.AddMinutes(-1),
+            AssuranceGrade = AnalysisGrade.D,
+            Deployable = true
+        });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var result = await _repo.GetProjectListInsightsAsync(
@@ -722,9 +735,55 @@ public class ProjectRepositoryTests : IDisposable
         Assert.NotEqual(childRun.Id, insight.LastRunId);
         // And its status is the parent's: a green child under a parent still running is not "done".
         Assert.Equal(PipelineStatus.Running, insight.LastRunStatus);
-        Assert.Equal(AnalysisGrade.F, insight.LatestGateGrade);
+        Assert.Equal(AnalysisGrade.D, insight.LatestGateGrade);
+        Assert.Equal(AnalysisQualificationState.DeployedSealed, insight.GradeQualification?.State);
         Assert.Equal(ProjectProductionStatus.Online, insight.ProductionStatus);
         Assert.Equal(1, insight.OnlineUserCount);
+        Assert.Equal(OnlineAudienceState.Measured, insight.OnlineUserState);
+    }
+
+    [Fact]
+    public async Task GetProjectListInsightsAsync_TellsWaitingForDataFromAMeasuredZeroFromUnavailable()
+    {
+        var now = new DateTime(2026, 11, 5, 10, 0, 0, DateTimeKind.Utc);
+        async Task<int> ProjectWithAppAsync(string name, bool analytics, DateTime? lastIngestAt)
+        {
+            var project = new Project { Name = name, Description = "d" };
+            _db.MonitoredApps.Add(new MonitoredApp
+            {
+                Project = project,
+                Name = name,
+                Enabled = true,
+                CurrentStatus = AppHealthStatus.Up,
+                AnalyticsEnabled = analytics,
+                AnalyticsLastIngestAt = lastIngestAt
+            });
+            await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+            return project.Id;
+        }
+
+        var never = await ProjectWithAppAsync("never", analytics: true, lastIngestAt: null);
+        var stale = await ProjectWithAppAsync("stale", analytics: true, lastIngestAt: now.AddMinutes(-20));
+        var quiet = await ProjectWithAppAsync("quiet", analytics: true, lastIngestAt: now.AddMinutes(-2));
+        var off = await ProjectWithAppAsync("off", analytics: false, lastIngestAt: null);
+
+        var result = await _repo.GetProjectListInsightsAsync(
+            [never, stale, quiet, off], now.AddMinutes(-5), TestContext.Current.CancellationToken);
+
+        // Nothing fresh was ingested: waiting, whatever the zero count says.
+        Assert.Equal(OnlineAudienceState.Waiting, result[never].OnlineUserState);
+        Assert.Equal(OnlineAudienceState.Waiting, result[stale].OnlineUserState);
+        // An ingestion inside the window with nobody online is a measured zero.
+        Assert.Equal(OnlineAudienceState.Measured, result[quiet].OnlineUserState);
+        Assert.Equal(0, result[quiet].OnlineUserCount);
+        // Without web analytics there is no counter at all.
+        Assert.Equal(OnlineAudienceState.Unavailable, result[off].OnlineUserState);
+        Assert.Null(result[off].OnlineUserCount);
+        // R-23: the last audience ingestion travels with the state, so the wait can be told since when.
+        Assert.Null(result[never].OnlineUserLastEventAt);
+        Assert.Equal(now.AddMinutes(-20), result[stale].OnlineUserLastEventAt);
+        Assert.Equal(now.AddMinutes(-2), result[quiet].OnlineUserLastEventAt);
+        Assert.Null(result[off].OnlineUserLastEventAt);
     }
 
 

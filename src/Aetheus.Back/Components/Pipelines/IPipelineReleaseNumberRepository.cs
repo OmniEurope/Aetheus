@@ -23,4 +23,10 @@ public interface IPipelineReleaseNumberRepository
 
     /// <summary>The release number (and series) a run was created with, null when it has none.</summary>
     Task<ReleaseNumberAssignment?> GetRunReleaseAsync(int runId, CancellationToken ct = default);
+
+    /// <summary>R-33: the number the series would hand out next, without taking it; null when the project is gone.</summary>
+    Task<int?> PeekNextReleaseNumberAsync(int projectId, string series, CancellationToken ct = default);
+
+    /// <summary>R-33: a release of the project already carries this version (any status).</summary>
+    Task<bool> ReleaseVersionExistsAsync(int projectId, string version, CancellationToken ct = default);
 }

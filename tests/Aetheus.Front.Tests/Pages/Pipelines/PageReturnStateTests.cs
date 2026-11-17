@@ -41,8 +41,8 @@ public sealed class PageReturnStateTests : BunitContext
         SetupPipeline("Deploy Prod");
         var firstSource = HoldSource("api/pipelines/5/source");
         var first = Render<PipelineEdit>(parameters => parameters.Add(page => page.Id, 5));
-        // First visit: nothing to show yet, the page-wide loader.
-        Assert.NotEmpty(first.FindAll(".aetheus-loader"));
+        // First visit: nothing to show yet, the page holds the content-area veil (R-36 level 2).
+        Assert.True(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy);
         firstSource.SetResult(new PipelineSourceDto());
         first.WaitForState(() => first.Markup.Contains("Deploy Prod"));
 
@@ -51,7 +51,7 @@ public sealed class PageReturnStateTests : BunitContext
         var back = Render<PipelineEdit>(parameters => parameters.Add(page => page.Id, 5));
 
         back.WaitForState(() => back.Markup.Contains("Deploy Prod"));
-        Assert.Empty(back.FindAll(".aetheus-loader"));
+        Assert.False(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy);
         Assert.DoesNotContain("Deploy Prod renamed", back.Markup);
         refresh.SetResult(new PipelineSourceDto());
         back.WaitForState(() => back.Markup.Contains("Deploy Prod renamed"));
@@ -68,8 +68,8 @@ public sealed class PageReturnStateTests : BunitContext
         var firstLoad = new TaskCompletionSource<PipelineRunDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/runs/77", ct => firstLoad.Task.WaitAsync(ct));
         var first = Render<PipelineRun>(parameters => parameters.Add(page => page.RunId, 77));
-        // First visit: only the page-wide loader until the run is read.
-        Assert.NotEmpty(first.FindAll(".aetheus-loader"));
+        // First visit: only the content-area veil until the run is read (R-36 level 2).
+        Assert.True(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy);
         Assert.DoesNotContain("Nightly", first.Markup);
         firstLoad.SetResult(Run("Nightly"));
         first.WaitForState(() => first.Markup.Contains("Nightly"));

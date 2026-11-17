@@ -188,6 +188,10 @@ public partial class ServerServicesSection : IAsyncDisposable
         // spinner / refreshed log pane actually appear without waiting for another interaction.
         if (matchesBusy || matchesLog)
             _ = InvokeAsync(StateHasChanged);
+
+        // The packages and updates tab (R-23) hears of the finished task too, to refresh its pending list.
+        if (_patchSection is not null)
+            _ = InvokeAsync(() => _patchSection.HandleTaskCompletedAsync(notification));
     }
 
     private async Task ShowLogOutputAsync(TaskCompletedNotification notification)
@@ -270,8 +274,24 @@ public partial class ServerServicesSection : IAsyncDisposable
         });
     }
 
+    private ServerPatchSection? _patchSection;
+
+    // Recette R-12: the tasks this page launches, adopted again when the user comes back while one still runs.
+    private static readonly string[] ServiceTaskPrefixes =
+        [ServerTaskNames.ServiceActionPrefix, ServerTaskNames.InstallPrefix, ServerTaskNames.UninstallPrefix];
+
     // Recette R3-37: what became of the task an action of this page launched.
     private ServerTaskFollower? _follower;
+
+    // Recette R-12: a service action adopted on arrival ("Service Restart - nginx") is called "Redémarrer - nginx", as the
+    // page calls the one it launches.
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        new(ServerTaskNames.ServiceActionPrefix, rest => ServerAdoptedTaskTitles.Action<ServiceAction>(
+            rest, (action, service) => $"{L[action.ToString()]} - {service}")),
+        new(ServerTaskNames.InstallPrefix, service => $"{L["Install"]} - {service}"),
+        new(ServerTaskNames.UninstallPrefix, service => $"{L["Uninstall"]} - {service}")
+    ]);
 
     private async Task ExecuteActionAsync(ServiceAction action, string serviceName)
     {
@@ -284,12 +304,12 @@ public partial class ServerServicesSection : IAsyncDisposable
         if (taskId is not null)
         {
             _actions.Track(serviceName, taskId.Value, action.ToString());
-            _follower?.Follow($"{action} - {serviceName}", taskId.Value);
-            Toast.Success(L["TaskQueued"], $"{action} - {serviceName}");
+            _follower?.Follow($"{L[action.ToString()]} - {serviceName}", taskId.Value);
+            Toast.Success(L["TaskQueued"], $"{L[action.ToString()]} - {serviceName}");
         }
         else
         {
-            Toast.Error(L["Error"], $"{action} - {serviceName}");
+            Toast.Error(L["Error"], $"{L[action.ToString()]} - {serviceName}");
         }
     }
 
@@ -318,12 +338,12 @@ public partial class ServerServicesSection : IAsyncDisposable
             var ok = await Api.Teamspeak.SetupTeamspeakAsync(ServerId, new TeamspeakSetupRequest());
             if (ok)
             {
-                Toast.Success(L["TaskQueued"], $"Install - {serviceName}");
+                Toast.Success(L["TaskQueued"], $"{L["Install"]} - {serviceName}");
                 await OnServiceChanged.InvokeAsync();
             }
             else
             {
-                Toast.Error(L["Error"], $"Install - {serviceName}");
+                Toast.Error(L["Error"], $"{L["Install"]} - {serviceName}");
             }
             return;
         }
@@ -333,12 +353,12 @@ public partial class ServerServicesSection : IAsyncDisposable
         if (taskId is not null)
         {
             TrackPendingInstall(serviceName, taskId.Value);   // S-UX-INST: offer to start it once the install lands
-            _follower?.Follow($"Install - {serviceName}", taskId.Value);
-            Toast.Success(L["TaskQueued"], $"Install - {serviceName}");
+            _follower?.Follow($"{L["Install"]} - {serviceName}", taskId.Value);
+            Toast.Success(L["TaskQueued"], $"{L["Install"]} - {serviceName}");
         }
         else
         {
-            Toast.Error(L["Error"], $"Install - {serviceName}");
+            Toast.Error(L["Error"], $"{L["Install"]} - {serviceName}");
         }
     }
 
@@ -371,12 +391,12 @@ public partial class ServerServicesSection : IAsyncDisposable
             if (taskId is not null)
             {
                 _actions.Track(serviceName, taskId.Value, "Uninstall");
-                _follower?.Follow($"Uninstall - {serviceName}", taskId.Value);
-                Toast.Success(L["TaskQueued"], $"Uninstall - {serviceName}");
+                _follower?.Follow($"{L["Uninstall"]} - {serviceName}", taskId.Value);
+                Toast.Success(L["TaskQueued"], $"{L["Uninstall"]} - {serviceName}");
             }
             else
             {
-                Toast.Error(L["Error"], $"Uninstall - {serviceName}");
+                Toast.Error(L["Error"], $"{L["Uninstall"]} - {serviceName}");
             }
         });
     }

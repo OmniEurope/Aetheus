@@ -15,6 +15,7 @@ public class OrganizationServiceTests
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IUserChangeNotifier _userNotifier = Substitute.For<IUserChangeNotifier>();
     private readonly IOrganizationRoleAssignmentService _roleAssignments = Substitute.For<IOrganizationRoleAssignmentService>();
+    private readonly LeaderLeaseDouble _lease = LeaderLeaseDouble.Leader();
     private readonly OrganizationService _sut;
 
     public OrganizationServiceTests()
@@ -23,7 +24,7 @@ public class OrganizationServiceTests
             .Returns([]);
         _repo.GetProjectOrganizationIdsAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        _sut = new OrganizationService(_repo, _authz, TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), _userNotifier, Substitute.For<IAuditService>(), _roleAssignments);
+        _sut = new OrganizationService(_repo, _authz, TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), _userNotifier, Substitute.For<IAuditService>(), _roleAssignments, _lease);
     }
 
     [Fact]
@@ -389,6 +390,29 @@ public class OrganizationServiceTests
         Assert.Equal(OrganizationRole.Owner, result.Role);
         _authz.Received(1).InvalidateRoleCache("alice");
         await _userNotifier.Received(1).NotifyPermissionsChangedAsync(5, PermissionChangeReasons.OrganizationMembership, Arg.Any<CancellationToken>());
+        // A promotion cannot lose an Owner: it never takes the owners lock.
+        Assert.Equal(0, _lease.SerializedRequests);
+    }
+
+    [Fact]
+    public async Task UpdateMemberAsync_DemotingTheLastOwner_IsRefusedUnderTheOwnersLock()
+    {
+        var member = new OrganizationMember
+        {
+            Id = 10,
+            UserId = 5,
+            Role = OrganizationRole.Owner,
+            User = new User { Id = 5, Username = "alice", Email = "a@b.c" }
+        };
+        _repo.GetMemberWithUserByIdAsync(10, 1, Arg.Any<CancellationToken>()).Returns(member);
+        _repo.CountOwnersAsync(1, Arg.Any<CancellationToken>()).Returns(1);
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.UpdateMemberAsync(1, 10,
+            new UpdateOrganizationMemberRequest { Role = OrganizationRole.Member }, TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, _lease.SerializedRequests);
+        Assert.Equal(OrganizationRole.Owner, member.Role);
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

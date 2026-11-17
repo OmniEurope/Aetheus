@@ -16,6 +16,7 @@ internal static class AnalysisMapper
         PipelineId = row.PipelineId,
         PipelineName = row.PipelineName,
         PipelineRunId = row.PipelineRunId,
+        PipelineRunNumber = row.PipelineRunNumber,
         BranchName = row.BranchName,
         CommitHash = row.CommitHash,
         Category = row.Category,
@@ -30,7 +31,8 @@ internal static class AnalysisMapper
         BlockerCount = row.BlockerCount,
         WarningCount = row.WarningCount,
         CompletedAt = row.CompletedAt,
-        RepositoryId = row.RepositoryId
+        RepositoryId = row.RepositoryId,
+        Source = row.PipelineRunId is null && row.ScannerKey == CveWatchFindings.ScannerKey ? AnalysisScanSource.CveWatch : AnalysisScanSource.Pipeline
     };
 
     public static AnalysisReportDto ToDto(AnalysisReportRow row)
@@ -107,6 +109,7 @@ internal static class AnalysisMapper
             Id = occurrence.Id,
             AnalysisReportId = occurrence.AnalysisReportId,
             PipelineRunId = occurrence.AnalysisReport?.PipelineRunId,
+            PipelineRunNumber = occurrence.AnalysisReport?.PipelineRun?.BuildNumber,
             RepositoryId = occurrence.AnalysisReport?.PipelineRun?.Pipeline.SourceRepositoryId,
             ToolName = occurrence.ToolName,
             ScannerKey = occurrence.ScannerKey,

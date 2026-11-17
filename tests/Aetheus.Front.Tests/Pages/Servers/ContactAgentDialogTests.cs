@@ -2,6 +2,7 @@
 using System.Reflection;
 using Aetheus.Front.Components.Servers;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
@@ -39,12 +40,13 @@ public class ContactAgentDialogTests : BunitContext
             .Add(x => x.ServerId, 1)
             .Add(x => x.ServerName, "TestServer"));
 
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=contact-agent-running]").GetAttribute("aria-busy")));
-        Assert.Contains("omni-busy", cut.Find("[data-testid=contact-agent-running]").ClassName, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=contact-agent-running]")));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
 
         contact.SetResult(new ContactAgentResultDto { Reachable = true });
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=contact-agent-running]")));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     [Fact]

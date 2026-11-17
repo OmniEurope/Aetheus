@@ -282,7 +282,7 @@ public class ServerDockerSectionTests : BunitContext
     }
 
     [Fact]
-    public void ProjectToolbar_StartsOnlyContainersInSelectedProject()
+    public async Task ProjectToolbar_StartsOnlyContainersInSelectedProject()
     {
         _handler.SetJsonResponse("api/servers/20/docker/action", "{}");
         var original = MakeDockerServer();
@@ -304,7 +304,7 @@ public class ServerDockerSectionTests : BunitContext
 
         cut.Find("select#docker-bulk-project").Change("0");
         cut.Find(".docker-bulk-actions .omni-overflow-menu__trigger").Click();
-        cut.Find(".omni-menu__item[title='StartAll']").Click();
+        await cut.Find(".omni-menu__item[title='StartAll']").ClickAsync(new());
 
         Assert.Single(_handler.Requests, request => request.Url.Contains("docker/action", StringComparison.Ordinal));
         cut.Find("input[placeholder='FilterContainers']").Input("second");
@@ -370,7 +370,7 @@ public class ServerDockerSectionTests : BunitContext
 
         Assert.Contains("TaskFailed", cut.Markup);
         Assert.Contains("no configuration file provided: not found", cut.Markup);
-        Assert.DoesNotContain("aria-busy=\"true\"", cut.Markup);
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     [Theory]
@@ -470,6 +470,29 @@ public class ServerDockerSectionTests : BunitContext
         // Second pick - the panel closes.
         await ChooseRowActionAsync(cut, "nginx", "ViewLogs");
         Assert.Empty(cut.FindAll(".docker-logs"));
+    }
+
+    /// <summary>Recette R-1: while a container's logs are being read the page veil is not held, or it would cover the
+    /// logs card's own close button; the card says it is loading.</summary>
+    [Fact]
+    public async Task PendingContainerLogs_HoldNoPageVeil_AndTheCloseButtonStaysUsable()
+    {
+        var pending = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/servers/20/docker/containers/logs", _ => pending.Task);
+        var cut = RenderContainersTab();
+
+        // The pick is not awaited: its handler waits for the read, which is the pending state under test.
+        Row(cut, "nginx").QuerySelector(".omni-overflow-menu__trigger")!.Click();
+        var opening = ClickAsync(cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Single(item => item.TextContent.Trim() == "ViewLogs"));
+
+        cut.WaitForAssertion(() => Assert.Contains("DockerLogs - abc123def456", cut.Markup));
+        Assert.Contains("Loading", cut.Find(".action-veil-placeholder").TextContent, StringComparison.Ordinal);
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
+
+        cut.Find("button[title=Close]").Click();
+        Assert.DoesNotContain("DockerLogs - abc123def456", cut.Markup);
+        pending.SetResult("late");
+        await Record.ExceptionAsync(() => opening);
     }
 
     [Fact]
@@ -773,6 +796,23 @@ public class ServerDockerSectionTests : BunitContext
     }
 
     [Fact]
+    public async Task ComposeActionAsync_FollowsTheTaskTheBackendNames()
+    {
+        var cut = RenderComposeTab();
+        await ClickAsync(cut.Find("button[title=Start]"));
+
+        await cut.InvokeAsync(() => Services.GetRequiredService<TaskTrackerService>().Upsert(new ServerTaskDto
+        {
+            Id = 77001,
+            ServerId = 20,
+            Name = "Compose Up - monitoring",
+            Status = TaskExecutionStatus.Running
+        }));
+
+        cut.WaitForAssertion(() => Assert.Equal(77001, cut.FindComponent<ServerTaskFollower>().Instance.TaskId));
+    }
+
+    [Fact]
     public async Task OpenComposeEditorAsync_SetsFields()
     {
         var cut = RenderComposeTab();
@@ -781,7 +821,7 @@ public class ServerDockerSectionTests : BunitContext
 
         // The editor opens under the stack's name and asks the agent for its compose file.
         Assert.Contains("DockerCompose - monitoring", cut.Markup);
-        Assert.Single(cut.FindAll("div[aria-busy=true]"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Contains(_handler.Requests, r => r.Url.EndsWith("docker/compose/monitoring/file", StringComparison.Ordinal));
     }
 
@@ -993,7 +1033,7 @@ public class ServerDockerSectionTests : BunitContext
         var cut = RenderDockerSection();
         var composeTab = cut.FindComponent<DockerComposeTab>();
         await ClickAsync(EditComposeEntry(composeTab));
-        Assert.Single(composeTab.FindAll("div[aria-busy=true]"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
 
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
@@ -1005,7 +1045,7 @@ public class ServerDockerSectionTests : BunitContext
         })));
 
         cut.WaitForAssertion(() => Assert.Contains("nginx", composeTab.FindComponent<OmniCodeEditor>().Instance.Value));
-        Assert.Empty(composeTab.FindAll("div[aria-busy=true]"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     // FRONT-017: open stack A, then B; A's compose file arrives last. It must not land under B's title,
@@ -1044,7 +1084,7 @@ public class ServerDockerSectionTests : BunitContext
         await cut.InvokeAsync(() => { });
         // A's late answer neither fills B's editor nor ends its loading.
         Assert.Equal(string.Empty, composeTab.FindComponent<OmniCodeEditor>().Instance.Value);
-        Assert.Single(composeTab.FindAll("div[aria-busy=true]"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Contains("DockerCompose - stack-b", composeTab.Markup);
 
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification

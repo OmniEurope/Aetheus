@@ -3,6 +3,10 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Test classes run in parallel, each booting real hosts in this one process: the workstation GC
+         collects on a single thread and its pauses stopped every class at once (measured 2026-11-04:
+         16.6 min with it, 8 min with the server GC, on 24 cores). -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,6 +14,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="NSubstitute" />
+    <!-- Direct ref keeps the patched release ahead of the vulnerable transitive one (MimeKit, via Aetheus.Back, which no longer pins it: the web framework prunes it). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Otp.NET" />
     <PackageReference Include="SSH.NET" />
@@ -24,6 +30,28 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Aetheus.Back\Aetheus.Back.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A leader or non-leader PostgreSQL lease double, shared with Aetheus.Back.Tests. -->
+    <Compile Include="..\Shared\LeaderLeaseDouble.cs" Link="Shared\LeaderLeaseDouble.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Real files recorded from the public runtime sources of the vulnerability watch. -->
+    <Content Include="..\fixtures\runtime-advisories\*"
+             Link="fixtures\runtime-advisories\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+    <!-- The answer Packagist served for monolog/monolog, recorded once for the Back unit tests and replayed here. -->
+    <None Include="..\Aetheus.Back.Tests\PackageFeeds\Recorded\packagist-p2-monolog-monolog.json"
+          Link="Recorded\packagist-p2-monolog-monolog.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Real OSV records as the API publishes them (recorded 2026-11-01). -->
+    <Content Include="..\fixtures\osv\*"
+             Link="fixtures\osv\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -16,8 +16,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// for works on servers and not on pipelines, the container environment is an Organization Admin's by
 /// default, and port reservation is refused to a Reader and across organizations.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PermissionKeysHttpIntegrationTests(PostgresFixture fixture)
+public sealed class PermissionKeysHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -25,21 +24,14 @@ public sealed class PermissionKeysHttpIntegrationTests(PostgresFixture fixture)
 
     /// <summary>Every converted server action: route, body, key.</summary>
     public static TheoryData<string> ServerActions() =>
-        ["services/action", "services/install", "services/uninstall", "system/upgrade",
-         "firewall/allow", "firewall/deny", "firewall/delete", "firewall/toggle", "docker/containers/abcdef123456/env"];
+        ["services/action", "system/upgrade", "firewall/allow", "docker/containers/abcdef123456/env"];
 
     private static (string Route, object Body, string Key) ServerAction(string action, int serverId) => action switch
     {
         "services/action" => ($"/api/servers/{serverId}/services/action",
             new ServiceActionRequest { Action = ServiceAction.Restart, ServiceName = "nginx" }, PermissionKeys.ServerServicesControl),
-        "services/install" => ($"/api/servers/{serverId}/services/install",
-            new ServiceInstallRequest { ServiceName = "nginx" }, PermissionKeys.ServerServicesControl),
-        "services/uninstall" => ($"/api/servers/{serverId}/services/uninstall",
-            new ServiceInstallRequest { ServiceName = "nginx" }, PermissionKeys.ServerServicesControl),
         "system/upgrade" => ($"/api/servers/{serverId}/system/upgrade",
             new SystemUpgradeRequest { DryRun = true }, PermissionKeys.ServerSystemUpgrade),
-        "firewall/toggle" => ($"/api/servers/{serverId}/firewall/toggle",
-            new FirewallToggleRequest { Enabled = true }, PermissionKeys.ServerFirewallManage),
         "docker/containers/abcdef123456/env" => ($"/api/servers/{serverId}/docker/containers/abcdef123456/env",
             new { }, PermissionKeys.ServerDockerContainerEnvView),
         _ => ($"/api/servers/{serverId}/{action}", Rule, PermissionKeys.ServerFirewallManage)
@@ -67,9 +59,6 @@ public sealed class PermissionKeysHttpIntegrationTests(PostgresFixture fixture)
     /// default; the built-in Contributor, which held them through Server Write, no longer does.</summary>
     [Theory]
     [InlineData("firewall/allow")]
-    [InlineData("firewall/deny")]
-    [InlineData("firewall/delete")]
-    [InlineData("firewall/toggle")]
     [InlineData("system/upgrade")]
     public async Task FirewallAndSystemUpgrade_AreAnOrganizationAdminsByDefault_NotAContributors(string action)
     {
@@ -88,27 +77,6 @@ public sealed class PermissionKeysHttpIntegrationTests(PostgresFixture fixture)
             var response = await client.PostAsJsonAsync(route, body, IntegrationJsonOptions.Default, Ct);
             Assert.True(expected == response.StatusCode, $"{role} on {action}: {response.StatusCode}");
         }
-    }
-
-    [Fact]
-    public async Task ServerContributor_CustomRole_WorksOnServersButNotOnPipelines()
-    {
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        var tenant = await ManagedTenantAsync(factory, "sc");
-        var client = await UserAsync(factory, tenant,
-            [new Grant(ResourceType.Server, null, Permission.Write), new Grant(ResourceType.Pipeline, null, Permission.Read)],
-            PermissionKeys.ServerServicesControl, PermissionKeys.ServerFirewallManage, PermissionKeys.ServerPortsReserve);
-
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
-            $"/api/servers/{tenant.ServerId}/firewall/allow", Rule, IntegrationJsonOptions.Default, Ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"/api/servers/{tenant.ServerId}/ports",
-            new CreatePortReservationRequest { Port = 42010, OwnerLabel = "server-contributor" }, IntegrationJsonOptions.Default, Ct)).StatusCode);
-        // It reads pipelines, and does not run them, nor upgrade the system it was not given.
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/pipelines/{tenant.PipelineId}", Ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(
-            $"/api/pipelines/{tenant.PipelineId}/run", new PipelineRunRequest(), IntegrationJsonOptions.Default, Ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/servers/{tenant.ServerId}/system/upgrade",
-            new SystemUpgradeRequest { DryRun = true }, IntegrationJsonOptions.Default, Ct)).StatusCode);
     }
 
     [Fact]

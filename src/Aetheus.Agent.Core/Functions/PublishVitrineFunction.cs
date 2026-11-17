@@ -83,7 +83,7 @@ public sealed class PublishVitrineFunction : IPipelineFunction
             return PipelineFunctionResult.Failure($"Web root {webRoot} is not writable by the agent.");
         }
 
-        Publish(canonicalSource, webRoot);
+        Publish(canonicalSource, webRoot, cancellationToken);
         await context.Log($"Vitrine published to {webRoot} (world-readable for Apache).").ConfigureAwait(false);
         return PipelineFunctionResult.Success();
     }
@@ -190,7 +190,7 @@ public sealed class PublishVitrineFunction : IPipelineFunction
 
     /// <summary>Stage the site beside the live files, copy the live files aside, empty the web root and
     /// move the stage in; a failure once the swap began puts the live files back.</summary>
-    private void Publish(string source, string webRoot)
+    private void Publish(string source, string webRoot, CancellationToken cancellationToken)
     {
         var stage = $"{webRoot}/.aetheus-next.{Environment.ProcessId}";
         var backup = $"{webRoot}/.aetheus-previous.{Environment.ProcessId}";
@@ -202,20 +202,23 @@ public sealed class PublishVitrineFunction : IPipelineFunction
         var switched = false;
         try
         {
-            DirectoryTree.CopyContents(source, stage);
+            DirectoryTree.CopyContents(source, stage, cancellationToken: cancellationToken);
             DirectoryTree.GrantReadToAll(stage);
             _checkpoint("snapshot");
-            DirectoryTree.CopyContents(webRoot, backup, name => keep.Contains(name, StringComparer.Ordinal));
+            DirectoryTree.CopyContents(
+                webRoot, backup, name => keep.Contains(name, StringComparer.Ordinal), cancellationToken);
             switched = true;
             _checkpoint("clear");
-            DirectoryTree.RemoveContents(webRoot, keep);
+            DirectoryTree.RemoveContents(webRoot, cancellationToken, keep);
             _checkpoint("move");
-            DirectoryTree.MoveContents(stage, webRoot);
+            DirectoryTree.MoveContents(stage, webRoot, cancellationToken);
             switched = false;
         }
         catch (Exception) when (switched)
         {
-            DirectoryTree.RemoveContents(webRoot, keep[1]);
+            // A cancellation takes this path too (the swap ends, the live site comes back), and the
+            // restoration itself is not cancellable: it must run to its end.
+            DirectoryTree.RemoveContents(webRoot, CancellationToken.None, keep[1]);
             DirectoryTree.MoveContents(backup, webRoot);
             throw;
         }

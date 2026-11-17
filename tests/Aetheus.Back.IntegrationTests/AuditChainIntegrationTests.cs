@@ -10,7 +10,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// back by a fresh context, and the chain still verifies. The InMemory suite kept the ticks and could
 /// not see that PostgreSQL drops them.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AuditChainIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

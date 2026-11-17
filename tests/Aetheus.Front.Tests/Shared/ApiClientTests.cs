@@ -29,6 +29,7 @@ public class ApiClientTests
         var result = await api.Auth.LoginAsync(new LoginRequest { Email = "u@example.com", Password = "p" }, Xunit.TestContext.Current.CancellationToken);
         Assert.True(result.IsSuccess);
         Assert.Equal("tok", result.Value!.Token);
+        h.AssertSent(HttpMethod.Post, "api/auth/login", json: """{"email":"u@example.com","password":"p","rememberMe":false,"totpCode":null,"recoveryCode":null}""");
     }
 
     [Fact]
@@ -43,6 +44,7 @@ public class ApiClientTests
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
         Assert.Equal("Invalid credentials.", result.Error?.Message);
+        h.AssertSent(HttpMethod.Post, "api/auth/login", json: """{"email":"u@example.com","password":"p","rememberMe":false,"totpCode":null,"recoveryCode":null}""");
     }
 
     [Fact]
@@ -55,6 +57,7 @@ public class ApiClientTests
         };
         var result = await api.Auth.GetRegistrationTokensAsync(Xunit.TestContext.Current.CancellationToken);
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/auth/registration-tokens");
     }
 
     [Fact]
@@ -67,6 +70,7 @@ public class ApiClientTests
         };
         var result = await api.Auth.CreateRegistrationTokenAsync(48, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/auth/registration-tokens", json: """{"expirationHours":48,"organizationId":null}""");
     }
 
     [Fact]
@@ -76,6 +80,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         var result = await api.Auth.CreateRegistrationTokenAsync(ct: Xunit.TestContext.Current.CancellationToken);
         Assert.Null(result);
+        h.AssertSent(HttpMethod.Post, "api/auth/registration-tokens", json: """{"expirationHours":24,"organizationId":null}""");
     }
 
     // --- Servers ---
@@ -94,6 +99,7 @@ public class ApiClientTests
         Assert.Contains("type=Docker", h.LastRequest.RequestUri.ToString());
         Assert.Contains("status=Online", h.LastRequest.RequestUri.ToString());
         Assert.Contains("sortBy=Name", h.LastRequest.RequestUri.ToString());
+        h.AssertSent(HttpMethod.Get, "api/servers?page=1&pageSize=25&search=test&type=Docker&status=Online&sortBy=Name&sortDescending=True");
     }
 
     [Fact]
@@ -107,6 +113,7 @@ public class ApiClientTests
         var result = await api.Servers.GetServerDetailAsync(5, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
         Assert.Equal(5, result!.Id);
+        h.AssertSent(HttpMethod.Get, "api/servers/5");
     }
 
     [Fact]
@@ -116,6 +123,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerDto { Id = 1 }) };
         var result = await api.Servers.UpdateServerAsync(1, new UpdateServerRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Put, "api/servers/1", new UpdateServerRequest());
     }
 
     [Fact]
@@ -125,6 +133,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         var result = await api.Servers.UpdateServerAsync(1, new UpdateServerRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.Null(result);
+        h.AssertSent(HttpMethod.Put, "api/servers/1", new UpdateServerRequest());
     }
 
     [Fact]
@@ -135,6 +144,7 @@ public class ApiClientTests
         Assert.True(await api.Servers.RetireServerAsync(1, Xunit.TestContext.Current.CancellationToken));
         Assert.Equal(HttpMethod.Delete, h.LastRequest?.Method);
         Assert.Equal("http://test/api/servers/1", h.RequestUris.Single());
+        h.AssertSent(HttpMethod.Delete, "api/servers/1");
     }
 
     [Fact]
@@ -143,6 +153,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
         Assert.False(await api.Servers.RetireServerAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/servers/1");
     }
 
     [Fact]
@@ -153,6 +164,7 @@ public class ApiClientTests
         Assert.True(await api.Servers.PurgeServerAsync(4, Xunit.TestContext.Current.CancellationToken));
         Assert.Equal(HttpMethod.Delete, h.LastRequest?.Method);
         Assert.Equal("http://test/api/servers/4/permanent", h.RequestUris.Single());
+        h.AssertSent(HttpMethod.Delete, "api/servers/4/permanent");
     }
 
     [Fact]
@@ -161,6 +173,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.Conflict);
         Assert.False(await api.Servers.PurgeServerAsync(4, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/servers/4/permanent");
     }
 
     [Fact]
@@ -174,6 +187,7 @@ public class ApiClientTests
         var result = await api.Servers.GetRetiredServersAsync(2, 10, "RetiredAt", true, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(4, Assert.Single(result.Items).Id);
         Assert.Equal("http://test/api/servers/retired?page=2&pageSize=10&sortBy=RetiredAt&sortDescending=True", h.RequestUris.Single());
+        h.AssertSent(HttpMethod.Get, "api/servers/retired?page=2&pageSize=10&sortBy=RetiredAt&sortDescending=True");
     }
 
     // --- Tasks ---
@@ -188,6 +202,7 @@ public class ApiClientTests
         };
         var result = await api.Pipelines.GetTasksAsync(2, 10);
         Assert.Empty(result.Items);
+        h.AssertSent(HttpMethod.Get, "api/tasks?page=2&pageSize=10");
     }
 
     [Fact]
@@ -197,6 +212,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerTaskDto { Id = 1 }) };
         var result = await api.Pipelines.CreateTaskAsync(new CreateTaskRequest());
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/tasks", new CreateTaskRequest());
     }
 
     [Fact]
@@ -205,6 +221,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Pipelines.CreateTaskAsync(new CreateTaskRequest()));
+        h.AssertSent(HttpMethod.Post, "api/tasks", new CreateTaskRequest());
     }
 
     [Fact]
@@ -218,6 +235,7 @@ public class ApiClientTests
         Assert.True(result.Success);
         Assert.Equal(HttpMethod.Post, h.LastRequest!.Method);
         Assert.Equal("/api/tasks/4443/cancel", h.LastRequest.RequestUri!.AbsolutePath);
+        h.AssertSent(HttpMethod.Post, "api/tasks/4443/cancel");
     }
 
     // --- Pipelines ---
@@ -233,6 +251,7 @@ public class ApiClientTests
         await api.Pipelines.GetPipelinesAsync(search: "build", triggerType: PipelineTriggerType.Webhook);
         Assert.Contains("search=build", h.LastRequest!.RequestUri!.ToString());
         Assert.Contains("triggerType=Webhook", h.LastRequest.RequestUri.ToString());
+        h.AssertSent(HttpMethod.Get, "api/pipelines?page=1&pageSize=25&search=build&triggerType=Webhook");
     }
 
     [Fact]
@@ -242,6 +261,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineDto { Id = 3 }) };
         var result = await api.Pipelines.GetPipelineAsync(3, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(3, result!.Id);
+        h.AssertSent(HttpMethod.Get, "api/pipelines/3");
     }
 
     [Fact]
@@ -253,6 +273,7 @@ public class ApiClientTests
         Assert.NotNull(result.Value);
         Assert.True(result.IsSuccess);
         Assert.Null(result.Error);
+        h.AssertSent(HttpMethod.Post, "api/pipelines", new CreatePipelineRequest());
     }
 
     [Fact]
@@ -267,6 +288,7 @@ public class ApiClientTests
         Assert.Null(result.Value);
         Assert.NotNull(result.Error);
         Assert.Contains("bad stage", result.Error.Errors);
+        h.AssertSent(HttpMethod.Post, "api/pipelines", new CreatePipelineRequest());
     }
 
     [Fact]
@@ -277,6 +299,7 @@ public class ApiClientTests
         var result = await api.Pipelines.UpdatePipelineAsync(2, new UpdatePipelineRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result.Value);
         Assert.Equal(2, result.Value.Id);
+        h.AssertSent(HttpMethod.Put, "api/pipelines/2", new UpdatePipelineRequest());
     }
 
     [Fact]
@@ -291,6 +314,7 @@ public class ApiClientTests
         Assert.Null(result.Value);
         Assert.NotNull(result.Error);
         Assert.Contains("bad step", result.Error.Errors);
+        h.AssertSent(HttpMethod.Put, "api/pipelines/2", new UpdatePipelineRequest());
     }
 
     [Fact]
@@ -299,6 +323,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Pipelines.DeletePipelineAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/pipelines/1");
     }
 
     [Fact]
@@ -313,6 +338,7 @@ public class ApiClientTests
         Assert.True(status.NotFound);
         Assert.False(status.Forbidden);
         Assert.False(status); // implicit bool - keeps `if (await Api.X())` call sites working
+        h.AssertSent(HttpMethod.Delete, "api/pipelines/1");
     }
 
     [Fact]
@@ -326,6 +352,7 @@ public class ApiClientTests
         Assert.False(status.Success);
         Assert.True(status.Forbidden);
         Assert.False(status.NotFound);
+        h.AssertSent(HttpMethod.Delete, "api/pipelines/1");
     }
 
     [Fact]
@@ -339,6 +366,7 @@ public class ApiClientTests
         Assert.True(result.IsSuccess);
         Assert.Null(result.Error);
         Assert.False(result.NotFound);
+        AssertTriggerRunSent(h, "api/pipelines/5/run");
     }
 
     [Fact]
@@ -355,6 +383,7 @@ public class ApiClientTests
         Assert.NotNull(result.Error);
         Assert.Contains("YAML syntax error", result.Error.Errors);
         Assert.False(result.NotFound);
+        AssertTriggerRunSent(h, "api/pipelines/5/run");
     }
 
     [Fact]
@@ -372,6 +401,7 @@ public class ApiClientTests
         Assert.Null(result.Value);
         Assert.Null(result.Error);
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
+        AssertTriggerRunSent(h, "api/pipelines/5/run");
     }
 
     [Fact]
@@ -384,6 +414,7 @@ public class ApiClientTests
         Assert.Null(result.Error);
         Assert.True(result.NotFound);
         Assert.False(result.IsSuccess);
+        AssertTriggerRunSent(h, "api/pipelines/5/run");
     }
 
     [Fact]
@@ -393,6 +424,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PaginatedResult<PipelineRunDto>()) };
         var result = await api.Pipelines.GetPipelineRunsAsync(1);
         Assert.Empty(result);
+        h.AssertSent(HttpMethod.Get, "api/pipelines/1/runs?pageSize=50");
     }
 
     [Fact]
@@ -402,6 +434,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineRunDto { Id = 7 }) };
         var result = await api.Pipelines.GetPipelineRunAsync(7, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(7, result!.Id);
+        h.AssertSent(HttpMethod.Get, "api/pipelines/runs/7");
     }
 
     // --- Projects ---
@@ -416,6 +449,7 @@ public class ApiClientTests
         };
         await api.Projects.GetProjectsAsync(search: "web", ct: Xunit.TestContext.Current.CancellationToken);
         Assert.Contains("search=web", h.LastRequest!.RequestUri!.ToString());
+        h.AssertSent(HttpMethod.Get, "api/projects?page=1&pageSize=25&search=web");
     }
 
     [Fact]
@@ -425,6 +459,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ProjectDetailDto { Id = 2 }) };
         var result = await api.Projects.GetProjectDetailAsync(2, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(2, result!.Id);
+        h.AssertSent(HttpMethod.Get, "api/projects/2");
     }
 
     [Fact]
@@ -433,6 +468,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ProjectDto { Id = 1 }) };
         Assert.NotNull(await api.Projects.CreateProjectAsync(new CreateProjectRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/projects", new CreateProjectRequest());
     }
 
     [Fact]
@@ -441,6 +477,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Projects.CreateProjectAsync(new CreateProjectRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/projects", new CreateProjectRequest());
     }
 
     [Fact]
@@ -449,6 +486,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ProjectDto { Id = 1 }) };
         Assert.NotNull(await api.Projects.UpdateProjectAsync(1, new UpdateProjectRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/projects/1", new UpdateProjectRequest());
     }
 
     [Fact]
@@ -457,6 +495,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Projects.UpdateProjectAsync(1, new UpdateProjectRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/projects/1", new UpdateProjectRequest());
     }
 
     [Fact]
@@ -465,6 +504,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.Equal(ProjectDeletionOutcome.Deleted, await api.Projects.DeleteProjectAsync(1, [], Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/projects/1");
     }
 
     // --- Monitoring ---
@@ -475,6 +515,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new DashboardOverviewDto()) };
         Assert.NotNull(await api.Monitoring.GetDashboardAsync());
+        h.AssertSent(HttpMethod.Get, "api/monitoring/dashboard");
     }
 
     [Fact]
@@ -495,6 +536,7 @@ public class ApiClientTests
         Assert.Contains("hours=48", uri, StringComparison.Ordinal);
         Assert.Contains("take=250", uri, StringComparison.Ordinal);
         Assert.Contains("afterUtc=", uri, StringComparison.Ordinal);
+        h.AssertSent(HttpMethod.Get, "api/monitoring/servers/1/metrics?hours=48&take=250&afterUtc=2026-07-28T12%3A30%3A00.0000000Z");
     }
 
     // --- Logs ---
@@ -506,6 +548,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<TaskLogDto>()) };
         var result = await api.Monitoring.GetTaskLogsAsync(5, Xunit.TestContext.Current.CancellationToken);
         Assert.Empty(result);
+        h.AssertSent(HttpMethod.Get, "api/logs/task/5");
     }
 
     // --- Settings ---
@@ -520,6 +563,7 @@ public class ApiClientTests
         };
         var result = await api.Settings.GetSettingsAsync();
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/settings");
     }
 
     [Fact]
@@ -529,6 +573,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         await api.Settings.UpdateSettingAsync("key1", "val1");
         Assert.Equal(HttpMethod.Put, h.LastRequest!.Method);
+        h.AssertSent(HttpMethod.Put, "api/settings/key1", json: """{"key":"key1","value":"val1"}""");
     }
 
     [Fact]
@@ -537,6 +582,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<SecretDto>()) };
         Assert.Empty(await api.Settings.GetSecretsAsync());
+        h.AssertSent(HttpMethod.Get, "api/settings/secrets");
     }
 
     [Fact]
@@ -545,6 +591,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new SecretDto { Id = 1 }) };
         Assert.NotNull(await api.Settings.CreateSecretAsync(new CreateSecretRequest()));
+        h.AssertSent(HttpMethod.Post, "api/settings/secrets", new CreateSecretRequest());
     }
 
     [Fact]
@@ -553,6 +600,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Settings.CreateSecretAsync(new CreateSecretRequest()));
+        h.AssertSent(HttpMethod.Post, "api/settings/secrets", new CreateSecretRequest());
     }
 
     [Fact]
@@ -561,6 +609,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Settings.DeleteSecretAsync(1));
+        h.AssertSent(HttpMethod.Delete, "api/settings/secrets/1");
     }
 
     // --- Docker ---
@@ -571,6 +620,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<DockerContainerDto>()) };
         Assert.Empty(await api.ServerTools.GetDockerContainersAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/docker/containers");
     }
 
     [Fact]
@@ -579,6 +629,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.ExecuteDockerActionAsync(1, new DockerActionRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/action", new DockerActionRequest());
     }
 
     [Fact]
@@ -588,6 +639,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("log line") };
         var result = await api.ServerTools.GetContainerLogsAsync(1, new DockerContainerLogsRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("log line", result);
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/containers/logs", new DockerContainerLogsRequest());
     }
 
     [Fact]
@@ -596,6 +648,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
         Assert.Equal(string.Empty, await api.ServerTools.GetContainerLogsAsync(1, new DockerContainerLogsRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/containers/logs", new DockerContainerLogsRequest());
     }
 
     [Fact]
@@ -604,6 +657,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<DockerImageDto>()) };
         Assert.Empty(await api.ServerTools.GetDockerImagesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/docker/images");
     }
 
     [Fact]
@@ -612,6 +666,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.PullDockerImageAsync(1, new DockerPullImageRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/images/pull", new DockerPullImageRequest());
     }
 
     [Fact]
@@ -620,6 +675,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.RemoveDockerImageAsync(1, "img123", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/servers/1/docker/images/img123");
     }
 
     [Fact]
@@ -628,6 +684,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<DockerComposeStackDto>()) };
         Assert.Empty(await api.ServerTools.GetComposeStacksAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/docker/compose");
     }
 
     [Fact]
@@ -636,6 +693,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.ExecuteComposeActionAsync(1, new DockerComposeActionRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/compose/action", new DockerComposeActionRequest());
     }
 
     [Fact]
@@ -644,6 +702,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<DockerNetworkDto>()) };
         Assert.Empty(await api.ServerTools.GetDockerNetworksAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/docker/networks");
     }
 
     [Fact]
@@ -652,6 +711,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<DockerVolumeDto>()) };
         Assert.Empty(await api.ServerTools.GetDockerVolumesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/docker/volumes");
     }
 
     [Fact]
@@ -660,6 +720,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.PruneDockerAsync(1, new DockerPruneRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/prune", new DockerPruneRequest());
     }
 
     [Fact]
@@ -668,6 +729,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.UpdateDockerResourceLimitsAsync(1, new DockerResourceLimitsRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/resource-limits", new DockerResourceLimitsRequest());
     }
 
     [Fact]
@@ -676,6 +738,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.InspectContainerAsync(1, "cid", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/containers/cid/inspect");
     }
 
     [Fact]
@@ -684,6 +747,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.GetComposeFileAsync(1, "stack1", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/docker/compose/stack1/file");
     }
 
     [Fact]
@@ -692,6 +756,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.SaveComposeFileAsync(1, new DockerComposeFileSaveRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/servers/1/docker/compose/file", new DockerComposeFileSaveRequest());
     }
 
     [Fact]
@@ -700,6 +765,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.ExecuteShellCommandAsync(1, new DockerExecRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/exec", new DockerExecRequest());
     }
 
     [Fact]
@@ -708,6 +774,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.GetContainerEnvVarsAsync(1, "cid", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/containers/cid/env");
     }
 
     [Fact]
@@ -716,6 +783,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.ListContainerFilesAsync(1, new DockerBrowseRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/containers/browse", new DockerBrowseRequest());
     }
 
     [Fact]
@@ -724,6 +792,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.BuildImageAsync(1, new DockerBuildRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/docker/build", new DockerBuildRequest());
     }
 
     // --- Server Configuration ---
@@ -735,6 +804,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("yaml: content") };
         var result = await api.Servers.ExportServerConfigAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("yaml: content", result);
+        h.AssertSent(HttpMethod.Get, "api/servers/1/configuration/export");
     }
 
     [Fact]
@@ -743,6 +813,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
         Assert.Null(await api.Servers.ExportServerConfigAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/configuration/export");
     }
 
     [Fact]
@@ -751,6 +822,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerConfigValidationResult()) };
         Assert.NotNull(await api.Servers.ValidateServerConfigAsync(1, "yaml", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/configuration/validate", json: """{"yaml":"yaml"}""");
     }
 
     [Fact]
@@ -759,6 +831,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Servers.ValidateServerConfigAsync(1, "yaml", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/configuration/validate", json: """{"yaml":"yaml"}""");
     }
 
     [Fact]
@@ -767,6 +840,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerConfigPreviewDto()) };
         Assert.NotNull(await api.Servers.PreviewServerConfigAsync(1, "yaml", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/configuration/preview", json: """{"yaml":"yaml"}""");
     }
 
     [Fact]
@@ -775,6 +849,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Servers.PreviewServerConfigAsync(1, "yaml", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/configuration/preview", json: """{"yaml":"yaml"}""");
     }
 
     [Fact]
@@ -784,6 +859,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerConfigDeployResultDto { TasksCreated = 3 }) };
         var result = await api.Servers.DeployServerConfigAsync(1, "yaml", Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(3, result!.TasksCreated);
+        h.AssertSent(HttpMethod.Post, "api/servers/1/configuration/deploy", json: """{"yaml":"yaml"}""");
     }
 
     [Fact]
@@ -792,6 +868,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Servers.DeployServerConfigAsync(1, "yaml", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/configuration/deploy", json: """{"yaml":"yaml"}""");
     }
 
     // --- Server Sub-Resources ---
@@ -803,6 +880,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "srv1", "srv2" }) };
         var result = await api.Servers.GetServerNamesAsync(Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(2, result.Count);
+        h.AssertSent(HttpMethod.Get, "api/servers/names");
     }
 
     [Fact]
@@ -814,6 +892,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<ProjectDto>())
         };
         Assert.Empty(await api.Servers.GetServerProjectsAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/projects?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -822,6 +901,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<PipelineDto>()) };
         Assert.Empty(await api.Pipelines.GetServerPipelinesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/pipelines");
     }
 
     [Fact]
@@ -830,6 +910,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<VariableLibraryDto>()) };
         Assert.Empty(await api.Servers.GetServerVariableLibrariesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/variable-libraries");
     }
 
     [Fact]
@@ -838,6 +919,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<VaultDto>()) };
         Assert.Empty(await api.Servers.GetServerVaultsAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/vaults");
     }
 
     [Fact]
@@ -855,6 +937,7 @@ public class ApiClientTests
 
         Assert.Empty(result.Items);
         Assert.Equal(0, result.TotalCount);
+        h.AssertSent(HttpMethod.Get, "api/servers/1/releases?page=1&pageSize=25");
     }
 
     [Fact]
@@ -867,6 +950,7 @@ public class ApiClientTests
         };
         var result = await api.Servers.GetServerTasksAsync(1);
         Assert.Empty(result.Items);
+        h.AssertSent(HttpMethod.Get, "api/servers/1/tasks?page=1&pageSize=25");
     }
 
     [Fact]
@@ -879,6 +963,7 @@ public class ApiClientTests
         };
         var result = await api.Servers.GetServerLogsAsync(1);
         Assert.Empty(result.Items);
+        h.AssertSent(HttpMethod.Get, "api/servers/1/logs?page=1&pageSize=50");
     }
 
     // --- Server Modules ---
@@ -889,6 +974,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ServerModuleDto>()) };
         Assert.Empty(await api.Servers.GetServerModulesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/modules");
     }
 
     [Fact]
@@ -897,6 +983,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerModuleDto { Id = 1 }) };
         Assert.NotNull(await api.Servers.CreateServerModuleAsync(1, new CreateServerModuleRequest()));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/modules", new CreateServerModuleRequest());
     }
 
     [Fact]
@@ -905,6 +992,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Servers.CreateServerModuleAsync(1, new CreateServerModuleRequest()));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/modules", new CreateServerModuleRequest());
     }
 
     [Fact]
@@ -913,6 +1001,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerModuleDto { Id = 1 }) };
         Assert.NotNull(await api.Servers.UpdateServerModuleAsync(1, 1, new UpdateServerModuleRequest()));
+        h.AssertSent(HttpMethod.Put, "api/servers/1/modules/1", new UpdateServerModuleRequest());
     }
 
     [Fact]
@@ -921,6 +1010,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Servers.DeleteServerModuleAsync(1, 1));
+        h.AssertSent(HttpMethod.Delete, "api/servers/1/modules/1");
     }
 
     // --- Server Apps ---
@@ -934,6 +1024,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<ServerAppDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty(await api.Servers.GetServerAppsAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/apps?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -942,6 +1033,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerAppDto { Id = 1 }) };
         Assert.NotNull(await api.Servers.CreateServerAppAsync(1, new CreateServerAppRequest()));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/apps", new CreateServerAppRequest());
     }
 
     [Fact]
@@ -950,6 +1042,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Servers.CreateServerAppAsync(1, new CreateServerAppRequest()));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/apps", new CreateServerAppRequest());
     }
 
     [Fact]
@@ -958,6 +1051,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ServerAppDto { Id = 1 }) };
         Assert.NotNull(await api.Servers.UpdateServerAppAsync(1, 1, new UpdateServerAppRequest()));
+        h.AssertSent(HttpMethod.Put, "api/servers/1/apps/1", new UpdateServerAppRequest());
     }
 
     [Fact]
@@ -966,6 +1060,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Servers.DeleteServerAppAsync(1, 1));
+        h.AssertSent(HttpMethod.Delete, "api/servers/1/apps/1");
     }
 
     // --- Project Sub-Resources ---
@@ -979,6 +1074,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<ProjectServerDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty(await api.Projects.GetProjectServersAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/projects/1/servers?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -990,6 +1086,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<ServerTaskDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty((await api.Projects.GetProjectTasksAsync(1, ct: Xunit.TestContext.Current.CancellationToken)).Items);
+        h.AssertSent(HttpMethod.Get, "api/projects/1/tasks?page=1&pageSize=25&sortDescending=false");
     }
 
     [Fact]
@@ -1001,6 +1098,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<TaskLogDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty((await api.Projects.GetProjectLogsAsync(1, ct: Xunit.TestContext.Current.CancellationToken)).Items);
+        h.AssertSent(HttpMethod.Get, "api/projects/1/logs?page=1&pageSize=50&sortDescending=false");
     }
 
     [Fact]
@@ -1009,6 +1107,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ProjectActivityDto>()) };
         Assert.Empty(await api.Projects.GetProjectActivityAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/projects/1/activity?count=20");
     }
 
     // --- Logs (unmasked) ---
@@ -1019,6 +1118,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<TaskLogDto>()) };
         Assert.Empty(await api.Monitoring.GetTaskLogsUnmaskedAsync(5, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/logs/task/5/unmasked");
     }
 
     // --- Audit ---
@@ -1034,6 +1134,7 @@ public class ApiClientTests
         var result = await api.Monitoring.GetAuditLogsAsync(search: "test", action: "Create");
         Assert.Empty(result.Items);
         Assert.Contains("search=test", h.LastRequest!.RequestUri!.ToString());
+        h.AssertSent(HttpMethod.Get, "api/audit?page=1&pageSize=50&search=test&action=Create");
     }
 
     [Fact]
@@ -1042,6 +1143,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "Create", "Delete" }) };
         Assert.Equal(2, (await api.Monitoring.GetAuditActionsAsync()).Count);
+        h.AssertSent(HttpMethod.Get, "api/audit/actions");
     }
 
     [Fact]
@@ -1050,6 +1152,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "Server" }) };
         Assert.Single(await api.Monitoring.GetAuditEntityTypesAsync());
+        h.AssertSent(HttpMethod.Get, "api/audit/entity-types");
     }
 
     // --- Apache ---
@@ -1060,6 +1163,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ApacheDataDto()) };
         Assert.NotNull(await api.ServerTools.GetApacheStateAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/apache");
     }
 
     [Fact]
@@ -1068,6 +1172,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ApacheModuleDto>()) };
         Assert.Empty(await api.ServerTools.GetApacheModulesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/apache/modules");
     }
 
     [Fact]
@@ -1076,6 +1181,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ApacheVirtualHostDto>()) };
         Assert.Empty(await api.ServerTools.GetApacheVirtualHostsAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/apache/vhosts");
     }
 
     [Fact]
@@ -1084,6 +1190,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.ExecuteApacheActionAsync(1, new ApacheActionRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/apache/action", new ApacheActionRequest());
     }
 
     [Fact]
@@ -1092,6 +1199,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.GetApacheLogsAsync(1, new ApacheLogRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/apache/logs", new ApacheLogRequest());
     }
 
     [Fact]
@@ -1100,6 +1208,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.GetApacheVHostConfigAsync(1, "site1", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/apache/vhosts/site1/config");
     }
 
     [Fact]
@@ -1108,6 +1217,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.SaveApacheVHostConfigAsync(1, new ApacheVHostSaveRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/servers/1/apache/vhosts//config", new ApacheVHostSaveRequest());
     }
 
     [Fact]
@@ -1116,6 +1226,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.GetApacheHtaccessAsync(1, "/var/www", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/apache/htaccess?documentRoot=%2Fvar%2Fwww");
     }
 
     [Fact]
@@ -1124,6 +1235,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.SaveApacheHtaccessAsync(1, new ApacheHtaccessSaveRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/servers/1/apache/htaccess", new ApacheHtaccessSaveRequest());
     }
 
     // --- Certbot ---
@@ -1134,6 +1246,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<CertbotCertificateDto>()) };
         Assert.Empty(await api.ServerTools.GetCertbotCertificatesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/certbot");
     }
 
     [Fact]
@@ -1142,6 +1255,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.ExecuteCertbotActionAsync(1, new CertbotActionRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/certbot/action", new CertbotActionRequest());
     }
 
     [Fact]
@@ -1150,6 +1264,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.ServerTools.CreateCertbotCertificateAsync(1, new CertbotCreateRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/certbot/create", new CertbotCreateRequest());
     }
 
     // --- Module Links ---
@@ -1160,6 +1275,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ModuleLinkDto>()) };
         Assert.Empty(await api.Servers.GetModuleLinksAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/module-links");
     }
 
     [Fact]
@@ -1168,6 +1284,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<LinkedResourceDto>()) };
         Assert.Empty(await api.Servers.GetLinksForResourceAsync(1, ModuleLinkType.Docker, "nginx"));
+        h.AssertSent(HttpMethod.Get, "api/servers/1/module-links/resource?sourceType=Docker&sourceIdentifier=nginx");
     }
 
     [Fact]
@@ -1203,6 +1320,7 @@ public class ApiClientTests
         Assert.NotNull(sent);
         Assert.Equal(["nginx", "worker"], sent.ResourceIdentifiers);
         Assert.Equal(2, sent.Page);
+        h.AssertSent(HttpMethod.Post, "api/servers/1/module-links/resource-page", json: """{"sourceType":0,"resourceIdentifiers":["nginx","worker"],"page":2,"pageSize":25,"search":"site","sortBy":null,"sortDescending":false,"filters":null,"sorts":null}""");
     }
 
     [Fact]
@@ -1211,6 +1329,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ModuleLinkDto { Id = 1 }) };
         Assert.NotNull(await api.Servers.CreateModuleLinkAsync(1, new CreateModuleLinkRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/module-links", new CreateModuleLinkRequest());
     }
 
     [Fact]
@@ -1219,6 +1338,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Servers.CreateModuleLinkAsync(1, new CreateModuleLinkRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/module-links", new CreateModuleLinkRequest());
     }
 
     [Fact]
@@ -1227,6 +1347,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Servers.DeleteModuleLinkAsync(1, 5, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/servers/1/module-links/5");
     }
 
     [Fact]
@@ -1235,6 +1356,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Servers.AutoDetectModuleLinksAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/servers/1/module-links/auto-detect");
     }
 
     // --- Variable Libraries ---
@@ -1248,6 +1370,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty((await api.Variables.GetVariableLibrariesAsync()).Items);
+        h.AssertSent(HttpMethod.Get, "api/variable-libraries?page=1&pageSize=25");
     }
 
     [Fact]
@@ -1256,6 +1379,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VariableLibraryDetailDto { Id = 1 }) };
         Assert.NotNull(await api.Variables.GetVariableLibraryDetailAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/variable-libraries/1");
     }
 
     [Fact]
@@ -1264,6 +1388,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "lib1" }) };
         Assert.Single(await api.Variables.GetVariableLibraryNamesAsync());
+        h.AssertSent(HttpMethod.Get, "api/variable-libraries/names");
     }
 
     [Fact]
@@ -1289,6 +1414,7 @@ public class ApiClientTests
         Assert.Contains("page=2", uri);
         Assert.Contains("pageSize=200", uri);
         Assert.Contains("projectId=7", uri);
+        h.AssertSent(HttpMethod.Get, "api/variable-libraries/suggestion-keys?page=2&pageSize=200&sortBy=Key&sortDescending=false&projectId=7");
     }
 
     [Fact]
@@ -1297,6 +1423,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VariableLibraryDto { Id = 1 }) };
         Assert.NotNull(await api.Variables.CreateVariableLibraryAsync(new CreateVariableLibraryRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/variable-libraries", new CreateVariableLibraryRequest());
     }
 
     [Fact]
@@ -1305,6 +1432,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Variables.CreateVariableLibraryAsync(new CreateVariableLibraryRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/variable-libraries", new CreateVariableLibraryRequest());
     }
 
     [Fact]
@@ -1313,6 +1441,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VariableLibraryDto { Id = 1 }) };
         Assert.NotNull(await api.Variables.UpdateVariableLibraryAsync(1, new UpdateVariableLibraryRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/variable-libraries/1", new UpdateVariableLibraryRequest());
     }
 
     [Fact]
@@ -1321,6 +1450,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Variables.DeleteVariableLibraryAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/variable-libraries/1");
     }
 
     [Fact]
@@ -1329,6 +1459,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VariableEntryDto { Id = 1 }) };
         Assert.True((await api.Variables.CreateVariableEntryAsync(1, new CreateVariableEntryRequest(), Xunit.TestContext.Current.CancellationToken)).IsSuccess);
+        h.AssertSent(HttpMethod.Post, "api/variable-libraries/1/entries", new CreateVariableEntryRequest());
     }
 
     [Fact]
@@ -1339,6 +1470,7 @@ public class ApiClientTests
         var outcome = await api.Variables.CreateVariableEntryAsync(1, new CreateVariableEntryRequest { Key = "A" }, Xunit.TestContext.Current.CancellationToken);
         Assert.False(outcome.IsSuccess);
         Assert.Equal(HttpStatusCode.BadRequest, outcome.StatusCode);
+        h.AssertSent(HttpMethod.Post, "api/variable-libraries/1/entries", json: """{"value":"","key":"A"}""");
     }
 
     [Fact]
@@ -1347,6 +1479,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VariableEntryDto { Id = 1 }) };
         Assert.True((await api.Variables.UpdateVariableEntryAsync(1, 1, new UpdateVariableEntryRequest(), Xunit.TestContext.Current.CancellationToken)).IsSuccess);
+        h.AssertSent(HttpMethod.Put, "api/variable-libraries/1/entries/1", new UpdateVariableEntryRequest());
     }
 
     [Fact]
@@ -1355,6 +1488,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Variables.DeleteVariableEntryAsync(1, 1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/variable-libraries/1/entries/1");
     }
 
     [Fact]
@@ -1372,6 +1506,7 @@ public class ApiClientTests
         Assert.Contains("api/variable-libraries/1/entries/2/versions", h.LastRequest!.RequestUri!.ToString());
         Assert.Contains("page=2", h.LastRequest.RequestUri.ToString());
         Assert.Contains("sortDescending=true", h.LastRequest.RequestUri.ToString());
+        h.AssertSent(HttpMethod.Get, "api/variable-libraries/1/entries/2/versions?page=2&pageSize=25&sortBy=Version&sortDescending=true");
     }
 
     [Fact]
@@ -1380,6 +1515,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<VariableEntryDto>()) };
         Assert.Empty(await api.Variables.ExportVariableEntriesAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/variable-libraries/1/export");
     }
 
     [Fact]
@@ -1388,6 +1524,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ImportResultDto()) };
         Assert.NotNull(await api.Variables.ImportVariableEntriesAsync(1, [], Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/variable-libraries/1/import", json: "[]");
     }
 
     [Fact]
@@ -1396,6 +1533,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Variables.ImportVariableEntriesAsync(1, [], Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/variable-libraries/1/import", json: """[]""");
     }
 
     // --- Vaults ---
@@ -1409,6 +1547,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<VaultDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty((await api.Variables.GetVaultsAsync()).Items);
+        h.AssertSent(HttpMethod.Get, "api/vaults?page=1&pageSize=25");
     }
 
     [Fact]
@@ -1417,6 +1556,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VaultDetailDto { Id = 1 }) };
         Assert.NotNull(await api.Variables.GetVaultDetailAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/vaults/1");
     }
 
     [Fact]
@@ -1425,6 +1565,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "vault1" }) };
         Assert.Single(await api.Variables.GetVaultNamesAsync());
+        h.AssertSent(HttpMethod.Get, "api/vaults/names");
     }
 
     [Fact]
@@ -1433,6 +1574,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VaultDto { Id = 1 }) };
         Assert.NotNull(await api.Variables.CreateVaultAsync(new CreateVaultRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/vaults", new CreateVaultRequest());
     }
 
     [Fact]
@@ -1441,6 +1583,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Variables.CreateVaultAsync(new CreateVaultRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/vaults", new CreateVaultRequest());
     }
 
     [Fact]
@@ -1449,6 +1592,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VaultDto { Id = 1 }) };
         Assert.NotNull(await api.Variables.UpdateVaultAsync(1, new UpdateVaultRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/vaults/1", new UpdateVaultRequest());
     }
 
     [Fact]
@@ -1457,6 +1601,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Variables.DeleteVaultAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/vaults/1");
     }
 
     [Fact]
@@ -1465,6 +1610,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VaultSecretDto { Key = "k" }) };
         Assert.NotNull(await api.Variables.CreateVaultSecretAsync(1, new CreateVaultSecretRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/vaults/1/secrets", new CreateVaultSecretRequest());
     }
 
     [Fact]
@@ -1473,6 +1619,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new VaultSecretDto { Key = "k" }) };
         Assert.NotNull(await api.Variables.UpdateVaultSecretAsync(1, 1, new UpdateVaultSecretRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/vaults/1/secrets/1", new UpdateVaultSecretRequest());
     }
 
     [Fact]
@@ -1481,6 +1628,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Variables.DeleteVaultSecretAsync(1, 1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/vaults/1/secrets/1");
     }
 
     [Fact]
@@ -1489,6 +1637,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<VaultSecretVersionDto>()) };
         Assert.Empty(await api.Variables.GetVaultSecretVersionsAsync(1, 1));
+        h.AssertSent(HttpMethod.Get, "api/vaults/1/secrets/1/versions");
     }
 
     [Fact]
@@ -1497,6 +1646,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "secret-key" }) };
         Assert.Single(await api.Variables.ExportVaultSecretKeysAsync(1));
+        h.AssertSent(HttpMethod.Get, "api/vaults/1/export-keys");
     }
 
     [Fact]
@@ -1505,6 +1655,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ImportResultDto()) };
         Assert.NotNull(await api.Variables.ImportVaultSecretsAsync(1, [], Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/vaults/1/import", json: "[]");
     }
 
     // --- Pipeline Templates ---
@@ -1515,6 +1666,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new DryRunResultDto()) };
         Assert.NotNull(await api.Pipelines.DryRunPipelineAsync(1, ct: Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/pipelines/1/dry-run", json: "null");
     }
 
     [Fact]
@@ -1523,6 +1675,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Pipelines.DryRunPipelineAsync(1, ct: Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/pipelines/1/dry-run", json: """null""");
     }
 
     [Fact]
@@ -1534,6 +1687,7 @@ public class ApiClientTests
             Content = Json(new List<PipelineTemplateSummaryDto>())
         };
         Assert.Empty(await api.PipelineTemplates.GetPipelineTemplatesAsync());
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates");
     }
 
     [Fact]
@@ -1546,6 +1700,7 @@ public class ApiClientTests
         await api.PipelineTemplates.GetPipelineTemplatesAsync();
         await api.PipelineTemplates.GetPipelineTemplatesAsync();
         Assert.Equal(1, callCount);
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates");
     }
 
     [Fact]
@@ -1559,6 +1714,8 @@ public class ApiClientTests
         api.PipelineTemplates.InvalidateTemplateCache();
         await api.PipelineTemplates.GetPipelineTemplatesAsync();
         Assert.Equal(2, callCount);
+        Assert.Equal(["http://test/api/pipelines/templates", "http://test/api/pipelines/templates"], h.RequestUris);
+        Assert.All(h.RequestBodies, body => Assert.Null(body));
     }
 
     [Fact]
@@ -1567,6 +1724,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineTemplateDto { Id = 1 }) };
         Assert.NotNull(await api.PipelineTemplates.GetPipelineTemplateAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates/1");
     }
 
     [Fact]
@@ -1590,6 +1748,7 @@ public class ApiClientTests
         Assert.Contains("api/pipelines/templates/1/versions", uri);
         Assert.Contains("page=2", uri);
         Assert.Contains("sortDescending=true", uri);
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates/1/versions?page=2&pageSize=10&sortBy=Version&sortDescending=true");
     }
 
     [Fact]
@@ -1605,6 +1764,7 @@ public class ApiClientTests
 
         Assert.Equal("name: seven", result!.YamlContent);
         Assert.EndsWith("api/pipelines/templates/1/versions/7", h.LastRequest!.RequestUri!.ToString());
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates/1/versions/7");
     }
 
     [Fact]
@@ -1621,6 +1781,7 @@ public class ApiClientTests
 
         Assert.Equal(yaml, result);
         Assert.EndsWith("api/pipelines/templates/12/resolve?version=1", h.LastRequest!.RequestUri!.ToString());
+        h.AssertSent(HttpMethod.Post, "api/pipelines/templates/12/resolve?version=1", json: """null""");
     }
 
     [Fact]
@@ -1629,6 +1790,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineTemplateDto { Id = 1 }) };
         Assert.NotNull(await api.PipelineTemplates.CreatePipelineTemplateAsync(new CreatePipelineTemplateRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/pipelines/templates", new CreatePipelineTemplateRequest());
     }
 
     [Fact]
@@ -1637,6 +1799,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineTemplateDto { Id = 1 }) };
         Assert.NotNull(await api.PipelineTemplates.UpdatePipelineTemplateAsync(1, new UpdatePipelineTemplateRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/pipelines/templates/1", new UpdatePipelineTemplateRequest());
     }
 
     [Fact]
@@ -1645,6 +1808,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.PipelineTemplates.DeletePipelineTemplateAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/pipelines/templates/1");
     }
 
     [Fact]
@@ -1655,6 +1819,7 @@ public class ApiClientTests
         var result = await api.PipelineTemplates.ExportPipelineTemplateAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
         Assert.Equal(3, result!.Length);
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates/1/export");
     }
 
     [Fact]
@@ -1663,6 +1828,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
         Assert.Null(await api.PipelineTemplates.ExportPipelineTemplateAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/pipelines/templates/1/export");
     }
 
     [Fact]
@@ -1671,6 +1837,11 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineTemplateDto { Id = 2 }) };
         Assert.NotNull(await api.PipelineTemplates.ImportPipelineTemplateAsync([1, 2], "template.json", Xunit.TestContext.Current.CancellationToken));
+        Assert.Equal(HttpMethod.Post, h.LastRequest!.Method);
+        Assert.Equal("http://test/api/pipelines/templates/import", h.RequestUris.Single());
+        Assert.StartsWith("multipart/form-data", h.LastRequest.Content!.Headers.ContentType!.MediaType, StringComparison.Ordinal);
+        Assert.Contains("name=file", h.RequestBodies[^1], StringComparison.Ordinal);
+        Assert.Contains("filename=template.json", h.RequestBodies[^1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1679,6 +1850,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PipelineYamlDefinition()) };
         Assert.NotNull(await api.Packages.ValidatePipelineYamlAsync("stages: []", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/pipelines/validate", json: """{"yaml":"stages: []","organizationId":null}""");
     }
 
     [Fact]
@@ -1687,6 +1859,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Packages.ValidatePipelineYamlAsync("bad yaml", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/pipelines/validate", json: """{"yaml":"bad yaml","organizationId":null}""");
     }
 
     // --- Releases ---
@@ -1700,6 +1873,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<ReleaseDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty((await api.Projects.GetReleasesAsync()).Items);
+        h.AssertSent(HttpMethod.Get, "api/releases?page=1&pageSize=25");
     }
 
     [Fact]
@@ -1708,6 +1882,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ReleaseDto { Id = 1 }) };
         Assert.NotNull(await api.Projects.GetReleaseAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/releases/1");
     }
 
     [Fact]
@@ -1716,6 +1891,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ReleaseDto>()) };
         Assert.Empty(await api.Projects.SyncReleasesAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/releases/sync/1");
     }
 
     [Fact]
@@ -1724,6 +1900,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ReleaseDto { Id = 1 }) };
         Assert.NotNull(await api.Projects.TriggerReleaseBuildAsync(1, new TriggerReleaseBuildRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/releases/1/build", new TriggerReleaseBuildRequest());
     }
 
     [Fact]
@@ -1732,6 +1909,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Projects.TriggerReleaseBuildAsync(1, new TriggerReleaseBuildRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/releases/1/build", new TriggerReleaseBuildRequest());
     }
 
     [Fact]
@@ -1740,6 +1918,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ReleaseDto { Id = 1 }) };
         Assert.NotNull(await api.Projects.RollbackReleaseAsync(1, new RollbackReleaseRequest { PipelineId = 1 }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/releases/1/rollback", json: """{"pipelineId":1,"restoreDatabase":false,"backupRunId":null}""");
     }
 
     [Fact]
@@ -1748,6 +1927,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new ReleaseDto { Id = 1 }) };
         Assert.NotNull(await api.Projects.PromoteReleaseAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/releases/1/promote");
     }
 
     // --- Admin: Users ---
@@ -1761,6 +1941,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<UserDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty((await api.Auth.GetUsersAsync(cancellationToken: TestContext.Current.CancellationToken)).Items);
+        h.AssertSent(HttpMethod.Get, "api/users?page=1&pageSize=25");
     }
 
     [Fact]
@@ -1769,6 +1950,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new UserDto { Id = 1 }) };
         Assert.NotNull(await api.Auth.GetUserDetailAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/users/1");
     }
 
     [Fact]
@@ -1777,6 +1959,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new UserDto { Id = 1 }) };
         Assert.NotNull(await api.Auth.GetCurrentUserAsync(Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/users/me");
     }
 
     [Fact]
@@ -1787,6 +1970,7 @@ public class ApiClientTests
         var outcome = await api.Auth.CreateUserAsync(new CreateUserRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(outcome.Value);
         Assert.Null(outcome.Error);
+        h.AssertSent(HttpMethod.Post, "api/users", new CreateUserRequest());
     }
 
     [Fact]
@@ -1803,6 +1987,7 @@ public class ApiClientTests
         Assert.Null(outcome.Value);
         Assert.Equal(HttpStatusCode.Conflict, outcome.StatusCode);
         Assert.Equal("Username already exists.", outcome.Error?.Message);
+        h.AssertSent(HttpMethod.Post, "api/users", new CreateUserRequest());
     }
 
     [Fact]
@@ -1811,6 +1996,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new UserDto { Id = 1 }) };
         Assert.NotNull(await api.Auth.UpdateUserAsync(1, new UpdateUserRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/users/1", new UpdateUserRequest());
     }
 
     [Fact]
@@ -1819,6 +2005,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Auth.DeleteUserAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/users/1");
     }
 
     [Fact]
@@ -1827,6 +2014,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Auth.ChangeUserPasswordAsync(1, new ChangeUserPasswordRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/users/1/change-password", new ChangeUserPasswordRequest());
     }
 
     [Fact]
@@ -1835,6 +2023,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.NoContent);
         Assert.True(await api.Auth.ChangeOwnPasswordAsync(new ChangeUserPasswordRequest { CurrentPassword = "old", NewPassword = "newpass123" }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/users/me/change-password", json: """{"currentPassword":"old","newPassword":"newpass123"}""");
     }
 
     [Fact]
@@ -1843,6 +2032,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.False(await api.Auth.ChangeOwnPasswordAsync(new ChangeUserPasswordRequest { CurrentPassword = "wrong", NewPassword = "newpass123" }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/users/me/change-password", json: """{"currentPassword":"wrong","newPassword":"newpass123"}""");
     }
 
     [Fact]
@@ -1851,6 +2041,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<string> { "Admin" }) };
         Assert.Single(await api.Auth.GetRolesAsync());
+        h.AssertSent(HttpMethod.Get, "api/users/roles");
     }
 
     [Fact]
@@ -1878,6 +2069,7 @@ public class ApiClientTests
         Assert.Contains("search=adm", uri);
         Assert.Contains("sortBy=Name", uri);
         Assert.Contains("sortDescending=true", uri);
+        h.AssertSent(HttpMethod.Get, "api/roles?page=2&pageSize=25&search=adm&sortBy=Name&sortDescending=true");
     }
 
     [Fact]
@@ -1887,6 +2079,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new RoleDto { Id = 1, Name = "Admin" }) };
         var result = await api.Auth.GetRoleAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Get, "api/roles/1");
     }
 
     [Fact]
@@ -1907,6 +2100,7 @@ public class ApiClientTests
         Assert.Contains("search=ali", uri);
         Assert.Contains("sortBy=Username", uri);
         Assert.Contains("sortDescending=true", uri);
+        h.AssertSent(HttpMethod.Get, "api/roles/4/users?page=3&pageSize=25&search=ali&sortBy=Username&sortDescending=true");
     }
 
     [Fact]
@@ -1927,6 +2121,7 @@ public class ApiClientTests
         Assert.Contains("pageSize=10", uri);
         Assert.Contains("search=bob", uri);
         Assert.DoesNotContain("api/users?pageSize=200", uri);
+        h.AssertSent(HttpMethod.Get, "api/roles/4/available-users?page=2&pageSize=10&search=bob&sortBy=Username&sortDescending=false");
     }
 
     [Fact]
@@ -1936,6 +2131,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new RoleDto { Id = 1, Name = "New" }) };
         var result = await api.Auth.CreateRoleAsync(new CreateRoleRequest { Name = "New" }, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/roles", json: """{"name":"New","description":"","permissionKeys":null,"organizationId":null}""");
     }
 
     [Fact]
@@ -1944,6 +2140,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Auth.CreateRoleAsync(new CreateRoleRequest { Name = "x" }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/roles", json: """{"name":"x","description":"","permissionKeys":null,"organizationId":null}""");
     }
 
     [Fact]
@@ -1953,6 +2150,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new RoleDto { Id = 1, Name = "Updated" }) };
         var result = await api.Auth.UpdateRoleAsync(1, new UpdateRoleRequest { Name = "Updated" }, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Put, "api/roles/1", json: """{"name":"Updated","description":""}""");
     }
 
     [Fact]
@@ -1961,6 +2159,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Auth.DeleteRoleAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/roles/1");
     }
 
     [Fact]
@@ -1970,6 +2169,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<ResourcePermissionDto>()) };
         var result = await api.Auth.GetRolePermissionsAsync(1);
         Assert.Empty(result);
+        h.AssertSent(HttpMethod.Get, "api/roles/1/permissions");
     }
 
     [Fact]
@@ -1978,6 +2178,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Auth.SetRolePermissionsAsync(1, new SetResourcePermissionsRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/roles/1/permissions", new SetResourcePermissionsRequest());
     }
 
     [Fact]
@@ -1987,6 +2188,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new RoleDto { Id = 2, Name = "Clone" }) };
         var result = await api.Auth.CloneRoleAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/roles/1/clone");
     }
 
     [Fact]
@@ -1995,6 +2197,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
         Assert.Null(await api.Auth.CloneRoleAsync(99, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/roles/99/clone");
     }
 
     [Fact]
@@ -2004,6 +2207,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new UserPermissionSummaryDto()) };
         var result = await api.Auth.GetUserEffectivePermissionsAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Get, "api/users/1/effective-permissions");
     }
 
     [Fact]
@@ -2013,6 +2217,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new UserPermissionSummaryDto()) };
         var result = await api.Auth.GetMyPermissionsAsync(Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Get, "api/users/me/permissions");
     }
 
     // --- Admin: Dashboards ---
@@ -2023,6 +2228,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<DashboardDto>()) };
         Assert.Empty(await api.Monitoring.GetDashboardsAsync());
+        h.AssertSent(HttpMethod.Get, "api/dashboards");
     }
 
     [Fact]
@@ -2031,6 +2237,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new DashboardDto { Id = 1 }) };
         Assert.NotNull(await api.Monitoring.GetDashboardAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/dashboards/1");
     }
 
     [Fact]
@@ -2039,6 +2246,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new DashboardDto { Id = 1 }) };
         Assert.NotNull(await api.Monitoring.CreateDashboardAsync(new CreateDashboardRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/dashboards", new CreateDashboardRequest());
     }
 
     [Fact]
@@ -2047,6 +2255,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new DashboardDto { Id = 1 }) };
         Assert.NotNull(await api.Monitoring.UpdateDashboardAsync(1, new UpdateDashboardRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/dashboards/1", new UpdateDashboardRequest());
     }
 
     [Fact]
@@ -2055,6 +2264,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Monitoring.DeleteDashboardAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/dashboards/1");
     }
 
     // --- Admin: Plugins ---
@@ -2068,6 +2278,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<PluginRegistrationDto> { Items = [], TotalCount = 0 })
         };
         Assert.Empty(await api.Settings.GetPluginsAsync(Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/plugins?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -2076,6 +2287,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PluginRegistrationDto { Id = 1 }) };
         Assert.NotNull(await api.Settings.GetPluginAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/plugins/1");
     }
 
     [Fact]
@@ -2084,6 +2296,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PluginRegistrationDto { Id = 1 }) };
         Assert.NotNull(await api.Settings.RegisterPluginAsync(new RegisterPluginRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/plugins", new RegisterPluginRequest());
     }
 
     [Fact]
@@ -2092,6 +2305,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PluginRegistrationDto { Id = 1 }) };
         Assert.NotNull(await api.Settings.UpdatePluginAsync(1, new UpdatePluginRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/plugins/1", new UpdatePluginRequest());
     }
 
     [Fact]
@@ -2100,6 +2314,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Settings.UnregisterPluginAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/plugins/1");
     }
 
     // --- Admin: Alerts ---
@@ -2110,6 +2325,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new List<AlertRuleDto>()) };
         Assert.Empty(await api.Monitoring.GetAlertRulesAsync());
+        h.AssertSent(HttpMethod.Get, "api/alerts");
     }
 
     [Fact]
@@ -2118,6 +2334,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new AlertRuleDto { Id = 1 }) };
         Assert.NotNull(await api.Monitoring.CreateAlertRuleAsync(new CreateAlertRuleRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/alerts", new CreateAlertRuleRequest());
     }
 
     [Fact]
@@ -2126,6 +2343,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new AlertRuleDto { Id = 1 }) };
         Assert.NotNull(await api.Monitoring.UpdateAlertRuleAsync(1, new UpdateAlertRuleRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Put, "api/alerts/1", new UpdateAlertRuleRequest());
     }
 
     [Fact]
@@ -2134,6 +2352,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Monitoring.DeleteAlertRuleAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/alerts/1");
     }
 
     // --- Admin: Notifications ---
@@ -2147,6 +2366,7 @@ public class ApiClientTests
             Content = Json(new PaginatedResult<NotificationChannelDto>())
         };
         Assert.Empty(await api.Monitoring.GetNotificationChannelsAsync());
+        h.AssertSent(HttpMethod.Get, "api/notifications/channels?page=1&pageSize=100");
     }
 
     [Fact]
@@ -2155,6 +2375,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new NotificationChannelDto { Id = 1 }) };
         Assert.NotNull(await api.Monitoring.CreateNotificationChannelAsync(new CreateNotificationChannelRequest(), Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/notifications/channels", new CreateNotificationChannelRequest());
     }
 
     [Fact]
@@ -2163,6 +2384,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Monitoring.DeleteNotificationChannelAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/notifications/channels/1");
     }
 
     // --- Git Light Repos ---
@@ -2181,6 +2403,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitReposAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos?page=1&pageSize=100&projectId=1&sortDescending=False");
     }
 
     [Fact]
@@ -2194,6 +2417,7 @@ public class ApiClientTests
         var result = await api.Git.GetGitRepoAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
         Assert.Equal("repo", result!.Name);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1");
     }
 
     [Fact]
@@ -2206,6 +2430,7 @@ public class ApiClientTests
         };
         var result = await api.Git.CreateGitRepoAsync(new CreateGitLightRepoRequest { Name = "new" }, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/git/repos", json: """{"projectId":0,"name":"new","description":null,"defaultBranch":null}""");
     }
 
     [Fact]
@@ -2215,6 +2440,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         var result = await api.Git.CreateGitRepoAsync(new CreateGitLightRepoRequest { Name = "x" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Null(result);
+        h.AssertSent(HttpMethod.Post, "api/git/repos", json: """{"projectId":0,"name":"x","description":null,"defaultBranch":null}""");
     }
 
     [Fact]
@@ -2227,6 +2453,7 @@ public class ApiClientTests
         };
         var result = await api.Git.UpdateGitRepoAsync(1, new UpdateGitLightRepoRequest { Description = "updated" }, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Put, "api/git/repos/1", json: """{"description":"updated","defaultBranch":null,"isConfiguration":null}""");
     }
 
     [Fact]
@@ -2236,6 +2463,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
         var result = await api.Git.UpdateGitRepoAsync(1, new UpdateGitLightRepoRequest { Description = "x" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Null(result);
+        h.AssertSent(HttpMethod.Put, "api/git/repos/1", json: """{"description":"x","defaultBranch":null,"isConfiguration":null}""");
     }
 
     [Fact]
@@ -2244,6 +2472,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Git.DeleteGitRepoAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/git/repos/1");
     }
 
     [Fact]
@@ -2252,6 +2481,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.NotFound);
         Assert.False(await api.Git.DeleteGitRepoAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/git/repos/1");
     }
 
     // --- Git Light Branches ---
@@ -2270,6 +2500,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitBranchesAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/branches?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -2278,6 +2509,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Git.CreateGitBranchAsync(1, new CreateGitLightBranchRequest { Name = "feat", StartRef = "main" }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/branches", json: """{"name":"feat","startRef":"main"}""");
     }
 
     [Fact]
@@ -2286,6 +2518,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Git.DeleteGitBranchAsync(1, "feat", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/git/repos/1/branches/feat");
     }
 
     // --- Git Light Tags ---
@@ -2304,6 +2537,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitTagsAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/tags?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -2312,6 +2546,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Git.CreateGitTagAsync(1, new CreateGitLightTagRequest { Name = "v1.0", Ref = "main" }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/tags", json: """{"name":"v1.0","ref":"main","message":null}""");
     }
 
     [Fact]
@@ -2320,6 +2555,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Git.DeleteGitTagAsync(1, "v1.0", Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/git/repos/1/tags/v1.0");
     }
 
     // --- Git Light File Browser ---
@@ -2338,6 +2574,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitTreeAsync(1, "main", "src", Xunit.TestContext.Current.CancellationToken);
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/tree?page=1&pageSize=100&sortDescending=false&ref=main&path=src");
     }
 
     [Fact]
@@ -2350,6 +2587,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitBlobAsync(1, "main", "file.txt", Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/blob?ref=main&path=file.txt");
     }
 
     [Fact]
@@ -2362,6 +2600,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitBlameAsync(1, "main", "file.txt");
         Assert.Single(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/blame?ref=main&path=file.txt");
     }
 
     // --- Git Light Commits ---
@@ -2376,6 +2615,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitCommitsAsync(1, "main", 1, 10, "search");
         Assert.Single(result.Items);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/commits?page=1&pageSize=10&ref=main&search=search");
     }
 
     // --- Git Light Pull Requests ---
@@ -2390,6 +2630,7 @@ public class ApiClientTests
         };
         var result = await api.Git.GetGitPullRequestsAsync(1, status: PullRequestStatus.Open);
         Assert.Single(result.Items);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/pull-requests?page=1&pageSize=25&status=Open");
     }
 
     [Fact]
@@ -2399,6 +2640,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new InternalPullRequestDto { Number = 1 }) };
         var result = await api.Git.GetGitPullRequestAsync(1, 1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/pull-requests/1");
     }
 
     [Fact]
@@ -2408,6 +2650,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new InternalPullRequestDto { Number = 1 }) };
         var result = await api.Git.CreateGitPullRequestAsync(1, new CreateInternalPullRequestRequest { Title = "PR" }, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/pull-requests", json: """{"sourceBranch":"","targetBranch":"","title":"PR","description":null}""");
     }
 
     [Fact]
@@ -2416,6 +2659,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         Assert.Null(await api.Git.CreateGitPullRequestAsync(1, new CreateInternalPullRequestRequest { Title = "x" }, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/pull-requests", json: """{"sourceBranch":"","targetBranch":"","title":"x","description":null}""");
     }
 
     [Fact]
@@ -2425,6 +2669,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new InternalPullRequestDto { Number = 1 }) };
         var result = await api.Git.MergeGitPullRequestAsync(1, 1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/pull-requests/1/merge");
     }
 
     [Fact]
@@ -2433,6 +2678,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.Conflict);
         Assert.Null(await api.Git.MergeGitPullRequestAsync(1, 1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/pull-requests/1/merge");
     }
 
     [Fact]
@@ -2442,6 +2688,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new InternalPullRequestDto { Number = 1 }) };
         var result = await api.Git.CloseGitPullRequestAsync(1, 1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/pull-requests/1/close");
     }
 
     [Fact]
@@ -2451,6 +2698,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new PullRequestDiffDto()) };
         var result = await api.Git.GetGitPullRequestDiffAsync(1, 1, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/pull-requests/1/diff");
     }
 
     // --- Git Branch Protection ---
@@ -2462,6 +2710,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("graph-data") };
         var result = await api.Git.GetGitCommitGraphAsync(1, ct: Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("graph-data", result);
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/graph?maxCount=100");
     }
 
     [Fact]
@@ -2477,6 +2726,7 @@ public class ApiClientTests
             })
         };
         Assert.Single(await api.Git.GetGitBranchProtectionRulesAsync(1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Get, "api/git/repos/1/branch-protection?page=1&pageSize=100&sortDescending=false");
     }
 
     [Fact]
@@ -2486,6 +2736,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new BranchProtectionRuleDto { Id = 1 }) };
         var result = await api.Git.CreateGitBranchProtectionRuleAsync(1, new CreateBranchProtectionRuleRequest { Pattern = "main" }, Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Post, "api/git/repos/1/branch-protection", json: """{"pattern":"main","preventDeletion":true,"preventForcePush":true,"protectionLevel":0}""");
     }
 
     [Fact]
@@ -2495,6 +2746,7 @@ public class ApiClientTests
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new BranchProtectionRuleDto { Id = 1 }) };
         var result = await api.Git.UpdateGitBranchProtectionRuleAsync(1, 1, new UpdateBranchProtectionRuleRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.NotNull(result);
+        h.AssertSent(HttpMethod.Put, "api/git/repos/1/branch-protection/1", new UpdateBranchProtectionRuleRequest());
     }
 
     [Fact]
@@ -2503,6 +2755,7 @@ public class ApiClientTests
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
         Assert.True(await api.Git.DeleteGitBranchProtectionRuleAsync(1, 1, Xunit.TestContext.Current.CancellationToken));
+        h.AssertSent(HttpMethod.Delete, "api/git/repos/1/branch-protection/1");
     }
 
     [Fact]
@@ -2525,6 +2778,7 @@ public class ApiClientTests
 
         Assert.Equal(105, result.Count);
         Assert.Contains(h.RequestUris, uri => uri.Contains("page=2", StringComparison.Ordinal));
+        Assert.Equal(["http://test/api/projects?page=1&pageSize=200", "http://test/api/projects?page=2&pageSize=200"], h.RequestUris);
     }
 
     [Fact]
@@ -2547,6 +2801,7 @@ public class ApiClientTests
 
         Assert.Equal(105, result.Count);
         Assert.Contains(h.RequestUris, uri => uri.Contains("page=2", StringComparison.Ordinal));
+        Assert.Equal(["http://test/api/servers?page=1&pageSize=100", "http://test/api/servers?page=2&pageSize=100"], h.RequestUris);
     }
 
     [Fact]
@@ -2569,6 +2824,18 @@ public class ApiClientTests
 
         Assert.Equal(105, result.Count);
         Assert.Contains(h.RequestUris, uri => uri.Contains("page=2", StringComparison.Ordinal));
+        Assert.Equal(["http://test/api/variable-libraries?page=1&pageSize=100", "http://test/api/variable-libraries?page=2&pageSize=100"], h.RequestUris);
+    }
+
+    /// <summary>A manual run posts a dictionary whose only entry is the 32-hex idempotency key.</summary>
+    private static void AssertTriggerRunSent(TestHandler h, string relativeUrl)
+    {
+        Assert.Equal(HttpMethod.Post, h.LastRequest!.Method);
+        Assert.Equal($"http://test/{relativeUrl}", h.RequestUris.Single());
+        var body = JsonSerializer.Deserialize<Dictionary<string, string>>(h.RequestBodies[^1]!);
+        var entry = Assert.Single(body!);
+        Assert.Equal("AETHEUS_RUN_IDEMPOTENCY_KEY", entry.Key);
+        Assert.Matches("^[0-9a-f]{32}$", entry.Value);
     }
 
     // --- Test Handler ---
@@ -2580,13 +2847,22 @@ public class ApiClientTests
         public List<string> RequestUris { get; } = [];
         public Func<HttpRequestMessage, HttpResponseMessage>? ResponseFactory { get; set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        /// <summary>The body of every request, read while the request is still alive.</summary>
+        public List<string?> RequestBodies { get; } = [];
+
+        /// <summary>Asserts the last request: exact verb, exact relative URI and JSON body (none when omitted).</summary>
+        public void AssertSent(HttpMethod method, string relativeUrl, object? body = null, string? json = null) =>
+            SentRequestAssert.Matches(
+                LastRequest!.Method.Method, RequestUris[^1], RequestBodies[^1], method, relativeUrl, body, json);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             LastRequest = request;
             RequestUris.Add(request.RequestUri?.ToString() ?? string.Empty);
+            RequestBodies.Add(request.Content is null ? null : await request.Content.ReadAsStringAsync(ct));
             if (ResponseFactory is not null)
-                return Task.FromResult(ResponseFactory(request));
-            return Task.FromResult(Response);
+                return ResponseFactory(request);
+            return Response;
         }
     }
 }

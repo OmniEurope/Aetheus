@@ -102,6 +102,11 @@ public sealed class PipelineWorkspaceSourceResolver(
         var (reference, referenceName) = await ResolveReferenceAsync(
             source, definitionRepository, definitionDiskPath, definitionCommit!, ct).ConfigureAwait(false);
 
+        // Decision 2026-11-10: the exclude list is a configuration file, never read from an external mirror.
+        if (definitionRepository.IsExternalMirror && !string.IsNullOrWhiteSpace(source.MatchExcludeFile))
+            throw new BadRequestException(
+                $"source.match_exclude_file '{source.MatchExcludeFile}' is never read from the mirror of an external "
+                + $"repository ('{definitionRepository.Slug}'), whose content is untrusted.");
         var excluded = await ReadExcludedPathsAsync(
             projectId, source.MatchExcludeFile, definitionCommit!, definitionRepository.Id, ct).ConfigureAwait(false);
         var referenceTree = await cli.GetTreeBlobsAsync(definitionDiskPath, reference, ct).ConfigureAwait(false);

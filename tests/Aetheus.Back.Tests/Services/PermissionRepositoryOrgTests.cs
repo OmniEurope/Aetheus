@@ -80,7 +80,7 @@ public class PermissionRepositoryOrgTests : IDisposable
 
         Assert.Equal(5, await _repo.GetResourceOrganizationIdAsync(ResourceType.Server, 10, TestContext.Current.CancellationToken));
         Assert.Null(await _repo.GetResourceOrganizationIdAsync(ResourceType.Project, 999, TestContext.Current.CancellationToken));
-        Assert.Null(await _repo.GetResourceOrganizationIdAsync(ResourceType.AgentPool, 1, TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.GetResourceOrganizationIdAsync(ResourceType.Docker, 1, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -117,6 +117,19 @@ public class PermissionRepositoryOrgTests : IDisposable
     }
 
     [Fact]
+    public async Task AgentPool_IsOwnedByItsOrganization()
+    {
+        _db.AgentPools.AddRange(
+            new AgentPool { Id = 1, Name = "pool-5", OrganizationId = 5 },
+            new AgentPool { Id = 2, Name = "pool-7", OrganizationId = 7 });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal([1], await _repo.GetResourceIdsByOrganizationsAsync(ResourceType.AgentPool, [5], ct: TestContext.Current.CancellationToken));
+        Assert.Equal(7, await _repo.GetResourceOrganizationIdAsync(ResourceType.AgentPool, 2, TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.GetResourceOrganizationIdAsync(ResourceType.AgentPool, 99, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task GetResourceIdsByOrganizationsAsync_TypeNoOrganizationOwns_ReturnsEmpty()
-        => Assert.Empty(await _repo.GetResourceIdsByOrganizationsAsync(ResourceType.AgentPool, [5], ct: TestContext.Current.CancellationToken));
+        => Assert.Empty(await _repo.GetResourceIdsByOrganizationsAsync(ResourceType.Docker, [5], ct: TestContext.Current.CancellationToken));
 }

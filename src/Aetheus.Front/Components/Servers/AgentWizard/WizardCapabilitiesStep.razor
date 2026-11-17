@@ -40,6 +40,11 @@
                                 Value="IncludeFirewallManagement" ValueChanged="IncludeFirewallManagementChanged">
                 <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
             </OmniSelectableCard>
+
+            <OmniSelectableCard Multiple="true" Title="@L["WizardModuleHostReboot"]" Description="@L["WizardModuleHostRebootHint"]"
+                                Value="IncludeHostReboot" ValueChanged="IncludeHostRebootChanged">
+                <Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon>
+            </OmniSelectableCard>
         }
 
         <OmniSelectableCard Multiple="true" Title="@L["WizardDevModeInsecureTls"]" Description="@L["WizardDevModeInsecureTlsHint"]"

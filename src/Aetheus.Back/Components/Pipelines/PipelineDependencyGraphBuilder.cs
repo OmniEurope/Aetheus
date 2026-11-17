@@ -44,7 +44,9 @@ internal static class PipelineDependencyGraphBuilder
                 RecentRuns = pipeline.RecentRuns,
                 References = references,
                 OwnerUsername = pipeline.OwnerUsername,
-                OwnerInactive = pipeline.OwnerInactive
+                OwnerInactive = pipeline.OwnerInactive,
+                ExternalImportPath = pipeline.ExternalImportPath,
+                ExternalImportCommit = pipeline.ExternalImportCommit
             };
             items.Add(item);
         }

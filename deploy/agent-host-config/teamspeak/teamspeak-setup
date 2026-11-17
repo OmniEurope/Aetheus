@@ -21,6 +21,27 @@ NL='
 CR="$(printf '\r')"
 one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
 valid_path() { one_line "$1" || return 1; case "$1" in *..*) return 1 ;; esac; printf '%s' "$1" | grep -Eq '^/[a-zA-Z0-9._/-]{1,127}$'; }
+# DEPLOY-001: this helper runs as root and chowns the install path recursively to the teamspeak user,
+# so "/etc", "/usr" or "/home" used to hand a system directory to that account. The install now has to
+# be a dedicated directory under TS_PARENT whose name starts with "teamspeak" (default
+# /opt/teamspeak3-server_linux_amd64), each further segment starting with a letter, digit, "_" or "-"
+# (no ".", no empty segment, no trailing slash). Mirrors the backend TeamspeakSetupInstallPathRegex.
+TS_PARENT=/opt
+dedicated_path() {
+    case "$1" in "$TS_PARENT"/teamspeak*) ;; *) return 1 ;; esac
+    printf '%s' "${1#"$TS_PARENT"}" | grep -Eq '^/teamspeak[a-zA-Z0-9._-]{0,63}(/[a-zA-Z0-9_-][a-zA-Z0-9._-]{0,63})*$'
+}
+# Refuses the path when any component that already exists is a symbolic link: a link on the way
+# (/opt/teamspeak -> /etc) would send the extraction and the recursive chown somewhere else.
+no_link_on_the_way() {
+    _walk=""
+    _ifs="$IFS"; IFS=/; set -f
+    for _segment in ${1#/}; do
+        _walk="$_walk/$_segment"
+        if [ -L "$_walk" ]; then IFS="$_ifs"; set +f; return 1; fi
+    done
+    IFS="$_ifs"; set +f
+}
 valid_port() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9]{1,5}$' && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
 
 install_path="${1:-}"
@@ -28,6 +49,8 @@ voice_port="${2:-9987}"
 query_port="${3:-10011}"
 
 valid_path "$install_path" || die "invalid install path"
+dedicated_path "$install_path" || die "invalid install path: it must be a dedicated $TS_PARENT/teamspeak* directory"
+no_link_on_the_way "$install_path" || die "invalid install path: a component of $install_path is a symbolic link"
 valid_port "$voice_port"   || die "invalid voice port"
 valid_port "$query_port"   || die "invalid query port"
 
@@ -98,12 +121,17 @@ case "$TS_SHA256" in
 esac
 [ "${#TS_SHA256}" -eq 64 ] || die "TS_SHA256 must be a pinned 64-character hexadecimal checksum"
 mkdir -p "$install_path"
+# Checked again once the directory exists: nothing on the way became a link, and the resolved path is
+# the one that was validated, before root extracts into it and hands it to the teamspeak user.
+no_link_on_the_way "$install_path" || die "invalid install path: a component of $install_path is a symbolic link"
+[ "$(realpath -- "$install_path")" = "$install_path" ] || die "invalid install path: $install_path does not resolve to itself"
 ts_tmp="$(mktemp)"
 trap 'rm -f "$ts_tmp"' EXIT
 curl -fsSL "$TS_URL" -o "$ts_tmp"
 echo "$TS_SHA256  $ts_tmp" | sha256sum -c - || die "TeamSpeak tarball checksum mismatch - refusing to install"
 tar xjf "$ts_tmp" -C "$install_path" --strip-components=1
-chown -R teamspeak:teamspeak "$install_path"
+# -h: a link inside the extracted tree is chowned itself, never the file it points to.
+chown -R -h teamspeak:teamspeak "$install_path"
 
 # 3. Accept the license non-interactively (required since 3.1).
 touch "$install_path/.ts3server_license_accepted"

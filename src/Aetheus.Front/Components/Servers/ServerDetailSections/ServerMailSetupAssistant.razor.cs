@@ -135,9 +135,7 @@ public partial class ServerMailSetupAssistant : IDisposable
     internal bool AdoptOpenSetupTask()
     {
         if (SetupBusy) return false;
-        var open = Tracker.Tasks.FirstOrDefault(task => task.ServerId == ServerId
-            && task.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned or TaskExecutionStatus.Running
-            && task.Name.StartsWith(MailTaskNames.SetupPrefix, StringComparison.Ordinal));
+        var open = ServerTaskAdoption.FindInFlight(Tracker.Tasks, ServerId, name => name.StartsWith(MailTaskNames.SetupPrefix, StringComparison.Ordinal), includePipelineTasks: true);
         if (open is null) return false;
         _setupTaskId = open.Id;
         _setupFailure = null;

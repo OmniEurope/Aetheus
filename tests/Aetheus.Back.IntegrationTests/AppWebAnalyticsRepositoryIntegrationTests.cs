@@ -9,8 +9,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class AppWebAnalyticsRepositoryIntegrationTests(PostgresFixture fixture)
+public sealed class AppWebAnalyticsRepositoryIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task RecordSummaryReplayAndTieredPurge_ExecuteOnPostgres()

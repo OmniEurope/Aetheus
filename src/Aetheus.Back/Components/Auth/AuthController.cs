@@ -181,6 +181,11 @@ public class AuthController(
     [HttpPost("renew")]
     public async Task<ActionResult<LoginResponse>> Renew(CancellationToken ct)
     {
+        // BACK-006: a personal access token is not an interactive session. Renewing it would mint a JWT
+        // and a refresh token that outlive the PAT's expiry and revocation.
+        if (PatPrincipalCheck.IsPatPrincipal(User))
+            return Unauthorized(new ApiError { Message = "Token not eligible for renewal." });
+
         var nameId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(nameId, out var userId))
             return Unauthorized(new ApiError { Message = "Token not eligible for renewal." });
@@ -192,17 +197,22 @@ public class AuthController(
     }
 
     /// <summary> The client says the user logged out, before it drops its tokens. The server
-    /// forgets what it holds in memory for that user (the typed mailbox passwords); it revokes no
-    /// token. A principal without a numeric user id (the bootstrap admin) holds nothing of the
-    /// kind. </summary>
+    /// revokes the refresh token the body carries when it belongs to the caller (the caller's other
+    /// devices keep their own tokens), and forgets what it holds in memory for that user (the typed
+    /// mailbox passwords). The body is optional: an older client that sends none still gets its 204,
+    /// and its refresh token then lives until it expires. The access token itself is not revoked; it
+    /// expires on its own. A principal without a numeric user id (the bootstrap admin) holds neither.
+    /// </summary>
     [EnableRateLimiting("auth-token")]
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Logout(CancellationToken ct)
+    public async Task<IActionResult> Logout(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] LogoutRequest? request,
+        CancellationToken ct)
     {
         var nameId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (int.TryParse(nameId, out var userId))
-            await authService.LogoutAsync(userId, ct);
+            await authService.LogoutAsync(userId, request?.RefreshToken, ct);
         return NoContent();
     }
 
@@ -264,14 +274,17 @@ public class AuthController(
         return Ok();
     }
 
+    /// <summary>R-50: password and second factor, the sign-in lockout and rate limit; the answer is the
+    /// caller's new session, every other one having ended.</summary>
+    [EnableRateLimiting("login")]
     [HttpPost("totp/disable")]
-    public async Task<ActionResult> DisableTotp([FromBody] TotpDisableRequest request, CancellationToken ct)
+    public async Task<ActionResult<LoginResponse>> DisableTotp([FromBody] TotpDisableRequest request, CancellationToken ct)
     {
         var userId = GetUserId();
         if (userId is null) return Unauthorized();
-        var ok = await authService.DisableTotpAsync(userId.Value, request.Password, ct);
-        if (!ok) return BadRequest(new ApiError { Message = "Invalid password or TOTP not enabled." });
-        return Ok();
+        var session = await authService.DisableTotpAsync(userId.Value, request, ct);
+        if (session is null) return BadRequest(new ApiError { Message = "Invalid password or code, TOTP not enabled, or account locked." });
+        return Ok(session);
     }
 
     // --- Lockout (F-011) ---

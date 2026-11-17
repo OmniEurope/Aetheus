@@ -29,8 +29,13 @@ public class HeartbeatServiceTests
     private readonly ISudoersHashCollector _sudoersHashCollectorMock = Substitute.For<ISudoersHashCollector>();
     private readonly Aetheus.Agent.Core.Collectors.Ssh.ISshConfigCollector _sshConfigCollectorMock =
         Substitute.For<Aetheus.Agent.Core.Collectors.Ssh.ISshConfigCollector>();
+    private readonly Aetheus.Agent.Core.Collectors.MachineJobs.IMachineJobsCollector _machineJobsCollectorMock =
+        Substitute.For<Aetheus.Agent.Core.Collectors.MachineJobs.IMachineJobsCollector>();
+    private readonly Aetheus.Agent.Core.Collectors.MachineReboot.IMachineRebootCollector _machineRebootCollectorMock =
+        Substitute.For<Aetheus.Agent.Core.Collectors.MachineReboot.IMachineRebootCollector>();
     private readonly IDockerStorageMaintenance _dockerStorageMaintenanceMock = Substitute.For<IDockerStorageMaintenance>();
     private readonly IShellRunner _shellRunnerMock = Substitute.For<IShellRunner>();
+    private readonly IAgentExitJournal _exitJournalMock = Substitute.For<IAgentExitJournal>();
     private readonly AgentState _agentState;
     private readonly EnrollmentService _enrollment;
     private readonly IOptions<AetheusAgentOptions> _options;
@@ -91,8 +96,8 @@ public class HeartbeatServiceTests
         _firewallCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
             .Returns(new FirewallDataDto());
 
-        _listeningPortsCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<ObservedPortDto>());
+        _listeningPortsCollectorMock.ScanAsync(Arg.Any<CancellationToken>())
+            .Returns(ListeningPortsScan.None);
 
         _sudoersHashCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, string>());
@@ -104,8 +109,67 @@ public class HeartbeatServiceTests
                 PermitRootLogin = new SshSettingDto { Value = "no", Source = "/etc/ssh/sshd_config:3" }
             });
 
+        _machineRebootCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new MachineRebootDataDto
+            {
+                Collected = true,
+                Entries =
+                [
+                    new MachineRebootEntryDto
+                    {
+                        Source = MachineRebootSource.UnattendedUpgrades,
+                        CronExpression = "0 2 * * *",
+                        TimeZoneId = "Europe/Paris",
+                        Conditional = true,
+                        Detail = "/etc/apt/apt.conf.d/52unattended-upgrades-local"
+                    }
+                ]
+            });
+
+        _machineJobsCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new MachineJobsDataDto
+            {
+                Collected = true,
+                TimeZoneId = "Europe/Paris",
+                SkippedLines = 2,
+                Jobs = [new MachineJobEntryDto { Source = MachineJobSource.SystemdTimer, Name = "logrotate.timer", CronExpression = "0 0 * * *", TimeZoneId = "Europe/Paris", Detail = "logrotate.timer" }]
+            });
+
         _dockerStorageMaintenanceMock.CollectDiagnosticsAsync(Arg.Any<CancellationToken>())
             .Returns(new StorageDiagnosticsDto { BuildCacheBytes = 1234 });
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_CarriesTheMachineRebootsTheCollectorRead()
+    {
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).SendHeartbeatAsync(1, Arg.Is<ServerHeartbeatDto>(h =>
+                h.MachineReboots != null
+                && h.MachineReboots.Collected
+                && h.MachineReboots.Entries.Count == 1
+                && h.MachineReboots.Entries[0].CronExpression == "0 2 * * *"
+                && h.MachineReboots.Entries[0].TimeZoneId == "Europe/Paris"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_CarriesTheMachineJobsAndTimeZoneTheCollectorRead()
+    {
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).SendHeartbeatAsync(1, Arg.Is<ServerHeartbeatDto>(h =>
+                h.MachineJobs != null
+                && h.MachineJobs.Collected
+                && h.MachineJobs.TimeZoneId == "Europe/Paris"
+                && h.MachineJobs.SkippedLines == 2
+                && h.MachineJobs.Jobs.Count == 1
+                && h.MachineJobs.Jobs[0].Name == "logrotate.timer"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -393,6 +457,60 @@ public class HeartbeatServiceTests
     }
 
     [Fact]
+    public async Task R17_AnApacheRestartedOnTheHost_ShowsOnTheNextBeat_WhileTheInventoryStaysCached()
+    {
+        // The clock never advances: the inventory (collected stopped) stays cached for its 180 s, yet the running
+        // state read on each beat is what the backend gets, so a restart done outside Aetheus is reported within a beat.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 6, 10, 0, 0, TimeSpan.Zero));
+        _apacheCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new ApacheDataDto { IsInstalled = true, IsRunning = false });
+        _apacheCollectorMock.CollectRunStateAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                new ApacheRunState(false, null),
+                new ApacheRunState(true, 4321),
+                (ApacheRunState?)null);
+        var sent = new List<ApacheDataDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(beat => sent.Add(beat.Apache)), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+        var service = CreateService(time);
+        var ct = TestContext.Current.CancellationToken;
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await service.CollectAndSendHeartbeatAsync(ct);
+
+        await _apacheCollectorMock.Received(1).CollectAsync(Arg.Any<CancellationToken>());
+        Assert.False(sent[0].IsRunning);
+        Assert.True(sent[1].IsRunning);
+        Assert.Equal(4321, sent[1].Pid);
+        // An unreadable state keeps the last collected one instead of inventing a stop or a start.
+        Assert.False(sent[2].IsRunning);
+    }
+
+    [Fact]
+    public async Task R17_AFullApacheCollectionThatFails_KeepsTheLastKnownRunningState()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 6, 10, 0, 0, TimeSpan.Zero));
+        var health = new AgentRuntimeHealth(time);
+        _apacheCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(new ApacheDataDto { IsInstalled = true, IsRunning = true, Pid = 77 }),
+                Task.FromException<ApacheDataDto>(new InvalidOperationException("systemctl failed")));
+        var sent = new List<ApacheDataDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(beat => sent.Add(beat.Apache)), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+        var service = CreateService(time, health);
+        var ct = TestContext.Current.CancellationToken;
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        health.InvalidateInventories(CachedInventory.Apache);
+        await service.CollectAndSendHeartbeatAsync(ct);
+
+        Assert.All(sent, apache => Assert.True(apache.IsRunning));
+        Assert.Equal(77, sent[1].Pid);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ApiFailure_RetriesOnNextTimeProviderTick()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 19, 12, 0, 0, TimeSpan.Zero));
@@ -447,9 +565,12 @@ public class HeartbeatServiceTests
             _listeningPortsCollectorMock,
             _sudoersHashCollectorMock,
             _sshConfigCollectorMock,
+            _machineRebootCollectorMock,
+            _machineJobsCollectorMock,
             _dockerStorageMaintenanceMock,
             Substitute.For<IShellRunner>(),
             notEnrolledState,
+            Substitute.For<IAgentExitJournal>(),
             new AgentRuntimeHealth(TimeProvider.System),
             TimeProvider.System,
             _options,
@@ -558,7 +679,8 @@ public class HeartbeatServiceTests
 
         // The beat does not wait for the measurement it starts (see the hung case above); a later beat reports it.
         await service.CollectAndSendHeartbeatAsync(ct);
-        for (var beat = 0; beat < 100 && LastSentHeartbeat().StorageDiagnostics.BuildCacheBytes != 1234; beat++)
+        var reportDeadline = DateTime.UtcNow.AddSeconds(30);
+        while (LastSentHeartbeat().StorageDiagnostics.BuildCacheBytes != 1234 && DateTime.UtcNow < reportDeadline)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(20), ct);
             await service.CollectAndSendHeartbeatAsync(ct);
@@ -750,6 +872,106 @@ public class HeartbeatServiceTests
         Assert.Equal(2, CollectionCounts()[outdated]);
     }
 
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_PendingExit_IsSentThenMarkedReported()
+    {
+        var report = new AgentExitReportDto { Kind = AgentExitKinds.Restart, Reason = "watchdog" };
+        _exitJournalMock.GetPendingReport().Returns(report);
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).SendHeartbeatAsync(
+            1, Arg.Is<ServerHeartbeatDto>(h => h.PreviousExit == report), Arg.Any<CancellationToken>());
+        _exitJournalMock.Received(1).MarkReported();
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_PendingExit_StaysPendingWhenTheSendFails()
+    {
+        _exitJournalMock.GetPendingReport().Returns(new AgentExitReportDto { Kind = AgentExitKinds.Unclean });
+        _apiClientMock.SendHeartbeatAsync(Arg.Any<int>(), Arg.Any<ServerHeartbeatDto>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken));
+
+        _exitJournalMock.DidNotReceive().MarkReported();
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_NoPendingExit_SendsNoReport()
+    {
+        _exitJournalMock.GetPendingReport().Returns((AgentExitReportDto?)null);
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).SendHeartbeatAsync(
+            1, Arg.Is<ServerHeartbeatDto>(h => h.PreviousExit == null), Arg.Any<CancellationToken>());
+        _exitJournalMock.DidNotReceive().MarkReported();
+    }
+
+    // ACORE-003: a probe that failed is not an empty reading, and a cached scan is not a fresh one.
+    [Fact]
+    public async Task ObservedPorts_AScanWhoseProbesAllFailed_IsReportedAsUnavailable()
+    {
+        // The collector returns an empty listing with no measured protocol (both probes failed).
+        _listeningPortsCollectorMock.ScanAsync(Arg.Any<CancellationToken>()).Returns(ListeningPortsScan.None);
+        var sent = new List<ServerHeartbeatDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+
+        await CreateService().CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        var beat = Assert.Single(sent);
+        Assert.False(beat.ObservedPortsAvailable);
+        Assert.Empty(beat.ObservedProtocols!);
+    }
+
+    [Fact]
+    public async Task ObservedPorts_OnlyTheProtocolThatWasMeasured_IsReported()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.Zero));
+        _listeningPortsCollectorMock.ScanAsync(Arg.Any<CancellationToken>()).Returns(new ListeningPortsScan(
+            [new ObservedPortDto { Port = 80, Protocol = "tcp", Holder = "nginx", Interface = "0.0.0.0" }],
+            [new ProtocolMeasurement("tcp", time.GetUtcNow())]));
+        var sent = new List<ServerHeartbeatDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+
+        await CreateService(time).CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        var beat = Assert.Single(sent);
+        Assert.True(beat.ObservedPortsAvailable);
+        var tcp = Assert.Single(beat.ObservedProtocols!);
+        Assert.Equal("tcp", tcp.Protocol);
+    }
+
+    [Fact]
+    public async Task ObservedPorts_ACachedScan_KeepsItsRealAgeInsteadOfReadingAsFresh()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.Zero));
+        _listeningPortsCollectorMock.ScanAsync(Arg.Any<CancellationToken>()).Returns(new ListeningPortsScan(
+            [], [new ProtocolMeasurement("tcp", time.GetUtcNow()), new ProtocolMeasurement("udp", time.GetUtcNow())]));
+        var sent = new List<ServerHeartbeatDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+        var service = CreateService(time);
+        var ct = TestContext.Current.CancellationToken;
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        time.Advance(TimeSpan.FromSeconds(90));
+        await service.CollectAndSendHeartbeatAsync(ct);
+
+        // One probe only: the second beat was served from the cache, and says how old that reading is.
+        await _listeningPortsCollectorMock.Received(1).ScanAsync(Arg.Any<CancellationToken>());
+        Assert.Equal(2, sent.Count);
+        Assert.All(sent[0].ObservedProtocols!, protocol => Assert.Equal(0, protocol.AgeSeconds));
+        Assert.All(sent[1].ObservedProtocols!, protocol => Assert.Equal(90, protocol.AgeSeconds));
+    }
+
     private HeartbeatService CreateService(
         TimeProvider? timeProvider = null,
         AgentRuntimeHealth? runtimeHealth = null)
@@ -772,9 +994,12 @@ public class HeartbeatServiceTests
         _listeningPortsCollectorMock,
         _sudoersHashCollectorMock,
         _sshConfigCollectorMock,
+        _machineRebootCollectorMock,
+        _machineJobsCollectorMock,
         _dockerStorageMaintenanceMock,
         _shellRunnerMock,
         _agentState,
+        _exitJournalMock,
         runtimeHealth ?? new AgentRuntimeHealth(time),
         time,
         _options,

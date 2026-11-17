@@ -87,6 +87,56 @@ public sealed class PipelineSystemTaskFactoryTests
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ImportedExternalPipeline_CheckoutOnARunnerNotLinkedToTheProject_DispatchesNothing()
+    {
+        // R-11 (decision of 2026-11-10): the system steps of an imported pipeline run on a server linked to its
+        // project only. The organization's any-runner fallback returns an unlinked one; the project has none online.
+        _repo.GetPipelineRunWithPipelineAsync(RunId, Arg.Any<CancellationToken>())
+            .Returns(new PipelineRun { Id = RunId, Pipeline = new Pipeline { Name = "oe1-ci", ExternalImportCommit = new string('a', 40) } });
+        GivenAnyOnlineRunner(new Server { Id = 3, Name = "org-runner", Hostname = "org-runner" });
+        _repo.GetProjectLinkedServerIdsAsync(7, Arg.Any<CancellationToken>()).Returns([8]);
+
+        var dispatched = await _sut.CreateSystemTasksAsync(
+            RunId, Step(PipelineRunHelpers.SystemPrepareStage), [], new PipelineYamlDefinition(), organizationId: null,
+            projectId: 7, completedStages: [], TestContext.Current.CancellationToken);
+
+        Assert.False(dispatched);
+        await _servers.Received(1).ResolveProjectServerForTargetAsync(
+            Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(), null, false, 7, Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAndAffinityTheCallerAlreadyRead_AreNotReadAgain()
+    {
+        GivenAnyOnlineRunner(new Server { Id = 4, Name = "locked", Hostname = "locked", RequireContainerIsolation = true });
+        var run = new PipelineRun { Id = RunId, Pipeline = new Pipeline { Name = "CI" } };
+
+        await _sut.CreateSystemTasksAsync(
+            RunId, Step(PipelineRunHelpers.SystemPrepareStage), [], new PipelineYamlDefinition(), organizationId: null,
+            projectId: null, completedStages: [], TestContext.Current.CancellationToken, run, new KnownRunAffinity(null));
+
+        await _repo.DidNotReceive().GetPipelineRunWithPipelineAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetRunAffinityServerIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        // The runner was still chosen and checked: the known "no affinity" sent it to the any-runner lookup.
+        await _repo.Received(1).FindAnyOnlineRunnerAsync(Arg.Any<int?>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AKnownAffinity_IsUsedWithoutReadingItAgain()
+    {
+        var run = new PipelineRun { Id = RunId, Pipeline = new Pipeline { Name = "CI" } };
+
+        var dispatched = await _sut.CreateSystemTasksAsync(
+            RunId, Step(PipelineRunHelpers.SystemCleanupStage), [], new PipelineYamlDefinition(), organizationId: null,
+            projectId: null, completedStages: [], TestContext.Current.CancellationToken, run, new KnownRunAffinity(5));
+
+        Assert.False(dispatched);
+        await _repo.DidNotReceive().GetRunAffinityServerIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).FindServerByIdAsync(5, Arg.Any<CancellationToken>());
+    }
+
     private void GivenAnyOnlineRunner(Server server) =>
         _repo.FindAnyOnlineRunnerAsync(Arg.Any<int?>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>()).Returns(server);
 

@@ -18,7 +18,9 @@ public class PostgresLeaderLeaseSqlAuditTests
             "SELECT pg_advisory_lock(hashtextextended(@name, 0))",
             "SELECT pg_try_advisory_lock(hashtextextended(@name, 0))",
             "SELECT 1",
-            "SELECT pg_advisory_unlock(hashtextextended(@name, 0))"
+            "SELECT pg_advisory_unlock(hashtextextended(@name, 0))",
+            // Audit E4 (user decision of 2026-11-14): the port claims' lock, held to the caller's transaction end.
+            "SELECT pg_advisory_xact_lock(hashtextextended(@name, 0))"
         };
 
         Assert.Equal(expected.Order(), statements.Order());

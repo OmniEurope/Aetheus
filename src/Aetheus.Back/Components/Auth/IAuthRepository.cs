@@ -5,7 +5,9 @@ namespace Aetheus.Back.Components.Auth;
 
 public interface IAuthRepository
 {
-    Task<RegistrationToken?> FindValidRegistrationTokenAsync(string token, CancellationToken ct = default);
+    /// <summary>The unused, unexpired registration token stored under one of <paramref name="tokenHashes"/> (R-53: the
+    /// per-purpose hash and the legacy one).</summary>
+    Task<RegistrationToken?> FindValidRegistrationTokenAsync(IReadOnlyCollection<string> tokenHashes, CancellationToken ct = default);
 
     /// <summary>Finds a server by hostname in any organization, retired servers included.</summary>
     Task<Server?> FindServerByHostnameAsync(string hostname, CancellationToken ct = default);
@@ -49,7 +51,7 @@ public interface IAuthRepository
 
     Task<RegistrationToken?> FindRegistrationTokenByIdAsync(int id, CancellationToken ct = default);
 
-    Task<int?> ValidateServerTokenHashAsync(string tokenHash, CancellationToken ct = default);
+    Task<int?> ValidateServerTokenHashAsync(IReadOnlyCollection<string> tokenHashes, CancellationToken ct = default);
 
     Task RevokeServerTokensAsync(int serverId, CancellationToken ct = default);
 
@@ -89,7 +91,7 @@ public interface IAuthRepository
 
     // --- Refresh Tokens (F-012) ---
     Task AddRefreshTokenAsync(RefreshToken token, CancellationToken ct = default);
-    Task<RefreshToken?> FindRefreshTokenByHashAsync(string tokenHash, CancellationToken ct = default);
+    Task<RefreshToken?> FindRefreshTokenByHashAsync(IReadOnlyCollection<string> tokenHashes, CancellationToken ct = default);
     /// <summary>Untracked current state of one refresh token (re-read after a lost rotation race).</summary>
     Task<RefreshToken?> FindRefreshTokenStateAsync(int tokenId, CancellationToken ct = default);
     /// <summary>

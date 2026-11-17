@@ -35,6 +35,9 @@ public sealed class AetheusAgentOptions
     public int MinTimeoutSeconds { get; set; } = AgentRuntimeDefaults.MinimumTaskTimeoutSeconds;
     public int MaxTimeoutSeconds { get; set; } = AgentRuntimeDefaults.MaximumTaskTimeoutSeconds;
 
+    /// <summary>Own bound of the production browser smoke suite (seconds), applied on top of the step timeout (the smaller wins). A step may override it with the AETHEUS_SMOKE_SUITE_TIMEOUT_SECONDS variable.</summary>
+    public int SmokeSuiteTimeoutSeconds { get; set; } = AgentRuntimeDefaults.SmokeSuiteTimeoutSeconds;
+
     // Exposes deployment tuning through agent configuration for constrained disks and large
     // artifacts.
     /// <summary>Recent release dirs kept per app after a successful deploy (the rest are pruned).</summary>

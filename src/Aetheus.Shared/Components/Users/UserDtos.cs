@@ -155,6 +155,29 @@ public sealed record ChangeUserPasswordRequest
     public string NewPassword { get; init; } = string.Empty;
 }
 
+/// <summary>R-1 (owner decision 2026-10-29): the first step of the administrator a fresh install seeds, which its
+/// holder turns into their own account. Name, sign-in address and password are all replaced at once.</summary>
+public sealed record SetUpOwnAccountRequest
+{
+    [Required]
+    [StringLength(50)]
+    public string Username { get; init; } = string.Empty;
+
+    [Required]
+    [StringLength(200)]
+    [EmailAddress]
+    public string? Email { get; init; }
+
+    /// <summary>The installation's password the account signed in with.</summary>
+    [Required]
+    [StringLength(100)]
+    public string CurrentPassword { get; init; } = string.Empty;
+
+    [Required]
+    [StringLength(PasswordPolicy.MaximumLength, MinimumLength = PasswordPolicy.MinimumLength)]
+    public string NewPassword { get; init; } = string.Empty;
+}
+
 /// <summary>A role held for one organization (ADR-059, R-47).</summary>
 public sealed record OrganizationRoleAssignmentDto
 {

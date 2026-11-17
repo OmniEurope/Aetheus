@@ -70,7 +70,12 @@ public sealed class ExecutorProcessRunner(
             }
 
             if (externallyCancelled)
+            {
+                // Same cancellation for every handler, but the agent must not report the task as stopped.
+                if (!terminated)
+                    throw new ProcessTreeNotTerminatedException(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
+            }
 
             return new ExecutorResult(-1, true);
         }
@@ -136,7 +141,7 @@ public sealed class ExecutorProcessRunner(
         }
     }
 
-    private static async Task<bool> WaitForExitAsync(Process process, CancellationToken cancellationToken)
+    internal static async Task<bool> WaitForExitAsync(Process process, CancellationToken cancellationToken)
     {
         try
         {
@@ -155,7 +160,7 @@ public sealed class ExecutorProcessRunner(
         return HasExited(process);
     }
 
-    private static bool HasExited(Process process)
+    internal static bool HasExited(Process process)
     {
         try
         {

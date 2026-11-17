@@ -3,11 +3,11 @@
 @using static Aetheus.Front.Components.Shared.PipelineRunFormatting
 @using static Aetheus.Front.Components.Pipelines.PipelineRunLogView
 
-<PageTitle>@(L["PipelineRun"]) #@RunId - Aetheus</PageTitle>
+<PageTitle>@(_run is { } titleRun ? $"{L["PipelineRun"]} #{titleRun.BuildNumber}" : L["PipelineRun"].Value) - Aetheus</PageTitle>
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else if (_run is null)
 {
@@ -21,6 +21,7 @@ else
         WaitingReasonCount="@WaitViews.Count" GateIncomplete="@_gateState.IsIncomplete"
         BlockingWarningCount="@BlockingWarnings.Count" InfoWarningCount="@InfoWarnings.Count"
         RunInProgress="@(RunInProgress && !_run.CancellationRequested)" CanRerun="@CanRerun" HasFailedSteps="@HasFailedSteps"
+        ConfirmationMissed="@PipelineRunMissedConfirmation.Applies(_run)"
         Cancelling="@_cancelling" Rerunning="@_rerunning" Retrying="@_retrying"
         VariablesRequested="@ShowVariables" EditRequested="@(() => Nav.NavigateTo(PipelineHref))"
         CancelRequested="@CancelRunAsync" RerunRequested="@OnRerunClick" RetryFailedRequested="@RetryFailedAsync" />
@@ -97,7 +98,7 @@ else
     @* Tabs *@
     @if (!TabsReady)
     {
-        <AetheusLoader Size="OmniControlSize.Large" />
+        <ZoneVeil />
     }
     else
     {
@@ -184,7 +185,9 @@ else
                                 <OmniFactTileRow Term="@L["Duration"]"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent><PipelineRunLiveDuration StartedAt="@_run.StartedAt" CompletedAt="@_run.CompletedAt" IsRunning="@RunInProgress" /></ChildContent></OmniFactTileRow>
                                 @if (_pipelineRunsSummary is { } runsSummary)
                                 {
-                                    <OmniFactTileRow Term="@L["AverageSuccessDuration"]" data-testid="run-average-success-duration"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent>@runsSummary.AverageDurationLabel(L["NotAvailableShort"])</ChildContent></OmniFactTileRow>
+                                    @* R-33: the default average leaves the time spent waiting for approvals out; the full one keeps it. *@
+                                    <OmniFactTileRow Term="@L["RunAverageDuration"]" data-testid="run-average-duration"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent>@runsSummary.AverageActiveDurationLabel(L["NotAvailableShort"]) <HelpMark Text="@L["RunAverageDurationHelp"]" TestId="run-average-duration-help" /></ChildContent></OmniFactTileRow>
+                                    <OmniFactTileRow Term="@L["RunFullAverageDuration"]" data-testid="run-full-average-duration"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent>@runsSummary.AverageDurationLabel(L["NotAvailableShort"]) <HelpMark Text="@L["RunFullAverageDurationHelp"]" TestId="run-full-average-duration-help" /></ChildContent></OmniFactTileRow>
                                 }
                             </ChildContent>
                         </OmniFactTile>
@@ -192,22 +195,16 @@ else
                         {
                             <PipelineRunGateOverview Gate="@gate" BlockingTestCount="@(AssuranceVerdict?.BlockingTests.Count ?? 0)" RunGrade="@_run.GateGrade" Href="@TabHref("gate")" />
                         }
-                        @if (_run.Parameters.Count > 0)
+                        @if (_run.Parameters.Count > 0 || !UsedResources.IsEmpty)
                         {
-                            @* A button (it opens a dialog), so its content is phrasing content only. *@
-                            <OmniFactTile Title="@L["RunParameters"]" OnClick="@ShowParameters" Class="run-parameters-tile">
+                            @* A button (it opens a dialog), so its content is phrasing content only. R-61: three numbers
+                               (parameters, libraries, vaults); the names are listed in the dialog. *@
+                            <OmniFactTile Title="@L["RunParametersTile"]" OnClick="@ShowParameters" Class="run-parameters-tile">
                                 <Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon>
                                 <ChildContent>
-                                    <OmniFactTileRow Term="@L["RunTileCount"]"><Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon><ChildContent>@_run.Parameters.Count</ChildContent></OmniFactTileRow>
-                                    @* R-37: the libraries and vaults the run read, from the definition it executed. *@
-                                    @if (UsedResources.Libraries.Count > 0)
-                                    {
-                                        <OmniFactTileRow Term="@L["Libraries"]" data-testid="run-used-libraries"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("data_object"))" /></Icon><ChildContent>@string.Join(", ", UsedResources.Libraries)</ChildContent></OmniFactTileRow>
-                                    }
-                                    @if (UsedResources.Vaults.Count > 0)
-                                    {
-                                        <OmniFactTileRow Term="@L["Vaults"]" data-testid="run-used-vaults"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("lock"))" /></Icon><ChildContent>@string.Join(", ", UsedResources.Vaults)</ChildContent></OmniFactTileRow>
-                                    }
+                                    <OmniFactTileRow Term="@L["RunParametersTile"]" data-testid="run-used-parameters"><Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon><ChildContent>@_run.Parameters.Count</ChildContent></OmniFactTileRow>
+                                    <OmniFactTileRow Term="@L["Libraries"]" data-testid="run-used-libraries"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("data_object"))" /></Icon><ChildContent>@UsedResources.Libraries.Count</ChildContent></OmniFactTileRow>
+                                    <OmniFactTileRow Term="@L["Vaults"]" data-testid="run-used-vaults"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("lock"))" /></Icon><ChildContent>@UsedResources.Vaults.Count</ChildContent></OmniFactTileRow>
                                 </ChildContent>
                             </OmniFactTile>
                         }
@@ -222,16 +219,16 @@ else
                             <OmniFactTile Title="@L["Release"]" Href="@($"/releases/{release.Id}")">
                                 <Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon>
                                 <ChildContent>
-                                    @* A commit-derived release name is a full 40-char sha; shorten it so the tile keeps
-                                       its column width. No Href: the whole tile is already the link to the release. *@
-                                    <OmniFactTileRow Term="@L["Release"]"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent><ShortId Value="@release.Version" Copyable="false" Class="run-release-version release-version" /> <ReleaseStatusBadge Status="@release.Status" /></ChildContent></OmniFactTileRow>
-                                    @if (AppVersion is { Length: > 0 } appVersion)
-                                    {
-                                        <OmniFactTileRow Term="@L["Version"]" title="@appVersion"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent><span class="run-release-app-version">@appVersion</span></ChildContent></OmniFactTileRow>
-                                    }
+                                    @* R-63: ONE line, the short version; the full versions (release and built application) are
+                                       the row's tooltip and stay on the release page. A commit-derived release name is a full
+                                       40-char sha, shortened so the tile keeps its column width. No Href: the whole tile is
+                                       already the link to the release. *@
+                                    <OmniFactTileRow Term="@L["Release"]" title="@ReleaseFullVersions(release)"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent><ShortId Value="@release.Version" Copyable="false" Class="run-release-version release-version" /> <ReleaseStatusBadge Status="@release.Status" /></ChildContent></OmniFactTileRow>
                                 </ChildContent>
                             </OmniFactTile>
                         }
+                        @* R-63: right below the Release tile. R-82: where a succeeded deployment put the application; absent when not known. *@
+                        <PipelineRunDeployedTile Run="@_run" />
                         @if (_run.Artifacts.Count > 0)
                         {
                             @* A single artifact reads by its name, several by their count. *@
@@ -258,14 +255,13 @@ else
                                 </ChildContent>
                             </OmniFactTile>
                         }
-                        @* R-82: where a succeeded deployment put the application; absent when not known. *@
-                        <PipelineRunDeployedTile Run="@_run" />
                     </OmniTileGrid>
 
                     @* The stage timeline precedes secondary details so the run's progress is
                        visible first. *@
-                    @* R1-12: OE's veil lies over the timeline while a report is published; it stays mounted. *@
-                    <div id="run-timeline-zone" class="@(_live?.AnalysisPublishing == true ? "run-timeline-zone omni-busy" : "run-timeline-zone")" aria-busy="@(_live?.AnalysisPublishing == true ? "true" : "false")"
+                    @* R1-12, R-1: the page veil is held while a report is published; the timeline stays mounted. *@
+                    <VeilHold Busy="@(_live?.AnalysisPublishing == true)" />
+                    <div id="run-timeline-zone" class="run-timeline-zone"
                          title="@(_live?.AnalysisPublishing == true ? L["AnalysisPublishingTitle"].Value : null)">
                     <RunTimelineTree Run="_run!" Depth="0" SelectedStepId="_selectedStep?.Id" OnSelectStep="SelectStep"
                                      PreloadedChildren="ChildRuns" Baselines="_baselines.Runs"
@@ -294,7 +290,7 @@ else
                                             <OmniIcon Name="OmniIconName.ChevronRight" Class="run-failed-open-hint" />
                                         </OmniStack>
                                     </div>
-                                    <PipelineStepStopAlert Step="@failed" />
+                                    <PipelineStepStopAlert Step="@failed" LastErrorLine="@PipelineStepStopReason.LastErrorLine(failed, _stepLogsCache)" />
                                     @{ var errLines = ErrorLinesFor(failed, _stepLogsCache); }
                                     @if (errLines.Count > 0)
                                     {
@@ -321,7 +317,7 @@ else
                     @if (_gateState.IsIncomplete)
                     {
                 <OmniAlert Severity="OmniSeverity.Warning" Title="@L["AnalysisGateIncompleteTitle"]">
-                            @string.Format(L["AnalysisGateIncompleteDetail"], string.Join(", ", _gateState.FailedRunIds))
+                            @string.Format(L["AnalysisGateIncompleteDetail"], string.Join(", ", _gateState.FailedRunNumbers))
                 </OmniAlert>
                     }
                     @* Test Results Summary *@
@@ -439,7 +435,7 @@ else
                             @* The stop reason sits in its own padded zone: the panel's blocks are not separated by a margin on the alert. *@
                             @if (PipelineStepStopReason.For(_selectedStep, L) is not null)
                             {
-                                <div class="run-step-stop-zone"><PipelineStepStopAlert Step="@_selectedStep" /></div>
+                                <div class="run-step-stop-zone"><PipelineStepStopAlert Step="@_selectedStep" LastErrorLine="@PipelineStepStopReason.LastErrorLine(_selectedStep, _stepLogsCache)" /></div>
                             }
                             @if (_showCommand && !string.IsNullOrEmpty(_selectedStep.Command))
                             {
@@ -476,15 +472,24 @@ else
                                 }
                                 else if (_logsLoading && _selectedStep.TaskId.HasValue && !_stepLogsCache.ContainsKey(_selectedStep.TaskId.Value))
                                 {
-                                    @* Recette R-116: the step's logs are being read, OE's busy veil lies over the zone they will fill. *@
-                                    <div class="omni-busy action-veil-placeholder" aria-busy="true" data-testid="step-logs-pending"></div>
+                                    @* Recette R-116, R-1: the step's logs are being read, the page veil is held over the zone they will fill. *@
+                                    <VeilHold Busy="true" />
+                                    <div class="action-veil-placeholder" data-testid="step-logs-pending"></div>
                                 }
                                 else
                                 {
                                     var logs = _selectedStep.TaskId.HasValue ? _stepLogsCache.GetValueOrDefault(_selectedStep.TaskId.Value) : null;
                                     @if (logs is null or { Count: 0 })
                                     {
-                                        <div class="step-log-empty">@GetEmptyLogsReason(_selectedStep, L)</div>
+                                        @if (BackendStepLine(_selectedStep) is { } backendLine)
+                                        {
+                                            @* R-34: a backend-run step has no task log; its account is its log. *@
+                                            <div class="run-logs-lines" data-testid="step-backend-log"><div class="run-log-line"><span class="run-log-num">1</span>@backendLine</div></div>
+                                        }
+                                        else
+                                        {
+                                            <div class="step-log-empty">@GetEmptyLogsReason(_selectedStep, L)</div>
+                                        }
                                     }
                                     else
                                     {
@@ -509,7 +514,7 @@ else
                                                 </OmniAlert>
                                             }
                                             <div class="run-logs-lines">
-                                                <AetheusVirtualList Items="@filteredLogs" ItemSize="21" OverscanCount="20" Context="entry">
+                                                <AetheusVirtualList Items="@filteredLogs" ItemSize="21" OverscanCount="20" OnSpacersApplied="@(() => LogFollow.RepinAsync(_logsTerminal))" Context="entry">
                                                     <div class="run-log-line @(entry.Log.Level == TaskLogLevel.Error ? "step-log-error" : "")"><span class="run-log-num">@entry.Num</span>@if (AnsiLine.HasSequences(entry.Log.Message)) { <OmniAnsiText Text="@entry.Log.Message" /> } else { @HighlightLogVariables(entry.Log.Message, _logVarRegex) }</div>
                                                 </AetheusVirtualList>
                                             </div>
@@ -527,7 +532,7 @@ else
             @if (ShowGateTab && _gateState.Result is { } gateResult)
             {
                 <OmniTabsItem Key="gate" Title="@L["AnalysisGateTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("rule"))" /></Icon><ChildContent>
-                    <PipelineRunGateFindings Gate="@gateResult" RunGrade="@_run?.GateGrade" BlockingTests="@(AssuranceVerdict?.BlockingTests ?? [])" RunIds="@_gateState.RunIds" ProjectId="@EffectiveProjectId" ProjectName="@_run?.ProjectName" FindingReopened="@(_ => _gateState.ReopenFindingAsync(Api, _pageCache))" />
+                    <PipelineRunGateFindings Gate="@gateResult" RunGrade="@_run?.GateGrade" BlockingTests="@(AssuranceVerdict?.BlockingTests ?? [])" FlakyTests="@(AssuranceVerdict?.FlakyTests ?? [])" RunIds="@_gateState.RunIds" ProjectId="@EffectiveProjectId" ProjectName="@_run?.ProjectName" FindingReopened="@(_ => _gateState.ReopenFindingAsync(Api, _pageCache))" />
                 </ChildContent></OmniTabsItem>
             }
 

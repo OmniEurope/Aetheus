@@ -31,6 +31,12 @@ public sealed record PipelineDotnetTestRequest
 
     public required bool CollectCoverage { get; init; }
 
+    /// <summary>Whether the failed tests run once more to tell the flaky ones apart.</summary>
+    public bool RerunFailedTests { get; init; }
+
+    /// <summary>The fully qualified test methods a rerun selects; empty for the suite itself.</summary>
+    public IReadOnlyList<string> RerunMethods { get; init; } = [];
+
     /// <summary>Absolute runsettings path, or null.</summary>
     public string? RunSettings { get; init; }
 
@@ -133,6 +139,10 @@ public sealed record PipelineDotnetTestRequest
             StatusVariable = statusVariable,
             CollectCoverage = string.Equals(
                 envVars.GetValueOrDefault(PipelineDotnetTestVariables.CollectCoverage),
+                "true",
+                StringComparison.OrdinalIgnoreCase),
+            RerunFailedTests = string.Equals(
+                envVars.GetValueOrDefault(PipelineDotnetTestVariables.RerunFailedTests),
                 "true",
                 StringComparison.OrdinalIgnoreCase),
             RunSettings = runSettings,

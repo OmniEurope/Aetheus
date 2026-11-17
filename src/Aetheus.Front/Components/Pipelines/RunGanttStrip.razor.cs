@@ -332,12 +332,14 @@ public partial class RunGanttStrip
         : StatusText(stage.Status);
 
     private static OmniIconName StepIcon(PipelineStepRunDto step) =>
-        PipelineRunFormatting.IsSkippedByCondition(step) ? PipelineRunFormatting.SkippedIcon
+        PipelineRunFormatting.IsSkippedByCondition(step) || PipelineRunFormatting.IsSkippedWithoutWork(step)
+            ? PipelineRunFormatting.SkippedIcon
         : step.IsRejected ? OmniIconName.Warning
         : StatusIcon(step.Status);
 
     private string StepStatusText(PipelineStepRunDto step) =>
         PipelineRunFormatting.IsSkippedByCondition(step) ? L["Skipped"]
+        : PipelineRunFormatting.IsSkippedWithoutWork(step) ? PipelineRunFormatting.SkippedWithoutWorkText(step, L)
         : step.IsRejected ? L.Localize(PipelineStatus.Rejected)
         : StatusText(step.Status);
 

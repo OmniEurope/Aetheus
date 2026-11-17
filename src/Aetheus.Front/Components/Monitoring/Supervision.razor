@@ -27,11 +27,14 @@ else
     @* Everything at a glance, all applications together, above their list. *@
     @if (_summary is not null)
     {
-        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="supervision-totals">
+        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="supervision-totals tiles-scroll-row">
             <OmniStatTile Value="@Number(_summary.TotalCount)" Title="@L["MonitoredApps"]" Detail="@AppsDetail" />
             @if (_summary.Audience is { } audience)
             {
-                <OmniStatTile Value="@Number(audience.OnlineVisitors)" Title="@L["CurrentVisitors"]" />
+                @* R-23: every application still waiting for data says so, instead of a total of zero. *@
+                <OmniStatTile Value="@(audience.OnlineVisitorState == OnlineAudienceState.Waiting ? L["OnlineUsersWaiting"].Value : Number(audience.OnlineVisitors))"
+                              Detail="@(audience.OnlineVisitorState == OnlineAudienceState.Waiting ? OnlineAudienceText.WaitingHint(L, audience.OnlineVisitorLastEventAt) : null)"
+                              Title="@L["CurrentVisitors"]" data-testid="supervision-online-tile" />
                 <OmniStatTile Value="@Number(audience.VisitorsToday)" Title="@L["UniqueVisitorsToday"]" />
                 <OmniStatTile Value="@Number(audience.VisitorsThisWeek)" Title="@L["UniqueVisitorsThisWeek"]" />
                 <OmniStatTile Value="@Number(audience.VisitorsThisMonth)" Title="@L["UniqueVisitorsThisMonth"]" />

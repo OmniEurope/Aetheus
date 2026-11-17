@@ -52,7 +52,7 @@ internal sealed class FunctionHttp(HttpClient client)
             using (response)
             {
                 if ((int)response.StatusCode >= 400)
-                    throw new FunctionHttpException($"{request.Method} {request.RequestUri} answered HTTP {(int)response.StatusCode}.");
+                    throw new FunctionHttpException($"{request.Method} {request.RequestUri} answered HTTP {(int)response.StatusCode}.", response.StatusCode);
                 return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -66,6 +66,12 @@ internal sealed class FunctionHttpException : Exception
         : base(message)
     {
     }
+
+    public FunctionHttpException(string message, System.Net.HttpStatusCode statusCode)
+        : base(message) => StatusCode = statusCode;
+
+    /// <summary>The HTTP status the server answered, or null when there was no answer.</summary>
+    public System.Net.HttpStatusCode? StatusCode { get; }
 
     public FunctionHttpException(string message, Exception innerException)
         : base(message, innerException)

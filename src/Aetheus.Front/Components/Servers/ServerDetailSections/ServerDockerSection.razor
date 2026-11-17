@@ -10,7 +10,7 @@
     </SectionContent>
 }
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
+<ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="Docker" AdoptPrefixes="AdoptedTaskPrefixes" NotAdoptedPrefixes="@ServerTaskNames.DockerReadPrefixes" SettleOnHeartbeat="true" />
 
 @* TabRenderMode.Client keeps every tab alive: switching tabs must not destroy an open shell or a
    half-edited compose file, and a SignalR result arriving on an inactive tab must still land. *@

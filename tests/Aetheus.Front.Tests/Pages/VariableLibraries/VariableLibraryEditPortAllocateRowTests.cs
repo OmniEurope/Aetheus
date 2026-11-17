@@ -49,7 +49,14 @@ public sealed class VariableLibraryEditPortAllocateRowTests : BunitContext
     {
         var cut = Render(new VariableEntryDto { Id = 1, Key = "PORT_FRONT", Value = string.Empty });
 
-        Assert.NotNull(cut.FindMenuItem("PortAllocateRow"));
+        Assert.True(RowMenuOffersAllocation(cut));
+    }
+
+    // The add form has its own "Allocate a port" (R-12): this looks at the row's menu only.
+    private static bool RowMenuOffersAllocation(IRenderedComponent<VariableLibraryEdit> cut)
+    {
+        cut.Find("tbody .omni-overflow-menu__trigger").Click();
+        return cut.FindAll(".omni-menu__item").Any(entry => entry.Names().Contains("PortAllocateRow", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -59,7 +66,7 @@ public sealed class VariableLibraryEditPortAllocateRowTests : BunitContext
     {
         var cut = Render(new VariableEntryDto { Id = 1, Key = key, Value = value });
 
-        Assert.Null(cut.FindMenuItem("PortAllocateRow"));
+        Assert.False(RowMenuOffersAllocation(cut));
     }
 
     [Fact]

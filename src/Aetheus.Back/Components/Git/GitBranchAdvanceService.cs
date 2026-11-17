@@ -37,13 +37,23 @@ public enum GitBranchAdvanceOutcome
     Refused
 }
 
+/// <summary>A commit named in a report: its abbreviated id and its subject line.</summary>
+public sealed record GitBranchCommit(string ShortSha, string Subject);
+
 /// <param name="RepositorySlug">The internal repository the advance applied to, when one matched.</param>
 /// <param name="PreviousSha">The branch tip before the update; null when the branch did not exist.</param>
+/// <param name="BranchOnlyCommits">For <see cref="GitBranchAdvanceOutcome.NotFastForward"/>: the newest commits the branch
+/// holds that the requested commit does not (at most <see cref="GitBranchAdvanceService.MaximumNamedCommits"/>), the cause
+/// of the divergence. Null for any other outcome, or when git could not list them.</param>
+/// <param name="BranchOnlyTotal">How many commits the branch holds that the requested commit does not; null with
+/// <paramref name="BranchOnlyCommits"/>.</param>
 public sealed record GitBranchAdvanceResult(
     GitBranchAdvanceOutcome Outcome,
     string? RepositorySlug = null,
     string? PreviousSha = null,
-    string? Detail = null);
+    string? Detail = null,
+    IReadOnlyList<GitBranchCommit>? BranchOnlyCommits = null,
+    int? BranchOnlyTotal = null);
 
 /// <summary>Why a release tag was or was not created. Like a branch advance, every outcome is reported.</summary>
 public enum GitTagOutcome
@@ -176,7 +186,10 @@ public sealed class GitBranchAdvanceService(
                 logger.LogInformation(
                     "Branch {Branch} of {Slug} left at {Previous}: {Target} and the branch diverged (neither descends from the other).",
                     branch, slug, previousSha, targetSha);
-                return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.NotFastForward, slug, previousSha);
+                var (onlyOnBranch, total) = await ListBranchOnlyCommitsAsync(diskPath, previousSha, targetSha, ct).ConfigureAwait(false);
+                return new GitBranchAdvanceResult(
+                    GitBranchAdvanceOutcome.NotFastForward, slug, previousSha,
+                    BranchOnlyCommits: onlyOnBranch, BranchOnlyTotal: total);
             }
         }
 
@@ -201,6 +214,40 @@ public sealed class GitBranchAdvanceService(
         // Only a real move is announced: the other outcomes left the branch where it was.
         await announcer.AnnounceAsync(repo, diskPath, branch, previousSha, targetSha, ct).ConfigureAwait(false);
         return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.Advanced, slug, previousSha);
+    }
+
+    /// <summary>How many commits are named when a branch has diverged: enough to see the cause, not a log dump.</summary>
+    internal const int MaximumNamedCommits = 5;
+
+    private const int MaximumSubjectLength = 120;
+
+    /// <summary>The commits <paramref name="branchSha"/> holds that <paramref name="targetSha"/> does not, newest first,
+    /// with their total. Both are null when git cannot list them: the divergence is reported all the same.</summary>
+    private async Task<(IReadOnlyList<GitBranchCommit>? Commits, int? Total)> ListBranchOnlyCommitsAsync(
+        string diskPath, string branchSha, string targetSha, CancellationToken ct)
+    {
+        var range = $"{targetSha}..{branchSha}";
+        var (logCode, logOut, _) = await git.RunGitAsync(
+            diskPath, ["log", "--format=%h%x09%s", $"--max-count={MaximumNamedCommits}", range], ct, ignoreExitCode: true)
+            .ConfigureAwait(false);
+        var (countCode, countOut, _) = await git.RunGitAsync(
+            diskPath, ["rev-list", "--count", range], ct, ignoreExitCode: true).ConfigureAwait(false);
+        if (logCode != 0 || countCode != 0 || !int.TryParse(countOut.Trim(), out var total)) return (null, null);
+
+        var commits = new List<GitBranchCommit>();
+        foreach (var line in logOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.TrimEnd('\r').Split('\t', 2);
+            commits.Add(new GitBranchCommit(parts[0], parts.Length == 2 ? SanitizeSubject(parts[1]) : string.Empty));
+        }
+        return (commits, total);
+    }
+
+    // A subject is free text written by anyone: control characters never reach the run log, and a very long one is cut.
+    private static string SanitizeSubject(string subject)
+    {
+        var clean = new string(subject.Select(c => char.IsControl(c) ? ' ' : c).ToArray()).Trim();
+        return clean.Length > MaximumSubjectLength ? clean[..MaximumSubjectLength] + "..." : clean;
     }
 
     public async Task<GitTagResult> TryCreateTagAsync(

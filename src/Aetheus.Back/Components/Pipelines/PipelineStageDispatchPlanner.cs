@@ -17,10 +17,15 @@ public interface IPipelineStageDispatchPlanner
     /// <summary>Dispatches whatever is ready in <paramref name="runId"/>.</summary>
     /// <returns><c>true</c> when a stage was cancelled by an unmet condition, so the caller must
     /// re-evaluate - a cancelled stage can unblock the ones that depended on it.</returns>
+    /// <param name="ownerProjectId">The project the run's pipeline belongs to directly, when the caller already
+    /// holds the loaded pipeline: it is then the run's project and is not read again. Null when the pipeline has
+    /// no project of its own (owned through an environment or a project server) or the caller did not load it.</param>
+    /// <param name="loadedRun">The run with its pipeline, when the caller already holds it: the system stages
+    /// (prepare, cleanup) use it instead of reading it again.</param>
     Task<bool> CreateTasksForNextStageAsync(
         int runId, PipelineYamlDefinition definition, Dictionary<string, string> resolvedVars,
         List<PipelineStepRun> pendingSteps, int? organizationId, HashSet<string> secretKeys,
-        IPipelineChildRunLauncher launcher, CancellationToken ct);
+        IPipelineChildRunLauncher launcher, CancellationToken ct, int? ownerProjectId = null, PipelineRun? loadedRun = null);
 
     /// <summary>First-dispatch overload: reuses variables the caller already resolved.</summary>
     Task<bool> CreateTasksForNextStageAsync(
@@ -71,7 +76,7 @@ public sealed class PipelineStageDispatchPlanner(
     public async Task<bool> CreateTasksForNextStageAsync(
         int runId, PipelineYamlDefinition definition, Dictionary<string, string> resolvedVars,
         List<PipelineStepRun> pendingSteps, int? organizationId, HashSet<string> secretKeys,
-        IPipelineChildRunLauncher launcher, CancellationToken ct)
+        IPipelineChildRunLauncher launcher, CancellationToken ct, int? ownerProjectId = null, PipelineRun? loadedRun = null)
     {
         // Artifact collection is an execution barrier. A periodic reconcile can arrive after the
         // producer step completed but before its operation task did; dispatching a consumer here
@@ -84,16 +89,15 @@ public sealed class PipelineStageDispatchPlanner(
             return false;
         }
 
-        var completedStages = await repo.GetCompletedStageNamesAsync(runId, ct).ConfigureAwait(false);
-        var terminalStages = await repo.GetTerminalStageNamesAsync(runId, ct).ConfigureAwait(false);
+        var progress = await repo.GetStageProgressAsync(runId, ct).ConfigureAwait(false);
+        var completedStages = progress.Completed;
+        var terminalStages = progress.Terminal;
 
         // A cancelled run counts as failed for the deployment rollback its cancellation kept
         // (PipelineRunControlService): the only failed() stages still pending after a cancel are those.
         // BACK-019: an artifact the run could not collect fails it as surely as a failed step, so the
         // failed() handlers see it.
-        var previousStageFailed = await repo.HasAnyFailedStepInRunAsync(runId, ct).ConfigureAwait(false)
-            || await repo.HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false)
-            || await finalizer.IsCancellationRequestedAsync(runId, ct).ConfigureAwait(false);
+        var previousStageFailed = await HasPreviousStageFailedAsync(runId, ct).ConfigureAwait(false);
         var dependencyTerminalStages = previousStageFailed
             ? terminalStages
             : completedStages;
@@ -112,7 +116,7 @@ public sealed class PipelineStageDispatchPlanner(
         PipelineVariableExpansion.ApplyStepOutputs(
             resolvedVars, secretKeys, await repo.GetSuccessfulStepOutputsAsync(runId, ct).ConfigureAwait(false));
         var activeStageNames = await repo.GetActiveStageNamesAsync(runId, ct).ConfigureAwait(false) ?? [];
-        var notStarted = completedStages.Count == 0 && terminalStages.Count == 0 && activeStageNames.Count == 0;
+        var notStarted = IsNotStarted(completedStages, terminalStages, activeStageNames);
         // Before the run touches anything, approvals included. Only a run that has not started:
         // failing a started one outright would skip its failed() rollback.
         if (notStarted && await _gradeGate.EvaluateAsync(runId, resolvedVars, ct).ConfigureAwait(false) is { } refusal)
@@ -122,14 +126,14 @@ public sealed class PipelineStageDispatchPlanner(
             return false;
         }
         // BACK-018: environments are read in the run's project, for approvals, checks and locks alike.
-        var projectId = await repo.GetRunProjectIdAsync(runId, ct).ConfigureAwait(false);
+        var projectId = ownerProjectId ?? await repo.GetRunProjectIdAsync(runId, ct).ConfigureAwait(false);
         // The environments the run declares are approved at its launch, before any stage.
         if (notStarted
             && await _approvals.RequireLaunchApprovalsAsync(runId, projectId, flattenedStages, ct).ConfigureAwait(false))
             return false;
         var state = new NextStageDispatchState(
             await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false),
-            activeStageNames, projectId)
+            activeStageNames, projectId, loadedRun)
         {
             // ONE mark for the whole pass: a refusal in any stage drops the tasks of the stages dispatched
             // before it too, since they all belong to the run that is then failed.
@@ -143,6 +147,14 @@ public sealed class PipelineStageDispatchPlanner(
 
         return await FinalizeNextStageDispatchAsync(runId, state, ct).ConfigureAwait(false);
     }
+
+    private async Task<bool> HasPreviousStageFailedAsync(int runId, CancellationToken ct) =>
+        await repo.HasAnyFailedStepInRunAsync(runId, ct).ConfigureAwait(false)
+        || await repo.HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false)
+        || await finalizer.IsCancellationRequestedAsync(runId, ct).ConfigureAwait(false);
+
+    private static bool IsNotStarted(ICollection<string> completedStages, ICollection<string> terminalStages, ICollection<string> activeStageNames) =>
+        completedStages.Count == 0 && terminalStages.Count == 0 && activeStageNames.Count == 0;
 
     private async Task<bool> DispatchReadyStageAsync(
         int runId,
@@ -227,7 +239,7 @@ public sealed class PipelineStageDispatchPlanner(
     {
         var dispatch = await TryDispatchSystemStageAsync(
             runId, stageName, stageSteps, resolvedVars, definition, organizationId,
-            completedStages, flattenedStages, state.ProjectId, ct).ConfigureAwait(false);
+            completedStages, flattenedStages, state.ProjectId, state, ct).ConfigureAwait(false);
         if (!dispatch.Handled) return false;
         state.TouchedStageSteps.AddRange(stageSteps);
         state.AnyTaskCreated |= dispatch.TaskCreated;
@@ -350,7 +362,7 @@ public sealed class PipelineStageDispatchPlanner(
         var stageHasDeploy = dispatchServers.StageHasDeployStep(stageDef);
         var resolution = await _serverSelector.ResolveAsync(
             runId, stageName, stageDef, resolvedVars, organizationId,
-            stageHasDeploy, state.AffinityServerId, state.ProjectId, ct).ConfigureAwait(false);
+            stageHasDeploy, state.AffinityServerId, state.ProjectId, ct, state.ServerPass).ConfigureAwait(false);
         if (resolution.Server is null)
         {
             state.AnyRunnerTemporarilyUnavailable |= resolution.RunnerTemporarilyUnavailable;
@@ -395,9 +407,16 @@ public sealed class PipelineStageDispatchPlanner(
         state.AnyStageCancelled = true;
     }
 
-    private sealed class NextStageDispatchState(int? affinityServerId, List<string> activeStageNames, int? projectId)
+    private sealed class NextStageDispatchState(int? affinityServerId, List<string> activeStageNames, int? projectId, PipelineRun? loadedRun)
     {
         public int? ProjectId { get; } = projectId;
+
+        /// <summary>The run with its pipeline when the caller held it (the system stages do not read it again).</summary>
+        public PipelineRun? LoadedRun { get; } = loadedRun;
+
+        /// <summary>The affinity as this pass read it at its start: unlike <see cref="AffinityServerId"/>, which the
+        /// pass moves as it dispatches, it is what the database held then.</summary>
+        public int? LoadedAffinityServerId { get; } = affinityServerId;
         public bool AnyTaskCreated { get; set; }
         public bool AnyStageCancelled { get; set; }
         public bool AnyStageSyncFailed { get; set; }
@@ -407,6 +426,9 @@ public sealed class PipelineStageDispatchPlanner(
         public bool AnyEnvironmentCheckFailed { get; set; }
         public bool SystemTaskDispatchFailed { get; set; }
         public int? AffinityServerId { get; set; } = affinityServerId;
+
+        /// <summary>What this pass already asked about runners, shared by its ready stages.</summary>
+        public PipelineReadyStageServerSelector.Pass ServerPass { get; } = new();
 
         /// <summary>The inserts already queued when the pass began creating tasks.</summary>
         public UnsavedInsertsMark QueuedBeforePass { get; init; }
@@ -501,8 +523,9 @@ public sealed class PipelineStageDispatchPlanner(
         // so the stage appears ready and no deadlock is declared. A genuine deadlock has nothing running
         // and no newly completed stage, so it still looks identical on this pass and still fails.
         var stillRunning = await repo.HasAnyRunningStepInRunAsync(runId, ct).ConfigureAwait(false);
-        var recheckedCompleted = await repo.GetCompletedStageNamesAsync(runId, ct).ConfigureAwait(false);
-        var recheckedTerminal = await repo.GetTerminalStageNamesAsync(runId, ct).ConfigureAwait(false);
+        var rechecked = await repo.GetStageProgressAsync(runId, ct).ConfigureAwait(false);
+        var recheckedCompleted = rechecked.Completed;
+        var recheckedTerminal = rechecked.Terminal;
         var recheckedReady = FindReadyStages(
             pendingSteps, definition, recheckedCompleted,
             previousStageFailed ? recheckedTerminal : recheckedCompleted);
@@ -534,12 +557,14 @@ public sealed class PipelineStageDispatchPlanner(
         List<string> completedStages,
         List<PipelineStageDefinition> flattenedStages,
         int? projectId,
+        NextStageDispatchState state,
         CancellationToken ct)
     {
         if (stageName is not (PipelineRunHelpers.SystemPrepareStage or PipelineRunHelpers.SystemCleanupStage))
             return new(false, false, false, false, [], []);
         if (await systemTasks.CreateSystemTasksAsync(
-                runId, stageSteps, resolvedVars, definition, organizationId, projectId, completedStages, ct)
+                runId, stageSteps, resolvedVars, definition, organizationId, projectId, completedStages, ct,
+                state.LoadedRun, new KnownRunAffinity(state.LoadedAffinityServerId))
             .ConfigureAwait(false))
             return new(true, true, false, false, [], []);
 

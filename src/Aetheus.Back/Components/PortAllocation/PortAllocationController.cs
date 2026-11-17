@@ -72,6 +72,31 @@ public class PortAllocationController(
         return Ok(await service.AllocateIntoLibraryAsync(libraryId, request.ServerId, request.Keys, ct));
     }
 
+    /// <summary>The port check's offer to move conflicting keys: same gates as <see cref="Allocate"/>.</summary>
+    [HttpPost("reallocate")]
+    public async Task<ActionResult<List<VariableEntryDto>>> Reallocate(
+        int libraryId, [FromBody] AllocateLibraryPortsRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await CanReserveAsync(libraryId, request.ServerId, ct)) return Forbid();
+        return Ok(await service.ReallocateInLibraryAsync(libraryId, request.ServerId, request.Keys, ct));
+    }
+
+    /// <summary>The ports a reallocation of these keys would write, nothing reserved: its confirmation lists them.</summary>
+    [HttpPost("free-preview")]
+    public async Task<ActionResult<List<int>>> FreePreview(
+        int libraryId, [FromBody] AllocateLibraryPortsRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await CanReserveAsync(libraryId, request.ServerId, ct)) return Forbid();
+        return Ok(await service.PreviewFreePortsAsync(libraryId, request.ServerId, request.Keys.Count, ct));
+    }
+
+    private async Task<bool> CanReserveAsync(int libraryId, int serverId, CancellationToken ct) =>
+        await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, libraryId, Permission.Write, ct)
+        && await authz.HasPermissionAsync(User, PermissionKeys.ServerPortsReserve, serverId, ct)
+        && await ServerInLibraryOrganizationAsync(libraryId, serverId, ct);
+
     private async Task<bool> ServerInLibraryOrganizationAsync(int libraryId, int serverId, CancellationToken ct)
     {
         var projectId = await service.GetLibraryProjectIdAsync(libraryId, ct);

@@ -26,12 +26,22 @@ internal static partial class PipelineCopyAdapter
 
     /// <summary>The copy's name: the source prefix replaced by the new one, or the new prefix put in
     /// front of a name that does not start with the source prefix.</summary>
-    internal static string NewName(string sourceName, string sourcePrefix, string prefix) =>
-        !string.IsNullOrEmpty(sourcePrefix)
+    internal static string NewName(
+        string sourceName, string sourcePrefix, string prefix, string? sourceSlug = null, string? targetSlug = null)
+    {
+        if (!string.IsNullOrEmpty(sourcePrefix)
             && sourceName.StartsWith(sourcePrefix + "-", StringComparison.Ordinal)
-            && sourceName.Length > sourcePrefix.Length + 1
-            ? prefix + sourceName[sourcePrefix.Length..]
-            : $"{prefix}-{sourceName}";
+            && sourceName.Length > sourcePrefix.Length + 1)
+            return prefix + sourceName[sourcePrefix.Length..];
+        // R-86 (b): a pipeline named after the source project's slug (`w7-ci`, whose file is
+        // `.pipeline/w7-ci.yaml`) takes the target project's slug instead of getting a prefix put in
+        // front of the old slug. The file name follows the pipeline name, and so do the references.
+        if (!string.IsNullOrEmpty(sourceSlug) && !string.IsNullOrEmpty(targetSlug)
+            && sourceName.StartsWith(sourceSlug + "-", StringComparison.OrdinalIgnoreCase)
+            && sourceName.Length > sourceSlug.Length + 1)
+            return targetSlug + sourceName[sourceSlug.Length..];
+        return $"{prefix}-{sourceName}";
+    }
 
     /// <summary>A library or vault keeps its name unless it carries the source project's identity: a generic
     /// name (<c>application-prod-host</c>) is what a template asks for and must not change. The identity is

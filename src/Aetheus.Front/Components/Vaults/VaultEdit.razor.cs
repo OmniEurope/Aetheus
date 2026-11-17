@@ -84,6 +84,16 @@ public partial class VaultEdit : IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_dropKeyFromAddress)
+        {
+            _dropKeyFromAddress = false;
+            Nav.NavigateTo(Nav.GetUriWithQueryParameter("key", (string?)null), replace: true);
+        }
+        if (_focusNewSecretValue)
+        {
+            _focusNewSecretValue = false;
+            await JS.InvokeVoidAsync("Aetheus.focusById", NewSecretValueId);
+        }
         if (!firstRender) return;
         // R-64: a pipeline created, changed or deleted while the page is open changes who reads the vault.
         _pipelineChanges = new PipelineChangeSubscription(HubFactory, () => InvokeAsync(async () =>
@@ -143,11 +153,31 @@ public partial class VaultEdit : IAsyncDisposable
             if (!string.IsNullOrWhiteSpace(Name)) _model.Name = Name;
         }
 
+        ResolveKeyLink(detail);
+
         // Publish the parent project so the NavMenu keeps the project's submenu open
         // while we're editing one of its vaults.
         ProjectNav.Set(_model.ProjectId);
 
         ReassertBreadcrumb(isNew);
+    }
+
+    private const string NewSecretValueId = "vault-new-secret-value";
+    private bool _focusNewSecretValue;
+    private bool _dropKeyFromAddress;
+
+    /// <summary>R-56: a <c>?key=</c> link to a secret that does not exist yet (the project overview's missing
+    /// variables) opens the add form with that key filled and the focus on the (masked) value, rather than
+    /// leaving an empty filtered grid. A key that exists keeps the grid filtered on it.</summary>
+    private void ResolveKeyLink(VaultDetailDto? detail)
+    {
+        if (detail is null || string.IsNullOrWhiteSpace(FilterKey)) return;
+        var key = FilterKey.Trim();
+        if (detail.Secrets.Exists(secret => string.Equals(secret.Key, key, StringComparison.Ordinal))) return;
+        _newSecret.Key = key;
+        FilterKey = null;
+        _focusNewSecretValue = true;
+        _dropKeyFromAddress = true;
     }
 
     private static VaultModel ModelFromDetail(VaultDetailDto detail) => new()
@@ -199,7 +229,8 @@ public partial class VaultEdit : IAsyncDisposable
             if (created is not null)
             {
                 Toast.Success("Created", "VaultCreated");
-                Nav.NavigateTo($"/vaults/{created.Id}");
+                // R-24: created for a missing key, the new vault opens on that key to ask for its value.
+                Nav.NavigateTo(string.IsNullOrWhiteSpace(FilterKey) ? $"/vaults/{created.Id}" : LocalReturnUrl.Append($"/vaults/{created.Id}?key={Uri.EscapeDataString(FilterKey.Trim())}", ReturnUrl));
             }
         }
         else
@@ -288,7 +319,12 @@ public partial class VaultEdit : IAsyncDisposable
         {
             _newSecret = new NewSecretModel();
             Toast.Success("Added", "SecretAdded");
-            await ReloadDetail();
+            ShowSecret(secret);
+        }
+        else
+        {
+            // Refused (a 409 included): the rows and the typed fields stay as they were.
+            Toast.Error("Error", "SaveFailed");
         }
     }
 
@@ -319,7 +355,7 @@ public partial class VaultEdit : IAsyncDisposable
                 return;
             }
             Toast.Success("Saved", "SecretUpdated");
-            await ReloadDetail();
+            ShowSecret(updated);
         }
     }
 
@@ -352,7 +388,7 @@ public partial class VaultEdit : IAsyncDisposable
                 return;
             }
             Toast.Success("Rotated", "SecretRotated");
-            await ReloadDetail();
+            ShowSecret(rotated);
         }
     }
 
@@ -372,7 +408,7 @@ public partial class VaultEdit : IAsyncDisposable
                 return;
             }
             Toast.Success("Deleted", "SecretDeleted");
-            await ReloadDetail();
+            HideSecret(secretId);
         });
     }
 
@@ -419,7 +455,12 @@ public partial class VaultEdit : IAsyncDisposable
         if (result is not null)
         {
             Toast.Success("Imported", "SecretsImported", result.ImportedCount);
-            await ReloadDetail();
+            // The answer carries a count, not the rows: the detail is read again, in the background.
+            ReadDetailBehind();
+        }
+        else
+        {
+            Toast.Error("Error", "SaveFailed");
         }
     }
 
@@ -475,9 +516,62 @@ public partial class VaultEdit : IAsyncDisposable
 
     private async Task ReloadDetail()
     {
+        // A read still running behind a secret change is older than this one: its answer is dropped.
+        _detailRead++;
         _detail = await Api.Variables.GetVaultDetailAsync(Id!.Value);
         // R-64: the page's own save (a rename, a secret) can change who reads the vault.
         await RefreshUsageAsync();
+    }
+
+    // R-10: a secret added, saved, rotated or deleted shows at once from the action's answer; the detail is then
+    // read again in the background and replaces the local rows, unless a newer change or read came in meanwhile.
+    private int _detailRead;
+
+    private void ShowSecret(VaultSecretDto secret)
+    {
+        ChangeSecrets(held => held.Exists(s => s.Id == secret.Id)
+            ? held.Select(s => s.Id == secret.Id ? secret : s)
+            : [.. held, secret]);
+        ReadDetailBehind();
+    }
+
+    private void HideSecret(int secretId)
+    {
+        ChangeSecrets(held => held.Where(s => s.Id != secretId));
+        ReadDetailBehind();
+    }
+
+    private void ChangeSecrets(Func<List<VaultSecretDto>, IEnumerable<VaultSecretDto>> change)
+    {
+        if (_detail is null) return;
+        var secrets = change(_detail.Secrets).ToList();
+        _detail = _detail with { Secrets = secrets, SecretCount = secrets.Count };
+        _detailRead++;
+    }
+
+    /// <summary>The read started by the last secret change, for a caller that must wait for it.</summary>
+    internal Task BackgroundDetailRead { get; private set; } = Task.CompletedTask;
+
+    private void ReadDetailBehind() => BackgroundDetailRead = ReadDetailBehindAsync();
+
+    private async Task ReadDetailBehindAsync()
+    {
+        var read = ++_detailRead;
+        var generation = _loadGeneration;
+        var key = CurrentKey();
+        try
+        {
+            var detail = await Api.Variables.GetVaultDetailAsync(Id!.Value);
+            if (detail is null || read != _detailRead || !IsCurrentLoad(generation, key)) return;
+            _detail = detail;
+            await RefreshUsageAsync();
+        }
+        catch (HttpRequestException)
+        {
+            // The action succeeded and its change is drawn; a failed read leaves the rows as they are.
+            return;
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private static OmniTone GetExpiryBadge(DateTime expiresAt)

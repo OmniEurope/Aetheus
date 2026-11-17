@@ -44,7 +44,7 @@ public sealed class TeamspeakSetupOperationExecutor(
 
         // Validate before the OS check so a malformed request is rejected without spawning anything
         // on any platform (mirrors MailOperationExecutor / PackageOperationExecutor).
-        if (!OperationTargetValidator.TeamspeakInstallPathRegex().IsMatch(target) ||
+        if (!OperationTargetValidator.TeamspeakSetupInstallPathRegex().IsMatch(target) ||
             voicePort is null || queryPort is null)
         {
             logger.LogWarning("Rejected teamspeak setup with invalid parameters");

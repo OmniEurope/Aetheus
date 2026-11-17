@@ -52,10 +52,8 @@ public class RkhunterRepository(AppDbContext db, TimeProvider timeProvider) : IR
         await ServerTaskRepositoryOperations.AddTaskAsync(db, task, ct).ConfigureAwait(false);
     }
 
-    public async Task UpdateScanScheduleAsync(int serverId, string? cronExpression, CancellationToken ct = default)
-    {
-        await UpdateStateAsync(serverId, state => state.ScanScheduleCron = cronExpression, ct).ConfigureAwait(false);
-    }
+    public Task<bool> UpdateScanScheduleAsync(int serverId, string? cronExpression, CancellationToken ct = default) =>
+        UpdateStateAsync(serverId, state => state.ScanScheduleCron = cronExpression, ct);
 
     public async Task<List<RkhunterState>> GetScheduledStatesAsync(CancellationToken ct = default)
     {
@@ -74,12 +72,14 @@ public class RkhunterRepository(AppDbContext db, TimeProvider timeProvider) : IR
             ct).ConfigureAwait(false);
     }
 
-    private async Task UpdateStateAsync(int serverId, Action<RkhunterState> update, CancellationToken ct)
+    /// <summary>False when the server has no rkhunter state (rkhunter never installed): nothing is written.</summary>
+    private async Task<bool> UpdateStateAsync(int serverId, Action<RkhunterState> update, CancellationToken ct)
     {
         var state = await db.RkhunterStates.FirstOrDefaultAsync(item => item.ServerId == serverId, ct)
             .ConfigureAwait(false);
-        if (state is null) return;
+        if (state is null) return false;
         update(state);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
     }
 }

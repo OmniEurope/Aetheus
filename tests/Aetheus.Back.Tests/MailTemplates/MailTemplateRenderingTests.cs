@@ -31,7 +31,7 @@ public sealed class MailTemplateRenderingTests
     {
         var mail = NotificationMailKit.Build(FailedRun, "https://aetheus.example.org", languageJson: "\"fr-FR\"");
 
-        Assert.Equal("[Aetheus] Échec de l'exécution du pipeline : publish-observability-packages", mail.Subject);
+        Assert.Equal("Aetheus - Aetheus - Échec", mail.Subject);
         Assert.Contains("lang=\"fr\"", mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains(Banner, mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains("Notification de la plateforme", mail.HtmlBody, StringComparison.Ordinal);
@@ -39,7 +39,7 @@ public sealed class MailTemplateRenderingTests
         Assert.Contains("href=\"https://aetheus.example.org/pipelines/runs/2698\"", mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains("Voir l'exécution et ses journaux", mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains(FailedBadge, mail.HtmlBody, StringComparison.Ordinal);
-        Assert.Contains("Numéro de build\t11", mail.TextBody, StringComparison.Ordinal);
+        Assert.Contains("Numéro d'exécution\t#11", mail.TextBody, StringComparison.Ordinal);
         // The banner states the event: the raw event key is never shown.
         Assert.DoesNotContain("Événement source", mail.TextBody, StringComparison.Ordinal);
         Assert.DoesNotContain("pipeline.failed", mail.TextBody, StringComparison.Ordinal);
@@ -65,11 +65,11 @@ public sealed class MailTemplateRenderingTests
     }
 
     /// <summary>
-    /// Golden structure: banner first, then the explanation, the detail table, the action button to the event's page,
+    /// Golden structure (recette R-27): banner first, then the action button to the event's page, the explanation, the detail table,
     /// in that order, and nothing left unrendered.
     /// </summary>
     [Fact]
-    public void TheDefaultNotification_KeepsItsStructure_BannerDetailsButton()
+    public void TheDefaultNotification_KeepsItsStructure_BannerButtonDetails()
     {
         var mail = NotificationMailKit.Build(FailedRun, "https://aetheus.example.org");
         var html = mail.HtmlBody!;
@@ -79,7 +79,7 @@ public sealed class MailTemplateRenderingTests
         var details = html.IndexOf(">Event details</h3>", StringComparison.Ordinal);
         var badge = html.IndexOf(FailedBadge + "\">Failed</span>", StringComparison.Ordinal);
         var button = html.IndexOf(ActionButton, StringComparison.Ordinal);
-        Assert.True(banner >= 0 && banner < intro && intro < details && details < badge && badge < button,
+        Assert.True(banner >= 0 && banner < button && button < intro && intro < details && details < badge,
             $"banner {banner}, intro {intro}, details {details}, badge {badge}, button {button}");
         Assert.Contains("href=\"https://aetheus.example.org/pipelines/runs/2698\" target=\"_blank\" rel=\"noopener noreferrer\">View execution and logs</a>",
             html, StringComparison.Ordinal);
@@ -106,7 +106,7 @@ public sealed class MailTemplateRenderingTests
     {
         var mail = NotificationMailKit.Build(FailedRun, "https://aetheus.example.org", languageJson: languageJson);
 
-        Assert.StartsWith("[Aetheus] Pipeline execution failed: ", mail.Subject, StringComparison.Ordinal);
+        Assert.StartsWith("Aetheus - Aetheus - Failure", mail.Subject, StringComparison.Ordinal);
         Assert.Contains("lang=\"en\"", mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains(Banner, mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains(ActionButton, mail.HtmlBody, StringComparison.Ordinal);
@@ -134,7 +134,7 @@ public sealed class MailTemplateRenderingTests
             mail.HtmlBody, StringComparison.Ordinal);
         Assert.DoesNotContain(Banner, mail.HtmlBody, StringComparison.Ordinal);
         // The English recipient keeps the default template: the stored one is French only.
-        Assert.StartsWith("[Aetheus] Pipeline execution failed: ", english.Subject, StringComparison.Ordinal);
+        Assert.StartsWith("Aetheus - Aetheus - Failure", english.Subject, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public sealed class MailTemplateRenderingTests
         await emailer.SendChannelTestAsync("admin@x.org", "Équipe ops", Ct);
 
         await sender.Received(1).SendAsync(Arg.Is<EmailMessage>(message =>
-            message.Subject == "[Aetheus] Test du canal de notification : « Équipe ops »"
+            message.Subject == "Aetheus - Test"
             && message.TextBody.Contains("Canal : Équipe ops")
             && message.HtmlBody!.Contains(OmniMailTheme.From(preset.With(palette)).Link, StringComparison.OrdinalIgnoreCase)), Arg.Any<CancellationToken>());
     }
@@ -227,7 +227,7 @@ public sealed class MailTemplateRenderingTests
 
         Assert.Equal("Essai : Équipe exploitation", french.Subject);
         Assert.Contains("Bonjour, Équipe exploitation", french.Text, StringComparison.Ordinal);
-        Assert.StartsWith("[Aetheus] Notification channel test", english.Subject, StringComparison.Ordinal);
+        Assert.StartsWith("Aetheus - Test", english.Subject, StringComparison.Ordinal);
     }
 
     [Fact]

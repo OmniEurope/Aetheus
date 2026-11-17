@@ -37,8 +37,27 @@ public sealed class PortAllocationService(
         };
     }
 
-    public async Task<List<VariableEntryDto>> AllocateIntoLibraryAsync(
+    public Task<List<VariableEntryDto>> AllocateIntoLibraryAsync(
         int libraryId, int serverId, IReadOnlyList<string> keys, CancellationToken ct = default)
+        => AllocateCoreAsync(libraryId, serverId, keys, replaceExisting: false, ct);
+
+    public Task<List<VariableEntryDto>> ReallocateInLibraryAsync(
+        int libraryId, int serverId, IReadOnlyList<string> keys, CancellationToken ct = default)
+        => AllocateCoreAsync(libraryId, serverId, keys, replaceExisting: true, ct);
+
+    public async Task<List<int>> PreviewFreePortsAsync(
+        int libraryId, int serverId, int count, CancellationToken ct = default)
+    {
+        _ = await repo.FindLibraryScopeAsync(libraryId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException($"Variable library {libraryId} was not found.");
+        return await registry.PeekFreePortsAsync(serverId, count, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>With <paramref name="replaceExisting"/> a key that already holds a value is given a new
+    /// port (the reallocation the port check offers after a conflict) and the port it held is released
+    /// for the library's project; without it such a key is refused.</summary>
+    private async Task<List<VariableEntryDto>> AllocateCoreAsync(
+        int libraryId, int serverId, IReadOnlyList<string> keys, bool replaceExisting, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(keys);
 
@@ -57,23 +76,32 @@ public sealed class PortAllocationService(
         // empty) and refused when it carries a value, before any port is reserved: a value somebody typed
         // is not overwritten behind their back.
         var existing = await repo.FindEntriesByKeyAsync(libraryId, normalized, ct).ConfigureAwait(false);
-        var holding = existing.Where(entry => !string.IsNullOrWhiteSpace(entry.Value)).Select(entry => entry.Key).ToList();
-        if (holding.Count > 0)
+        var holdingEntries = existing.Where(entry => !string.IsNullOrWhiteSpace(entry.Value)).ToList();
+        if (holdingEntries.Count > 0 && !replaceExisting)
             throw new BadRequestException(
-                $"{string.Join(", ", holding.Select(key => $"'{key}'"))} already holds a value in "
+                $"{string.Join(", ", holdingEntries.Select(entry => $"'{entry.Key}'"))} already holds a value in "
                 + $"'{scope.LibraryName}'; empty it first, or name another key.");
         var existingIds = existing.ToDictionary(entry => entry.Key, entry => entry.Id, StringComparer.Ordinal);
 
         // One transaction, now that the scope is re-entrant: the library service opens its own inside
         // this one and joins it instead of making EF refuse a nested begin. The compensation below
         // stays as the belt for the provider that has no transactions at all.
-        return transaction.IsRelational
+        var written = transaction.IsRelational
             ? await transaction
                 .ExecuteInTransactionAsync(
                     () => WriteAsync(libraryId, serverId, projectId, scope, normalized, existingIds, ct), ct)
                 .ConfigureAwait(false)
             : await WriteAsync(libraryId, serverId, projectId, scope, normalized, existingIds, ct)
                 .ConfigureAwait(false);
+
+        // The ports the replaced values held are no longer wanted: released only where this project holds them.
+        foreach (var entry in holdingEntries)
+        {
+            if (int.TryParse(entry.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var oldPort))
+                await ReleaseLibraryPortAsync(libraryId, oldPort, ct).ConfigureAwait(false);
+        }
+
+        return written;
     }
 
     public async Task<int?> GetLibraryProjectIdAsync(int libraryId, CancellationToken ct = default)

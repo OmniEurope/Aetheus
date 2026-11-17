@@ -43,6 +43,18 @@ public sealed class PipelineRunDeployedTileTests : BunitContext
     }
 
     [Fact]
+    public void TheTitle_IsAlignedToTheStart()
+    {
+        var cut = Tile(new PipelineRunDto
+        {
+            Status = PipelineStatus.Success,
+            DeployedAddress = new PipelineRunDeployedAddressDto { AppUrl = "https://app.example.test" }
+        });
+
+        Assert.Contains("omni-fact-tile--title-start", cut.Find(".run-deployed-tile").ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnApplicationWithoutAnAddressOfItsOwnForTheApi_HasOnlyTheApplicationLink()
     {
         var cut = Tile(new PipelineRunDto

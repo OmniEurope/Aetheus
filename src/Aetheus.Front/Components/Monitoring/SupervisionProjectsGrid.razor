@@ -15,7 +15,7 @@
 <OmniDataGrid TItem="SupervisionRow" Items="@Rows" KeyOf="@(row => row.Key)" ExportTitle="@ExportContext.Title(L["Supervision"])" ExportFields="@ExportContext.Fields()"
     ShowLoadingBar="true" Busy="@IsLoading" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_groups" GroupLabel="@GroupLabel"
-    ExpandMode="OmniDataGridRowMode.Single" OnRowClick="@(args => Nav.NavigateTo(args.Item.Href))"
+    ExpandMode="OmniDataGridRowMode.Single" @bind-ExpandedKeys="_expandedKeys" OnRowClick="@(args => Nav.NavigateTo(args.Item.Href))"
     EmptyText="@L["NoMonitoredApps"].Value" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
     Class="dashboard-clickable-grid supervision-projects-grid aetheus-grid-fullheight">
     <EmptyContent>
@@ -62,12 +62,9 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="SupervisionRow" Property="OnlineVisitors" Title="@L["CurrentVisitors"]" Width="8rem"
             Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators"
-            Visible="@(Rows.Any(row => row.OnlineVisitors.HasValue))">
+            Visible="@(Rows.Any(row => row.OnlineVisitorState != OnlineAudienceState.Unavailable))">
             <Template Context="row">
-                @if (row.OnlineVisitors is int online)
-                {
-                    <span title="@L["OnlineUsersAvailable"]">@online</span>
-                }
+                <OnlineAudienceValue Count="@row.OnlineVisitors" State="@row.OnlineVisitorState" LastEventAt="@row.OnlineVisitorLastEventAt" />
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="SupervisionRow" Property="LastEventAt" Value="@LocalLastEventAt" Title="@L["LastEventReceived"]" Width="11rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">

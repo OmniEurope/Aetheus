@@ -34,7 +34,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         var tail = Math.Clamp(request.Tail, 1, 10000);
         var command = $"docker logs --tail {tail} {request.ContainerId}";
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker logs - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 15), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"{ServerTaskNames.DockerLogsPrefix}{request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 15), ct).ConfigureAwait(false);
         return "Log retrieval task queued.";
     }
 
@@ -96,7 +96,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         };
 
         await QueueTaskAsync(TypedOperation(
-            serverId, $"Compose {request.Action} - {request.StackName}", operation, request.StackName, 120), ct).ConfigureAwait(false);
+            serverId, $"{ServerTaskNames.ComposeActionPrefix}{request.Action} - {request.StackName}", operation, request.StackName, 120), ct).ConfigureAwait(false);
     }
 
     public async Task<List<DockerNetworkDto>> GetNetworksAsync(int serverId, CancellationToken ct = default)
@@ -181,7 +181,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidContainerId(containerId))
             throw new BadRequestException("Invalid container ID.");
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker inspect - {containerId[..Math.Min(12, containerId.Length)]}", $"docker inspect {containerId}", 15), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"{ServerTaskNames.DockerInspectPrefix}{containerId[..Math.Min(12, containerId.Length)]}", $"docker inspect {containerId}", 15), ct).ConfigureAwait(false);
     }
 
     public async Task GetComposeFileAsync(int serverId, string stackName, CancellationToken ct = default)
@@ -212,7 +212,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
             throw new BadRequestException("Command is required.");
 
         await QueueTaskAsync(PayloadOperation(
-            serverId, $"Docker exec - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}",
+            serverId, ServerTaskNames.DockerExecPrefix + request.ContainerId[..Math.Min(12, request.ContainerId.Length)],
             OperationKind.DockerExecScript, request.ContainerId, "AETHEUS_DOCKER_EXEC_B64", request.Command, 30), ct).ConfigureAwait(false);
         await audit.LogAsync("DockerExec", "Server", serverId, request.ContainerId[..Math.Min(12, request.ContainerId.Length)], ct).ConfigureAwait(false);
     }
@@ -222,7 +222,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidContainerId(containerId))
             throw new BadRequestException("Invalid container ID.");
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker env - {containerId[..Math.Min(12, containerId.Length)]}", $"docker inspect --format='{{{{json .Config.Env}}}}' {containerId}", 15), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"{ServerTaskNames.DockerEnvPrefix}{containerId[..Math.Min(12, containerId.Length)]}", $"docker inspect --format='{{{{json .Config.Env}}}}' {containerId}", 15), ct).ConfigureAwait(false);
     }
 
     public async Task ListContainerFilesAsync(int serverId, DockerBrowseRequest request, CancellationToken ct = default)
@@ -236,7 +236,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         // interpreted as an `ls` option, and avoid wrapping the whole thing in `sh -c`.
         var command = $"docker exec {request.ContainerId} ls -la -- {request.Path}";
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker ls - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 15), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"{ServerTaskNames.DockerListPrefix}{request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 15), ct).ConfigureAwait(false);
     }
 
     public async Task BuildImageAsync(int serverId, DockerBuildRequest request, CancellationToken ct = default)

@@ -10,6 +10,9 @@ public partial class ServerCronSection : ServerActionSectionBase
 
     private string _jobSearch = string.Empty;
 
+    // R-19: deleting a job is a one-off action followed by the follower's progress block; no page-wide veil.
+    protected override bool VeilsConfirmedActionOnPage => false;
+
     private CronDataDto Cron => Server.Cron;
 
     // Each heartbeat brings a new job list; jobs that were not there read bold.
@@ -88,6 +91,13 @@ public partial class ServerCronSection : ServerActionSectionBase
         }
         _actionRunning = false;
     }
+
+    /// <summary>Recette R-12: what a task adopted on arrival ("Cron delete - j1") is called, as the page names its own.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.Key(L, "Cron save - ", "Save"),
+        ServerAdoptedTaskTitles.Key(L, "Cron delete - ", "DeleteCronJob")
+    ]);
 
     private async Task DeleteJobAsync(CronJobDto job)
     {

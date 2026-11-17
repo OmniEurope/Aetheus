@@ -136,8 +136,8 @@ const refusals = [
   { helper: "portsentry/portsentry-setup", bad: ["atcp\nx", "80", "53"], reason: /invalid mode/, good: ["atcp", "80", "53"], reaches: "apt-get" },
   { helper: "portsentry/portsentry-setup", bad: ["atcp", "80\n22", "53"], reason: /invalid tcp ports/, good: ["atcp", "80,22", "53"], reaches: "apt-get" },
   { helper: "portsentry/portsentry-setup", bad: ["atcp", "80", "53\r"], reason: /invalid udp ports/, good: ["atcp", "80", "53"], reaches: "apt-get" },
-  { helper: "teamspeak/teamspeak-setup", bad: ["/srv/ts\n/etc"], reason: /invalid install path/, good: ["/srv/ts"], reaches: "systemctl" },
-  { helper: "teamspeak/teamspeak-setup", bad: ["/srv/ts", "9987\n1"], reason: /invalid voice port/, good: ["/srv/ts", "9987"], reaches: "systemctl" },
+  { helper: "teamspeak/teamspeak-setup", bad: ["/opt/teamspeak3-server_linux_amd64\n/etc"], reason: /invalid install path/, good: ["/opt/teamspeak3-server_linux_amd64"], reaches: "systemctl" },
+  { helper: "teamspeak/teamspeak-setup", bad: ["/opt/teamspeak3-server_linux_amd64", "9987\n1"], reason: /invalid voice port/, good: ["/opt/teamspeak3-server_linux_amd64", "9987"], reaches: "systemctl" },
   { helper: "firewall/aetheus-firewall", bad: ["allow", "8080", "tcp\nudp"], reason: /invalid protocol/, good: ["allow", "8080", "tcp"], reaches: "ufw allow" },
   { helper: "firewall/aetheus-firewall", bad: ["allow", "8080", "tcp", "10.0.0.1\n0.0.0.0/0"], reason: /invalid source/, good: ["allow", "8080", "tcp", "10.0.0.1"], reaches: "ufw allow" },
   { helper: "mail/mail-setup", bad: ["mail.example.com\nx.org", "example.com", "s1", "admin@example.com", "1024"], reason: /invalid hostname/, good: ["mail.example.com", "example.com", "s1", "admin@example.com", "1024"], reaches: "debconf-set-selections", input: "longpassword\n" },
@@ -337,19 +337,27 @@ test("unblock-ip keeps hosts.deny when it cannot be read", () => {
 // Treat an installed TeamSpeak service that cannot start as a failure. See
 // docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
+// DEPLOY-001: the dedicated install parent is checked character by character, so it is given in the
+// shell's form under the temporary root.
+const shellTsParent = text => text.replace("TS_PARENT=/opt\n", "TS_PARENT=@SHROOT@/opt\n");
+
+function setUpTeamspeak(stubs = {}) {
+  const env = setUp("teamspeak/teamspeak-setup", { stubs, rewrite: shellTsParent });
+  assert.ok(env.text.includes(`TS_PARENT=${env.shRoot}/opt\n`), "the TeamSpeak install parent was rebased");
+  return env;
+}
+
 function teamspeak({ active, start = "0", unit = true }) {
   const state = `"$(dirname "$0")/../active"`;
-  const env = setUp("teamspeak/teamspeak-setup", {
-    stubs: {
-      systemctl: `case "$1" in
+  const env = setUpTeamspeak({
+    systemctl: `case "$1" in
   is-active) [ -f ${state} ] && exit 0; exit 3 ;;
   start) [ ${start} -eq 0 ] || exit ${start}; ${active === "after-start" ? `touch ${state}` : ":"} ;;
 esac`
-    }
   });
   if (active === true) env.write("/active", "");
-  env.write("/srv/ts/ts3server", "#!/bin/sh\n");
-  chmodSync(env.file("/srv/ts/ts3server"), 0o755);
+  env.write("/opt/teamspeak3-server/ts3server", "#!/bin/sh\n");
+  chmodSync(env.file("/opt/teamspeak3-server/ts3server"), 0o755);
   env.directory("/etc/systemd/system");
   if (unit) env.write("/etc/systemd/system/teamspeak3.service", "[Unit]\n");
   return env;
@@ -358,7 +366,7 @@ esac`
 test("teamspeak-setup leaves a running server untouched", () => {
   const env = teamspeak({ active: true });
   try {
-    const result = env.run([`${env.shRoot}/srv/ts`]);
+    const result = env.run([`${env.shRoot}/opt/teamspeak3-server`]);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /leaving it untouched/);
     assert.ok(!env.calls().some(call => call.startsWith("systemctl start")));
@@ -368,7 +376,7 @@ test("teamspeak-setup leaves a running server untouched", () => {
 test("teamspeak-setup fails when the installed server does not start", () => {
   const env = teamspeak({ active: false, start: "1" });
   try {
-    const result = env.run([`${env.shRoot}/srv/ts`]);
+    const result = env.run([`${env.shRoot}/opt/teamspeak3-server`]);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /teamspeak3 did not start/);
     assert.ok(!env.calls().some(call => call.startsWith("curl")), "the installed files are not downloaded again");
@@ -378,7 +386,7 @@ test("teamspeak-setup fails when the installed server does not start", () => {
 test("teamspeak-setup fails when the started unit does not stay active", () => {
   const env = teamspeak({ active: false });
   try {
-    const result = env.run([`${env.shRoot}/srv/ts`]);
+    const result = env.run([`${env.shRoot}/opt/teamspeak3-server`]);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /teamspeak3 is not active/);
   } finally { env.cleanup(); }
@@ -387,7 +395,7 @@ test("teamspeak-setup fails when the started unit does not stay active", () => {
 test("teamspeak-setup writes a missing unit again and starts the installed server", () => {
   const env = teamspeak({ active: "after-start", unit: false });
   try {
-    const result = env.run([`${env.shRoot}/srv/ts`]);
+    const result = env.run([`${env.shRoot}/opt/teamspeak3-server`]);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /without the teamspeak3 unit - writing it again[\s\S]*started the existing server/);
     assert.ok(existsSync(env.file("/etc/systemd/system/teamspeak3.service")));
@@ -461,9 +469,9 @@ test("aetheus-certbot-manage announces its helper version, marker and verb agree
   try {
     const result = env.run(["version"]);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout.trim(), "aetheus-certbot-helper-version: 9");
+    assert.equal(result.stdout.trim(), "aetheus-certbot-helper-version: 11");
     const script = readFileSync(join(helpersRoot, "certbot/aetheus-certbot-manage"), "utf8");
-    assert.match(script, /^# aetheus-certbot-helper-version: 9$/m);
+    assert.match(script, /^# aetheus-certbot-helper-version: 11$/m);
   } finally { env.cleanup(); }
 });
 
@@ -494,6 +502,58 @@ for (const [label, issuer, renewal, removedLocally] of deleteCases) {
     } finally { env.cleanup(); }
   });
 }
+
+// --- aetheus-certbot-manage delete: certbot's global lock and unknown lineages (recette R-48) ---
+// A stand-in certbot replaying the two messages certbot prints (certbot/_internal/lock.py: "Another instance of
+// Certbot is already running."; cert_manager.py: "No certificate found with name"). It fails with exit code 1 for the
+// first `busyRuns` calls, then succeeds, so the helper's wait is observed through the number of calls.
+const lockedCertbot = busyRuns => `n=$(cat "$(dirname "$0")/../runs" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "$(dirname "$0")/../runs"
+if [ "$n" -le ${busyRuns} ]; then echo "Another instance of Certbot is already running." >&2; exit 1; fi
+echo "Deleted all files relating to certificate app.w9.test."; exit 0`;
+const lockWaitEnv = { AETHEUS_CERTBOT_LOCK_WAIT_SECONDS: "2", AETHEUS_CERTBOT_LOCK_RETRY_SECONDS: "1" };
+
+test("delete waits for certbot's lock and then deletes the lineage", () => {
+  const env = setUp("certbot/aetheus-certbot-manage", { stubs: { certbot: lockedCertbot(1) } });
+  try {
+    env.write("/etc/letsencrypt/renewal/app.w9.test.conf", "authenticator = webroot\n");
+    const result = env.run(["delete", "app.w9.test"], { env: lockWaitEnv });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(env.calls().filter(call => call.startsWith("certbot delete")).length, 2, "tried again once the lock was free");
+    assert.match(result.stdout, /Deleted all files relating to certificate/);
+  } finally { env.cleanup(); }
+});
+
+test("delete reports a distinct busy outcome (exit 75) when certbot's lock stays held", () => {
+  const env = setUp("certbot/aetheus-certbot-manage", { stubs: { certbot: lockedCertbot(99) } });
+  try {
+    env.write("/etc/letsencrypt/renewal/app.w9.test.conf", "authenticator = webroot\n");
+    const result = env.run(["delete", "app.w9.test"], { env: lockWaitEnv });
+    assert.equal(result.status, 75, result.stderr);
+    assert.match(result.stderr, /Another instance of Certbot is already running/);
+    assert.match(result.stderr, /certbot is still busy/);
+    assert.ok(env.calls().filter(call => call.startsWith("certbot delete")).length >= 2, "waited and retried before giving up");
+  } finally { env.cleanup(); }
+});
+
+test("delete reports a lineage certbot does not know with its own exit code (76), not as a generic failure", () => {
+  const unknown = 'echo "No certificate found with name \'app.w9.test\' (expected one of: other.example.com)." >&2; exit 1';
+  const env = setUp("certbot/aetheus-certbot-manage", { stubs: { certbot: unknown } });
+  try {
+    const result = env.run(["delete", "app.w9.test"], { env: lockWaitEnv });
+    assert.equal(result.status, 76, result.stderr);
+    assert.match(result.stderr, /No certificate found with name/);
+    assert.equal(env.calls().filter(call => call.startsWith("certbot delete")).length, 1, "no retry for an unknown lineage");
+  } finally { env.cleanup(); }
+});
+
+test("delete keeps certbot's own exit code and output for any other failure", () => {
+  const env = setUp("certbot/aetheus-certbot-manage", { stubs: { certbot: 'echo "Failed to delete the lineage." >&2; exit 1' } });
+  try {
+    const result = env.run(["delete", "app.w9.test"], { env: lockWaitEnv });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /Failed to delete the lineage/);
+  } finally { env.cleanup(); }
+});
 
 // --- aetheus-certbot-manage normalize: the server-wide ACME alias ---------------------------------
 // Lets Encrypt follows the HTTP to HTTPS redirect of a vhost Aetheus does not own, and the HTTPS vhost
@@ -1071,6 +1131,150 @@ test("renewal-check drops control characters of certbot output before recording 
   assert.equal(tail[1], "output=colored [31merror[0m with CR");
 });
 
+// --- aetheus-certbot-manage renewal-check <names> (recette R-13 and R-19) ---------------------------
+// The dry run of only the named lineages, one after the other, merged into the recorded state; and certbot's
+// own log copied to the task output when a run fails. certbot is a stand-in: the lineages listed in `failing`
+// print the given output and exit 1, every other one passes. The state file and the log are written first.
+const recordedState = (failures, { exit = 1, output = [] } = {}) =>
+  `checked_at=1700000000\nexit_code=${exit}\n${failures.map(([name, reason]) => `failed=${name}\t${reason}\n`).join("")}${output.map(line => `output=${line}\n`).join("")}`;
+const targetedCheck = ({ names, failing = {}, prior, certbotLog }) => {
+  const cases = Object.entries(failing).map(([name, output]) => `${name}) cat <<'CERTBOT_OUTPUT'\n${output}\nCERTBOT_OUTPUT\nexit 1;;`).join("\n");
+  const env = setUp("certbot/aetheus-certbot-manage", { stubs: { certbot: `case "$4" in\n${cases}\n*) echo "Simulating renewal of $4: success";;\nesac` } });
+  try {
+    if (prior !== undefined) env.write("/var/lib/aetheus-certbot/renewal-check", prior);
+    if (certbotLog !== undefined) env.write("/var/log/letsencrypt/letsencrypt.log", certbotLog);
+    const result = env.run(["renewal-check", ...names]);
+    const statePath = env.file("/var/lib/aetheus-certbot/renewal-check");
+    const state = existsSync(statePath) ? readFileSync(statePath, "utf8").split("\n").filter(Boolean) : null;
+    return {
+      result, state, calls: env.calls().filter(call => call.startsWith("certbot")),
+      failed: state?.filter(line => line.startsWith("failed=")).map(line => line.slice("failed=".length).split("\t")[0]),
+      tail: state?.filter(line => line.startsWith("output="))
+    };
+  } finally { env.cleanup(); }
+};
+const randomFails = failedChallenge("random.example.com", "random.example.com", "malformed", "authorization must be pending");
+
+test("renewal-check with a name rehearses only that lineage, with --cert-name", () => {
+  const { result, calls } = targetedCheck({ names: ["shop.example.com"], prior: recordedState([["shop.example.com", "old"]]) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls, ["certbot renew --dry-run --cert-name shop.example.com --non-interactive"]);
+});
+
+test("renewal-check with a name that passes takes it out of the failure list and keeps the other failures", () => {
+  const prior = recordedState([["random.example.com", "pending"], ["demo.example.com", "busy"]], { output: ["certbot renew --dry-run ran for 600 s and exited with code 1", "kept line"] });
+  const { result, state, failed, tail } = targetedCheck({ names: ["random.example.com"], prior });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(failed, ["demo.example.com"]);
+  assert.equal(state[1], "exit_code=1");
+  assert.ok(Number(state[0].slice("checked_at=".length)) > 1700000000, "the date is the new test");
+  assert.deepEqual(tail, ["output=certbot renew --dry-run ran for 600 s and exited with code 1", "output=kept line"]);
+});
+
+test("renewal-check with a name that passes turns the verdict to passed when it was the only failure", () => {
+  const { result, state, failed, tail } = targetedCheck({ names: ["random.example.com"], prior: recordedState([["random.example.com", "pending"]], { output: ["old tail"] }) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(state[1], "exit_code=0");
+  assert.deepEqual([failed, tail], [[], []]);
+});
+
+test("renewal-check with a name that fails keeps it in the list with its reason, and the others stay", () => {
+  const prior = recordedState([["random.example.com", "old reason"], ["demo.example.com", "busy"]]);
+  const { result, state, failed } = targetedCheck({ names: ["random.example.com"], failing: { "random.example.com": randomFails }, prior });
+  assert.equal(result.status, 1);
+  assert.deepEqual(failed.sort(), ["demo.example.com", "random.example.com"]);
+  assert.equal(state[1], "exit_code=1");
+  assert.ok(state.some(line => /^failed=random\.example\.com\tSome challenges have failed\./.test(line)), state.join("\n"));
+  assert.ok(!state.some(line => line.includes("old reason")), "the earlier reason of the retested lineage is replaced");
+  assert.ok(state.some(line => line.startsWith("output=certbot renew --dry-run ran for")));
+});
+
+test("renewal-check with a name certbot reported without naming a failure still lists that lineage", () => {
+  const { failed } = targetedCheck({ names: ["random.example.com"], failing: { "random.example.com": "Another instance of Certbot is already running." }, prior: recordedState([]) });
+  assert.deepEqual(failed, ["random.example.com"]);
+});
+
+test("renewal-check with several names rehearses them one after the other and merges each result", () => {
+  const prior = recordedState([["a.example.com", "x"], ["b.example.com", "y"], ["c.example.com", "z"]]);
+  const { result, calls, failed, state } = targetedCheck({
+    names: ["a.example.com", "b.example.com"], failing: { "b.example.com": failedChallenge("b.example.com", "b.example.com", "malformed", "authorization must be pending") }, prior
+  });
+  assert.equal(result.status, 1);
+  assert.deepEqual(calls, [
+    "certbot renew --dry-run --cert-name a.example.com --non-interactive",
+    "certbot renew --dry-run --cert-name b.example.com --non-interactive"
+  ]);
+  assert.deepEqual(failed.sort(), ["b.example.com", "c.example.com"]);
+  assert.equal(state[1], "exit_code=1");
+});
+
+test("renewal-check with a name keeps a failed earlier run that named no lineage as failed", () => {
+  const { state, tail } = targetedCheck({ names: ["shop.example.com"], prior: recordedState([], { output: ["Another instance of Certbot is already running."] }) });
+  assert.equal(state[1], "exit_code=1");
+  assert.deepEqual(tail, ["output=Another instance of Certbot is already running."]);
+});
+
+test("renewal-check with a name and no recorded full run records a failure but not a lone pass", () => {
+  const passing = targetedCheck({ names: ["shop.example.com"] });
+  assert.equal(passing.result.status, 0, passing.result.stderr);
+  assert.equal(passing.state, null);
+  assert.match(passing.result.stdout, /No earlier full dry run is recorded/);
+  const failing = targetedCheck({ names: ["random.example.com"], failing: { "random.example.com": randomFails } });
+  assert.deepEqual(failing.failed, ["random.example.com"]);
+  assert.equal(failing.state[1], "exit_code=1");
+});
+
+for (const [label, args] of [
+  ["a name holding a line break", ["renewal-check", "ok.example.com", "bad\nname"]],
+  ["a name starting with a dash", ["renewal-check", "--force-renewal"]],
+  ["more than 64 names", ["renewal-check", ...Array.from({ length: 65 }, (_, index) => `c${index}.example.com`)]]
+]) {
+  test(`renewal-check refuses ${label} without running certbot`, () => {
+    const env = setUp("certbot/aetheus-certbot-manage");
+    try {
+      const result = env.run(args);
+      assert.equal(result.status, 2);
+      assert.deepEqual(env.calls().filter(call => call.startsWith("certbot")), []);
+      assert.ok(!existsSync(env.file("/var/lib/aetheus-certbot/renewal-check")));
+    } finally { env.cleanup(); }
+  });
+}
+
+const certbotLogFile = `2026-10-30 13:25:18,001:DEBUG:certbot._internal.main:certbot version: 2.11.0
+2026-10-30 13:25:19,002:DEBUG:acme.client:Received response:
+HTTP 400
+{"type": "urn:ietf:params:acme:error:rateLimited"}
+2026-10-30 13:25:19,003:WARNING:certbot._internal.renewal:Attempting to renew cert (random.example.com) failed
+2026-10-30 13:25:19,004:ERROR:certbot._internal.renewal:Failed to renew certificate random.example.com with error: urn:ietf:params:acme:error:malformed :: authorization must be pending
+2026-10-30 13:25:19,005:DEBUG:certbot._internal.renewal:Traceback was:
+Traceback (most recent call last):
+  File "acme/client.py", line 1, in answer_challenge
+acme.messages.Error: urn:ietf:params:acme:error:malformed :: authorization must be pending
+2026-10-30 13:25:19,006:DEBUG:certbot._internal.main:Exiting abnormally`;
+
+test("renewal-check copies the relevant lines of certbot's own log to the task output when a run fails", () => {
+  for (const names of [[], ["random.example.com"]]) {
+    const { result } = targetedCheck({
+      names, failing: { "random.example.com": randomFails, "*": randomFails },
+      prior: recordedState([["random.example.com", "x"]]), certbotLog: certbotLogFile
+    });
+    const out = result.stdout;
+    assert.match(out, /certbot's own log \(.*letsencrypt\.log\), relevant lines of this run/, `names=${names}`);
+    assert.match(out, /:WARNING:certbot\._internal\.renewal:Attempting to renew cert \(random\.example\.com\) failed/);
+    assert.match(out, /:ERROR:certbot\._internal\.renewal:Failed to renew certificate random\.example\.com with error: .*authorization must be pending/);
+    assert.match(out, /^acme\.messages\.Error: urn:ietf:params:acme:error:malformed :: authorization must be pending$/m);
+    assert.doesNotMatch(out, /certbot version: 2\.11\.0/, "debug entries are left out");
+    assert.doesNotMatch(out, /Exiting abnormally/);
+  }
+});
+
+test("renewal-check says so when certbot's own log is not readable, and prints no log section for a pass", () => {
+  const failing = targetedCheck({ names: ["random.example.com"], failing: { "random.example.com": randomFails }, prior: recordedState([]) });
+  assert.match(failing.result.stdout, /certbot's own log .* is not readable: no detail from it\./);
+  const passing = targetedCheck({ names: ["random.example.com"], prior: recordedState([["random.example.com", "x"]]), certbotLog: certbotLogFile });
+  assert.doesNotMatch(passing.result.stdout, /certbot's own log/);
+});
+
 // --- aetheus-agent-read-grant -------------------------------------------------------------------
 // Root-owned helper run by aetheus-agent-read-grant.service before every agent start: read-only POSIX ACLs
 // for the agent account on the SSH configuration. It is run for real on a fake tree; setfacl is a stand-in
@@ -1442,3 +1646,84 @@ for (const address of ["admin@example.com;id", "admin/x@example.com", "not-an-ad
     } finally { env.cleanup(); }
   });
 }
+
+// ---- DEPLOY-001: teamspeak-setup installs only into a dedicated /opt/teamspeak* directory -------------
+// Root extracts the server there and chowns it recursively to the teamspeak user, so a system
+// directory (/etc, /usr, /home) or a path that a symbolic link sends elsewhere must be refused before
+// anything runs.
+
+// SHA-256 of an empty file: the curl stand-in leaves the temporary download empty.
+const emptySha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+function freshTeamspeak() {
+  // Not installed, not running; sleep is a stand-in so the credential wait does not cost 12 seconds.
+  const env = setUpTeamspeak({ systemctl: 'case "$1" in is-active) exit 3 ;; esac', sleep: "exit 0" });
+  env.write("/etc/aetheus-agent/teamspeak.sha256", `${emptySha256}\n`);
+  env.directory("/etc/systemd/system");
+  env.directory("/opt");
+  return env;
+}
+
+for (const path of ["/etc", "/usr", "/home/teamspeak", "/opt", "/opt/", "/opt/other", "/opt/teamspeak/", "/opt/teamspeak/./x", "/opt/teamspeak//x", "/opt/teamspeak/.hidden"]) {
+  test(`teamspeak-setup refuses the install path ${path} before anything runs`, () => {
+    const env = freshTeamspeak();
+    try {
+      const result = env.run([`${env.shRoot}${path}`]);
+      assert.notEqual(result.status, 0, result.stdout);
+      assert.match(result.stderr, /invalid install path/);
+      assert.deepEqual(env.calls(), [], "nothing ran before the refusal");
+    } finally { env.cleanup(); }
+  });
+}
+
+test("teamspeak-setup refuses an absolute system path outside the dedicated parent", () => {
+  // The real /etc, not the rebased one: the parent check is what refuses it, not a missing directory.
+  const env = freshTeamspeak();
+  try {
+    const result = env.run(["/etc"]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /dedicated .*\/opt\/teamspeak\* directory/);
+    assert.deepEqual(env.calls(), []);
+  } finally { env.cleanup(); }
+});
+
+test("teamspeak-setup installs into the default dedicated directory and chowns only that directory", () => {
+  const env = freshTeamspeak();
+  try {
+    const target = `${env.shRoot}/opt/teamspeak3-server_linux_amd64`;
+    const result = env.run([target]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /installed at .*teamspeak3-server_linux_amd64/);
+    const calls = env.calls();
+    assert.ok(calls.some(call => call.startsWith("tar xjf ") && call.endsWith(`-C ${target} --strip-components=1`)), calls.join(" | "));
+    assert.ok(calls.includes(`chown -R -h teamspeak:teamspeak ${target}`), calls.join(" | "));
+    assert.ok(existsSync(env.file("/opt/teamspeak3-server_linux_amd64/ts3server.ini")));
+  } finally { env.cleanup(); }
+});
+
+posixTest("teamspeak-setup refuses an install path whose directory is a symbolic link", () => {
+  const env = freshTeamspeak();
+  try {
+    env.directory("/etc/x");
+    shell(`ln -s "${env.shRoot}/etc/x" "${env.shRoot}/opt/teamspeak-link"`);
+    assert.equal(spawnSync("test", ["-L", `${env.shRoot}/opt/teamspeak-link`]).status, 0, "the stand-in link is a real symbolic link");
+    const result = env.run([`${env.shRoot}/opt/teamspeak-link`]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /is a symbolic link/);
+    assert.deepEqual(env.calls(), [], "nothing ran, nothing was chowned");
+    assert.deepEqual(readdirSync(env.file("/etc/x")), []);
+  } finally { env.cleanup(); }
+});
+
+posixTest("teamspeak-setup refuses an install path with a symbolic link deeper on the way", () => {
+  const env = freshTeamspeak();
+  try {
+    env.directory("/opt/teamspeak3");
+    env.directory("/etc/x");
+    shell(`ln -s "${env.shRoot}/etc" "${env.shRoot}/opt/teamspeak3/data"`);
+    const result = env.run([`${env.shRoot}/opt/teamspeak3/data/x`]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /is a symbolic link/);
+    assert.deepEqual(env.calls(), []);
+  } finally { env.cleanup(); }
+});

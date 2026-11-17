@@ -29,6 +29,10 @@ internal static class PreferenceKeys
     public static string GettingStartedClosed(int projectId) =>
         "aetheus.projects." + projectId.ToString(CultureInfo.InvariantCulture) + ".getting-started-closed";
 
+    /// <summary>Set when the user ended the "Prepare this project" checklist of one project before it was complete (R-33).</summary>
+    public static string GettingStartedFinished(int projectId) =>
+        "aetheus.projects." + projectId.ToString(CultureInfo.InvariantCulture) + ".getting-started-finished";
+
     /// <summary>The node positions laid out by hand in one pipeline's Visual editor.</summary>
     public static string VisualLayout(int pipelineId) =>
         "aetheus.pipelines." + pipelineId.ToString(CultureInfo.InvariantCulture) + ".visual-layout";

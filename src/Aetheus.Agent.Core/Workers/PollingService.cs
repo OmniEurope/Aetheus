@@ -32,9 +32,14 @@ public sealed class PollingService(
     private readonly SemaphoreSlim _concurrencyGate = new(options.Value.MaxConcurrentTasks);
     internal readonly ConcurrentDictionary<int, TrackedTask> _runningTasks = new();
 
+    // R-12: stop reports still being sent for tasks that already left _runningTasks (the report goes out
+    // after the task left the table). Registered before the task leaves it, so the drain never misses one.
+    private readonly ConcurrentDictionary<int, Task> _pendingStopReports = new();
+
     private readonly ConcurrentDictionary<OperationKind, IOperationExecutor?> _operationExecutorCache = new();
 
-    internal sealed record TrackedTask(Task Execution, CancellationTokenSource Cts, bool IsSelfUpdate = false);
+    internal sealed record TrackedTask(
+        Task Execution, CancellationTokenSource Cts, bool IsSelfUpdate = false, int? PipelineRunId = null);
 
     private static readonly HashSet<string> TerminalStatuses =
         [nameof(TaskExecutionStatus.Success), nameof(TaskExecutionStatus.Failed),
@@ -153,6 +158,20 @@ public sealed class PollingService(
                 continue;
             }
 
+            if (HasCancelledTaskStillStopping(task))
+            {
+                // The control plane marks a cancelled step done at once and dispatches the always()/Cleanup
+                // stage, but the cancelled step's process tree is still being killed here (the executor
+                // awaits it). A second free slot must not start that stage beside it: both would touch the
+                // run's workspace and resource locks. The claim goes back to the queue until the step has
+                // left the tracking table.
+                logger.LogInformation(
+                    "Task {TaskId} is returning to the queue: a cancelled task of run {RunId} is still stopping",
+                    task.Id, task.PipelineRunId);
+                await apiClient.ReleaseTaskAsync(task.Id, stoppingToken).ConfigureAwait(false);
+                continue;
+            }
+
             if (!await _concurrencyGate.WaitAsync(0, stoppingToken).ConfigureAwait(false))
             {
                 // The claim already moved this task to Assigned on the control plane. Dropping it here
@@ -172,17 +191,30 @@ public sealed class PollingService(
             // completing execution would otherwise finish before TryAdd, leaving a ghost
             // entry whose disposed CTS then throws on every reconciliation pass.
             var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var executionTask = TrackTaskAsync(task, cts, registered.Task);
-            _runningTasks.TryAdd(task.Id, new TrackedTask(executionTask, cts, task.Operation == OperationKind.AgentSelfUpdate));
+            var executionTask = TrackTaskAsync(task, cts, registered.Task, stoppingToken);
+            _runningTasks.TryAdd(task.Id, new TrackedTask(
+                executionTask, cts, task.Operation == OperationKind.AgentSelfUpdate, task.PipelineRunId));
             MarkTaskActivity();
             registered.SetResult();
         }
     }
 
+    /// <summary>True when a task of the same pipeline run is still tracked after its token was cancelled
+    /// (server-side cancellation observed by the reconcile pass): its process tree may still be dying.</summary>
+    private bool HasCancelledTaskStillStopping(PendingTaskDto task) =>
+        task.PipelineRunId is { } runId
+        && _runningTasks.Values.Any(tracked =>
+            tracked.PipelineRunId == runId && tracked.Cts.IsCancellationRequested);
+
     // E-3 test seam: await all currently dispatched in-flight tasks so an assertion on a
     // task's terminal effect (StartTask/CompleteTask) is deterministic rather than time-raced.
-    internal Task DrainRunningTasksAsync() =>
-        Task.WhenAll(_runningTasks.Values.Select(t => t.Execution));
+    // The tracked tasks are snapshotted first, the stop reports second: a task that left the table in
+    // between registered its report before leaving, so one of the two snapshots always holds it.
+    internal Task DrainRunningTasksAsync()
+    {
+        var tracked = _runningTasks.Values.Select(t => t.Execution).ToList();
+        return Task.WhenAll(tracked.Concat(_pendingStopReports.Values));
+    }
 
     internal async Task ReconcileRunningTasksAsync(CancellationToken ct)
     {
@@ -207,15 +239,21 @@ public sealed class PollingService(
         }
     }
 
-    private async Task TrackTaskAsync(PendingTaskDto task, CancellationTokenSource cts, Task registered)
+    private async Task TrackTaskAsync(
+        PendingTaskDto task, CancellationTokenSource cts, Task registered, CancellationToken hostStopping)
     {
         await registered.ConfigureAwait(false);
         runtimeHealth.BeginTask();
         // R-33: the window a Testcontainers reaper started by this step's tests is attributed to.
         var pipelineWindow = task.PipelineRunId is null ? null : runtimeHealth.TrackPipelineTask();
+        var stoppedByServerCancellation = false;
+        TaskCompletionSource? stopReport = null;
         try
         {
-            await ExecuteTaskAsync(task, cts.Token).ConfigureAwait(false);
+            // A cancelled token with the host still running is the reconcile pass obeying the server;
+            // a host shutdown leaves the task for the control plane to time out and must not report it.
+            stoppedByServerCancellation = await ExecuteTaskAsync(task, cts.Token).ConfigureAwait(false)
+                                          && !hostStopping.IsCancellationRequested;
         }
         finally
         {
@@ -223,14 +261,41 @@ public sealed class PollingService(
             // must find its window closed, not still open until a later disposal.
             pipelineWindow?.Dispose();
             runtimeHealth.EndTask();
+            // Every task the server cancelled is reported once its stop is proven, a server operation as much as
+            // a pipeline step (ACORE-001): the control plane records that nothing of it remains on this agent.
+            if (stoppedByServerCancellation)
+            {
+                // Registered before the task leaves the table: whoever finds it gone (DrainRunningTasksAsync)
+                // still finds its report in flight.
+                stopReport = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _pendingStopReports[task.Id] = stopReport.Task;
+            }
+
             _runningTasks.TryRemove(task.Id, out _);
             MarkTaskActivity();
             cts.Dispose();
         }
+
+        // After the finally: the report says "nothing of this task remains here", so it goes out last.
+        if (stopReport is null)
+            return;
+
+        try
+        {
+            await ReportCancelledTaskStoppedAsync(task).ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingStopReports.TryRemove(task.Id, out _);
+            stopReport.SetResult();
+        }
     }
 
-    private async Task ExecuteTaskAsync(PendingTaskDto task, CancellationToken ct)
+    /// <summary>Runs the task. Returns true when it ended because its token was cancelled (the server-side
+    /// cancellation seen by the reconcile pass, or the host stopping), false when it ran to its own end.</summary>
+    private async Task<bool> ExecuteTaskAsync(PendingTaskDto task, CancellationToken ct)
     {
+        var cancelled = false;
         try
         {
             logger.LogInformation("Starting task {TaskId}: {Name}", task.Id, task.Name);
@@ -252,13 +317,16 @@ public sealed class PollingService(
                 {
                     IncidentId = Guid.NewGuid(),
                     TaskId = task.Id,
+                    // BACK-004: the refusal closes the task, so it carries the claim's lease like a completion.
+                    AgentSessionId = task.AgentSessionId,
+                    AgentSessionFencingToken = task.AgentSessionFencingToken,
                     OccurredAtUtc = timeProvider.GetUtcNow().UtcDateTime,
                     Reason = "Pipeline task refused: a deployment-only agent accepts only stages explicitly classified as deploy."
                 };
                 await refusalOutbox.StoreAsync(report, CancellationToken.None).ConfigureAwait(false);
                 await apiClient.StartTaskAsync(task.Id, ct).ConfigureAwait(false);
                 await TryReportDeploymentBuildRefusalAsync(report, CancellationToken.None).ConfigureAwait(false);
-                return;
+                return false;
             }
 
             if (task.Container is not null)
@@ -268,9 +336,16 @@ public sealed class PollingService(
             else
                 await ExecuteShellAsync(task, ct).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
-            logger.LogInformation("Task {TaskId} cancelled (server-side or shutdown)", task.Id);
+            // A stop that was not proven is never reported: the control plane waits its maximum delay.
+            cancelled = ex is not UnconfirmedCancellationException;
+            if (cancelled)
+                logger.LogInformation("Task {TaskId} cancelled (server-side or shutdown)", task.Id);
+            else
+                logger.LogError(
+                    "Task {TaskId} cancelled (server-side or shutdown), but its processes could not be proven stopped; it is not reported stopped",
+                    task.Id);
         }
         catch (Exception ex)
         {
@@ -282,6 +357,32 @@ public sealed class PollingService(
             if (task.PurgeWorkspace && task.PipelineRunId is { } pipelineRunId)
                 ContainerWorkspacePurger.Purge(_options.WorkDirectory, pipelineRunId, logger);
             _concurrencyGate.Release();
+        }
+
+        return cancelled;
+    }
+
+    /// <summary>
+    /// R-12: tells the control plane that a task it cancelled has stopped, with the ordinary completion
+    /// report (status Cancelled). The control plane holds the run's cleanup and always() stages back until
+    /// it hears this, so they never start beside the process tree that was still dying. Sent once the task
+    /// has left the tracking table and released its slot, so nothing of it remains on this agent.
+    /// Best-effort: without it the control plane proceeds after its maximum wait.
+    /// </summary>
+    private async Task ReportCancelledTaskStoppedAsync(PendingTaskDto task)
+    {
+        try
+        {
+            await apiClient.CompleteTaskAsync(task.Id, new TaskResultDto
+            {
+                TaskId = task.Id,
+                Status = TaskExecutionStatus.Cancelled,
+                ExitCode = -1
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not report that cancelled task {TaskId} stopped; the control plane proceeds after its maximum wait", task.Id);
         }
     }
 
@@ -351,7 +452,8 @@ public sealed class PollingService(
             task,
             _options.WorkDirectory);
 
-        if (task.Operation == OperationKind.AiRun)
+        // The reboot order names itself to the backend when it asks for its confirmation (R-8).
+        if (task.Operation is OperationKind.AiRun or OperationKind.ServerReboot)
             task.EnvironmentVariables["AETHEUS_TASK_ID"] = task.Id.ToString();
 
         var result = await operationExecutor.ExecuteAsync(
@@ -380,6 +482,8 @@ public sealed class PollingService(
             // (Apache, mail...): the new state is sent now, not at the next tick.
             if (ChangesHostServices(task.Operation) || changedInventories != CachedInventory.None)
                 runtimeHealth.RequestHeartbeat();
+            // R-41: the installed packages changed, so the CVE watch of the host is reported again.
+            if (task.Operation == OperationKind.SystemPackageUpgrade) runtimeHealth.RequestHostPackageReport();
         }
         finally
         {

@@ -14,7 +14,8 @@ public sealed class TaskTimeoutService(
     IOptions<BackgroundServicesOptions> options,
     IHubContext<ServerHub> serverHub,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease,
+    AgentRestartRegistry? restartRegistry = null) : LeaderBackgroundService(leaderLease, "aetheus:task-timeout")
 {
     private readonly TimeSpan _checkInterval = options.Value.TaskCheckInterval;
     private readonly TimeSpan _startupDelay = options.Value.TaskStartupDelay;
@@ -35,13 +36,7 @@ public sealed class TaskTimeoutService(
     private readonly TimeSpan _heartbeatTimeout = options.Value.ServerHeartbeatTimeout;
 
 
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:task-timeout", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         if (_startupDelay > TimeSpan.Zero)
             await Task.Delay(_startupDelay, timeProvider, stoppingToken).ConfigureAwait(false);
@@ -473,6 +468,10 @@ public sealed class TaskTimeoutService(
             task.FailureReason = task.StartedAt is not null
                 ? PipelineOutageReplayPolicy.NotReplayedReason
                 : PipelineOutageReplayPolicy.NotReplayedBeforeStartReason;
+            // The agent said why its previous process ended, when it did: say it. Otherwise the text stays
+            // as it is, a cause is never guessed.
+            if (restartRegistry?.Find(task.ServerId) is { } restart)
+                task.FailureReason = $"{task.FailureReason} {restart.Describe()}";
             logger.LogWarning(
                 "Task #{TaskId} ({TaskName}) was orphaned by an agent restart; previous session {PreviousSession} was replaced",
                 task.Id,

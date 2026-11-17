@@ -7,7 +7,9 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Compares hosted database-size gauges with PostgreSQL catalog measurements within the
 /// specified tolerance, including row estimates.</summary>
-[Collection(PostgresCollection.Name)]
+// Serial: its MeterListener hears the database-size meter of every host in the process, so another
+// class's host running beside it would add a second database to the single measure it asserts.
+[Collection(SerialPostgresCollection.Name)]
 public sealed class DatabaseSizeMeasurementIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const int ProbeRows = 20_000;

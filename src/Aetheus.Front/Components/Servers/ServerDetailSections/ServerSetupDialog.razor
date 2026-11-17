@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <OmniTemplateForm TModel="ServerSetupDialogModel" Model="@_model" OnValidSubmit="@((EditContext context) => Submit((ServerSetupDialogModel)context.Model))">
     <OmniDataAnnotationsValidator Localizer="@L" />
-    <OmniStack Gap="OmniSpacing.Large">
+    <OmniStack Gap="OmniSpacing.Small">
         @if (Kind == ServerSetupKind.Portsentry)
         {
             <OmniFormField For="oe-pages-servers-serverdetailsections-serversetupdialog-1"><LabelContent>@L["Mode"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Mode" Id="oe-pages-servers-serverdetailsections-serversetupdialog-1" /></ChildContent></OmniFormField>

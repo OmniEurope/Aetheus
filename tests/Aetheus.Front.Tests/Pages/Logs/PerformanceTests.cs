@@ -15,6 +15,9 @@ public sealed class PerformanceTests : BunitContext
     {
         _handler = BunitTestHelper.RegisterServices(this);
         Services.AddSingleton<ClientApiTimings>();
+        _handler.SetJsonResponse(HttpMethod.Get, "api/admin/task-identity-backfill", new TaskIdentityBackfillDto());
+        _handler.SetJsonResponse(HttpMethod.Get, "api/admin/pipeline-run-identity-backfill", new PipelineRunIdentityBackfillDto());
+        _handler.SetJsonResponse(HttpMethod.Get, "api/admin/database-tables", new List<DatabaseTableVolumeDto>());
     }
 
     [Theory]
@@ -161,7 +164,7 @@ public sealed class PerformanceTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("api/projects", cut.Markup, StringComparison.Ordinal));
         var tabs = cut.FindAll("[role='tab']");
-        Assert.Equal(["slowest", "routes", "browser"], tabs.Select(tab => tab.GetAttribute("data-key")).ToArray());
+        Assert.Equal(["slowest", "routes", "browser", "tables"], tabs.Select(tab => tab.GetAttribute("data-key")).ToArray());
         // Markdown alone under each of the three tables (second decision of 2026-10-05, no CSV); the former
         // whole-page Markdown button is gone.
         Assert.Equal(3, cut.FindAll(".omni-data-grid__export-button").Count);
@@ -218,5 +221,107 @@ public sealed class PerformanceTests : BunitContext
         var cut = Render<Performance>();
 
         cut.WaitForAssertion(() => Assert.Contains("GridLoadFailed", cut.Markup, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Page rule 3.page-scroll-with-grid: the key figures take one row above the grid on a wide window (one column per
+    /// tile, compact tiles) so the grid keeps its ten rows without the page scrolling, and the tables carry no
+    /// bottom margin that would add to the page height.
+    /// </summary>
+    [Fact]
+    public void TheKeyFigures_TakeOneCompactRow_AndTheTablesLeaveNoMarginUnderThem()
+    {
+        _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto());
+
+        var cut = Render<Performance>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var tiles = cut.Find(".omni-tile-grid.tiles-above-grid");
+            Assert.Contains("tiles-scroll-row", tiles.ClassName, StringComparison.Ordinal);
+            var figures = tiles.QuerySelectorAll(".omni-stat-tile");
+            Assert.Equal(6, figures.Length);
+            Assert.Contains("omni-tile-grid--columns-6", tiles.ClassName, StringComparison.Ordinal);
+            Assert.All(figures, tile => Assert.Contains("omni-stat-tile--small", tile.ClassName, StringComparison.Ordinal));
+        });
+        Assert.Empty(cut.FindAll(".omni-data-grid.omni-u-mb-lg"));
+    }
+
+    /// <summary>ADR-060: the end of the task backfill is proved from this page, zero included.</summary>
+    [Theory]
+    [InlineData(1200, "1")]
+    [InlineData(0, "0")]
+    public void TheTaskBackfill_ShowsWhatRemains(int remaining, string leadingDigit)
+    {
+        _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto());
+        _handler.SetJsonResponse(HttpMethod.Get, "api/admin/task-identity-backfill", new TaskIdentityBackfillDto { Total = 31695, Remaining = remaining });
+
+        var cut = Render<Performance>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var tile = cut.Find("[data-testid='task-identity-backfill']");
+            Assert.Contains("TaskIdentityBackfillRemaining", tile.TextContent, StringComparison.Ordinal);
+            Assert.Contains("TaskIdentityBackfillDetail", tile.TextContent, StringComparison.Ordinal);
+            Assert.Contains(leadingDigit, tile.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>R-6: the tables tab lists each table with its rows, size, highest key and percentage of the key limit.</summary>
+    [Fact]
+    public void TheTablesTab_ShowsRowsSizeAndTheKeyAgainstItsLimit()
+    {
+        _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto());
+        _handler.SetJsonResponse(HttpMethod.Get, "api/admin/database-tables", new List<DatabaseTableVolumeDto>
+        {
+            new() { Name = "ServiceInfos", EstimatedRows = 2097, TotalBytes = 3L * 1024 * 1024, KeyType = "integer", MaxKey = 4854608, KeyLimit = int.MaxValue, KeyLimitPercent = 0.2261 },
+            new() { Name = "Settings", EstimatedRows = null, TotalBytes = 8192 }
+        });
+
+        var cut = Render<Performance>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var grid = cut.Find("[data-testid='database-tables']");
+            Assert.Contains("ServiceInfos", grid.TextContent, StringComparison.Ordinal);
+            Assert.Contains("integer", grid.TextContent, StringComparison.Ordinal);
+            Assert.Contains("0.2261", grid.TextContent.Replace(',', '.'), StringComparison.Ordinal);
+            Assert.Contains("Settings", grid.TextContent, StringComparison.Ordinal);
+            Assert.Contains("DatabaseTableKeyPercent", grid.TextContent, StringComparison.Ordinal);
+        });
+        Assert.Contains("PerformanceDatabaseTables", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>ADR-060: same proof for the runs, lot 2, on the same page.</summary>
+    [Theory]
+    [InlineData(1200, "1")]
+    [InlineData(0, "0")]
+    public void TheRunBackfill_ShowsWhatRemains(int remaining, string leadingDigit)
+    {
+        _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto());
+        _handler.SetJsonResponse(HttpMethod.Get, "api/admin/pipeline-run-identity-backfill", new PipelineRunIdentityBackfillDto { Total = 1468, Remaining = remaining });
+
+        var cut = Render<Performance>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var tile = cut.Find("[data-testid='pipeline-run-identity-backfill']");
+            Assert.Contains("PipelineRunIdentityBackfillRemaining", tile.TextContent, StringComparison.Ordinal);
+            Assert.Contains("PipelineRunIdentityBackfillDetail", tile.TextContent, StringComparison.Ordinal);
+            Assert.Contains(leadingDigit, tile.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void AFailedBackfillRead_LeavesTheReportOnScreen()
+    {
+        _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto { SampleCount = 3 });
+        _handler.SetResponse(HttpMethod.Get, "api/admin/task-identity-backfill", HttpStatusCode.InternalServerError);
+
+        var cut = Render<Performance>();
+
+        cut.WaitForAssertion(() => Assert.Contains("performance-window", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("GridLoadFailed", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='task-identity-backfill']"));
     }
 }

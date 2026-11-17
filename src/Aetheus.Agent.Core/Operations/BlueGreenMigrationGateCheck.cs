@@ -21,25 +21,9 @@ internal sealed class BlueGreenMigrationGateCheck(IShellRunner shell)
         BlueGreenContext context, IReadOnlyDictionary<string, string> envVars,
         int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
-        var migrationsDirectory = envVars.GetValueOrDefault("AETHEUS_BG_MIGRATIONS_DIR", string.Empty).Trim();
-        if (migrationsDirectory.Length == 0)
-        {
-            const string missing = "AETHEUS_BG_MIGRATIONS_DIR is required: the expand/contract gate cannot run without the migration sources.";
-            await onOutput(missing, TaskLogLevel.Error).ConfigureAwait(false);
-            await PublishAsync(Unavailable(missing), onOutput).ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
-        // An unreadable directory yields no discovered migrations, which would otherwise read as
-        // "nothing pending" and wave the bundle through with the gate silently disabled. A gate that
-        // cannot see its inputs has to fail, not report success.
-        if (!Directory.Exists(migrationsDirectory))
-        {
-            var notFound = $"Migration sources not found at '{migrationsDirectory}'; the expand/contract gate cannot inspect what is about to run. "
-                + "Provide an absolute path, or one that exists for the agent.";
-            await onOutput(notFound, TaskLogLevel.Error).ConfigureAwait(false);
-            await PublishAsync(Unavailable(notFound), onOutput).ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
+        var (migrationsDirectory, unavailable) = await ResolveMigrationsDirectoryAsync(envVars, onOutput).ConfigureAwait(false);
+        if (migrationsDirectory is null)
+            return unavailable;
 
         var (historyRead, applied) = await BlueGreenSchemaHistory
             .ReadAsync(shell, context, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
@@ -107,6 +91,41 @@ internal sealed class BlueGreenMigrationGateCheck(IShellRunner shell)
             .ConfigureAwait(false);
         await PublishAsync(report, onOutput).ConfigureAwait(false);
         return null;
+    }
+
+    /// <summary>
+    /// The folder of the migrations the gate reads (see <see cref="BlueGreenMigrationSources"/>), or the failed
+    /// result, already published, when it cannot be told.
+    /// </summary>
+    private static async Task<(string? Directory, ExecutorResult? Failure)> ResolveMigrationsDirectoryAsync(
+        IReadOnlyDictionary<string, string> envVars, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        var declared = envVars.GetValueOrDefault("AETHEUS_BG_MIGRATIONS_DIR", string.Empty).Trim();
+        if (declared.Length == 0)
+            return (null, await FailAsync(
+                "AETHEUS_BG_MIGRATIONS_DIR is required: the expand/contract gate cannot run without the migration sources.",
+                onOutput).ConfigureAwait(false));
+        // An unreadable directory yields no discovered migrations, which would otherwise read as
+        // "nothing pending" and wave the bundle through with the gate silently disabled. A gate that
+        // cannot see its inputs has to fail, not report success.
+        if (!Directory.Exists(declared))
+            return (null, await FailAsync(
+                $"Migration sources not found at '{declared}'; the expand/contract gate cannot inspect what is about to run. "
+                + "Provide an absolute path, or one that exists for the agent.",
+                onOutput).ConfigureAwait(false));
+        var (located, error) = BlueGreenMigrationSources.Locate(declared);
+        if (located is null)
+            return (null, await FailAsync(error!, onOutput).ConfigureAwait(false));
+        if (!string.Equals(located, declared, StringComparison.Ordinal))
+            await onOutput($"Migrations EF détectées dans '{located}'.", TaskLogLevel.Info).ConfigureAwait(false);
+        return (located, null);
+    }
+
+    private static async Task<ExecutorResult> FailAsync(string reason, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        await onOutput(reason, TaskLogLevel.Error).ConfigureAwait(false);
+        await PublishAsync(Unavailable(reason), onOutput).ConfigureAwait(false);
+        return new ExecutorResult(-1, false);
     }
 
     /// <summary>The directive line for one report: the shared prefix, then the report in JSON.</summary>

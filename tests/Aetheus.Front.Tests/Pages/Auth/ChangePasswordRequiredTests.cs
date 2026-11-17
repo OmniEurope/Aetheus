@@ -123,7 +123,7 @@ public class ChangePasswordRequiredTests : BunitContext
     }
 
     [Fact]
-    public void LogoutButton_LogsOutAndRedirectsToLogin()
+    public async Task LogoutButton_LogsOutAndRedirectsToLogin()
     {
         UseCountingHubFactory();
         var auth = Services.GetRequiredService<AuthStateProvider>();
@@ -131,7 +131,7 @@ public class ChangePasswordRequiredTests : BunitContext
         var factory = (CountingHubConnectionFactory)Services.GetRequiredService<HubConnectionFactory>();
 
         var cut = Render<ChangePasswordRequired>();
-        cut.FindMenuItem("Logout")!.Click();
+        await cut.FindMenuItem("Logout")!.ClickAsync(new());
 
         Assert.Null(auth.Token);
         Assert.Equal(1, factory.StopAllCount);

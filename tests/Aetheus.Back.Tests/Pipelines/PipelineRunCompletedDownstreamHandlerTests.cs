@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Pipelines.Events;
@@ -50,7 +51,7 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
             "pipeline.launch-refused",
             Arg.Is<string>(p => p.Contains("\"PipelineRunId\":99") && p.Contains($"\"PipelineId\":{pipelineId}")
                 && p.Contains("\"PipelineName\":\"B\"") && p.Contains("\"ProjectId\":7")
-                && p.Contains("on_success:A#99") && p.Contains(jsonReason)),
+                && p.Contains("on_success:A#12") && p.Contains(jsonReason)),
             Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
@@ -62,6 +63,7 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
         var run = new PipelineRun
         {
             Id = 99,
+            BuildNumber = 12,
             PipelineId = runPipelineId,
             YamlSnapshot = Yaml,
             AdditionalVariablesJson = additionalVarsJson,
@@ -112,6 +114,21 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
         await _runService.Received(1).TriggerChainedRunAsync(2,
             Arg.Is<Dictionary<string, string>>(v => v["BUILD_TRIGGEREDBY"] == "on_success:A#99"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("aetheus/deps/Newtonsoft.Json-13.0.3")]
+    [InlineData("aetheus/deps/Newtonsoft.Json-14.0.0")]
+    public async Task Does_not_chain_a_deployment_from_a_dependency_update_branch_patch_minor_or_major(string branch)
+    {
+        // R-2: a major update branch is a dependency update branch like any other: its run starts nothing downstream.
+        Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: new Pipeline { Id = 2, Name = "B" }, branchName: branch);
+
+        await RunAsync();
+
+        await _runService.DidNotReceive().TriggerChainedRunAsync(
+            Arg.Any<int>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).AppendRunWarningsAsync(99, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -271,6 +288,101 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
         await AssertRefusalShownAsync("the launch was refused: Parameter 'version' is required.", pipelineId: 2);
     }
 
+    /// <summary>Hands the handler's request to record a refused launch to the REAL recorder (over the mocked
+    /// repository), as the run service does, so the test reads the run that would be written.</summary>
+    private void GivenTheRealRecorder(Pipeline target)
+    {
+        var recorder = new PipelineRefusedLaunchRecorder(
+            _repo, Substitute.For<Microsoft.AspNetCore.SignalR.IHubContext<Aetheus.Back.Hubs.PipelineHub>>(),
+            Substitute.For<IAuditService>(), new PipelineRunNotificationPublisher(_repo, _userNotifications),
+            TimeProvider.System, NullLogger<PipelineRefusedLaunchRecorder>.Instance);
+        _runService.RecordRefusedAutomatedLaunchAsync(
+                target.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<ProblemDto>?>(), Arg.Any<bool>())
+            .Returns(call => recorder.RecordAsync(
+                target, null, call.ArgAt<string>(1), call.ArgAt<string>(2), call.ArgAt<IReadOnlyDictionary<string, string>?>(3),
+                call.ArgAt<CancellationToken>(4), call.ArgAt<IReadOnlyList<ProblemDto>?>(5), call.ArgAt<bool>(6)));
+    }
+
+    /// <summary>R-36 (run 3119 of oe1): the follow-up was refused for a parameter nothing supplies, and that refusal
+    /// was written on the upstream run only. It is now a failed run on the TARGET pipeline too, in its runs table,
+    /// carrying the reason as coded problems, with no step: the subscribers hear of it once.</summary>
+    [Fact]
+    public async Task A_follow_up_refused_for_a_missing_required_parameter_leaves_a_refused_run_on_the_downstream_pipeline()
+    {
+        var target = new Pipeline { Id = 2, Name = "B" };
+        Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: target);
+        _repo.FindPipelineAsync(2, Arg.Any<CancellationToken>()).Returns(target);
+        _repo.ReserveNextBuildNumberAsync(2, Arg.Any<CancellationToken>()).Returns(5);
+        GivenTheRealRecorder(target);
+        var missing = PipelineProblem.Of(
+            PipelineProblemCodes.ParameterRequired, "Parameter 'deployServer' is required.", ("parameter", "deployServer"));
+        GivenChainedLaunch(() => PipelineChainedRunOutcome.Refused(
+            PipelineProblem.Of(PipelineProblemCodes.DownstreamLaunchRefused, "the launch was refused: Parameter 'deployServer' is required."),
+            [missing.ToDto()]));
+
+        await RunAsync();
+
+        await _repo.Received(1).AddPipelineRunAsync(
+            Arg.Is<PipelineRun>(downstream => downstream.PipelineId == 2
+                && downstream.Status == PipelineStatus.Failed
+                && downstream.BuildNumber == 5
+                && downstream.CompletedAt == downstream.StartedAt
+                && downstream.WarningsJson!.Contains(PipelineProblemCodes.LaunchRefused, StringComparison.Ordinal)
+                && downstream.WarningsJson.Contains("on_success:A#12", StringComparison.Ordinal)
+                && downstream.WarningsJson.Contains(PipelineProblemCodes.ParameterRequired, StringComparison.Ordinal)
+                && downstream.WarningsJson.Contains("deployServer", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+        // No step and no job for a refused run.
+        _repo.DidNotReceive().TrackPipelineStepRun(Arg.Any<PipelineStepRun>());
+        _repo.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+        // The upstream run keeps its notice, and the subscribers are told once (not twice).
+        await AssertRefusalShownAsync("the launch was refused: Parameter 'deployServer' is required.", pipelineId: 2);
+    }
+
+    /// <summary>A launch refused with a thrown refusal (the pre-checks of the launch) is recorded the same way.</summary>
+    [Fact]
+    public async Task A_follow_up_whose_launch_throws_leaves_a_refused_run_on_the_downstream_pipeline()
+    {
+        var target = new Pipeline { Id = 2, Name = "B" };
+        Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: target);
+        GivenChainedLaunch(() => throw new BadRequestException("Parameter 'version' is required."));
+
+        await RunAsync();
+
+        await _runService.Received(1).RecordRefusedAutomatedLaunchAsync(
+            2, "on_success:A#12", "the launch was refused: Parameter 'version' is required.",
+            Arg.Is<IReadOnlyDictionary<string, string>?>(vars => vars!["UPSTREAM_RUN_ID"] == "99"),
+            Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<ProblemDto>?>(), false);
+    }
+
+    [Fact]
+    public async Task A_target_that_does_not_exist_has_no_pipeline_to_carry_a_refused_run()
+    {
+        Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: null);
+
+        await RunAsync();
+
+        await _runService.DidNotReceiveWithAnyArgs().RecordRefusedAutomatedLaunchAsync(
+            default, default!, default!, default, TestContext.Current.CancellationToken, default, default);
+    }
+
+    [Fact]
+    public async Task A_refused_run_that_cannot_be_recorded_still_leaves_the_upstream_notice()
+    {
+        Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: new Pipeline { Id = 2, Name = "B" });
+        GivenChainedLaunch(() => PipelineChainedRunOutcome.Refused("x"));
+        _runService.RecordRefusedAutomatedLaunchAsync(
+                Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<ProblemDto>?>(), Arg.Any<bool>())
+            .Returns<Task>(_ => throw new InvalidOperationException("store unavailable"));
+
+        var exception = await Record.ExceptionAsync(RunAsync);
+
+        Assert.Null(exception);
+        await _repo.Received(1).AppendRunWarningsAsync(99, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task A_refusal_that_cannot_be_recorded_never_fails_the_upstream_run()
     {
@@ -290,6 +402,7 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
         var run = new PipelineRun
         {
             Id = 99,
+            BuildNumber = 12,
             PipelineId = 1,
             YamlSnapshot = "name: A\ndescription: Diagnostic : liste\n",
             Pipeline = new Pipeline { Id = 1, Name = "A" }

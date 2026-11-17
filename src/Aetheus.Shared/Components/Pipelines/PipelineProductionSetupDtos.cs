@@ -98,11 +98,35 @@ public sealed record ProjectConfigRepositoryDto
     public List<string> FilesKept { get; init; } = [];
 }
 
+/// <summary>Why the repository of a project whose source is an external Git repository gave nothing to read (recette R-69).</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ProductionSourceProblem>))]
+public enum ProductionSourceProblem
+{
+    /// <summary>Nothing to report: the repository was read, or the project's source is not external.</summary>
+    None,
+
+    /// <summary>The external repository is attached beside an internal repository that holds no commit, which stays the
+    /// project's source: the analysis would read that empty one, so it reads nothing.</summary>
+    ExternalNotTheSource,
+
+    /// <summary>The external repository is the project's source but its mirror holds no commit yet (never synchronized, or
+    /// the synchronization failed).</summary>
+    ExternalNotSynchronized
+}
+
 /// <summary>What the wizard learns about the production deployment of a project from its repository.</summary>
 public sealed record PipelineProductionAnalysisDto
 {
     /// <summary>False when the repository could not be read: nothing below is then claimed.</summary>
     public bool Readable { get; init; }
+
+    /// <summary>Recette R-69: the project's source is an external Git repository (read through its internal mirror), or
+    /// should be (it is attached beside an internal repository that holds no commit). A production or QA pipeline created
+    /// for such a project without a readable Compose file could never deploy, so the wizard does not create it.</summary>
+    public bool ExternalSource { get; init; }
+
+    /// <summary>Why nothing could be read of the external repository; <see cref="ProductionSourceProblem.None"/> otherwise.</summary>
+    public ProductionSourceProblem SourceProblem { get; init; }
 
     public string? Branch { get; init; }
 
@@ -140,8 +164,19 @@ public sealed record PipelineProductionAnalysisDto
     /// <summary>The Compose file publishes a back port, so the API has its own host and virtual hosts.</summary>
     public bool DeclaresApi => DeclaresBackPort || DeclaresBlueGreen;
 
+    /// <summary>R-7: the repository's environment sample or Apache templates (<c>.pipeline/configs/</c>) could not be read, so
+    /// <c>PORT_FRONT</c> and <c>PORT_BACK</c> may be missing from this analysis. False when they were read, or when the branch
+    /// holds none. The wizard blocks the creation of the pipelines while it is true.</summary>
+    public bool TemplatesUnreadable { get; init; }
+
     /// <summary>The configuration repository, when the project already has one.</summary>
     public ProjectConfigRepositoryDto? ConfigRepository { get; init; }
+
+    /// <summary>R-38: the generic Apache virtual host templates (<c>.pipeline/configs/apache/app-http.conf</c>, <c>api-http.conf</c>,
+    /// <c>app-https.conf</c>, <c>api-https.conf</c>) that neither the configuration repository nor the source branch read holds,
+    /// so the production deployment would refuse to start. Empty when they are all there, or when the branch could not be read
+    /// completely (nothing is then claimed). The API's ones only matter to a front and an API.</summary>
+    public List<string> MissingApacheTemplates { get; init; } = [];
 
     /// <summary>The tokens of the environment sample already held by the configuration repository that name a variable
     /// the agent refuses to hand a step (recette R-5): the deployment of such a project stops at its preparation until
@@ -203,6 +238,11 @@ public sealed record PipelineProductionAnalysisRequest
     /// <summary>The Compose file to read, relative to the repository root; empty to let the analysis propose one.</summary>
     [StringLength(240)]
     public string? ComposeFile { get; init; }
+
+    /// <summary>The branch to read, the one the wizard creates the pipelines on (R-9); empty, or a branch the repository
+    /// does not hold, reads the repository's default branch.</summary>
+    [StringLength(200)]
+    public string? Branch { get; init; }
 }
 
 /// <summary>Applies the production setup the analysis proposed.</summary>
@@ -229,6 +269,15 @@ public sealed record PipelineProductionApplyRequest
     /// <see cref="ProductionStrategy.Replace"/>; empty keeps the one the Compose file declares.</summary>
     [StringLength(20)]
     public string? Strategy { get; init; }
+
+    /// <summary>The branch the Compose file is read from, the one the analysis read (R-9); empty reads the default branch.</summary>
+    [StringLength(200)]
+    public string? Branch { get; init; }
+
+    /// <summary>R-11: the application shape the user chose, the one that picks the deployment template: true the Full-stack
+    /// tile (a monolith: one host, no API virtual hosts, the replacement strategy only), false a front and an API (the API
+    /// gets its own virtual hosts). The Compose file never decides it.</summary>
+    public bool Monolith { get; init; }
 }
 
 /// <summary>The two ways the production pipeline brings a release up: the pipeline's <c>DEPLOY_STRATEGY</c>.</summary>
@@ -263,7 +312,7 @@ public sealed record PipelineProductionApplyResultDto
     /// <summary><c>bluegreen</c> or <c>replace</c>: the pipeline's <c>DEPLOY_STRATEGY</c>.</summary>
     public string Strategy { get; init; } = ProductionStrategy.Replace;
 
-    /// <summary>The pipeline's <c>DEPLOY_HAS_API</c>: the API has its own host and virtual hosts.</summary>
+    /// <summary>The API has its own host and virtual hosts (R-11: a front and an API, the template the pipeline extends).</summary>
     public bool DeclaresApi { get; init; }
 
     public List<ProductionAppliedEntryDto> Entries { get; init; } = [];
@@ -271,4 +320,21 @@ public sealed record PipelineProductionApplyResultDto
 
     public bool NeedsValues => Entries.Exists(entry =>
         entry.Outcome is ProductionEntryOutcome.NeedsValue or ProductionEntryOutcome.PortUnavailable);
+}
+
+/// <summary>R-38: creates the generic Apache virtual host templates in the project's configuration repository without reading
+/// the Compose file (a project whose source could not be read, an external repository not mirrored yet): the templates depend
+/// only on the shape and the strategy the user chose, never on the Compose file. A file the repository holds is kept.</summary>
+public sealed record PipelineProductionApacheRequest
+{
+    [Range(1, int.MaxValue)]
+    public int ProjectId { get; init; }
+
+    /// <summary>The application shape the user chose: true a monolith (one host, no API virtual hosts), false a front and an API.</summary>
+    public bool Monolith { get; init; }
+
+    /// <summary><see cref="ProductionStrategy.BlueGreen"/> or <see cref="ProductionStrategy.Replace"/>; empty is the replacement.
+    /// A monolith has the replacement only.</summary>
+    [StringLength(20)]
+    public string? Strategy { get; init; }
 }

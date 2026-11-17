@@ -52,6 +52,8 @@ public class NavMenuMethodTests : BunitContext
     [InlineData("projects", "servers/5")]
     [InlineData("settings", "admin/users")]
     [InlineData("admin", "servers")]
+    [InlineData("projects", "pipelines/schedule")]
+    [InlineData("projects", "pipelines/schedule?view=week")]
     public void IsOnSection_WrongPaths_ReturnsFalse(string section, string path)
     {
         var instance = CreateInstance(path);

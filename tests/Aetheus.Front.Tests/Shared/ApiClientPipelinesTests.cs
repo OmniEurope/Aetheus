@@ -106,7 +106,7 @@ public class ApiClientPipelinesTests
         var r = await _api.Pipelines.CreatePipelineAsync(new CreatePipelineRequest { Name = "New" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(2, r.Value!.Id);
         Assert.Null(r.Error);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, new CreatePipelineRequest { Name = "New" });
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class ApiClientPipelinesTests
         var r = await _api.Pipelines.UpdatePipelineAsync(1, new UpdatePipelineRequest { Name = "Updated" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("Updated", r.Value!.Name);
         Assert.Null(r.Error);
-        AssertLastRequest(HttpMethod.Put, url);
+        AssertLastRequest(HttpMethod.Put, url, new UpdatePipelineRequest { Name = "Updated" });
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new PipelinePreflightDto { Warnings = ["verified"] });
         var r = await _api.Pipelines.PreflightPipelineAsync(1, ct: Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("verified", Assert.Single(r.Value!.Warnings));
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, noBody: true);
     }
 
     /// <summary>R-20: the preview needs the parameters the run will use (the production server among them),
@@ -199,7 +199,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new PipelineRunDto { Id = 1 });
         var r = await _api.Pipelines.RetryFailedStepsAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(1, r!.Id);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, noBody: true);
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new DryRunResultDto { ResolvedVariables = new() { ["KEY"] = "val" } });
         var r = await _api.Pipelines.DryRunPipelineAsync(1, new Dictionary<string, string> { ["KEY"] = "val" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("val", r!.ResolvedVariables["KEY"]);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, json: """{"KEY":"val"}""");
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new DryRunResultDto { Warnings = ["none"] });
         var r = await _api.Pipelines.DryRunPipelineAsync(1, ct: Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("none", Assert.Single(r!.Warnings));
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, json: "null");
     }
 
     [Fact]
@@ -279,6 +279,7 @@ public class ApiClientPipelinesTests
         var r = await api2.PipelineTemplates.CreatePipelineTemplateAsync(new CreatePipelineTemplateRequest { Name = "NewTemplate" }, Xunit.TestContext.Current.CancellationToken);
 
         // Cache should be null again after create
+        handler2.LastSent(HttpMethod.Post, "api/pipelines/templates", new CreatePipelineTemplateRequest { Name = "NewTemplate" });
         Assert.Equal(5, r!.Id);
         Assert.Null(cacheField.GetValue(api2.PipelineTemplates));
     }
@@ -293,7 +294,7 @@ public class ApiClientPipelinesTests
             new PipelineTemplateDto { Id = 1, Name = "Updated Template" });
         var r = await _api.PipelineTemplates.UpdatePipelineTemplateAsync(1, new UpdatePipelineTemplateRequest { Name = "Updated Template" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("Updated Template", r!.Name);
-        AssertLastRequest(HttpMethod.Put, "api/pipelines/templates/1");
+        AssertLastRequest(HttpMethod.Put, "api/pipelines/templates/1", new UpdatePipelineTemplateRequest { Name = "Updated Template" });
         Assert.Null(typeof(Aetheus.Front.Components.Shared.PipelineTemplatesApi).GetField("_templateCache",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_api.PipelineTemplates));
     }
@@ -307,7 +308,7 @@ public class ApiClientPipelinesTests
         _handler.SetResponse(HttpMethod.Delete, "api/pipelines/templates/1", HttpStatusCode.NoContent);
         var r = await _api.PipelineTemplates.DeletePipelineTemplateAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.True(r.Success);
-        AssertLastRequest(HttpMethod.Delete, "api/pipelines/templates/1");
+        AssertLastRequest(HttpMethod.Delete, "api/pipelines/templates/1", noBody: true);
         Assert.Null(typeof(Aetheus.Front.Components.Shared.PipelineTemplatesApi).GetField("_templateCache",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_api.PipelineTemplates));
     }
@@ -331,6 +332,20 @@ public class ApiClientPipelinesTests
 
         Assert.Equal(12, Assert.Single(runs).Id);
         Assert.Contains(_handler.Requests, request => request.Url.Contains("runs/active?projectId=7"));
+    }
+
+    [Fact]
+    public async Task GetActivePipelineRunsAsync_ForwardsServerScope()
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/active", new List<PipelineRunDto>
+        {
+            new() { Id = 12, PipelineId = 3, PipelineName = "CI", Status = PipelineStatus.Running }
+        });
+
+        var runs = await _api.Pipelines.GetActivePipelineRunsAsync(null, 9, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(12, Assert.Single(runs).Id);
+        Assert.Contains(_handler.Requests, request => request.Url.Contains("runs/active?serverId=9"));
     }
 
     [Fact]
@@ -450,7 +465,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new ProjectDto { Id = 1, Name = "New Project" });
         var r = await _api.Projects.CreateProjectAsync(new CreateProjectRequest { Name = "New Project" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("New Project", r!.Name);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, new CreateProjectRequest { Name = "New Project" });
     }
 
     [Fact]
@@ -460,7 +475,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Put, url, new ProjectDto { Id = 1, Name = "Updated" });
         var r = await _api.Projects.UpdateProjectAsync(1, new UpdateProjectRequest { Name = "Updated" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("Updated", r!.Name);
-        AssertLastRequest(HttpMethod.Put, url);
+        AssertLastRequest(HttpMethod.Put, url, new UpdateProjectRequest { Name = "Updated" });
     }
 
     [Fact]
@@ -479,6 +494,7 @@ public class ApiClientPipelinesTests
         const string url = "api/projects/1";
         _handler.SetResponse(HttpMethod.Delete, url, HttpStatusCode.Accepted);
         Assert.Equal(ProjectDeletionOutcome.PendingCleanup, await _api.Projects.DeleteProjectAsync(1, [5], Xunit.TestContext.Current.CancellationToken));
+        AssertLastRequest(HttpMethod.Delete, url + "?serverTaskIds=5", noBody: true);
 
         _handler.SetResponse(HttpMethod.Delete, url, HttpStatusCode.Conflict);
         Assert.Null(await _api.Projects.DeleteProjectAsync(1, [5], Xunit.TestContext.Current.CancellationToken));
@@ -531,7 +547,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new List<ReleaseDto> { new() { Id = 1 } });
         var r = await _api.Projects.SyncReleasesAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(1, Assert.Single(r).Id);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, noBody: true);
     }
 
     [Fact]
@@ -541,7 +557,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new ReleaseDto { Id = 1, PipelineRunId = 11 });
         var r = await _api.Projects.TriggerReleaseBuildAsync(1, new TriggerReleaseBuildRequest(), Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(11, r!.PipelineRunId);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, new TriggerReleaseBuildRequest());
     }
 
     [Fact]
@@ -551,7 +567,7 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new ReleaseRollbackDto { Id = 1 });
         var r = await _api.Projects.RollbackReleaseAsync(1, new RollbackReleaseRequest { PipelineId = 1 }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(1, r!.Id);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, new RollbackReleaseRequest { PipelineId = 1 });
     }
 
     [Fact]
@@ -561,14 +577,17 @@ public class ApiClientPipelinesTests
         _handler.SetJsonResponse(HttpMethod.Post, url, new ReleaseDto { Id = 1, Status = ReleaseStatus.Published });
         var r = await _api.Projects.PromoteReleaseAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(ReleaseStatus.Published, r!.Status);
-        AssertLastRequest(HttpMethod.Post, url);
+        AssertLastRequest(HttpMethod.Post, url, noBody: true);
     }
 
-    private void AssertLastRequest(HttpMethod method, string relativeUrl)
+    /// <summary>Verb and URI always; the body only when one is given (<paramref name="noBody"/> asserts there is none).</summary>
+    private void AssertLastRequest(HttpMethod method, string relativeUrl, object? body = null, string? json = null, bool noBody = false)
     {
         var request = _handler.Requests[^1];
         Assert.Equal(method.Method, request.Method);
         Assert.Equal($"http://test/{relativeUrl}", request.Url);
+        if (body is not null || json is not null || noBody)
+            _handler.LastSent(method, relativeUrl, body, json);
     }
 }
 

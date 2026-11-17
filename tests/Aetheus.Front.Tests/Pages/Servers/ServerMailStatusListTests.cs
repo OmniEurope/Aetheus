@@ -391,12 +391,12 @@ public sealed class ServerMailStatusListTests : BunitContext
         Assert.Equal("true", FixButton(cut, "MailObtainCertificate").GetAttribute("aria-busy"));
         Assert.False(FixButton(cut, "MailObtainCertificate").HasAttribute("disabled"));
         Assert.True(FixButton(cut, "MailInstallCertificate").HasAttribute("disabled"));
-        FixButton(cut, "MailObtainCertificate").Click();
+        await FixButton(cut, "MailObtainCertificate").ClickAsync(new());
         Assert.Equal(1, _handler.Requests.Count(r => r.Method == "POST" && r.Url.EndsWith("mail/certificate", StringComparison.Ordinal)));
         // One banner at the top names the running task.
         Assert.Contains("MailTaskRunning", Host.Find(".mail-task-running").TextContent, StringComparison.Ordinal);
-        // Recette R-116: the banner wears the busy veil, no loader sits inside it.
-        Assert.Contains("omni-busy", Host.Find(".mail-task-running").ClassName, StringComparison.Ordinal);
+        // Recette R-116, R-37: the banner veils nothing (a mail task is not blocking), no loader sits inside it.
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Empty(Host.FindAll(".mail-task-running .aetheus-loader-logo"));
         Assert.DoesNotContain("MailWaitingForTask", Host.Markup, StringComparison.Ordinal);
 

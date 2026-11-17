@@ -40,7 +40,7 @@ internal sealed partial class AssuranceTestOutcomes(Func<string, string?> variab
     public JsObject Build()
     {
         var tests = new JsObject();
-        tests.Set("unit", Declared("unit", () => Required(Outcome("UNIT_TEST_GATE_STATUS"))));
+        tests.Set("unit", Declared("unit", () => WithFlaky(Required(Outcome("UNIT_TEST_GATE_STATUS")), "UNIT_TEST_FLAKY_TESTS")));
         tests.Set("analyzers", Declared("analyzers", () => Required(Outcome("ANALYZER_TEST_GATE_STATUS"))));
         tests.Set("currentIntegration", Declared("currentIntegration", () => WithFlaky(
             Required(Outcome("QA_CURRENT_INTEGRATION_GATE_STATUS")), "QA_CURRENT_INTEGRATION_FLAKY_TESTS")));
@@ -55,8 +55,26 @@ internal sealed partial class AssuranceTestOutcomes(Func<string, string?> variab
         tests.Set("previousE2E", Declared("previousE2E", () => Profiled("previousE2E", () => WithFlaky(Required(CompatibilityOutcome(
             "QA_PREVIOUS_E2E_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED")), "QA_PREVIOUS_E2E_FLAKY_TESTS"))));
         tests.Set("performance", Performance());
+        GradeFlaky(tests);
         return tests;
     }
+
+    /// <summary>A required suite that Passed while naming flaky tests carries the grade of the candidate's
+    /// flaky tests, counted over every suite of the section (<see cref="AssuranceFlakyGrade"/>), so the
+    /// overall grade, the worst of the suites, is that grade. A suite that failed or is unavailable keeps
+    /// its F; a suite without flaky tests keeps its A.</summary>
+    internal static void GradeFlaky(JsObject tests)
+    {
+        var grade = AssuranceFlakyGrade.Grade(AssuranceFlakyGrade.Count(FlakyLists(tests)));
+        foreach (var (_, value) in tests.Properties)
+            if (value is JsObject test && test["flakyTests"] is string
+                && JsValue.StrictEquals(test["required"], true) && JsValue.StrictEquals(test["status"], "Passed"))
+                test.Set("effectiveGrade", grade);
+    }
+
+    /// <summary>The <c>flakyTests</c> list of every suite of the section that seals one.</summary>
+    internal static IEnumerable<string> FlakyLists(JsObject tests) =>
+        tests.Properties.Select(property => property.Value is JsObject test ? test["flakyTests"] as string : null).OfType<string>();
 
     /// <summary>The performance smoke: unrequired when explicitly disabled, and Unavailable (its grade
     /// left as the outcome set it) when the setting is neither true nor false.</summary>
@@ -126,11 +144,11 @@ internal sealed partial class AssuranceTestOutcomes(Func<string, string?> variab
     }
 
     /// <summary>The suite's flaky tests, the ones that failed on one attempt and passed on its rerun, sealed
-    /// by name as <c>flakyTests</c> (the one-line list the QA pipeline published), after the outcome's own
-    /// properties: they do not change the grade, and they are never hidden from it. Set only when the
-    /// variable is, so a run without flaky tests seals the very contract it sealed before the rerun
-    /// existed; the verifier reads no such property, so a contract with or without it verifies alike.
-    /// A difference from the script, which had no rerun to report.</summary>
+    /// by name as <c>flakyTests</c> (the one-line list the CI or QA pipeline published), after the outcome's
+    /// own properties. They never fail the suite; <see cref="GradeFlaky"/> grades a passed suite on their
+    /// count, which the verifier recomputes. Set only when the variable is, so a run without flaky tests
+    /// seals the very contract it sealed before the rerun existed. A difference from the script, which had
+    /// no rerun to report.</summary>
     private JsObject WithFlaky(JsObject test, string variableName)
     {
         if (variable(variableName) is { } flaky)

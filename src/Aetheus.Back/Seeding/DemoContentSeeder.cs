@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text;
+using Aetheus.Back.Components.Analysis;
 using Aetheus.Back.Components.Artifacts;
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
@@ -10,7 +11,7 @@ namespace Aetheus.Back.Seeding;
 
 /// <summary>
 /// Materializes the demo data that cannot be represented by database rows alone: the Toto bare Git
-/// repository and downloadable artifact files. Every operation is idempotent so it is safe to run
+/// repository, downloadable artifact files and one report of the CVE watch. Every operation is idempotent so it is safe to run
 /// after the dated relational seed marker has already been written.
 /// </summary>
 public sealed class DemoContentSeeder(
@@ -29,6 +30,49 @@ public sealed class DemoContentSeeder(
 
         await SeedTotoRepositoryAsync(seed.TotoProjectId, ct).ConfigureAwait(false);
         await SeedArtifactsAsync(seed, ct).ConfigureAwait(false);
+        await SeedCveWatchRunAsync(seed, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One report the CVE watch wrote for the Toto project, so the page of a run (<c>/analysis/cve-watch/runs/{id}</c>)
+    /// has a run to open in a demo, QA or E2E database. It carries no finding: the findings of the watch come from
+    /// advisories and inventories the demo does not hold, and a seeded finding would change every count of the analysis
+    /// pages. Idempotent: the report is recognised by its scanner and content hash.
+    /// </summary>
+    private async Task SeedCveWatchRunAsync(DemoSeedResult seed, CancellationToken ct)
+    {
+        var contentHash = CveWatchFindings.Hash("demo-seed:cve-watch-run");
+        var exists = await db.AnalysisReports.AnyAsync(report =>
+            report.ProjectId == seed.TotoProjectId
+            && report.PipelineRunId == null
+            && report.ScannerKey == CveWatchFindings.ScannerKey
+            && report.ContentHash == contentHash, ct).ConfigureAwait(false);
+        if (exists) return;
+
+        var organizationId = await db.Projects
+            .Where(project => project.Id == seed.TotoProjectId)
+            .Select(project => project.OrganizationId)
+            .SingleAsync(ct).ConfigureAwait(false);
+        var anchor = DateTime.SpecifyKind(
+            DemoDataSeeder.ResolveVersionDate(seed.SeedDate).ToDateTime(new TimeOnly(12, 0)), DateTimeKind.Utc);
+        db.AnalysisReports.Add(new AnalysisReport
+        {
+            OrganizationId = organizationId,
+            ProjectId = seed.TotoProjectId,
+            ScannerKey = CveWatchFindings.ScannerKey,
+            ScannerName = CveWatchFindings.ScannerName,
+            ScannerVersion = CveWatchFindings.ScannerVersion,
+            Category = AnalysisCategory.Dependencies,
+            Status = AnalysisReportStatus.Passed,
+            Format = AnalysisReportFormat.NativeJson,
+            ContentHash = contentHash,
+            PayloadHash = contentHash,
+            ContentSize = 0,
+            StartedAt = anchor,
+            CompletedAt = anchor,
+            CreatedAt = anchor
+        });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     private async Task SeedTotoRepositoryAsync(int projectId, CancellationToken ct)

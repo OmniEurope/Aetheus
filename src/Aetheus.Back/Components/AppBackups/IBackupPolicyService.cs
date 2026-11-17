@@ -10,6 +10,10 @@ public interface IBackupPolicyService
         IReadOnlyCollection<int>? accessibleProjectIds, PaginationRequest request, CancellationToken ct = default);
     Task<BackupPolicyDto> CreateAsync(CreateBackupPolicyRequest request, CancellationToken ct = default);
     Task<BackupPolicyDto?> UpdateAsync(int id, UpdateBackupPolicyRequest request, CancellationToken ct = default);
+    /// <summary>Replaces only the backup schedule of a policy (a move in the planner, recette R-8): a five-field cron
+    /// expression, minutes first. An expression Cronos cannot parse is a <see cref="BadRequestException"/>; null when the
+    /// policy does not exist. The caller has already checked the Write right on the policy's project.</summary>
+    Task<BackupPolicyDto?> SetScheduleAsync(int id, string scheduleCron, CancellationToken ct = default);
     Task<bool> DeleteAsync(int id, CancellationToken ct = default);
 
     /// <summary>Project id owning the policy, for authorization; null if the policy does not exist.</summary>

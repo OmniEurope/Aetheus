@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
@@ -31,6 +32,7 @@ public sealed class ObservabilityPackageOperationExecutorTests
             "/agent-owned/promote.sh",
             "/agent-owned/publish.sh",
             "https://packages.example",
+            "/home/agent/.aetheus/dotnet/11.0.100/dotnet",
             environment);
 
         Assert.Equal("sh", startInfo.FileName);
@@ -40,7 +42,8 @@ public sealed class ObservabilityPackageOperationExecutorTests
             || argument.Contains(password, StringComparison.Ordinal));
         Assert.Equal("/agent-owned/publish.sh", startInfo.Environment["AETHEUS_TRUSTED_PUBLISH_SCRIPT"]);
         Assert.Equal("https://packages.example", startInfo.Environment["AETHEUS_PACKAGE_BASE_URL"]);
-        Assert.False(startInfo.Environment.ContainsKey("DOTNET"));
+        // R-20: the caller's DOTNET never crosses; the harness gets the SDK the agent resolved itself.
+        Assert.Equal("/home/agent/.aetheus/dotnet/11.0.100/dotnet", startInfo.Environment["DOTNET"]);
         Assert.False(startInfo.Environment.ContainsKey("UNRELATED_SECRET"));
         // A legacy set-wide version is still forwarded, so the harness can hold every candidate to it.
         Assert.Equal("1.2.3", startInfo.Environment["PACKAGE_VERSION"]);
@@ -72,6 +75,7 @@ public sealed class ObservabilityPackageOperationExecutorTests
             "/agent-owned/promote.sh",
             "/agent-owned/publish.sh",
             "https://packages.example",
+            "/home/agent/.aetheus/dotnet/11.0.100/dotnet",
             PerPackageEnvironment());
 
         Assert.False(startInfo.Environment.ContainsKey("PACKAGE_VERSION"));
@@ -163,6 +167,7 @@ public sealed class ObservabilityPackageOperationExecutorTests
             var fakeDotnet = Path.Combine(fakeBin, "dotnet");
             await File.WriteAllTextAsync(fakeDotnet, """
                 #!/bin/sh
+                if [ "$1" = --version ]; then echo 11.0.100; exit 0; fi
                 if [ "$1" = nuget ] && [ "$2" = push ]; then
                   cp "$3" "$FAKE_REGISTRY"
                   printf 'write\n' >> "$FAKE_WRITE_COUNT"

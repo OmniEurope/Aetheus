@@ -29,7 +29,8 @@ public sealed class PackageRegistryStorageReconcilerTests
         var sut = new PackageRegistryStorageReconciler(
             services.GetRequiredService<IServiceScopeFactory>(),
             new FakeTimeProvider(now),
-            NullLogger<PackageRegistryStorageReconciler>.Instance);
+            NullLogger<PackageRegistryStorageReconciler>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await sut.ReconcileOnceAsync(TestContext.Current.CancellationToken);
 

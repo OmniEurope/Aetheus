@@ -20,8 +20,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// is replaced; the HTTP pipeline, the role check, the master secret (stored encrypted through the real
 /// settings service and read back from PostgreSQL) and the audit chain are real.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class MailboxAdministratorOpenHttpIntegrationTests(PostgresFixture fixture)
+public sealed class MailboxAdministratorOpenHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task AdministratorOpensTheMailbox_AsTheMasterUser_AndTheOpeningIsAudited()

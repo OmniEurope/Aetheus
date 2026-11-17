@@ -18,8 +18,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// change the owners and audit them without preparing every pipeline again. Preparations are counted
 /// at the service boundary and the PUT is timed for 1, 10 and 20 pipelines (written to the test output).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class UserDeactivationPipelineTransferIntegrationTests(PostgresFixture fixture)
+public sealed class UserDeactivationPipelineTransferIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string Yaml =
         "name: handover\n" +

@@ -41,6 +41,30 @@ public class PluginManagementTests : BunitContext
     }
 
     [Fact]
+    public void TheOrganizationSwitcher_NarrowsThePluginListToTheChosenOrganization()
+    {
+        // R-12: every plugin belongs to an organization; the site Admin sees the switcher over every
+        // organization, and its choice reaches the list request.
+        _handler.SetJsonResponse("api/organizations/administered", new List<AdministeredOrganizationDto>
+        {
+            new(1, "Acme", PermissionCatalog.OrganizationAdministrationKeys),
+            new(2, "Globex", PermissionCatalog.OrganizationAdministrationKeys)
+        });
+        _handler.SetPaginatedJsonResponse("api/plugins", new List<PluginRegistrationDto>());
+        var cut = Render<PluginManagement>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("#admin-scope-organization")));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
+        Assert.DoesNotContain(_handler.RequestsSnapshot(), request => request.Url.Contains("organizationId=", StringComparison.Ordinal));
+
+        var dropDown = cut.FindComponent<AdministrationOrganizationSwitcher>().FindComponent<OmniDropDown<int>>();
+        cut.InvokeAsync(() => dropDown.Instance.ValueChanged.InvokeAsync(2));
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestsSnapshot(), request =>
+            request.Url.Contains("api/plugins?", StringComparison.Ordinal)
+            && request.Url.Contains("organizationId=2", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Renders_PluginRows()
     {
         _handler.SetPaginatedJsonResponse("api/plugins", new List<PluginRegistrationDto>
@@ -183,6 +207,8 @@ public class PluginManagementTests : BunitContext
         };
 
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [plugin])!);
+        // R-10: the list is read again by the grid, quietly, behind the row the save answered.
+        await cut.InvokeAsync(() => cut.FindComponent<AetheusDataGrid<PluginRegistrationDto>>().Instance.BackgroundRefresh);
 
         var plugins = (List<PluginRegistrationDto>)typeof(PluginManagement).GetField("_plugins",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(cut.Instance)!;

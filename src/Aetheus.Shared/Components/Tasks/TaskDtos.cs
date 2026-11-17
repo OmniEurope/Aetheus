@@ -72,6 +72,13 @@ public sealed record DeploymentBuildRefusalReport
     public DateTime OccurredAtUtc { get; init; }
     [StringLength(512)]
     public string Reason { get; init; } = string.Empty;
+
+    /// <summary>BACK-004: the lease the agent claimed the task under. The refusal closes the task, so it
+    /// passes the same session ownership check as an ordinary completion.</summary>
+    [StringLength(64)]
+    public string? AgentSessionId { get; init; }
+
+    public long? AgentSessionFencingToken { get; init; }
 }
 
 public sealed record TaskCompletedNotification

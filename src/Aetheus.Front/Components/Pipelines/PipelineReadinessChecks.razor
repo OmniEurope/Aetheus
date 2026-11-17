@@ -12,6 +12,13 @@
             <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" EnvironmentReturnUrl="@EnvironmentReturnUrl" OnChanged="@OnChanged" />
         </OmniAlert>
     }
+    else if (check.Severity == PipelineSetupReadinessSeverity.Error)
+    {
+        @* R-21: an error of the setup that does not stop the run: the OE error alert, its items linking to the pipelines to fix. *@
+        <OmniAlert Severity="OmniSeverity.Danger" data-testid="setup-readiness-check" data-severity="error">
+            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" EnvironmentReturnUrl="@EnvironmentReturnUrl" OnChanged="@OnChanged" />
+        </OmniAlert>
+    }
     else
     {
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Start" Gap="OmniSpacing.Small"
@@ -21,6 +28,11 @@
             </OmniBadge>
             <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" EnvironmentReturnUrl="@EnvironmentReturnUrl" OnChanged="@OnChanged" />
         </OmniStack>
+    }
+    @if (check.UndefinedVariables.Count > 0)
+    {
+        @* R-56: variable and the library or vault to create it in, the same table drawn as the empty values. *@
+        <PipelineReadinessUndefinedVariables Rows="@check.UndefinedVariables" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" OnChanged="@OnChanged" />
     }
     @if (check.EmptyValues.Count > 0)
     {

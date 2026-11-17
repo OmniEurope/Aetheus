@@ -86,9 +86,15 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
         });
         if (created is not null)
         {
-            await LoadAsync();
-            await Loader.ForceReloadAsync(ProjectId);
+            // R-10: the server shows at once from the answer, the quiet read behind it confirms. The shared
+            // project detail is read again because the overview checklist counts the servers.
+            await ShowOrLoadAsync(created);
             Toast.Success("Created", "ProjectServerCreated");
+            await Loader.ForceReloadAsync(ProjectId);
+        }
+        else
+        {
+            Toast.Error("Error", "SaveFailed");
         }
     }
 
@@ -118,11 +124,18 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
         });
         if (updated is not null)
         {
-            await LoadAsync();
-            await Loader.ForceReloadAsync(ProjectId);
+            await ShowOrLoadAsync(updated);
             Toast.Success("Updated", "ProjectServerUpdated");
+            await Loader.ForceReloadAsync(ProjectId);
+        }
+        else
+        {
+            // Refused (a 409 included): the row stays as it was.
+            Toast.Error("Error", "SaveFailed");
         }
     }
+
+    private Task ShowOrLoadAsync(ProjectServerDto row) => _grid is not null ? _grid.ShowRowAsync(row) : LoadAsync();
 
     private async Task DeleteServerAsync(ProjectServerDto server)
     {
@@ -135,8 +148,12 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
             var success = await Api.Projects.DeleteProjectServerAsync(ProjectId, server.Id);
             if (success)
             {
-                await LoadAsync();
+                // R-10: the server leaves the grid at once, the quiet read behind it confirms.
+                if (_grid is not null) await _grid.HideRowAsync(server);
+                else await LoadAsync();
                 Toast.Success("Deleted", "Deleted");
+                // The overview checklist counts the servers: the shared project detail is read again, as for create and update.
+                await Loader.ForceReloadAsync(ProjectId);
             }
             else
             {

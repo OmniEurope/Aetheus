@@ -61,15 +61,14 @@ public sealed class MailLeftoversCheckTests : BunitContext
         cut.Find("button.mail-leftovers-check").Click();
 
         cut.WaitForAssertion(() => Assert.True(cut.Instance.Busy));
-        var card = cut.Find(".mail-leftovers");
-        Assert.Contains("omni-busy", card.ClassList);
-        Assert.Equal("true", card.GetAttribute("aria-busy"));
+        Assert.NotNull(cut.Find(".mail-leftovers"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Contains("/tasks/300", cut.Markup, StringComparison.Ordinal);
 
         await CompleteAsync(300, TaskExecutionStatus.Success);
 
         cut.WaitForAssertion(() => Assert.False(cut.Instance.Busy));
-        Assert.DoesNotContain("omni-busy", cut.Find(".mail-leftovers").ClassList);
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Equal(["package", "path", "marker", "port"],
             cut.FindAll(".mail-leftovers-group").Select(group => group.GetAttribute("data-kind")).ToArray());
         var found = cut.Find(".mail-leftovers-found").TextContent;

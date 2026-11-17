@@ -23,6 +23,9 @@ public interface IAnalysisRepository
     Task<HashSet<string>> GetBaselineFingerprintsAsync(int projectId, string baselineBranch, int currentRunId,
         string scannerKey, AnalysisCategory category, CancellationToken ct = default);
     Task<Dictionary<string, AnalysisFinding>> GetFindingsByFingerprintsAsync(int projectId, IReadOnlyCollection<string> fingerprints, CancellationToken ct = default);
+    /// <summary>The fingerprints of the findings the reports of the run published before this one hold, whatever their
+    /// status: the run counts a finding once, however many of its reports saw it (recette R-21).</summary>
+    Task<HashSet<string>> GetFingerprintsOfEarlierReportsAsync(int runId, int reportId, CancellationToken ct = default);
     Task AddReportAsync(AnalysisReport report, CancellationToken ct = default);
     Task AddMetricsAsync(int reportId, IReadOnlyCollection<AnalysisMetric> metrics, CancellationToken ct = default);
     Task<List<AnalysisPolicy>> GetApplicablePoliciesAsync(int organizationId, int projectId, CancellationToken ct = default);
@@ -83,6 +86,11 @@ public interface IAnalysisRepository
         DateTime now, DateTime before, int limit, CancellationToken ct = default);
     Task MarkExpirationNotificationSentAsync(
         string kind, int id, DateTime sentAt, CancellationToken ct = default);
+
+    /// <summary>Ends, in every project, up to <paramref name="take"/> active decisions whose expiry has passed: the
+    /// decision is revoked (kept in the history) and its finding goes back to Open, unless a scan found it fixed.
+    /// Returns what it ended, so a second call ends only what is newly due.</summary>
+    Task<List<AnalysisDecisionExpired>> EndExpiredFindingDecisionsAsync(DateTime now, int take, CancellationToken ct = default);
     Task<AnalysisTrackingProject?> GetTrackingProjectAsync(int projectId, CancellationToken ct = default);
     Task<List<AnalysisTrackingProject>> GetActiveTrackingProjectsAsync(int limit, CancellationToken ct = default);
     Task SaveTrackingSnapshotAsync(AnalysisTrackingProject trackingProject,

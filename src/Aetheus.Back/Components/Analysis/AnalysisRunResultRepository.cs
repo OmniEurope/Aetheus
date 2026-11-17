@@ -94,7 +94,9 @@ public sealed class AnalysisRunResultRepository(AppDbContext db) : IAnalysisRunR
                         || occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Mitigated)
                     .Select(occurrence => occurrence.AnalysisFindingId).Distinct().Count()
             })
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            // One group (a constant key) or none: Single, because First without an ordering is an Entity Framework
+            // warning on every read of the page (R-1).
+            .SingleOrDefaultAsync(ct).ConfigureAwait(false);
         return counts is null ? (0, 0, 0) : (counts.Open, counts.NewOpen, counts.Decided);
     }
 

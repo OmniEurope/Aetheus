@@ -127,6 +127,9 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             variables.Remove(PipelineRunHelpers.CancelledByVariable);
             variables.Remove(PipelineRunHelpers.CancellationReasonVariable);
             run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
+            // R-22: a stage replayed with a fresh confirmation no longer carries its missed-confirmation warning.
+            run.WarningsJson = PipelineRunRetryWarnings.WithoutConfirmationOf(
+                run.WarningsJson, [.. failedSteps.Select(s => s.StageName).Distinct(StringComparer.OrdinalIgnoreCase)]);
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -241,7 +244,7 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
     }
 
     public async Task<List<PipelineRunDto>> GetActiveRunsAsync(
-        List<int>? accessiblePipelineIds = null, int? projectId = null, CancellationToken ct = default)
+        List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null, CancellationToken ct = default)
     {
         var query = db.PipelineRuns.AsNoTracking()
             .Where(run => run.Status == PipelineStatus.Running
@@ -252,6 +255,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             query = query.Where(run => accessiblePipelineIds.Contains(run.PipelineId));
         if (projectId.HasValue)
             query = query.Where(run => run.Pipeline.ProjectId == projectId.Value);
+        if (serverId.HasValue)
+            query = query.Where(run => run.StepRuns.Any(step => step.ServerId == serverId.Value));
 
         var runs = await query
             .OrderByDescending(run => run.StartedAt)
@@ -262,7 +267,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
         var hydrated = await PipelineAdvisorySteps.ApplyToListAsync(
             db, runs.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList(), ct).ConfigureAwait(false);
         var graded = await PipelineRunGradeAggregation.ApplyAsync(db, hydrated, ct).ConfigureAwait(false);
-        return await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
+        var linked = await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
+        return await PipelineRunDeployedReleases.ApplyAsync(db, linked, ct).ConfigureAwait(false);
     }
 
     public async Task<List<PipelineRunDto>> GetRecentRunsAsync(
@@ -286,6 +292,7 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
         var hydrated = await PipelineAdvisorySteps.ApplyToListAsync(
             db, runs.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList(), ct).ConfigureAwait(false);
         var graded = await PipelineRunGradeAggregation.ApplyAsync(db, hydrated, ct).ConfigureAwait(false);
-        return await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
+        var linked = await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
+        return await PipelineRunDeployedReleases.ApplyAsync(db, linked, ct).ConfigureAwait(false);
     }
 }

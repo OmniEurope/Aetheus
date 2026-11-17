@@ -99,6 +99,16 @@ public sealed class PipelineDotnetTestTaskFactoryTests
         Assert.Equal("false", CapturedVariables()[PipelineDotnetTestVariables.CollectCoverage]);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheFailedTestsRerunOnlyWhenTheStepAsksForIt(bool rerun)
+    {
+        Create(Step() with { RerunFailedTests = rerun });
+
+        Assert.Equal(rerun ? "true" : null, CapturedVariables().GetValueOrDefault(PipelineDotnetTestVariables.RerunFailedTests));
+    }
+
     [Fact]
     public void TheRunsWorkspaceIsPassedThroughUntouched()
     {

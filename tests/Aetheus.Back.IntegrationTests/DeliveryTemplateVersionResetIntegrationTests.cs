@@ -12,7 +12,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Concurrent startup serializes shipped-template renumbering through the advisory lock,
 /// removing previous rows before inserting version one under the uniqueness constraint.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class DeliveryTemplateVersionResetIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

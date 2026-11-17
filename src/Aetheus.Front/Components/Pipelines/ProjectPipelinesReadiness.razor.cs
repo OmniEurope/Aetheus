@@ -21,24 +21,44 @@ public partial class ProjectPipelinesReadiness
     /// other findings, which stay on the pipelines page.</summary>
     [Parameter] public bool EmptyValuesOnly { get; set; }
 
+    /// <summary>R-9: on the page of one pipeline, the verdict of that pipeline only, and only what it reads that nothing
+    /// defines; the project's other findings stay on its pipelines page.</summary>
+    [Parameter] public int? PipelineId { get; set; }
+
     private PipelineSetupReadinessDto? _readiness;
     private int? _loadedProjectId;
+    private int? _loadedPipelineId;
 
-    private IReadOnlyList<PipelineSetupReadinessCheckDto> Checks => EmptyValuesOnly
+    // R-36: the page of a pipeline that starts another on success is where that option is set, so it also says when the
+    // follow-up will be refused for want of a deployment server.
+    private IReadOnlyList<PipelineSetupReadinessCheckDto> Checks => PipelineId is not null
         ? [.. (_readiness?.Checks ?? []).Where(check =>
-            check.Kind is PipelineSetupReadinessKind.EmptyLibraryValues or PipelineSetupReadinessKind.EmptyVaultSecrets)]
-        : _readiness?.Checks ?? [];
+            check.Kind is PipelineSetupReadinessKind.UndefinedVariables || IsChainedFollowUp(check))]
+        : EmptyValuesOnly
+            ? [.. (_readiness?.Checks ?? []).Where(check =>
+                check.Kind is PipelineSetupReadinessKind.EmptyLibraryValues or PipelineSetupReadinessKind.EmptyVaultSecrets
+                    or PipelineSetupReadinessKind.UndefinedVariables)]
+            : _readiness?.Checks ?? [];
 
-    private string TitleKey => EmptyValuesOnly ? "ProjectValuesToFill"
+    private string TitleKey => (EmptyValuesOnly || PipelineId is not null)
+        && !Checks.Any(IsChainedFollowUp) ? "ProjectValuesToFill"
         : _readiness?.HasBlocking == true ? "ProjectPipelinesNotReady" : "ProjectPipelinesToVerify";
 
+    /// <summary>R-36: the follow-up an <c>on_success:</c> starts will be refused (no deployment server, or another required
+    /// parameter nothing supplies).</summary>
+    private static bool IsChainedFollowUp(PipelineSetupReadinessCheckDto check) =>
+        check.Kind is PipelineSetupReadinessKind.ChainedDeployServerMissing
+            or PipelineSetupReadinessKind.ChainedRequiredParameterMissing;
+
     /// <summary>The pages opened to fix a finding come back to this project's pipelines.</summary>
-    private string ReturnUrl => EmptyValuesOnly ? $"/projects/{ProjectId}" : $"/projects/{ProjectId}/pipelines";
+    private string ReturnUrl => PipelineId is { } pipelineId ? $"/pipelines/{pipelineId}"
+        : EmptyValuesOnly ? $"/projects/{ProjectId}" : $"/projects/{ProjectId}/pipelines";
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedProjectId == ProjectId) return;
+        if (_loadedProjectId == ProjectId && _loadedPipelineId == PipelineId) return;
         _loadedProjectId = ProjectId;
+        _loadedPipelineId = PipelineId;
         await LoadAsync();
         // The banners are drawn first, then the page swaps its loader for the list: the list never moves under them.
         StateHasChanged();
@@ -49,7 +69,9 @@ public partial class ProjectPipelinesReadiness
     {
         try
         {
-            _readiness = await Api.Pipelines.GetProjectReadinessAsync(ProjectId);
+            _readiness = PipelineId is { } pipelineId
+                ? await Api.Pipelines.GetPipelineReadinessAsync(pipelineId)
+                : await Api.Pipelines.GetProjectReadinessAsync(ProjectId);
         }
         catch (HttpRequestException)
         {

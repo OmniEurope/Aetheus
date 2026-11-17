@@ -72,7 +72,7 @@ public class PipelinesControllerTests
         _sut = new PipelinesController(
             _service, _runService, _approvalService, _artifactService, _webhookService,
             new PipelineOwnerAuthorization(_service, _authz), _authz, _runToEnd);
-        _fleetSut = new PipelineFleetController(_fleetService, _authz, Substitute.For<IPipelineTemplateService>());
+        _fleetSut = new PipelineFleetController(_fleetService, _authz, Substitute.For<IPipelineTemplateService>(), Substitute.For<IPipelineFleetBulkUpdateService>());
         var controllerContext = new ControllerContext
         {
             HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
@@ -213,7 +213,7 @@ public class PipelinesControllerTests
     {
         _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, Permission.Read, TestContext.Current.CancellationToken)
             .Returns([1, 3]);
-        _runService.GetActiveRunsAsync(Arg.Any<List<int>?>(), 7, TestContext.Current.CancellationToken)
+        _runService.GetActiveRunsAsync(Arg.Any<List<int>?>(), 7, null, TestContext.Current.CancellationToken)
             .Returns([new PipelineRunDto { Id = 9, PipelineId = 3, Status = PipelineStatus.Running }]);
 
         var response = await _sut.GetActiveRuns(7, TestContext.Current.CancellationToken);
@@ -221,7 +221,21 @@ public class PipelinesControllerTests
         var ok = Assert.IsType<OkObjectResult>(response.Result);
         Assert.Single(Assert.IsType<List<PipelineRunDto>>(ok.Value));
         await _runService.Received(1).GetActiveRunsAsync(
-            Arg.Is<List<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 1, 3 })), 7, TestContext.Current.CancellationToken);
+            Arg.Is<List<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 1, 3 })), 7, null, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task GetActiveRuns_ForwardsTheServerScope()
+    {
+        _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, Permission.Read, TestContext.Current.CancellationToken)
+            .Returns([1, 3]);
+        _runService.GetActiveRunsAsync(Arg.Any<List<int>?>(), null, 9, TestContext.Current.CancellationToken)
+            .Returns([new PipelineRunDto { Id = 9, PipelineId = 3, Status = PipelineStatus.Running }]);
+
+        var response = await _sut.GetActiveRuns(null, TestContext.Current.CancellationToken, serverId: 9);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        Assert.Single(Assert.IsType<List<PipelineRunDto>>(ok.Value));
     }
 
     [Fact]

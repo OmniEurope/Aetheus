@@ -161,6 +161,29 @@ public sealed class PipelineWorkspaceSourceResolverTests : IDisposable
         Assert.Contains("was not found at the definition's revision", error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Decision 2026-11-10: the exclude list is a configuration file; when the definition's repository is the
+    /// mirror of an external repository it is never read there, and the run is refused saying so.</summary>
+    [Fact]
+    public async Task Decision20261110_MustMatch_WithAnExcludeFileOnAnExternalMirror_IsRefusedWithoutReadingIt()
+    {
+        _git.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(
+        [
+            new GitLightRepoDto { Id = 3, ProjectId = 7, Slug = "oe1-mirror", DefaultBranch = "main", IsExternalMirror = true },
+            new GitLightRepoDto
+            {
+                Id = 2, ProjectId = 7, Slug = "aetheus-public", DefaultBranch = "main",
+                CloneUrl = "https://api/git/7/aetheus-public.git", IsAdditionalSource = true
+            }
+        ]);
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => Build().ResolveAsync(
+            7, Source(mustMatch: true, excludeFile: ".pipeline/configs/public/exclude.txt"), 3, DefinitionCommit, ct));
+
+        Assert.Contains("is never read from the mirror of an external repository ('oe1-mirror')", error.Message, StringComparison.Ordinal);
+        await _pipelineGit.DidNotReceiveWithAnyArgs().ReadProjectConfigAtRevisionAsync(default, default!, default!, ct, default);
+    }
+
     [Fact]
     public void Compare_NamesWhatIsMissingChangedAndUnexpected_OnceTheExcludedPathsAreSetAside()
     {

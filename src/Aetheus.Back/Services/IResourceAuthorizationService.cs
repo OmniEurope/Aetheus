@@ -20,6 +20,12 @@ public interface IResourceAuthorizationService
     Task<List<int>?> GetAccessibleResourceIdsAsync(ClaimsPrincipal user, ResourceType resourceType, Permission required, CancellationToken ct = default);
 
     /// <summary>
+    /// The same read scope for a user known by username only (a mail recipient, no request): null for
+    /// everything (a site-wide wildcard), else the ids of the resources the user's roles reach.
+    /// </summary>
+    Task<List<int>?> GetAccessibleResourceIdsForUsernameAsync(string username, ResourceType resourceType, Permission required, CancellationToken ct = default);
+
+    /// <summary>
     /// Organization ids the user belongs to (empty when none / unauthenticated). Used by the hubs to
     /// subscribe non-admin members to the per-org aggregate groups so they receive realtime
     /// Created/Registered events for org-scoped resources that did not exist when they connected.

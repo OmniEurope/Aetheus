@@ -9,6 +9,8 @@ public interface ITaskService : ITaskServerReader
 
     Task<PaginatedResult<ServerTaskDto>> GetTasksAsync(TaskPaginationRequest request, List<int>? accessibleServerIds = null, CancellationToken ct = default);
     Task<ServerTaskDto?> GetTaskAsync(int id, CancellationToken ct = default);
+    Task<int?> GetTaskIdByUidAsync(Guid uid, CancellationToken ct = default);
+    Task<TaskIdentityBackfillDto> GetIdentityBackfillProgressAsync(CancellationToken ct = default);
     Task<ServerTaskDto> CreateTaskAsync(CreateTaskRequest request, CancellationToken ct = default);
     Task<ServerTaskDto> CreateOperationAsync(CreateOperationRequest request, CancellationToken ct = default);
 

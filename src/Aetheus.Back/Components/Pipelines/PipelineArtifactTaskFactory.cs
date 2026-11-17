@@ -27,7 +27,7 @@ public interface IPipelineArtifactTaskFactory
     /// Resolves the artifact a step points at - same run, another pipeline's run, or a release.
     /// Public because the release step resolves the same thing and must not grow its own version of it.
     /// </summary>
-    Task<(PipelineArtifact? Artifact, string? Error)> ResolveArtifactSourceAsync(
+    Task<(PipelineArtifact? Artifact, PipelineProblem? Error)> ResolveArtifactSourceAsync(
         int runId, Dictionary<string, string> variables, PipelineStepDefinition stepDef,
         CancellationToken ct);
 }
@@ -62,7 +62,7 @@ public sealed class PipelineArtifactTaskFactory(
         if (!PipelinePathValidation.IsSafeRelativeDirectory(targetDirectory))
         {
             await FailRestoreArtifactsAsync(
-                runId, legServer, stepRun, "target_directory must be a safe relative path.", now, ct)
+                runId, legServer, stepRun, PipelineArtifactProblems.TargetDirectoryUnsafe(), now, ct)
                 .ConfigureAwait(false);
             return;
         }
@@ -71,7 +71,7 @@ public sealed class PipelineArtifactTaskFactory(
         {
             await FailRestoreArtifactsAsync(
                 runId, legServer, stepRun,
-                $"artifact '{artifact.Name}' has no valid authoritative SHA-256.", now, ct).ConfigureAwait(false);
+                PipelineArtifactProblems.InvalidSha256(artifact.Name), now, ct).ConfigureAwait(false);
             return;
         }
         CreateRestoreArtifactsTask(
@@ -85,7 +85,7 @@ public sealed class PipelineArtifactTaskFactory(
         PipelineStepRun stepRun,
         PipelineStepDefinition stepDefinition,
         string releaseSelector,
-        string? error,
+        PipelineProblem? error,
         DateTime now,
         CancellationToken ct)
     {
@@ -97,17 +97,17 @@ public sealed class PipelineArtifactTaskFactory(
             // record it as unavailable.
             await CompleteMissingRestoreArtifactAsync(
                 runId, server, stepRun,
-                $"Nothing to restore: the optional artifact '{stepDefinition.Artifact}' of {stepDefinition.ArtifactSourcePipeline} does not exist yet, so there is nothing to compare with ({error?.TrimEnd('.')}). The checks that read it record it as unavailable.",
+                $"Nothing to restore: the optional artifact '{stepDefinition.Artifact}' of {stepDefinition.ArtifactSourcePipeline} does not exist yet, so there is nothing to compare with ({error?.English.TrimEnd('.')}). The checks that read it record it as unavailable.",
                 runNotice: false, now, ct).ConfigureAwait(false);
             return;
         }
         var canBootstrap = stepDefinition.AllowMissing
             && PipelineReleaseArtifactRules.IsBootstrapSelector(releaseSelector)
-            && error?.Contains(PipelineReleaseArtifactRules.NoRetainedArtifact, StringComparison.Ordinal) == true;
+            && error?.Code == PipelineProblemCodes.ArtifactReleaseNotRetained;
         if (!canBootstrap)
         {
             await FailRestoreArtifactsAsync(
-                runId, server, stepRun, error ?? "the requested artifact could not be resolved.", now, ct)
+                runId, server, stepRun, error ?? PipelineArtifactProblems.Unresolved(), now, ct)
                 .ConfigureAwait(false);
             return;
         }
@@ -144,12 +144,12 @@ public sealed class PipelineArtifactTaskFactory(
         int runId,
         Server server,
         PipelineStepRun stepRun,
-        string reason,
+        PipelineProblem reason,
         DateTime now,
         CancellationToken ct)
     {
         stepRun.ServerId = server.Id;
-        MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, now);
+        MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason.English, now);
         await repo.AppendRunWarningsAsync(
             runId, [PipelineStepFailureWarning.RestoreArtifacts(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
@@ -232,7 +232,7 @@ public sealed class PipelineArtifactTaskFactory(
         MarkStepDispatched(stepRun, restoreTask);
     }
 
-    public async Task<(PipelineArtifact? Artifact, string? Error)> ResolveArtifactSourceAsync(
+    public async Task<(PipelineArtifact? Artifact, PipelineProblem? Error)> ResolveArtifactSourceAsync(
         int runId, Dictionary<string, string> variables, PipelineStepDefinition stepDef,
         CancellationToken ct)
     {
@@ -244,7 +244,7 @@ public sealed class PipelineArtifactTaskFactory(
                 runId, releaseSelector, artifactName, sourcePipelineName, ct).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(artifactName) || string.IsNullOrWhiteSpace(sourcePipelineName))
-            return (null, "'release' or both 'artifact' and 'artifact_source_pipeline' are required.");
+            return (null, PipelineArtifactProblems.SourceRequired());
 
         var (selector, selectorError) = ResolveSelector(stepDef, variables);
         if (selectorError is not null) return (null, selectorError);
@@ -259,7 +259,7 @@ public sealed class PipelineArtifactTaskFactory(
             var latestArtifact = await artifactRepo.FindLatestSuccessfulPipelineArtifactAsync(
                 context.Context!.ProjectId, sourcePipelineName, artifactName, ct).ConfigureAwait(false);
             return latestArtifact is null
-                ? (null, $"artifact '{artifactName}' was never produced by a successful {sourcePipelineName} run.")
+                ? (null, PipelineArtifactProblems.NeverProduced(artifactName, sourcePipelineName))
                 : (latestArtifact, null);
         }
 
@@ -272,7 +272,7 @@ public sealed class PipelineArtifactTaskFactory(
         var existingArtifact = await artifactRepo.FindSuccessfulPipelineArtifactByCommitAsync(
             context.Context!.ProjectId, sourcePipelineName, context.Context.Run.CommitHash!, artifactName, ct).ConfigureAwait(false);
         return existingArtifact is null
-            ? (null, $"artifact '{artifactName}' was not found on a successful {sourcePipelineName} run at commit {context.Context.Run.CommitHash}.")
+            ? (null, PipelineArtifactProblems.NotFoundAtCommit(artifactName, sourcePipelineName, context.Context.Run.CommitHash))
             : (existingArtifact, null);
     }
 
@@ -282,7 +282,7 @@ public sealed class PipelineArtifactTaskFactory(
     /// <summary>The step's artifact source selector, defaulted and validated. An unknown value is an
     /// error rather than a fall-back to the default: silently widening or narrowing a provenance
     /// lookup because a name was misspelled is exactly the failure this selector must not have.</summary>
-    private static (string Selector, string? Error) ResolveSelector(
+    private static (string Selector, PipelineProblem? Error) ResolveSelector(
         PipelineStepDefinition stepDef, Dictionary<string, string> variables)
     {
         var selector = SubstituteVariables(stepDef.ArtifactSourceSelector ?? string.Empty, variables).Trim();
@@ -292,19 +292,18 @@ public sealed class PipelineArtifactTaskFactory(
         {
             return (selector, null);
         }
-        return (selector,
-            $"'artifact_source_selector' must be '{SameCommitSelector}' or '{LatestSuccessfulSelector}', not '{selector}'.");
+        return (selector, PipelineArtifactProblems.SelectorInvalid(selector, SameCommitSelector, LatestSuccessfulSelector));
     }
 
-    private async Task<(ArtifactResolutionContext? Context, string? Error)> ResolveArtifactContextAsync(
+    private async Task<(ArtifactResolutionContext? Context, PipelineProblem? Error)> ResolveArtifactContextAsync(
         int runId, CancellationToken ct)
     {
         var currentRun = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         if (currentRun?.Pipeline is null || !IsGitCommitHash(currentRun.CommitHash))
-            return (null, "the current run has no verified source commit.");
+            return (null, PipelineArtifactProblems.NoVerifiedCommit());
         var projectId = await repo.GetPipelineProjectIdAsync(currentRun.Pipeline, ct).ConfigureAwait(false);
         return projectId is null
-            ? (null, "the current run is not attached to a project.")
+            ? (null, PipelineArtifactProblems.NoProject())
             : (new ArtifactResolutionContext(currentRun, projectId.Value), null);
     }
 
@@ -315,7 +314,7 @@ public sealed class PipelineArtifactTaskFactory(
             ? parentRunId
             : runId;
 
-    private async Task<(PipelineArtifact? Artifact, string? Error)> ResolveTriggeredArtifactAsync(
+    private async Task<(PipelineArtifact? Artifact, PipelineProblem? Error)> ResolveTriggeredArtifactAsync(
         int sourceRunId,
         ArtifactResolutionContext context,
         string artifactName,
@@ -327,25 +326,25 @@ public sealed class PipelineArtifactTaskFactory(
             ? null
             : await repo.GetPipelineProjectIdAsync(sourceRun.Pipeline, ct).ConfigureAwait(false);
         if (sourceProjectId != context.ProjectId)
-            return (null, "the source run belongs to another project.");
+            return (null, PipelineArtifactProblems.SourceRunOtherProject());
         if (!string.Equals(sourceRun?.CommitHash, context.Run.CommitHash, StringComparison.OrdinalIgnoreCase))
-            return (null, "the source run belongs to another source commit.");
+            return (null, PipelineArtifactProblems.SourceRunOtherCommit());
         // A Rejected source ran every control to the end and sealed what it found (recette R1-80): its
         // artifacts are complete, and what it found travels in its outputs. Only this lineage lookup
         // (the run this very pipeline triggered) accepts it; the same-commit and latest-successful
         // lookups above and below stay Success-only.
         if (sourceRun?.Status is not (PipelineStatus.Success or PipelineStatus.Rejected))
-            return (null, "the source run did not succeed; its optional producer artifact is unavailable.");
+            return (null, PipelineArtifactProblems.SourceRunNotSucceeded());
         var artifact = await artifactRepo.FindRunArtifactByNameAsync(
             sourceRunId, artifactName, ct).ConfigureAwait(false);
         return artifact?.ProjectId == context.ProjectId
             ? (artifact, null)
-            : (null, $"artifact '{artifactName}' was not found on successful {sourcePipelineName} run {sourceRunId}.");
+            : (null, PipelineArtifactProblems.NotFoundOnRun(artifactName, sourcePipelineName, sourceRunId));
     }
 
     private sealed record ArtifactResolutionContext(PipelineRun Run, int ProjectId);
 
-    private async Task<(PipelineArtifact? Artifact, string? Error)> ResolveReleaseArtifactAsync(
+    private async Task<(PipelineArtifact? Artifact, PipelineProblem? Error)> ResolveReleaseArtifactAsync(
         int runId,
         string releaseSelector,
         string artifactName,
@@ -353,13 +352,13 @@ public sealed class PipelineArtifactTaskFactory(
         CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(sourcePipelineName))
-            return (null, "'release' cannot be combined with 'artifact_source_pipeline'.");
+            return (null, PipelineArtifactProblems.ReleaseWithSourcePipeline());
         var releaseRun = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         var projectId = releaseRun?.Pipeline is null
             ? null
             : await repo.GetPipelineProjectIdAsync(releaseRun.Pipeline, ct).ConfigureAwait(false);
         if (projectId is null)
-            return (null, "the current run is not attached to a project.");
+            return (null, PipelineArtifactProblems.NoProject());
 
         return await PipelineReleaseArtifactRules.FindAsync(
             artifactRepo, projectId.Value, releaseRun?.CommitHash, releaseSelector, artifactName, ct)
@@ -416,10 +415,9 @@ public sealed class PipelineArtifactTaskFactory(
 
     private static bool IsOptionalProducerArtifactUnavailable(
         PipelineStepDefinition step,
-        string? error) =>
+        PipelineProblem? error) =>
         !string.IsNullOrWhiteSpace(step.ArtifactSourcePipeline)
-        && (error?.StartsWith("artifact '", StringComparison.Ordinal) == true
-            || error?.Contains("optional producer artifact is unavailable", StringComparison.Ordinal) == true);
+        && PipelineArtifactProblems.IsProducerArtifactUnavailable(error);
 
     public async Task CreateBackupRestoreTaskAsync(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,

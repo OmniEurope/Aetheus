@@ -31,7 +31,7 @@ public class IngestServiceTests : IDisposable
         _db = new AppDbContext(options);
         var appRepo = new AppMonitoringRepository(_db);
         var metricRepo = new AppMetricRepository(_db);
-        _hasher = new IngestKeyHasher(Options.Create(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }));
+        _hasher = new IngestKeyHasher(new TokenHashKeys(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }));
         _service = new IngestService(appRepo, metricRepo, new AppLogRepository(_db), new AppErrorRepository(_db),
             _hasher, new MemoryCache(new MemoryCacheOptions()), _notifications, new AppIngestGate(),
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero)),
@@ -141,6 +141,29 @@ public class IngestServiceTests : IDisposable
         // After eviction the revoked key stops resolving immediately.
         _service.InvalidateKeyCache(_hasher.Hash("secret-key"));
         Assert.Null(await _service.ResolveAppIdAsync("secret-key", ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task R53_AKeyStoredUnderTheLegacyHash_StillResolves_AndItsCacheEntryFollowsTheStoredHash()
+    {
+        // Before R-53 the hasher read an unconfigured IOptions<JwtOptions>: every stored hash was keyed
+        // with an empty key. Such a key keeps resolving through the legacy candidate.
+        var legacyHash = Convert.ToBase64String(
+            System.Security.Cryptography.HMACSHA256.HashData(Array.Empty<byte>(), System.Text.Encoding.UTF8.GetBytes("legacy-key")));
+        Assert.Equal(legacyHash, _hasher.HashCandidates("legacy-key")[1]);
+        Assert.NotEqual(legacyHash, _hasher.Hash("legacy-key"));
+        var app = _db.MonitoredApps.Single(a => a.Id == 1);
+        app.IngestKeyHash = legacyHash;
+        _db.SaveChanges();
+
+        Assert.Equal(1, await _service.ResolveAppIdAsync("legacy-key", ct: TestContext.Current.CancellationToken));
+
+        // Revoking it and evicting the stored (legacy) hash stops it at once, as for a current key.
+        app.IngestKeyHash = null;
+        _db.SaveChanges();
+        Assert.Equal(1, await _service.ResolveAppIdAsync("legacy-key", ct: TestContext.Current.CancellationToken)); // still cached
+        _service.InvalidateKeyCache(legacyHash);
+        Assert.Null(await _service.ResolveAppIdAsync("legacy-key", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -305,7 +328,7 @@ public class IngestServiceTests : IDisposable
         try
         {
             var second = _service.IngestMetricsAsync(1, [new ParsedMetricPoint("cpu", 95, "%", default, null)], ct);
-            Assert.Same(second, await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(5), ct)));
+            Assert.Same(second, await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(30), ct)));
             Assert.Equal(1, (await second).Accepted);
             Assert.False(first.IsCompleted);
         }

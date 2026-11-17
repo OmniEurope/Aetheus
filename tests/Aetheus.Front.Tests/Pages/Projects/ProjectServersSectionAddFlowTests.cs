@@ -117,7 +117,7 @@ public sealed class ProjectServersSectionAddFlowTests : BunitContext
     }
 
     [Fact]
-    public async Task ACreateTheBackendAnswersWithNothing_ReloadsNothingAndConfirmsNothing()
+    public async Task ACreateTheBackendAnswersWithNothing_ReloadsNothingAndReportsTheError()
     {
         var cut = RenderSection();
         _handler.SetRawResponse(HttpMethod.Post, "api/projects/1/servers", "null", "application/json");
@@ -128,7 +128,9 @@ public sealed class ProjectServersSectionAddFlowTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Single(CreateBodies()));
         Assert.Equal(listReadsBefore, ListReads());
-        Assert.Empty(Services.Toasts());
+        var toast = Assert.Single(Services.Toasts());
+        Assert.Equal(OmniSeverity.Danger, toast.Severity);
+        Assert.Equal("SaveFailed", toast.Detail);
     }
 
     private CreateProjectServerRequest Sent() =>

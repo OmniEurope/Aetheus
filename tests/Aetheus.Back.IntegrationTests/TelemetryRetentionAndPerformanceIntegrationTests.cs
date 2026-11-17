@@ -10,7 +10,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Runs hourly rollup checks, batched purges, latest-export reads and identifier-based
 /// deletion on PostgreSQL rather than relying on InMemory behaviour.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class TelemetryRetentionAndPerformanceIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime CurrentHour = new(2026, 9, 28, 12, 0, 0, DateTimeKind.Utc);

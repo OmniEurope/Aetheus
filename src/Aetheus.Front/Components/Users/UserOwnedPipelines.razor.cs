@@ -58,7 +58,6 @@ public partial class UserOwnedPipelines
         if (result is PipelineOwnerTransferResultDto)
         {
             await LoadAsync();
-            StateHasChanged();
         }
     }
 }

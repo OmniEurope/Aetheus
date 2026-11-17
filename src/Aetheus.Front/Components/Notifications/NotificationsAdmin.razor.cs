@@ -109,15 +109,6 @@ public partial class NotificationsAdmin : ComponentBase
         finally { _rulesLoading = false; }
     }
 
-    private async Task ReloadAllAsync()
-    {
-        // A created, renamed or deleted channel or rule changes the values the rule filters offer.
-        await LoadRuleFilterValuesAsync();
-        var channelReload = _channelsGrid?.Reload() ?? Task.CompletedTask;
-        var ruleReload = _rulesGrid?.Reload() ?? Task.CompletedTask;
-        await Task.WhenAll(channelReload, ruleReload);
-    }
-
     private Task ResetChannelSearchAsync() => _channelsGrid?.GoToPage(0, forceReload: true) ?? Task.CompletedTask;
     private Task ResetRuleSearchAsync() => _rulesGrid?.GoToPage(0, forceReload: true) ?? Task.CompletedTask;
 
@@ -135,10 +126,12 @@ public partial class NotificationsAdmin : ComponentBase
             channel is null ? L["Create"] : L["Edit"],
             new Dictionary<string, object?> { ["ChannelId"] = channel?.Id },
             new OmniDialogOptions { Width = "640px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        if (result is true)
+        // R-10: the dialog hands back what the save answered; the row shows it at once, the read behind it confirms.
+        if (result is NotificationChannelDto saved)
         {
             _dialogChannels = [];
-            await ReloadAllAsync();
+            if (_channelsGrid is not null) await _channelsGrid.ShowRowAsync(saved);
+            await RefreshRulesQuietlyAsync();
         }
     }
 
@@ -150,7 +143,15 @@ public partial class NotificationsAdmin : ComponentBase
             rule is null ? L["Create"] : L["Edit"],
             new Dictionary<string, object?> { ["Rule"] = rule, ["Channels"] = _dialogChannels },
             new OmniDialogOptions { Width = "640px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        if (result is true && _rulesGrid is not null) await _rulesGrid.Reload();
+        if (result is NotificationRuleDto saved && _rulesGrid is not null) await _rulesGrid.ShowRowAsync(saved);
+    }
+
+    // A created, renamed or deleted channel changes the channel names and the filter values of the rules: they are
+    // read again behind the channel row, without hiding the rows drawn.
+    private async Task RefreshRulesQuietlyAsync()
+    {
+        await LoadRuleFilterValuesAsync();
+        if (_rulesGrid is not null) await _rulesGrid.Refresh();
     }
 
     private async Task TestChannelAsync(int id)
@@ -200,7 +201,8 @@ public partial class NotificationsAdmin : ComponentBase
             {
                 _channelTest.Remove(channel.Id);
                 _dialogChannels = [];
-                await ReloadAllAsync();
+                if (_channelsGrid is not null) await _channelsGrid.HideRowAsync(channel);
+                await RefreshRulesQuietlyAsync();
             },
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
@@ -216,7 +218,7 @@ public partial class NotificationsAdmin : ComponentBase
         await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Monitoring.DeleteNotificationRuleAsync(rule.Id),
             "Deleted",
-            () => _rulesGrid?.Reload() ?? Task.CompletedTask,
+            () => _rulesGrid?.HideRowAsync(rule) ?? Task.CompletedTask,
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
     }

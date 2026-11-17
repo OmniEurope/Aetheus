@@ -83,6 +83,18 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
         return _harness.RunAsync(new RunAffectedDotnetFormatFunction(_tools), _env);
     }
 
+    /// <summary>Runs the function and returns the published variables, failing with the exit code, the
+    /// timeout flag and the failure reason when the run did not succeed: a failed or timed out run publishes
+    /// nothing, and a bare missing-key lookup would hide why.</summary>
+    private async Task<Dictionary<string, string>> RunSucceededAsync()
+    {
+        var (result, variables) = await RunAsync();
+        Assert.True(
+            result.ExitCode == 0 && !result.TimedOut,
+            $"The function did not succeed: exit code {result.ExitCode}, timed out {result.TimedOut}, reason: {result.FailureReason}");
+        return variables;
+    }
+
     private static string FailureReason(Executors.ExecutorResult result)
     {
         Assert.NotEqual(0, result.ExitCode);
@@ -201,7 +213,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
         FormatExit = 2;
         FormatReport = OneFinding;
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("1", variables["DOTNET_FORMAT_GATE_STATUS"]);
         Assert.True(Logged("dotnet format findings status: 1 (2 finding(s)); SARIF evidence recorded."));
@@ -290,7 +302,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
     {
         CatFileExit = 1;
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("full", variables["DOTNET_FORMAT_MODE"]);
         Assert.Equal(["cat-file", "-e", Baseline + "^{commit}"], Assert.Single(Runs("cat-file")).ArgumentList);
@@ -302,7 +314,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
     {
         MergeBaseExit = 1;
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("full", variables["DOTNET_FORMAT_MODE"]);
         Assert.Equal(["merge-base", "--is-ancestor", Baseline, Head], Assert.Single(Runs("merge-base")).ArgumentList);
@@ -314,7 +326,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
     {
         DiffExit = 91;
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("full", variables["DOTNET_FORMAT_MODE"]);
         Assert.Single(Runs("diff"));
@@ -326,7 +338,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
     {
         DiffLines = ["M\tsrc/A.cs", "D\tsrc/Old.cs"];
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("full", variables["DOTNET_FORMAT_MODE"]);
         Assert.DoesNotContain("--include", FormatRun.ArgumentList);
@@ -354,7 +366,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
     {
         _env["AETHEUS_FORMAT_MODE"] = "full";
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("full", variables["DOTNET_FORMAT_MODE"]);
         Assert.DoesNotContain(_tools.Runs, run => Path.GetFileName(run.FileName) == "git");
@@ -366,7 +378,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
         _env["AETHEUS_FORMAT_MODE"] = "full";
         _parameters["mode"] = "affected";
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("affected", variables["DOTNET_FORMAT_MODE"]);
     }
@@ -390,7 +402,7 @@ public sealed class RunAffectedDotnetFormatFunctionTests : IDisposable
         _parameters["baseline"] = Head;
         _parameters["head"] = Baseline;
 
-        var (_, variables) = await RunAsync();
+        var variables = await RunSucceededAsync();
 
         Assert.Equal("affected", variables["DOTNET_FORMAT_MODE"]);
         Assert.Equal(["merge-base", "--is-ancestor", Head, Baseline], Assert.Single(Runs("merge-base")).ArgumentList);

@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <OmniTemplateForm TModel="DockerResourceLimitsDialogModel" Model="@_model" OnValidSubmit="@((EditContext context) => Submit((DockerResourceLimitsDialogModel)context.Model))">
     <OmniDataAnnotationsValidator Localizer="@L" />
-    <OmniStack Gap="OmniSpacing.Medium">
+    <OmniStack Gap="OmniSpacing.Small">
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@ContainerId</OmniText>
         <OmniFormField For="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-1"><LabelContent>@L["CpuLimit"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.CpuLimit" Minimum="0" Maximum="1024" Step="0.25" Id="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-1" /></ChildContent></OmniFormField>
         <OmniFormField For="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-2"><LabelContent>@L["MemoryLimit"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.MemoryLimitMb" Minimum="0" Maximum="1048576" Step="64" TValue="int" Id="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-2" /></ChildContent></OmniFormField>

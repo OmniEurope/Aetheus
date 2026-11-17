@@ -7,7 +7,7 @@
 <div class="pipeline-setup-readiness" data-testid="setup-readiness">
     @if (Readiness is null && Loading)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else if (Readiness is null)
     {
@@ -17,7 +17,8 @@
     }
     else
     {
-        <OmniCard Class="@(Busy ? "omni-busy" : null)" aria-busy="@(Busy ? "true" : "false")" data-testid="setup-todo">
+        <VeilHold Busy="@Busy" />
+        <OmniCard data-testid="setup-todo">
             <HeaderContent>
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                            Justify="OmniJustification.Between" Gap="OmniSpacing.Small">
@@ -39,11 +40,17 @@
                             <strong>@L["PipelineSetupRecapRepository"]</strong>
                             <PipelineInfoTip Text="@RepositoryHelp" />
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 omni-u-text-muted">
-                                @L[RepositoryMissing ? "PipelineSetupRecapRepositoryMissing" : "PipelineSetupRecapRepositoryReady"]
+                                @L[RepositoryMissing ? (ExternalApplication ? "PipelineSetupRecapExternalMissing" : "PipelineSetupRecapRepositoryMissing") : "PipelineSetupRecapRepositoryReady"]
                             </OmniText>
                         </OmniStack>
                         <div class="pipeline-setup-todo-action">
-                            @if (RepositoryMissing)
+                            @* R-69: an external application never gets an empty internal repository; its own repository is attached. *@
+                            @if (RepositoryMissing && ExternalApplication)
+                            {
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AttachExternalRepository"
+                                            data-testid="setup-readiness-attach-external"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["PipelineSetupAttachExternal"]</span></ChildContent></OmniButton>
+                            }
+                            else if (RepositoryMissing)
                             {
                                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync"
                                             data-testid="setup-readiness-create-repository"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CreateGitRepository"]</span></ChildContent></OmniButton>
@@ -87,6 +94,11 @@
                 </div>
             </ChildContent>
         </OmniCard>
+
+        @if (FirstPush is { Phase: not PipelineSetupFirstPushPhase.None })
+        {
+            <PipelineSetupFirstPushOffer State="@FirstPush" />
+        }
 
         @if (OtherChecks.Count > 0)
         {

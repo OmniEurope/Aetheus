@@ -39,13 +39,20 @@ public interface IPipelineRunLauncher : IPipelineChildRunLauncher
     Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
         IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
-        IReadOnlyList<ProblemDto>? problems = null);
+        IReadOnlyList<ProblemDto>? problems = null, bool notifySubscribers = true);
 
     /// <inheritdoc cref="IPipelineRunService.RerunAsync"/>
     Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
 
     /// <inheritdoc cref="IPipelineRunService.PrepareRerunAsync"/>
     Task<PipelineRerunPlan?> PrepareRerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
+
+    /// <summary>R-7: the first stage dispatch of a run whose launch answered before it
+    /// (<see cref="PipelineRunPreparation.DeferFirstDispatch"/>). A run no longer Running is left alone; a failure
+    /// ends the run Failed carrying the reason, as a failure of the same dispatch inside the launch does.</summary>
+    Task DispatchFirstStageAsync(
+        int runId, int pipelineId, PipelineYamlDefinition definition,
+        Dictionary<string, string> resolvedVariables, HashSet<string> secretKeys, CancellationToken ct);
 }
 
 /// <summary>
@@ -74,7 +81,8 @@ public sealed class PipelineRunLauncher(
     IPipelinePortRegistryGuard portGuard,
     PipelineRefusedLaunchRecorder refusals,
     TimeProvider timeProvider,
-    ILogger<PipelineRunLauncher> logger) : IPipelineRunLauncher
+    ILogger<PipelineRunLauncher> logger,
+    IPipelineDeferredFirstDispatch? deferredDispatch = null) : IPipelineRunLauncher
 {
     public async Task<PipelineRunDto?> TriggerResolvedRunAsync(int id,
         Dictionary<string, string>? additionalVariables, Dictionary<string, string>? parameters,
@@ -101,6 +109,9 @@ public sealed class PipelineRunLauncher(
                 $"Idempotency key cannot exceed {PipelineRunRequest.MaxIdempotencyKeyLength} characters.",
                 ("max", PipelineRunRequest.MaxIdempotencyKeyLength)).ToRefusal();
         var definition = preparation.Definition;
+        // R-17: the manual trigger took 10 to 15 seconds in production with no cause established. One
+        // line per launch gives each phase's duration, read from the real instance's log.
+        var timing = new PhaseTiming(timeProvider);
         PipelineReleaseNumbers.EnsureValid(definition);
         var trigger = ResolveTriggerVariables(preparation, additionalVariables, parameters);
         var variables = trigger.Variables;
@@ -125,6 +136,7 @@ public sealed class PipelineRunLauncher(
             enforceResolvedReferences: true)
             .ConfigureAwait(false);
         preflight.ValidateUniqueDeploymentTargets(runtimePreparation.Definition, preLaunchVariables);
+        timing.Mark("parameters-and-variables");
 
         // Resolved TRANSITIVELY, like every other call site. Reading Pipeline.Project?.OrganizationId
         // yields null for a pipeline owned by an Environment or a ProjectServer, and a null
@@ -140,6 +152,7 @@ public sealed class PipelineRunLauncher(
             runtimePreparation.Definition, preLaunchVariables,
             organizationId, runtimePreparation.EffectiveProjectId, ct)
             .ConfigureAwait(false);
+        timing.Mark("preflight");
         // R-32: a template a later stage renders is read now, so a token nothing defines refuses the
         // launch before any stage runs (aetheus-demo had already reset the demo when it was refused).
         // R-82: a template nobody can read is refused here too, before any stage touches the host.
@@ -147,6 +160,7 @@ public sealed class PipelineRunLauncher(
             runtimePreparation.Definition, preLaunchVariables, runtimePreparation.EffectiveProjectId,
             preparation.DefinitionCommitHash ?? preparation.CommitHash, preparation.Pipeline.SourceRepositoryId, ct)
             .ConfigureAwait(false);
+        timing.Mark("config-templates");
         // R-20: read on the definition as declared, before the parameters were substituted into it.
         var emptyTargetProblems = preflight.FindEmptyTargetParameterProblems(
             preparation.Definition, preLaunchVariables, effectiveParams);
@@ -171,6 +185,16 @@ public sealed class PipelineRunLauncher(
         // R-72: deploying despite the quality gate is checked before the run exists, like the preflight.
         var gateOverride = await PipelineGateOverride.CheckAsync(
             runtimePreparation, runtimePreparation.Definition, preLaunchVariables, repo, ct).ConfigureAwait(false);
+        // R-33: a requested version is checked before a number is taken, and a run that carries one takes none; the
+        // version (requested or series.number) is a run variable, refused when a release already carries it.
+        var requestedVersion = await PipelineApplicationVersion.CheckRequestedAsync(
+            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, effectiveParams, ct).ConfigureAwait(false);
+        var release = requestedVersion is not null ? null : await PipelineReleaseNumbers.ResolveAsync(
+            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, variables,
+            runtimePreparation.ReleaseSeries, ct).ConfigureAwait(false);
+        await PipelineApplicationVersion.ApplyAsync(
+            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, requestedVersion, release, variables, ct)
+            .ConfigureAwait(false);
 
         // The launch is accepted, so the ports it will bind are now this owner's. Declared here rather
         // than at deploy time on purpose: a port claimed only once the container is up is a port two
@@ -183,14 +207,13 @@ public sealed class PipelineRunLauncher(
         var run = CreatePipelineRun(
             preparation, runtimePreparation, variables, effectiveParams, idempotencyKey,
             preflightOutcome.Checks);
-        var release = await PipelineReleaseNumbers.ResolveAsync(
-            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, variables,
-            runtimePreparation.ReleaseSeries, ct).ConfigureAwait(false);
         run.ReleaseNumber = release?.Number;
         run.ReleaseSeries = release?.Series;
         if (gateOverride is not null)
             PipelineGateOverride.Apply(run, preparation.GateOverrideBy!, gateOverride, run.StartedAt);
+        timing.Mark("gate-ports-release");
         var existing = await PersistPipelineRunAsync(run, ct).ConfigureAwait(false);
+        timing.Mark("persist");
         if (existing is not null) return existing;
         if (gateOverride is not null)
             await audit.LogAsync(
@@ -205,8 +228,14 @@ public sealed class PipelineRunLauncher(
         if (preflightWarnings.Count > 0)
             await repo.AppendRunWarningsAsync(run.Id, preflightWarnings, ct).ConfigureAwait(false);
 
-        return await LaunchPreparedRunAsync(
+        timing.Mark("warnings");
+        var launched = await LaunchPreparedRunAsync(
             run, preparation, runtimePreparation, variables, ct).ConfigureAwait(false);
+        timing.Mark("dispatch");
+        logger.Log(
+            timing.LevelFor(configuration),
+            "Launch timing of run {RunId} of pipeline {PipelineId}: {Timing}", run.Id, preparation.PipelineId, timing.Describe());
+        return launched;
     }
 
     private static ResolvedTriggerVariables ResolveTriggerVariables(
@@ -293,7 +322,9 @@ public sealed class PipelineRunLauncher(
     {
         try
         {
-            return await LaunchRunAsync(run, runtimePreparation, variables, ct).ConfigureAwait(false);
+            return await LaunchRunAsync(
+                run, runtimePreparation, variables, runtimePreparation.DeferFirstDispatch && deferredDispatch is not null, ct)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -306,13 +337,43 @@ public sealed class PipelineRunLauncher(
             // YAML, variable resolution, task dispatch) into a failed run carrying the message. This is one
             // of the sanctioned try/catch cases - ErrorHandlingMiddleware cannot attach the failure to a
             // run it never sees.
-            logger.LogError(ex, "Pipeline run {RunId} failed during launch setup", run.Id);
-            await repo.AppendRunWarningsAsync(run.Id, [BuildLaunchFailureReason(ex)], ct).ConfigureAwait(false);
-            await repo.UpdatePipelineRunStatusAsync(run.Id, PipelineStatus.Failed, ct).ConfigureAwait(false);
-            await pipelineHub.Clients
-                .Groups(HubGroups.PipelineRunUpdates(run.Id, preparation.PipelineId))
-                .SendAsync("PipelineRunCompleted", run.Id, PipelineStatus.Failed, ct).ConfigureAwait(false);
+            await FailLaunchAsync(run.Id, preparation.PipelineId, ex, ct).ConfigureAwait(false);
             return await runReader.GetRunAsync(run.Id, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task FailLaunchAsync(int runId, int pipelineId, Exception ex, CancellationToken ct)
+    {
+        logger.LogError(ex, "Pipeline run {RunId} failed during launch setup", runId);
+        await repo.AppendRunWarningsAsync(runId, [BuildLaunchFailureReason(ex)], ct).ConfigureAwait(false);
+        await repo.UpdatePipelineRunStatusAsync(runId, PipelineStatus.Failed, ct).ConfigureAwait(false);
+        await pipelineHub.Clients
+            .Groups(HubGroups.PipelineRunUpdates(runId, pipelineId))
+            .SendAsync("PipelineRunCompleted", runId, PipelineStatus.Failed, ct).ConfigureAwait(false);
+    }
+
+    public async Task DispatchFirstStageAsync(
+        int runId, int pipelineId, PipelineYamlDefinition definition,
+        Dictionary<string, string> resolvedVariables, HashSet<string> secretKeys, CancellationToken ct)
+    {
+        // Cancelled, or ended some other way, between the answer and now: nothing left to dispatch.
+        if (!await repo.IsRunStillRunningAsync(runId, ct).ConfigureAwait(false)) return;
+        var queuedBefore = repo.MarkUnsavedInserts();
+        try
+        {
+            await planner.CreateTasksForNextStageAsync(runId, definition, resolvedVariables, secretKeys, this, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Same sanctioned catch as the launch: nobody is in front of the dispatch any more, so the failed
+            // run carries the reason. The tasks the failed pass queued but did not save are dropped with it.
+            repo.DiscardUnsavedInsertsSince(queuedBefore);
+            await FailLaunchAsync(runId, pipelineId, ex, ct).ConfigureAwait(false);
         }
     }
 
@@ -338,11 +399,14 @@ public sealed class PipelineRunLauncher(
     // the same immutable preparation resolved before the run was created.
     private async Task<PipelineRunDto?> LaunchRunAsync(
         PipelineRun run, PipelineRunPreparation preparation,
-        Dictionary<string, string> additionalVariables, CancellationToken ct)
+        Dictionary<string, string> additionalVariables, bool deferFirstDispatch, CancellationToken ct)
     {
         var pipeline = preparation.Pipeline;
         var definition = preparation.Definition;
         var effectiveProjectId = preparation.EffectiveProjectId;
+        // R-7: the "dispatch" phase of the launch timing hides the first stage's dispatch, which launches the
+        // child runs of a trigger step inside this call; its own phases say which one is slow.
+        var timing = new PhaseTiming(timeProvider);
 
         // Inject project-level system vars that require a DB lookup.
         var projectVars = new Dictionary<string, string>(additionalVariables, StringComparer.OrdinalIgnoreCase);
@@ -364,6 +428,7 @@ public sealed class PipelineRunLauncher(
             definition, effectiveProjectId, projectVars, ct,
             pipelineId: run.PipelineId, runId: run.Id, pipelineName: pipeline.Name,
             buildNumber: run.BuildNumber).ConfigureAwait(false);
+        timing.Mark("run-variables");
         var publicVars = FilterSecretKeys(resolvedVars, secretKeys);
         run.ResolvedVariablesJson = JsonSerializer.Serialize(publicVars);
         warnings.InsertRange(0, preparation.DefinitionWarnings);
@@ -373,10 +438,18 @@ public sealed class PipelineRunLauncher(
             repo.TrackPipelineStepRun(stepRun);
 
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        timing.Mark("step-runs-save");
 
         await pipelineHub.Clients.Groups(HubGroups.PipelineRunUpdates(run.Id, run.PipelineId)).SendAsync("PipelineRunStarted", run.Id, run.PipelineId, ct).ConfigureAwait(false);
+        timing.Mark("started-signal");
 
-        await planner.CreateTasksForNextStageAsync(run.Id, definition, resolvedVars, secretKeys, this, ct).ConfigureAwait(false);
+        // R-7: a manual launch answers first. The dispatch (which starts the child runs of a trigger step) follows
+        // on its own, and the run is failed with the reason if it fails.
+        if (deferFirstDispatch)
+            deferredDispatch!.Start(run.Id, run.PipelineId, definition, resolvedVars, secretKeys, preparation.InitiatedBy);
+        else
+            await planner.CreateTasksForNextStageAsync(run.Id, definition, resolvedVars, secretKeys, this, ct).ConfigureAwait(false);
+        timing.Mark(deferFirstDispatch ? "first-stage-dispatch-started" : "first-stage-dispatch");
 
         await audit.LogAsync("Triggered", "PipelineRun", run.Id, pipeline.Name, ct).ConfigureAwait(false);
 
@@ -384,8 +457,14 @@ public sealed class PipelineRunLauncher(
         // the cross-link graph stays current beyond the one-shot migration backfill (best-effort).
         if (effectiveProjectId is { } recProjectId)
             await gitGraph.RecordRunContextAsync(recProjectId, run.CommitHash, run.BranchName, ct).ConfigureAwait(false);
+        timing.Mark("audit-and-git-graph");
 
-        return await runReader.GetRunAsync(run.Id, ct).ConfigureAwait(false);
+        var dto = await runReader.GetRunAsync(run.Id, ct).ConfigureAwait(false);
+        timing.Mark("read-run");
+        logger.Log(
+            timing.LevelFor(configuration),
+            "Launch setup timing of run {RunId} of pipeline {PipelineId}: {Timing}", run.Id, run.PipelineId, timing.Describe());
+        return dto;
     }
 
     public async Task<PipelineRunDto?> TriggerAutomatedRunAsync(
@@ -422,11 +501,12 @@ public sealed class PipelineRunLauncher(
     public async Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
         IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
-        IReadOnlyList<ProblemDto>? problems = null)
+        IReadOnlyList<ProblemDto>? problems = null, bool notifySubscribers = true)
     {
         var pipeline = await repo.FindPipelineAsync(pipelineId, ct).ConfigureAwait(false);
         if (pipeline is null) return;
-        await refusals.RecordAsync(pipeline, null, triggerSource, reason, additionalVariables, ct, problems).ConfigureAwait(false);
+        await refusals.RecordAsync(pipeline, null, triggerSource, reason, additionalVariables, ct, problems, notifySubscribers)
+            .ConfigureAwait(false);
     }
 
     public async Task<PipelineRunPreparation?> PrepareAutomatedRunAsync(
@@ -456,6 +536,12 @@ public sealed class PipelineRunLauncher(
                 "{Trigger} run of pipeline {PipelineId} blocked (F-EXEC-1b): pipeline has no owner. " +
                 "Re-save it as an authorized user to enable automated triggers.", triggerSource, pipelineId);
             await audit.LogAsync("BlockedUnownedAutomatedRun", "Pipeline", pipelineId, pipeline.Name, ct).ConfigureAwait(false);
+            // Nobody reads the log line of a schedule or a webhook: a failed run carries the reason and the
+            // project's followers are told (R-30). The caller still gets null, as before.
+            await refusals.RecordAsync(
+                pipeline, null, triggerSource,
+                "The pipeline has no owner, so an automated run cannot be authorized. Re-save it as an authorized user to enable automated triggers.",
+                additionalVariables, ct, null).ConfigureAwait(false);
             return null;
         }
 
@@ -485,6 +571,11 @@ public sealed class PipelineRunLauncher(
                     "Server.Admin on target server {ServerId}.", triggerSource, pipelineId, owner, serverId);
                 await audit.LogAsync("BlockedUnauthorizedAutomatedRun", "Pipeline", pipelineId,
                     $"{pipeline.Name} | Servers: {string.Join(',', targetIds)}", ct).ConfigureAwait(false);
+                await refusals.RecordAsync(
+                    pipeline, preparation, triggerSource,
+                    $"The pipeline owner '{owner}' lacks Server.Admin on target server {serverId}, so an automated run cannot be authorized. "
+                    + "Grant that permission or re-save the pipeline as an authorized user.",
+                    additionalVariables, ct, null).ConfigureAwait(false);
                 return null;
             }
         }

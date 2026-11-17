@@ -14,6 +14,7 @@ public sealed class AgentUpdateDiagnosticTextTests
 
     [Theory]
     [InlineData(null, "release manifest invalid", "AgentUpdateDiag_ManifestInvalid")]
+    [InlineData(null, "release archive absent", "AgentUpdateDiag_ArchiveAbsent")]
     [InlineData("agent-update-failed", "download failed", "AgentUpdateDiag_DownloadFailed")]
     [InlineData("agent-update-failed", " capability request refused ", "AgentUpdateDiag_CapabilityRequestRefused")]
     [InlineData("confirmation-timeout", "No confirming heartbeat arrived before the deadline.", "AgentUpdateDiag_ConfirmationTimeout")]
@@ -52,8 +53,12 @@ public sealed class AgentUpdateDiagnosticTextTests
     {
         var source = File.ReadAllText(Path.Combine(RepositoryScan.Root,
             "src", "Aetheus.Agent.Core", "Operations", "AgentSelfUpdateOperationExecutor.cs"));
+        // The release lookup names its failures in constants ("release manifest invalid", "release archive absent").
+        var resolver = File.ReadAllText(Path.Combine(RepositoryScan.Root,
+            "src", "Aetheus.Agent.Core", "Operations", "AgentReleaseArchiveResolver.cs"));
         var literals = Regex.Matches(source, @"ReportPhaseAsync\(AgentUpdatePhase\.Failed, \d+, ""(?<text>[^""]+)""")
             .Select(m => m.Groups["text"].Value)
+            .Concat(Regex.Matches(resolver, @"const string \w+Diagnostic = ""(?<text>[^""]+)""").Select(m => m.Groups["text"].Value))
             .Concat(Regex.Matches(source, @"const string diagnostic = ""(?<text>[^""]+)""").Select(m => m.Groups["text"].Value))
             .Distinct()
             .ToList();

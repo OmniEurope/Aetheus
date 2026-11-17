@@ -80,6 +80,7 @@ internal sealed class PipelineConfigTemplatePreflight(
         var known = BuildKnownNames(definition, launchVariables);
         var problems = new List<PipelineProblem>();
         var warnings = new List<PipelineProblem>();
+        bool? fromMirror = null;
         foreach (var use in templates)
         {
             var template = use.UsesConfigRepository
@@ -87,11 +88,13 @@ internal sealed class PipelineConfigTemplatePreflight(
                 : await pipelineGit.ReadProjectConfigAtRevisionAsync(project, use.Path, definitionCommit!, ct, sourceRepositoryId).ConfigureAwait(false);
             if (template is null)
             {
+                // Decision 2026-11-10: a mirror of an external repository is never read for a template; say so.
+                fromMirror ??= await pipelineGit.IsExternalMirrorDefinitionSourceAsync(project, sourceRepositoryId, ct).ConfigureAwait(false);
                 // R-82: the dispatch would meet the same null, after the stages before it had changed the host.
                 if (use.CertainSteps.Count > 0)
-                    problems.Add(DescribeMissing(use, use.CertainSteps, definitionCommit!, mayNotRun: false));
+                    problems.Add(DescribeMissing(use, use.CertainSteps, definitionCommit!, mayNotRun: false, fromMirror.Value));
                 else if (use.UncertainSteps.Count > 0)
-                    warnings.Add(DescribeMissing(use, use.UncertainSteps, definitionCommit!, mayNotRun: true));
+                    warnings.Add(DescribeMissing(use, use.UncertainSteps, definitionCommit!, mayNotRun: true, fromMirror.Value));
                 continue;
             }
 
@@ -112,10 +115,20 @@ internal sealed class PipelineConfigTemplatePreflight(
         return new PipelineConfigTemplateFindings(problems, warnings);
     }
 
-    private static PipelineProblem DescribeMissing(TemplateUse use, IEnumerable<string> steps, string commit, bool mayNotRun)
+    private static PipelineProblem DescribeMissing(
+        TemplateUse use, IEnumerable<string> steps, string commit, bool mayNotRun, bool fromMirror)
     {
         var stepNames = steps.ToList();
         var usedBy = string.Join(", ", stepNames.Select(step => $"step '{step}'"));
+        if (fromMirror)
+            return PipelineProblem.Of(
+                mayNotRun ? PipelineProblemCodes.ConfigTemplateFromExternalMirrorMayRun : PipelineProblemCodes.ConfigTemplateFromExternalMirror,
+                $"Configuration template '{use.Path}' (used by {usedBy}) is never read from the mirror of an external "
+                + "repository, whose content is untrusted: a deployment configuration comes only from the project's own "
+                + (mayNotRun
+                    ? "repositories. The condition of the step depends on a value only known once the run is under way, so the run is not refused."
+                    : "repositories (for an apache-config step, its configuration repository)."),
+                ("path", use.Path), ("steps", PipelineProblem.QuotedList(stepNames)));
         var english = use.UsesConfigRepository
             ? $"Configuration template '{use.Path}' (used by {usedBy}) was found neither in the project's "
               + $"configuration repository nor at commit {commit} of its source: prepare the production "

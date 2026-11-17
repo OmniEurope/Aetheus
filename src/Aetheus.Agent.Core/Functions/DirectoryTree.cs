@@ -44,13 +44,17 @@ internal static class DirectoryTree
     }
 
     /// <summary><c>cp -a source/. destination/</c>, leaving out the entries <paramref name="skip"/> names.</summary>
-    public static void CopyContents(string source, string destination, Func<string, bool>? skip = null)
+    public static void CopyContents(
+        string source, string destination, Func<string, bool>? skip = null, CancellationToken cancellationToken = default)
     {
         foreach (var entry in Entries(source).Where(entry => skip is null || !skip(entry.Name)))
-            Copy(entry, Path.Combine(destination, entry.Name));
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Copy(entry, Path.Combine(destination, entry.Name), cancellationToken);
+        }
     }
 
-    private static void Copy(FileSystemInfo entry, string target)
+    private static void Copy(FileSystemInfo entry, string target, CancellationToken cancellationToken)
     {
         if (entry.LinkTarget is { } link)
         {
@@ -64,7 +68,7 @@ internal static class DirectoryTree
         if (entry is DirectoryInfo directory)
         {
             Directory.CreateDirectory(target);
-            CopyContents(directory.FullName, target);
+            CopyContents(directory.FullName, target, cancellationToken: cancellationToken);
             if (!OperatingSystem.IsWindows())
                 File.SetUnixFileMode(target, directory.UnixFileMode);
             Directory.SetLastWriteTimeUtc(target, directory.LastWriteTimeUtc);
@@ -76,11 +80,14 @@ internal static class DirectoryTree
     }
 
     /// <summary><c>find directory -mindepth 1 -maxdepth 1 -exec rm -rf {} +</c>, sparing the entries
-    /// <paramref name="keep"/> names.</summary>
-    public static void RemoveContents(string directory, params string[] keep)
+    /// <paramref name="keep"/> names. A cancellation is observed between two entries, never inside one.</summary>
+    public static void RemoveContents(string directory, CancellationToken cancellationToken, params string[] keep)
     {
         foreach (var entry in Entries(directory).Where(entry => !keep.Contains(entry.Name, StringComparer.Ordinal)).ToList())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             Remove(entry);
+        }
     }
 
     /// <summary><c>rm -rf</c> of one path: a link goes, its target stays, and a path that is not there is
@@ -103,10 +110,11 @@ internal static class DirectoryTree
     }
 
     /// <summary><c>find source -mindepth 1 -maxdepth 1 -exec mv {} destination/ \;</c>.</summary>
-    public static void MoveContents(string source, string destination)
+    public static void MoveContents(string source, string destination, CancellationToken cancellationToken = default)
     {
         foreach (var entry in Entries(source).ToList())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var target = Path.Combine(destination, entry.Name);
             if (entry is DirectoryInfo)
                 Directory.Move(entry.FullName, target);

@@ -38,7 +38,9 @@ public sealed class MonitoredAppFormDialogBehaviorTests : BunitContext
         Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/environments", StringComparison.Ordinal));
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/appmonitoring/projects/7/apps", StringComparison.Ordinal));
         Assert.True(Spy.Closed);
-        Assert.Equal(true, Spy.LastResult);
+        // R-10: the dialog hands the saved application to the list, which draws that row at once.
+        var saved = Assert.IsType<MonitoredAppDto>(Spy.LastResult);
+        Assert.Equal(11, saved.Id);
     }
 
     [Fact]

@@ -14,12 +14,32 @@
 # later stage. Every consumer (quality, security, QA, candidate) restores this artifact, and the restore
 # refuses a payload without source-commit, delivery-contract.json and artifact-provenance.json, or built
 # from another commit than its own run.
+# R-33: APP_VERSION is the release version, handed down by the candidate that triggers this CI (application-candidate
+# v5): the default build passes it to MSBuild (-p:Version), the project's own commands read it from their environment,
+# and the delivery contract names the candidate with it. Without one (a CI launched alone, or by an older candidate)
+# the build keeps the project's own version and the contract names the candidate c-<source commit>, as before.
 name: application-ci-template
 trigger: manual
 variables:
   APPLICATION_HAS_FRONTEND: "true"
   APPLICATION_HAS_BACKEND: "true"
   APPLICATION_HAS_DATABASE: "false"
+  # run_tests, in the commands below, runs one test command. Its output streams to the log as usual (a copy is kept in
+  # TEST_LOG, which its caller removes); when it fails, the tests that failed (name and message, as the runner printed
+  # them) are repeated at the end of the step, each line marked ERROR so the run page's failed-step card shows them:
+  # the runner prints a failure where it happens, far above the summary, and the card otherwise holds only the exit
+  # code (recette R-72). The exit code is the runner's own. The comments live here, out of the commands, which a
+  # Windows test harness hands to Git's bash.exe on a command line that launcher cuts at 8191 characters.
+  # PLAN-006 (owner decision of 2026-11-05), as the platform's own CI does with rerun_failed_tests: the failed tests of
+  # a test project run once more, alone, through a filter on their test methods (run_test_project below). A test that
+  # passes on that rerun is flaky: named in the log and in .pipeline-test-results/flaky-tests.txt, published as
+  # UNIT_TEST_FLAKY_TESTS (step "Name the flaky unit tests") and graded by the candidate (grade-candidate-from-gates),
+  # it no longer fails the build on its own; a test that fails twice still does. Nothing is rerun above 20 failed
+  # tests (a break, not flakiness), nor when a failed test names no fully qualified method (Namespace.Class.Method) a
+  # filter can carry: the first failures then stand. The rerun is graded from its TRX, where every rerun method must
+  # have passed and none failed: VSTest always writes one; on Microsoft.Testing.Platform the filter (--filter-method)
+  # is xunit v3's, so an xunit v3 project writes xunit's own TRX and any other the TRX report extension's, without which
+  # its rerun fails and the first failures stand. In the awk program, "none" is an unset variable: the empty string.
   APPLICATION_CI_COMMANDS: |
     # Default build of a .NET repository: restore, build (Release) and test every solution it holds, then keep
     # the exact source as the payload. A project that builds otherwise sets APPLICATION_CI_COMMANDS.
@@ -35,6 +55,17 @@ variables:
       exit 1
     fi
     export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+    # CACHE_SCENARIO=cold (the nightly asks for it) restores the NuGet packages into a directory of this run alone,
+    # so the build and the tests do not depend on what an earlier run left in the agent's cache. Anything but warm
+    # or cold is refused, never read as warm.
+    case "${CACHE_SCENARIO:-warm}" in
+      warm) ;;
+      cold)
+        export NUGET_PACKAGES="$PWD/.pipeline-cache/nuget-${BUILD_BUILDID:-cold}"
+        rm -rf "$NUGET_PACKAGES"
+        ;;
+      *) echo "CACHE_SCENARIO must be warm or cold." >&2; exit 1 ;;
+    esac
     SOLUTIONS="$(find . -maxdepth 1 \( -name '*.sln' -o -name '*.slnx' \) | sort)"
     if test -z "$SOLUTIONS"; then
       SOLUTIONS="$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.slnx' \) -not -path './.pipeline-artifacts/*' -not -path '*/node_modules/*' | sort)"
@@ -46,12 +77,78 @@ variables:
     # .NET 10 repositories choose their test runner in global.json; the two runners take different arguments.
     TEST_RUNNER=vstest
     if grep -qs 'Microsoft.Testing.Platform' global.json; then TEST_RUNNER=mtp; fi
+    # run_tests: recette R-72, see the comment above this variable.
+    run_tests() {
+      TEST_LOG="$(mktemp)"
+      TEST_RC="$TEST_LOG.rc"
+      { if "$@"; then echo 0 > "$TEST_RC"; else echo "$?" > "$TEST_RC"; fi; } | tee "$TEST_LOG"
+      TEST_STATUS="$(cat "$TEST_RC")"
+      if test "$TEST_STATUS" -ne 0; then
+        echo "ERROR The tests that failed (repeated from the run above):" >&2
+        # show 1: a Microsoft.Testing.Platform block ("failed Name (3ms)", message indented, ends at the first
+        # stack frame or unindented line); show 2: a VSTest block ("  Failed Name [3 ms]", ends at its stack trace).
+        awk '
+          /^(failed|error|timeout|canceled) / { count++; show = (count <= 20) ? 1 : 0; if (show) print "ERROR " $0; next }
+          /^ +Failed [^ ]/ { count++; show = (count <= 20) ? 2 : 0; if (show) print "ERROR " $0; next }
+          show == 1 && /^ +from / { next }
+          show == 1 && (/^ +at / || /^[^ ]/) { show = 0; next }
+          show == 2 && /^ +Stack Trace:/ { show = 0; next }
+          show && NF { print "ERROR " $0 }
+          END { if (count > 20) print "ERROR " (count - 20) " more failed test(s) are not repeated here: see the run above." }
+        ' "$TEST_LOG" >&2
+      fi
+      rm -f "$TEST_RC"
+      return "$TEST_STATUS"
+    }
+    FLAKY_LIST="$PWD/.pipeline-test-results/flaky-tests.txt"
+    rm -f "$FLAKY_LIST"
+    run_test_project() {
+      PROJECT="$1"; FIRST_STATUS=0
+      if test "$TEST_RUNNER" = mtp; then
+        run_tests "$DOTNET" test --project "$PROJECT" --configuration Release --no-build || FIRST_STATUS=$?
+      else
+        run_tests "$DOTNET" test "$PROJECT" --configuration Release --no-build || FIRST_STATUS=$?
+      fi
+      FIRST_LOG="$TEST_LOG"
+      if test "$FIRST_STATUS" -eq 0 || { test "$TEST_RUNNER" = mtp && test "$FIRST_STATUS" -eq 8; }; then rm -f "$FIRST_LOG"; return "$FIRST_STATUS"; fi
+      FAILED="$(awk '/^(failed|error|timeout|canceled) / || /^ +Failed [^ ]/ { n = $0; sub(/^ *([Ff]ailed|error|timeout|canceled) /, none, n); sub(/[( \[].*$/, none, n)
+        if (n !~ /^[A-Za-z0-9_][A-Za-z0-9_.+`]*$/ || n !~ /[A-Za-z0-9_`]\.[A-Za-z0-9_]/) n = "-"; print n }' "$FIRST_LOG")"
+      rm -f "$FIRST_LOG"
+      COUNT="$(printf '%s\n' "$FAILED" | grep -c . || true)"
+      METHODS="$(printf '%s\n' "$FAILED" | grep . | sort -u || true)"
+      if test -z "$METHODS" || test "$COUNT" -gt 20 || printf '%s\n' "$METHODS" | grep -qx -- -; then
+        echo "WARNING: $PROJECT: $COUNT failed test(s), not rerun: the failures stand." >&2
+        return "$FIRST_STATUS"
+      fi
+      echo "$PROJECT: rerunning its $COUNT failed test(s) once: $(printf '%s\n' "$METHODS" | tr '\n' ' ')"
+      RERUN_DIR="$(mktemp -d)"; RERUN_STATUS=0
+      if test "$TEST_RUNNER" = mtp; then
+        TRX=--report-trx; if grep -qi 'xunit\.v3' "$PROJECT"; then TRX=--report-xunit-trx; fi
+        set -- --filter-method; for M in $METHODS; do set -- "$@" "$M"; done
+        "$DOTNET" test --project "$PROJECT" --configuration Release --no-build --results-directory "$RERUN_DIR" "$TRX" "$TRX-filename" rerun.trx "$@" || RERUN_STATUS=$?
+      else
+        FILTER="$(printf '%s\n' "$METHODS" | awk '{ if (NR > 1) printf "|"; printf "FullyQualifiedName=%s", $0 }')"
+        "$DOTNET" test "$PROJECT" --configuration Release --no-build --results-directory "$RERUN_DIR" --logger "trx;LogFileName=rerun.trx" --filter "$FILTER" || RERUN_STATUS=$?
+      fi
+      T="$RERUN_DIR/rerun.trx"; VERDICT=flaky; Q='"'
+      if test "$RERUN_STATUS" -ne 0 || ! test -s "$T" || grep -qE 'outcome="(Failed|Error|Timeout|Aborted)"' "$T"; then VERDICT=failed; fi
+      for M in $METHODS; do
+        P="$(printf '%s' "$M" | sed 's/[.+]/[&]/g')"
+        grep -E "testName=$Q$P[$Q(]" "$T" 2>/dev/null | grep -q 'outcome="Passed"' || VERDICT=failed
+      done
+      rm -rf "$RERUN_DIR"
+      if test "$VERDICT" = failed; then echo "$PROJECT: the rerun did not pass: the failures stand." >&2; return "$FIRST_STATUS"; fi
+      mkdir -p "$(dirname "$FLAKY_LIST")"
+      for M in $METHODS; do echo "WARNING: Flaky test in $PROJECT: $M failed, then passed on its rerun." >&2; printf '%s\n' "$M" >> "$FLAKY_LIST"; done
+      return 0
+    }
     printf '%s\n' "$SOLUTIONS" | while IFS= read -r SOLUTION; do
       echo ">>> $SOLUTION"
       "$DOTNET" restore "$SOLUTION" -p:Configuration=Release
-      "$DOTNET" build "$SOLUTION" --configuration Release --no-restore
+      # R-33: the release version, when the candidate handed one down, is the version of every assembly.
+      "$DOTNET" build "$SOLUTION" --configuration Release --no-restore ${APP_VERSION:+"-p:Version=$APP_VERSION"}
       TEST_PROJECTS="$(grep -rlE 'Microsoft\.NET\.Test\.Sdk|Microsoft\.Testing\.Platform|xunit|nunit|MSTest|TUnit|IsTestProject' \
-        --include='*.csproj' --include='*.fsproj' --include='*.vbproj' "$(dirname "$SOLUTION")" | sort || true)"
+        --exclude-dir=.pipeline-cache --include='*.csproj' --include='*.fsproj' --include='*.vbproj' "$(dirname "$SOLUTION")" | sort || true)"
       # A repository with no test project has nothing to run (the test command would fail on it): say so.
       if test -z "$TEST_PROJECTS"; then
         echo "WARNING: $SOLUTION holds no test project: it was built and nothing was tested." >&2
@@ -66,17 +163,14 @@ variables:
           continue
         fi
         TESTED=1
-        TEST_STATUS=0
-        if test "$TEST_RUNNER" = mtp; then
-          "$DOTNET" test --project "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
-        else
-          "$DOTNET" test "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
-        fi
+        # Its own variable: run_tests sets TEST_STATUS to the first attempt's code, which a flaky rerun overrules.
+        PROJECT_STATUS=0
+        run_test_project "$PROJECT" || PROJECT_STATUS=$?
         # Exit code 8 of Microsoft.Testing.Platform: the project holds no test. Said, never reported as a pass.
-        if test "$TEST_RUNNER" = mtp && test "$TEST_STATUS" -eq 8; then
+        if test "$TEST_RUNNER" = mtp && test "$PROJECT_STATUS" -eq 8; then
           echo "WARNING: $PROJECT ran no test." >&2
-        elif test "$TEST_STATUS" -ne 0; then
-          exit "$TEST_STATUS"
+        elif test "$PROJECT_STATUS" -ne 0; then
+          exit "$PROJECT_STATUS"
         fi
       done
       if test "$TESTED" -eq 0; then
@@ -87,7 +181,14 @@ variables:
   # written and the two stages that would produce them are skipped.
   APPLICATION_PAYLOAD_SEALED: "false"
   # Published by the Find pinned SDK stage.
-  APPLICATION_DOTNET_PINNED: "false"
+  APPLICATION_DOTNET_SDK_NEEDED: "false"
+  # Published by the Seal inputs stage: the candidate version the delivery contract carries, and the
+  # artifacts it digests (the payload inventory and every .tar.gz archive at the top of the payload, which
+  # is where a project's build leaves its container images), separated by spaces.
+  APPLICATION_CANDIDATE_VERSION_SEALED: ""
+  APPLICATION_SEALED_ARTIFACTS: ""
+  # R-33: the release version, set by the candidate that triggers this CI; empty, the build keeps its own.
+  APP_VERSION: ""
 
 stages:
   - name: Checkout
@@ -99,8 +200,9 @@ stages:
         checkout: true
 
   # The platform's own CI resolves the SDK global.json pins before it builds (ensure-dotnet-sdk): a runner
-  # without .NET installs it, never root, under the agent's home. A repository without global.json keeps
-  # the dotnet of the runner's PATH.
+  # without .NET installs it, never root, under the agent's home. A .NET repository without global.json
+  # (R-30) gets the SDK channel of its TargetFramework instead (the LTS channel when none is declared), so a
+  # fresh runner builds it too. A repository with no .NET file keeps the dotnet of the runner's PATH.
   - name: Find pinned SDK
     group: Build
     execution_role: build
@@ -109,14 +211,17 @@ stages:
     steps:
       - name: Look for the SDK manifest
         working_directory: "$(WORKSPACE)"
-        outputs: [APPLICATION_DOTNET_PINNED]
+        outputs: [APPLICATION_DOTNET_SDK_NEEDED]
         shell: |
           set -eu
           if test -s global.json && grep -q '"version"' global.json; then
-            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]true"
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]true"
+          elif find . -maxdepth 4 \( -name node_modules -o -name .git -o -name bin -o -name obj \) -prune -o \( -name '*.csproj' -o -name '*.fsproj' -o -name '*.vbproj' -o -name '*.sln' -o -name '*.slnx' -o -name Directory.Build.props \) -print | grep -q .; then
+            echo "No global.json pins an SDK: the SDK channel of the repository's TargetFramework is provided."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]true"
           else
-            echo "No global.json pins an SDK: the dotnet of the runner's PATH is used."
-            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]false"
+            echo "No global.json and no .NET project: the dotnet of the runner's PATH is used."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]false"
           fi
         timeout_seconds: 60
 
@@ -125,11 +230,13 @@ stages:
     execution_role: build
     os: linux
     depends_on: [Find pinned SDK]
-    condition: "eq(variables['APPLICATION_DOTNET_PINNED'], 'true')"
+    condition: "eq(variables['APPLICATION_DOTNET_SDK_NEEDED'], 'true')"
     steps:
       - name: Resolve the pinned .NET SDK
         type: aetheus
         function: ensure-dotnet-sdk
+        with:
+          project_root: "."
         timeout_seconds: 900
 
   - name: Build
@@ -143,6 +250,10 @@ stages:
         shell: |
           set -eu
           mkdir -p .pipeline-artifacts
+          # R-33: the release version reaches MSBuild and the project's commands as written: refused when it is not one.
+          case "${APP_VERSION:-}" in
+            *[!0-9A-Za-z.+-]*) echo "APP_VERSION contains unexpected characters: ${APP_VERSION}" >&2; exit 1 ;;
+          esac
           if test -n "${APPLICATION_CI_COMMANDS:-}"; then
             APPLICATION_HAS_FRONTEND="$(APPLICATION_HAS_FRONTEND)" \
             APPLICATION_HAS_BACKEND="$(APPLICATION_HAS_BACKEND)" \
@@ -170,6 +281,8 @@ stages:
         working_directory: "$(WORKSPACE)"
         outputs:
           - APPLICATION_PAYLOAD_SEALED
+          - APPLICATION_CANDIDATE_VERSION_SEALED
+          - APPLICATION_SEALED_ARTIFACTS
         shell: |
           set -eu
           SOURCE_SHA="$(printf '%s' "$(BUILD_SOURCEVERSION)" | tr 'A-F' 'a-f')"
@@ -194,10 +307,40 @@ stages:
             sha256sum "$FILE"; done) > .pipeline-payload-manifest
           mv .pipeline-payload-manifest .pipeline-artifacts/payload-manifest.txt
           printf '{"payload":[".pipeline-artifacts/payload-manifest.txt"],"contracts":[".pipeline-artifacts/source-commit",".pipeline-artifacts/integration-manifest.json",".pipeline-artifacts/delivery-contract.json"]}\n' > .pipeline-provenance-categories.json
+          # What the delivery contract digests: the payload inventory, and every .tar.gz archive at the top of the
+          # payload (the image archives of a project that ships containers; the image steps of the security
+          # pipeline look an archive up by its plain file name). A name with a space cannot travel in the list.
+          SEALED_ARTIFACTS=".pipeline-artifacts/payload-manifest.txt"
+          find .pipeline-artifacts -maxdepth 1 -type f -name '*.tar.gz' | sort > .pipeline-artifacts.archives
+          while IFS= read -r ARCHIVE; do
+            case "$ARCHIVE" in
+              *[[:space:]]*) echo "The payload archive '$ARCHIVE' has a space in its name: the delivery contract cannot seal it." >&2; exit 1 ;;
+            esac
+            SEALED_ARTIFACTS="$SEALED_ARTIFACTS $ARCHIVE"
+          done < .pipeline-artifacts.archives
+          rm -f .pipeline-artifacts.archives
+          # R-33: the candidate is named by its release version when the candidate run handed one down.
+          SEALED_VERSION="${APP_VERSION:-}"
+          echo "##aetheus[setvariable name=APPLICATION_CANDIDATE_VERSION_SEALED]${SEALED_VERSION:-c-$SOURCE_SHA}"
+          echo "##aetheus[setvariable name=APPLICATION_SEALED_ARTIFACTS]$SEALED_ARTIFACTS"
           echo "##aetheus[setvariable name=APPLICATION_PAYLOAD_SEALED]false"
         timeout_seconds: 600
+      # PLAN-006: the tests that failed and then passed on their project's single rerun (the default build's
+      # flaky-tests.txt, which a project's own commands may write too) did not fail the build, so they are published
+      # by name: the candidate grades them (grade-candidate-from-gates). An absent list publishes nothing.
+      - name: Name the flaky unit tests
+        type: aetheus
+        function: publish-failed-tests
+        with:
+          variable: UNIT_TEST_FLAKY_TESTS
+          sources: .pipeline-test-results/flaky-tests.txt
+        timeout_seconds: 60
 
-  # The delivery contract names the candidate (c-<source commit>) and seals the payload inventory.
+  # The delivery contract is the platform's own (schema 2, generate-delivery-contract): it names the candidate
+  # (its release version, else c-<source commit>), seals the source commit and the SHA-256 of the payload inventory and of every image
+  # archive, which is what the image steps of the security pipeline verify before they unpack an archive.
+  # A generic delivery has no schema gate: no database (migrations "-"), and bootstrap is forced to true so
+  # the baseline of a later candidate does not demand a schema state this delivery never sealed.
   - name: Delivery contract
     group: Build
     execution_role: build
@@ -206,14 +349,20 @@ stages:
     condition: "eq(variables['APPLICATION_PAYLOAD_SEALED'], 'false')"
     steps:
       - name: Seal the delivery contract
-        working_directory: "$(WORKSPACE)"
-        shell: |
-          set -eu
-          SOURCE_SHA="$(tr -d ' \r\n' < .pipeline-artifacts/source-commit)"
-          INVENTORY_SUM="$(sha256sum .pipeline-artifacts/payload-manifest.txt | cut -d ' ' -f 1)"
-          printf '{"schemaVersion":1,"adapter":"generic","candidateVersion":"c-%s","sourceSha":"%s","payloadManifestSha256":"%s"}\n' \
-            "$SOURCE_SHA" "$SOURCE_SHA" "$INVENTORY_SUM" > .pipeline-artifacts/delivery-contract.json
-        timeout_seconds: 120
+        type: aetheus
+        function: generate-delivery-contract
+        with:
+          manifest: .pipeline-artifacts/integration-manifest.json
+          output: .pipeline-artifacts/delivery-contract.json
+          adapter_name: generic
+          adapter_version: "1"
+          candidate_prefix: "$(APPLICATION_CANDIDATE_VERSION_SEALED)"
+          version_mode: source
+          bootstrap: "true"
+          migrations_dir: "-"
+          source_sha: "$(BUILD_SOURCEVERSION)"
+          artifacts: "$(APPLICATION_SEALED_ARTIFACTS)"
+        timeout_seconds: 300
 
   # The provenance digests every category the consumers restore, the delivery contract included, so it
   # comes last.

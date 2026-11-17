@@ -13,9 +13,11 @@ public sealed class AiApi(HttpClient http) : ApiClientBase(http)
 {
     public async Task<PaginatedResult<AiRunnerProfileDto>> GetAiRunnerProfilesAsync(
         int page = 1, int pageSize = 100, string? search = null, CancellationToken ct = default,
-        IReadOnlyList<GridFilter>? filters = null, string? sortBy = null, bool sortDescending = false)
+        IReadOnlyList<GridFilter>? filters = null, string? sortBy = null, bool sortDescending = false,
+        int? organizationId = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy ?? "Name", sortDescending);
+        AddOrganization(query, organizationId);
         // The list's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/ai/profiles", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<AiRunnerProfileDto>>(url, JsonOptions.Web, ct) ?? new();
@@ -84,6 +86,11 @@ public sealed class AiApi(HttpClient http) : ApiClientBase(http)
     public Task<AiTaskDefinitionDto?> UpdateAiTaskAsync(
         int id, UpdateAiTaskDefinitionRequest request, CancellationToken ct = default)
         => PutJsonAsync<UpdateAiTaskDefinitionRequest, AiTaskDefinitionDto>($"api/ai/tasks/{id}", request, ct);
+
+
+    /// <summary>Replaces only the schedule of an AI task (a move in the build planner).</summary>
+    public Task<ApiStatus> SetAiTaskScheduleAsync(int id, SetAiTaskScheduleRequest request, CancellationToken ct = default)
+        => PutJsonNoBodyAsync<SetAiTaskScheduleRequest>($"api/ai/tasks/{id}/schedule", request, ct);
 
 
     public Task<ApiStatus> DeleteAiTaskAsync(int id, CancellationToken ct = default)

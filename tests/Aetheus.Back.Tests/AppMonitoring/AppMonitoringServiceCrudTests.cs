@@ -316,6 +316,70 @@ public sealed class AppMonitoringServiceCrudTests
     }
 
     [Fact]
+    public async Task GetSummary_TellsWaitingForDataFromAMeasuredZeroFromUnavailable()
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        var apps = new List<MonitoredApp>
+        {
+            // Enabled, nothing ever ingested: waiting for data, never a zero.
+            new() { Id = 1, ProjectId = 4, Name = "never", CurrentStatus = AppHealthStatus.Up, AnalyticsEnabled = true },
+            // Enabled, last ingestion older than the five minutes: stale, still waiting.
+            new() { Id = 2, ProjectId = 4, Name = "stale", CurrentStatus = AppHealthStatus.Up, AnalyticsEnabled = true, AnalyticsLastIngestAt = now.AddMinutes(-30) },
+            // Enabled, ingested a minute ago, nobody online: a real measured zero.
+            new() { Id = 3, ProjectId = 4, Name = "quiet", CurrentStatus = AppHealthStatus.Up, AnalyticsEnabled = true, AnalyticsLastIngestAt = now.AddMinutes(-1) },
+            // Visitors are present: measured, whatever the ingestion time says.
+            new() { Id = 4, ProjectId = 4, Name = "busy", CurrentStatus = AppHealthStatus.Up, AnalyticsEnabled = true },
+            // Audience measurement off: no counter.
+            new() { Id = 5, ProjectId = 4, Name = "off", CurrentStatus = AppHealthStatus.Up }
+        };
+        _repo.GetAppsForSummaryAsync(null, Arg.Any<CancellationToken>()).Returns(apps);
+        _repo.GetActiveVisitorCountsAsync(
+                Arg.Any<IReadOnlyCollection<int>>(), now.AddMinutes(-5), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, int> { [4] = 2 });
+        _repo.GetAudienceTotalsAsync(default!, default, default, default, TestContext.Current.CancellationToken)
+            .ReturnsForAnyArgs(new List<AppAudiencePeriodTotal>());
+
+        var summary = await _service.GetSummaryAsync(null, ct: TestContext.Current.CancellationToken);
+
+        OnlineAudienceState StateOf(string name) => summary.Applications.Single(app => app.Name == name).OnlineVisitorState;
+        Assert.Equal(OnlineAudienceState.Waiting, StateOf("never"));
+        Assert.Equal(OnlineAudienceState.Waiting, StateOf("stale"));
+        Assert.Equal(OnlineAudienceState.Measured, StateOf("quiet"));
+        Assert.Equal(0, summary.Applications.Single(app => app.Name == "quiet").OnlineVisitorCount);
+        Assert.Equal(OnlineAudienceState.Measured, StateOf("busy"));
+        Assert.Equal(OnlineAudienceState.Unavailable, StateOf("off"));
+        // The total is measured as soon as one application is.
+        Assert.Equal(OnlineAudienceState.Measured, summary.Audience!.OnlineVisitorState);
+        // R-23: the wait has a starting point: the last audience ingestion, null when none ever arrived or the counter is off.
+        DateTime? LastEventOf(string name) => summary.Applications.Single(app => app.Name == name).OnlineVisitorLastEventAt;
+        Assert.Null(LastEventOf("never"));
+        Assert.Equal(now.AddMinutes(-30), LastEventOf("stale"));
+        Assert.Equal(now.AddMinutes(-1), LastEventOf("quiet"));
+        Assert.Null(LastEventOf("off"));
+        Assert.Equal(now.AddMinutes(-1), summary.Audience.OnlineVisitorLastEventAt);
+    }
+
+    [Fact]
+    public async Task GetSummary_EveryApplicationWaiting_MakesTheTotalWaiting()
+    {
+        var apps = new List<MonitoredApp>
+        {
+            new() { Id = 1, ProjectId = 4, Name = "w1", CurrentStatus = AppHealthStatus.Up, AnalyticsEnabled = true }
+        };
+        _repo.GetAppsForSummaryAsync(null, Arg.Any<CancellationToken>()).Returns(apps);
+        _repo.GetActiveVisitorCountsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, int>());
+        _repo.GetAudienceTotalsAsync(default!, default, default, default, TestContext.Current.CancellationToken)
+            .ReturnsForAnyArgs(new List<AppAudiencePeriodTotal>());
+
+        var summary = await _service.GetSummaryAsync(null, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(OnlineAudienceState.Waiting, summary.Audience!.OnlineVisitorState);
+        Assert.Equal(0, summary.Audience.OnlineVisitors);
+        Assert.Null(summary.Audience.OnlineVisitorLastEventAt);
+    }
+
+    [Fact]
     public async Task GetSummary_EmptyScopeShortCircuits_OtherwiseReturnsEveryAppAndAvailableVisitors()
     {
         var empty = await _service.GetSummaryAsync([], ct: TestContext.Current.CancellationToken);

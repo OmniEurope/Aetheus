@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+     <base href="https://www.php.net/ChangeLog-8.php">
+  
+  <title>PHP: PHP 8 ChangeLog</title>
+
+      <link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/fonts/Fira/fira.css" media="screen">
+      <link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/fonts/Font-Awesome/css/fontello.css" media="screen">
+      <link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/styles/theme-base.css" media="screen">
+      <link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/styles/theme-medium.css" media="screen">
+      <link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/styles/changelog.css" media="screen">
+  
+ <link rel="icon" type="image/svg+xml" sizes="any" href="https://www.php.net/favicon.svg?v=2">
+ <link rel="icon" type="image/png" sizes="196x196" href="https://www.php.net/favicon-196x196.png?v=2">
+ <link rel="icon" type="image/png" sizes="32x32" href="https://www.php.net/favicon-32x32.png?v=2">
+ <link rel="icon" type="image/png" sizes="16x16" href="https://www.php.net/favicon-16x16.png?v=2">
+ <link rel="shortcut icon" href="https://www.php.net/favicon.ico?v=2">
+
+ <link rel="search" type="application/opensearchdescription+xml" href="https://www.php.net/phpnetimprovedsearch.src" title="Add PHP.net search">
+ <link rel="alternate" type="application/atom+xml" href="https://www.php.net/releases/feed.php" title="PHP Release feed">
+ <link rel="alternate" type="application/atom+xml" href="https://www.php.net/feed.atom" title="PHP: Hypertext Preprocessor">
+
+ <link rel="canonical" href="https://www.php.net/ChangeLog-8.php">
+ <link rel="shorturl" href="https://www.php.net/ChangeLog-8">
+ <link rel="alternate" href="https://www.php.net/ChangeLog-8" hreflang="x-default">
+
+
+
+<link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/fonts/Fira/fira.css" media="screen">
+<link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/fonts/Font-Awesome/css/fontello.css" media="screen">
+<link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/styles/theme-base.css" media="screen">
+<link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/styles/theme-medium.css" media="screen">
+<link rel="stylesheet" type="text/css" href="/cached.php?t=&amp;f=/styles/changelog.css" media="screen">
+
+
+<meta name="Description" content="PHP is a popular general-purpose scripting language that powers everything from your blog to the most popular websites in the world." />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:site" content="@official_php" />
+<meta name="twitter:title" content="PHP: PHP 8 ChangeLog" />
+<meta name="twitter:description" content="PHP is a popular general-purpose scripting language that powers everything from your blog to the most popular websites in the world." />
+<meta name="twitter:creator" content="@official_php" />
+<meta name="twitter:image:src" content="https://www.php.net/images/meta-image.png" />
+
+<meta itemprop="name" content="PHP: PHP 8 ChangeLog" />
+<meta itemprop="description" content="PHP is a popular general-purpose scripting language that powers everything from your blog to the most popular websites in the world." />
+<meta itemprop="image" content="https://www.php.net/images/meta-image.png" />
+
+<meta property="og:image" content="https://www.php.net/images/meta-image.png" />
+<meta property="og:description" content="PHP is a popular general-purpose scripting language that powers everything from your blog to the most popular websites in the world." />
+
+<link href="https://fosstodon.org/@php" rel="me" />
+<!-- Matomo -->
+<script>
+    var _paq = window._paq = window._paq || [];
+    /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+    _paq.push(["setDoNotTrack", true]);
+    _paq.push(["disableCookies"]);
+    _paq.push(['trackPageView']);
+    _paq.push(['enableLinkTracking']);
+    (function() {
+        var u="https://analytics.php.net/";
+        _paq.push(['setTrackerUrl', u+'matomo.php']);
+        _paq.push(['setSiteId', '1']);
+        var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+        g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+    })();
+</script>
+<!-- End Matomo Code -->
+</head>
+<body class="docs ">
+
+<nav class="navbar navbar-fixed-top">
+  <div class="navbar__inner">
+    <a href="/" aria-label="PHP Home" class="navbar__brand">
+      <img
+        src="/images/logos/php-logo-white.svg"
+        aria-hidden="true"
+        width="80"
+        height="40"
+      >
+    </a>
+
+    <div
+      id="navbar__offcanvas"
+      tabindex="-1"
+      class="navbar__offcanvas"
+      aria-label="Menu"
+      role="navigation"
+    >
+      <button
+        id="navbar__close-button"
+        class="navbar__icon-item navbar_icon-item--visually-aligned navbar__close-button"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" /></svg>
+      </button>
+
+      <ul class="navbar__nav">
+                            <li class="navbar__item">
+              <a
+                href="/downloads.php"
+                                class="navbar__link  "
+              >
+                                  Downloads                              </a>
+          </li>
+                            <li class="navbar__item">
+              <a
+                href="/docs.php"
+                aria-current="page"                class="navbar__link navbar__link--active "
+              >
+                                  Documentation                              </a>
+          </li>
+                            <li class="navbar__item">
+              <a
+                href="/get-involved.php"
+                                class="navbar__link  "
+              >
+                                  Get Involved                              </a>
+          </li>
+                            <li class="navbar__item">
+              <a
+                href="/support.php"
+                                class="navbar__link  "
+              >
+                                  Help                              </a>
+          </li>
+                            <li class="navbar__item">
+              <a
+                href="/releases/8.5/index.php"
+                                class="navbar__link  navbar__release"
+              >
+                                  <img src="/images/php8/logo_php8_5.svg" alt="PHP 8.5">
+                              </a>
+          </li>
+              </ul>
+    </div>
+
+    <div class="navbar__right">
+        
+      
+      <!-- Desktop default search -->
+      <form
+        action="/manual-lookup.php"
+        class="navbar__search-form"
+      >
+        <label for="navbar__search-input" aria-label="Search docs">
+          <svg
+  xmlns="http://www.w3.org/2000/svg"
+  aria-hidden="true"
+  width="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="11" cy="11" r="8"></circle>
+  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+</svg>        </label>
+        <input
+          type="search"
+          name="pattern"
+          id="navbar__search-input"
+          class="navbar__search-input"
+          placeholder="Search docs"
+          accesskey="s"
+        >
+        <input type="hidden" name="scope" value="quickref">
+      </form>
+
+      <!-- Desktop encanced search -->
+      <button
+        id="navbar__search-button"
+        class="navbar__search-button"
+        hidden
+      >
+        <svg
+  xmlns="http://www.w3.org/2000/svg"
+  aria-hidden="true"
+  width="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="11" cy="11" r="8"></circle>
+  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+</svg>        Search docs
+      </button>
+
+        
+      <!-- Mobile default items -->
+      <a
+        id="navbar__search-link"
+        href="/lookup-form.php"
+        aria-label="Search docs"
+        class="navbar__icon-item navbar__search-link"
+      >
+        <svg
+  xmlns="http://www.w3.org/2000/svg"
+  aria-hidden="true"
+  width="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="11" cy="11" r="8"></circle>
+  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+</svg>      </a>
+      <a
+        id="navbar__menu-link"
+        href="/menu.php"
+        aria-label="Menu"
+        class="navbar__icon-item navbar_icon-item--visually-aligned navbar_menu-link"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg"
+  aria-hidden="true"
+  width="24"
+  viewBox="0 0 24 24"
+  fill="currentColor"
+>
+  <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" />
+</svg>      </a>
+
+      <!-- Mobile enhanced items -->
+      <button
+        id="navbar__search-button-mobile"
+        aria-label="Search docs"
+        class="navbar__icon-item navbar__search-button-mobile"
+        hidden
+      >
+        <svg
+  xmlns="http://www.w3.org/2000/svg"
+  aria-hidden="true"
+  width="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="11" cy="11" r="8"></circle>
+  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+</svg>      </button>
+      <button
+        id="navbar__menu-button"
+        aria-label="Menu"
+        class="navbar__icon-item navbar_icon-item--visually-aligned"
+        hidden
+      >
+        <svg xmlns="http://www.w3.org/2000/svg"
+  aria-hidden="true"
+  width="24"
+  viewBox="0 0 24 24"
+  fill="currentColor"
+>
+  <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" />
+</svg>      </button>
+    </div>
+
+    <div
+      id="navbar__backdrop"
+      class="navbar__backdrop"
+    ></div>
+  </div>
+
+  <div id="flash-message"></div>
+</nav>
+<div class="headsup"><a href='/index.php#2026-10-21-5'>Security advisory: Critical remote code execution vulnerabilities, update now</a></div>
+<nav id="trick"><div><dl>
+<dt><a href='/manual/en/getting-started.php'>Getting Started</a></dt>
+	<dd><a href='/manual/en/introduction.php'>Introduction</a></dd>
+	<dd><a href='/manual/en/tutorial.php'>A simple tutorial</a></dd>
+<dt><a href='/manual/en/langref.php'>Language Reference</a></dt>
+	<dd><a href='/manual/en/language.basic-syntax.php'>Basic syntax</a></dd>
+	<dd><a href='/manual/en/language.types.php'>Types</a></dd>
+	<dd><a href='/manual/en/language.variables.php'>Variables</a></dd>
+	<dd><a href='/manual/en/language.constants.php'>Constants</a></dd>
+	<dd><a href='/manual/en/language.expressions.php'>Expressions</a></dd>
+	<dd><a href='/manual/en/language.operators.php'>Operators</a></dd>
+	<dd><a href='/manual/en/language.control-structures.php'>Control Structures</a></dd>
+	<dd><a href='/manual/en/language.functions.php'>Functions</a></dd>
+	<dd><a href='/manual/en/language.oop5.php'>Classes and Objects</a></dd>
+	<dd><a href='/manual/en/language.namespaces.php'>Namespaces</a></dd>
+	<dd><a href='/manual/en/language.enumerations.php'>Enumerations</a></dd>
+	<dd><a href='/manual/en/language.error-handling.php'>Error Handling</a></dd>
+	<dd><a href='/manual/en/language.fibers.php'>Fibers</a></dd>
+	<dd><a href='/manual/en/language.generators.php'>Generators</a></dd>
+	<dd><a href='/manual/en/language.attributes.php'>Attributes</a></dd>
+	<dd><a href='/manual/en/language.references.php'>References Explained</a></dd>
+	<dd><a href='/manual/en/reserved.variables.php'>Predefined Variables</a></dd>
+	<dd><a href='/manual/en/reserved.exceptions.php'>Predefined Exceptions</a></dd>
+	<dd><a href='/manual/en/reserved.interfaces.php'>Predefined Interfaces and Classes</a></dd>
+	<dd><a href='/manual/en/reserved.attributes.php'>Predefined Attributes</a></dd>
+	<dd><a href='/manual/en/context.php'>Context options and parameters</a></dd>
+	<dd><a href='/manual/en/wrappers.php'>Supported Protocols and Wrappers</a></dd>
+</dl>
+<dl>
+<dt><a href='/manual/en/security.php'>Security</a></dt>
+	<dd><a href='/manual/en/security.intro.php'>Introduction</a></dd>
+	<dd><a href='/manual/en/security.general.php'>General considerations</a></dd>
+	<dd><a href='/manual/en/security.cgi-bin.php'>Installed as CGI binary</a></dd>
+	<dd><a href='/manual/en/security.apache.php'>Installed as an Apache module</a></dd>
+	<dd><a href='/manual/en/security.sessions.php'>Session Security</a></dd>
+	<dd><a href='/manual/en/security.filesystem.php'>Filesystem Security</a></dd>
+	<dd><a href='/manual/en/security.database.php'>Database Security</a></dd>
+	<dd><a href='/manual/en/security.errors.php'>Error Reporting</a></dd>
+	<dd><a href='/manual/en/security.variables.php'>User Submitted Data</a></dd>
+	<dd><a href='/manual/en/security.hiding.php'>Hiding PHP</a></dd>
+	<dd><a href='/manual/en/security.current.php'>Keeping Current</a></dd>
+<dt><a href='/manual/en/features.php'>Features</a></dt>
+	<dd><a href='/manual/en/features.http-auth.php'>HTTP authentication with PHP</a></dd>
+	<dd><a href='/manual/en/features.cookies.php'>Cookies</a></dd>
+	<dd><a href='/manual/en/features.sessions.php'>Sessions</a></dd>
+	<dd><a href='/manual/en/features.file-upload.php'>Handling file uploads</a></dd>
+	<dd><a href='/manual/en/features.remote-files.php'>Using remote files</a></dd>
+	<dd><a href='/manual/en/features.connection-handling.php'>Connection handling</a></dd>
+	<dd><a href='/manual/en/features.persistent-connections.php'>Persistent Database Connections</a></dd>
+	<dd><a href='/manual/en/features.commandline.php'>Command line usage</a></dd>
+	<dd><a href='/manual/en/features.gc.php'>Garbage Collection</a></dd>
+	<dd><a href='/manual/en/features.dtrace.php'>DTrace Dynamic Tracing</a></dd>
+</dl>
+<dl>
+<dt><a href='/manual/en/funcref.php'>Function Reference</a></dt>
+	<dd><a href='/manual/en/refs.basic.php.php'>Affecting PHP's Behaviour</a></dd>
+	<dd><a href='/manual/en/refs.utilspec.audio.php'>Audio Formats Manipulation</a></dd>
+	<dd><a href='/manual/en/refs.remote.auth.php'>Authentication Services</a></dd>
+	<dd><a href='/manual/en/refs.utilspec.cmdline.php'>Command Line Specific Extensions</a></dd>
+	<dd><a href='/manual/en/refs.compression.php'>Compression and Archive Extensions</a></dd>
+	<dd><a href='/manual/en/refs.crypto.php'>Cryptography Extensions</a></dd>
+	<dd><a href='/manual/en/refs.database.php'>Database Extensions</a></dd>
+	<dd><a href='/manual/en/refs.calendar.php'>Date and Time Related Extensions</a></dd>
+	<dd><a href='/manual/en/refs.fileprocess.file.php'>File System Related Extensions</a></dd>
+	<dd><a href='/manual/en/refs.international.php'>Human Language and
+ Character Encoding Support</a></dd>
+	<dd><a href='/manual/en/refs.utilspec.image.php'>Image Processing and Generation</a></dd>
+	<dd><a href='/manual/en/refs.remote.mail.php'>Mail Related Extensions</a></dd>
+	<dd><a href='/manual/en/refs.math.php'>Mathematical Extensions</a></dd>
+	<dd><a href='/manual/en/refs.utilspec.nontext.php'>Non-Text MIME Output</a></dd>
+	<dd><a href='/manual/en/refs.fileprocess.process.php'>Process Control Extensions</a></dd>
+	<dd><a href='/manual/en/refs.basic.other.php'>Other Basic Extensions</a></dd>
+	<dd><a href='/manual/en/refs.remote.other.php'>Other Services</a></dd>
+	<dd><a href='/manual/en/refs.search.php'>Search Engine Extensions</a></dd>
+	<dd><a href='/manual/en/refs.utilspec.server.php'>Server Specific Extensions</a></dd>
+	<dd><a href='/manual/en/refs.basic.session.php'>Session Extensions</a></dd>
+	<dd><a href='/manual/en/refs.basic.text.php'>Text Processing</a></dd>
+	<dd><a href='/manual/en/refs.basic.vartype.php'>Variable and Type Related Extensions</a></dd>
+	<dd><a href='/manual/en/refs.webservice.php'>Web Services</a></dd>
+	<dd><a href='/manual/en/refs.utilspec.windows.php'>Windows Only Extensions</a></dd>
+	<dd><a href='/manual/en/refs.xml.php'>XML Manipulation</a></dd>
+	<dd><a href='/manual/en/refs.ui.php'>GUI Extensions</a></dd>
+</dl>
+<dl>
+<dt>Keyboard Shortcuts</dt><dt>?</dt>
+<dd>This help</dd>
+<dt>j</dt>
+<dd>Next menu item</dd>
+<dt>k</dt>
+<dd>Previous menu item</dd>
+<dt>g p</dt>
+<dd>Previous man page</dd>
+<dt>g n</dt>
+<dd>Next man page</dd>
+<dt>G</dt>
+<dd>Scroll to bottom</dd>
+<dt>g g</dt>
+<dd>Scroll to top</dd>
+<dt>g h</dt>
+<dd>Goto homepage</dd>
+<dt>g s</dt>
+<dd>Goto search<br>(current page)</dd>
+<dt>/</dt>
+<dd>Focus search box</dd>
+</dl></div></nav>
+<div id="goto">
+    <div class="search">
+         <div class="text"></div>
+         <div class="results"><ul></ul></div>
+   </div>
+</div>
+
+
+
+
+
+<div id="layout" class="clearfix">
+  <section id="layout-content">
+<h1>PHP 8 ChangeLog</h1>
+<a href="#PHP_8_5">8.5</a> | <a href="#PHP_8_4">8.4</a> | <a href="#PHP_8_3">8.3</a> | <a href="#PHP_8_2">8.2</a> | <a href="#PHP_8_1">8.1</a> | <a href="#PHP_8_0">8.0</a>
+
+<a id="PHP_8_5"></a>
+
+<section class="version" id="8.5.12"><!-- {{{ 8.5.12 -->
+<h3>Version 8.5.12</h3>
+<b><time class='releasedate' datetime='2026-10-22'>22 Oct 2026</time></b>
+<ul><li>Core:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w">GHSA-w8hw-w9fx-j79w</a>, <a href="https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp">GHSA-6wmf-4rv5-p3rp</a> (Avoid state corruption via bailout).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23644">GH-23644</a> (Optimizer leaves a constant-vs-constant comparison unfolded, crashing the VM in zval_undefined_cv).</li>
+  <li>Fixed OSS-Fuzz 532353396 (assertion failure with static type).</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/23662">GH-23662</a> (Avoid NAN warning in print_r()).</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/21999">GH-21999</a>: GC inconsistency with lazy object, var_dump(), and object comparison.</li>
+  <li>Fixed OSS-Fuzz #536440507 (Immutable class incorrect assertion).</li>
+  <li>Fixed AVX being reported as supported when the OS has not enabled AVX state.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/23980">GH-23980</a> (ZEND_ASSERT violation @ ZEND_INCLUDE_OR_EVAL).</li>
+  <li>Fixed use-after-free when a dl()-loaded extension declares a frameless function and a later request calls it.</li>
+  <li>Fixed System V shared memory emulation for Windows attaching segments past the end of their mapping.</li>
+  <li>Fixed exception thrown by destructor during GC in a Fiber not being rethrown into the frame that triggered the GC.</li>
+</ul></li>
+<li>BCMath:
+<ul>
+  <li>Fixed BcMath\Number results that truncate to zero keeping a negative sign and comparing less than zero.</li>
+</ul></li>
+<li>BZ2:
+<ul>
+  <li>Fixed double close of the descriptor and use-after-free of the inner stream when bzopen() is given a stream resource.</li>
+</ul></li>
+<li>CLI:
+<ul>
+  <li>Fix <a href="https://github.com/php/php-src/issues/22567">GH-22567</a> (Windows ZTS CLI SAPI should refresh its TSRMLS cache during request activation).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23764">GH-23764</a> (Built-in server leaks a file descriptor on every HEAD request for a static file).</li>
+  <li>Fixed crash in the built-in server when a client is reset before being accepted.</li>
+  <li>Fixed the built-in server truncating an error page and leaking its unsent part after a partial socket write.</li>
+</ul></li>
+<li>DOM:
+<ul>
+  <li>Fixed use-after-free when re-constructing a DOMXPath whose php:function registrations are freed while still reachable from the cycle collector.</li>
+  <li>Fixed Dom\HTMLDocument::getElementById() not finding ids of SVG and MathML elements.</li>
+  <li>Fixed Dom\HTMLDocument giving attributes the namespace of their element when a fragment is parsed with an xlink, xml or xmlns context element.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23887">GH-23887</a> (Dom\HTMLCollection::namedItem() assertion failure, hang, or missed first element).</li>
+  <li>Fixed DOMXPath and Dom\XPath losing the context node and in-scope namespaces of an evaluation after a php:function() callback evaluated another expression on the same object.</li>
+</ul></li>
+<li>FFI:
+<ul>
+  <li>Fixed crashes with FFI callbacks created from __call() trampolines and array callables whose object is released.</li>
+</ul></li>
+<li>FTP:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23619">GH-23619</a> (cryptic error on servers that don't support TLS session resumption on data connection).</li>
+</ul></li>
+<li>GD:
+<ul>
+  <li>Fixed undefined behavior with GD2 images with `INT_MAX`-sized chunks.</li>
+  <li>Fixed undefined behavior with GIFs with problematic LZW compression data.</li>
+</ul></li>
+<li>Intl:
+<ul>
+  <li>Fixed cloning IntlDateFormatter and MessageFormatter losing PHP-side state such as dateType, timeType, calendar and the message pattern.</li>
+  <li>Fixed a crash when converting with a cloned UConverter that uses toUCallback/fromUCallback.</li>
+  <li>Fixed Collator attribute and strength methods not rejecting an unconstructed Collator.</li>
+  <li>Fixed crash in intl_error_set_custom_msg() without an active call frame.</li>
+  <li>Fixed grapheme_strstr() and grapheme_stristr() returning incorrect substrings when supplementary characters precede the match.</li>
+  <li>Fixed grapheme_strstr() and grapheme_strpos() missing canonically equivalent matches, and grapheme searches reporting ICU errors for empty haystacks.</li>
+  <li>Fixed grapheme_strrpos() and grapheme_strripos() skipping overlapping matches when using a negative offset.</li>
+  <li>Fixed IntlDateFormatter::parse(), localtime() and parseToCalendar() treating the offset as UTF-16 code units instead of bytes.</li>
+</ul></li>
+<li>Lexbor:
+<ul>
+  <li>Merge patches lexbor/lexbor@8a14bc0 and lexbor/lexbor@f67ce4b, fixing a heap buffer overflow in :lexbor-contains() parsing and buffer overflows in malformed decode replay.</li>
+  <li>Merge patches lexbor/lexbor@859f100, lexbor/lexbor@a36e09a, lexbor/lexbor@b0f7412, lexbor/lexbor@1b215a8, lexbor/lexbor@385afff, lexbor/lexbor@e6c068f, lexbor/lexbor@327a8b6, lexbor/lexbor@917742f and lexbor/lexbor@e89c258, fixing dropped usernames containing an at sign, uninitialized memory in IDNA buffer growth, the encoding of a space before a query or fragment in an opaque path, a query or fragment lost after a dot segment in a path, replacement file drive paths, the output encoding used for percent-encoding, the URLSearchParams tail pointer and fragment serialization without a query.</li>
+</ul></li>
+<li>MBString:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23106">GH-23106</a> (mb_strpos() reads past the end of a haystack ending in a truncated UTF-8 sequence).</li>
+  <li>Fixed mbstring functions emitting surrogates in UTF-8 output and flagging it as valid UTF-8.</li>
+</ul></li>
+<li>MySQLi:
+<ul>
+  <li>Fix <a href="https://github.com/php/php-src/issues/22854">GH-22854</a>: Fixed failed assertion when accessing mysqli property after failed reconnection.</li>
+</ul></li>
+<li>MySQLnd:
+<ul>
+  <li>Fixed field_count not resetting on OK packet.</li>
+  <li>Fixed memory leak when closing a prepared statement after its connection was killed.</li>
+</ul></li>
+<li>Opcache:
+<ul>
+  <li>Fixed OSS-Fuzz #546798343 (Heap-buffer-overflow in optimizer with FCCs and inlining).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23693">GH-23693</a> (Tracing JIT produces wrong results for a guard on a loop-invariant addition).</li>
+  <li>Fixed OSS-Fuzz #5674034779193344 (Read of uninitialized memory in is_cacheable_stream_path()).</li>
+  <li>Fix zend_analyze_calls() call_stack buffer overrun.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23628">GH-23628</a> (Tracing JIT reads undefined property slots of lazy proxy objects instead of forwarding to the real instance).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23679">GH-23679</a> (Tracing JIT writes a parent private property into a child's shadowing public property).</li>
+  <li>Fix multiple incorrect DCE due to unsound escape analysis.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/24063">GH-24063</a> (OPcache optimizer folds `$cond ? -0.0 : 0.0` into a single `-0.0` constant).</li>
+  <li>Fixed crash when a file cache is reused with a different set of extensions declaring frameless functions.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23991">GH-23991</a> (JIT generates invalid IR for multiple recursive calls).</li>
+  <li>Fix SCCP evaluation of isset()/empty() on dimension of non-escaping object.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/20890">GH-20890</a> (Segfault in zval_undefined_cv with non-simple property hook with minimal tracing JIT).</li>
+</ul></li>
+<li>OpenSSL:
+<ul>
+  <li>Fixed stream_socket_enable_crypto() leaving the socket non-blocking after a handshake timeout.</li>
+  <li>Fixed feof() on a TLS stream staying false after a close_notify on Windows.</li>
+</ul></li>
+<li>PCNTL:
+<ul>
+  <li>Fixed pcntl_signal_dispatch() dropping the queued signals when it runs while an exception is pending.</li>
+  <li>Fixed pcntl_signal_dispatch() dropping the signals queued behind a handler that throws.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23986">GH-23986</a> (/proc/self paths resolve to the parent process after pcntl_fork()).</li>
+</ul></li>
+<li>PDO:
+<ul>
+  <li>Fixed PDOStatement::getColumnMeta() reading out of bounds for an invalid column index.</li>
+  <li>Fixed PDOStatement::bindColumn() registering a binding for a column name that is not in the result set.</li>
+  <li>Fixed PDOStatement::execute() leaving the previous result available after a failed execution.</li>
+  <li>Fixed a use-after-free when bindValue()/execute()/closeCursor() is called from a bound parameter's __toString() during execute().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23962">GH-23962</a> (Destroying a persistent PDO instance rolls back a transaction still in use by another instance).</li>
+  <li>Fixed PDO::setAttribute() installing a PDO::ATTR_STATEMENT_CLASS class whose constructor arguments it rejects.</li>
+  <li>Fixed PDO::ATTR_STATEMENT_CLASS constructor_args type errors reporting "array given" regardless of the value passed.</li>
+  <li>Fixed PDOStatement::bindParam() and bindColumn() leaking the driver options value.</li>
+  <li>Fixed PDOStatement not reporting its bound parameters and columns to the cycle collector.</li>
+  <li>Fixed PDOStatement::setFetchMode() not applying changes atomically.</li>
+</ul></li>
+<li>PDO_DBLIB:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23741">GH-23741</a> (segfault after a failed query inside a PDO transaction). Errors raised by beginTransaction(), commit(), rollBack() and lastInsertId() are now reported instead of being dropped.</li>
+</ul></li>
+<li>PDO_Firebird:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23758">GH-23758</a> (PDO_Firebird returns null for non-null empty BLOBs).</li>
+</ul></li>
+<li>PGSQL:
+<ul>
+  <li>Fixed pg_lo_write() rejecting data containing null bytes.</li>
+  <li>Removed pg_service(), unavailable with any released libpq.</li>
+</ul></li>
+<li>Readline:
+<ul>
+  <li>Fixed a heap over-read in the interactive shell prompt when cli.prompt is set to an empty string.</li>
+</ul></li>
+<li>Reflection:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23842">GH-23842</a> (ReflectionProperty::skipLazyInitialization() copies invalid constant defaults with OPcache).</li>
+</ul></li>
+<li>Session:
+<ul>
+  <li>Fixed session_start() continuing after a failed create_sid() when session.use_strict_mode rejects the supplied ID.</li>
+  <li>Fixed exceptions from user-defined create_sid() handlers being replaced by return-value validation errors.</li>
+</ul></li>
+<li>SimpleXML:
+<ul>
+  <li>Fixed reconstructing a SimpleXMLElement freeing a child element that another variable still references.</li>
+</ul></li>
+<li>SOAP:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/22895">GH-22895</a> (Heap use-after-free while encoding a Traversable with an illegal key).</li>
+  <li>Fixed memory leak when load_wsdl_ex() failed to load.</li>
+</ul></li>
+<li>SQLite:
+<ul>
+  <li>Fixed a crash when SQLite3::close() is called from a userland callback.</li>
+</ul></li>
+<li>Standard:
+<ul>
+  <li>Fixed sha1_file() returning a digest for incomplete data after a stream read failure.</li>
+  <li>Fixed iptcembed() corrupting JPEG headers when called recursively from an output handler.</li>
+  <li>Fixed proc_open() leaking descriptor zero when descriptor setup fails.</li>
+  <li>Fixed three Windows-only proc_open() defects: an uninitialized PROCESS_INFORMATION, an indeterminate comspec pointer after a failed lookup, and an unchecked CreateFileA() failure.</li>
+  <li>Fix persistent stream context lifetime during shutdown (Levi Morrison)</li>
+  <li>Fix wordwrap() ignoring an existing break at the end of the string (Nicolas Grekas)</li>
+  <li>Fixed convert.quoted-printable-decode decoding lowercase hex digits to the wrong byte.</li>
+  <li>Fixed chown() and lchown() failing to resolve user names in ZTS builds when getpwnam_r() needs a larger buffer.</li>
+</ul></li>
+<li>Tidy:
+<ul>
+  <li>Fixed a use-after-free when a tidyNode is used after its document is reparsed.</li>
+</ul></li>
+<li>Zlib:
+<ul>
+  <li>Fixed inflate_init() dropping the preset dictionary for raw streams with a non-default window.</li>
+</ul></li>
+</ul>
+<!-- }}} --></section>
+
+<section class="version" id="8.5.11"><!-- {{{ 8.5.11 -->
+<h3>Version 8.5.11</h3>
+<b><time class='releasedate' datetime='2026-09-24'>24 Sep 2026</time></b>
+<ul><li>BCMath:
+<ul>
+  <li>Fixed out-of-bounds read in bc_is_zero_for_scale() when scale exceeds n_scale.</li>
+</ul></li>
+<li>Core:
+<ul>
+  <li>Fixed out-of-bounds reads during automatic UTF-16/32 encoding detection.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15375">GH-15375</a> (Nested "yield from" skips items after a valid() or next() call on the inner generator).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23232">GH-23232</a> (lone namespace separator asks the autoloader for an empty class name).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23301">GH-23301</a> (Nested "yield from" yields a value twice when the middle generator delegates again).</li>
+</ul></li>
+<li>DOM:
+<ul>
+  <li>Fixed NamedNodeMap::getNamedItemNS() with an empty URI not matching the null namespace in spec-following mode.</li>
+  <li>Fixed stale getElementsByClassName() and other node list caches after className/classList writes and attribute removals.</li>
+  <li>Fixed a use-after-free when cloning a DOMNameSpaceNode after DOMDocument::xinclude().</li>
+  <li>Fixed a crash in DOMXPath when a php:function callback receives a nodeset and a later callback returns a node from another document.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23331">GH-23331</a> (UAF when node_list_unlink() skips attribute children that still have a live wrapper).</li>
+  <li>Fixed a use-after-free when Dom\Element::setAttributeNS() replaces the value of an attribute whose child still has a live wrapper.</li>
+</ul></li>
+<li>GD:
+<ul>
+  <li>Fixed imageaffinematrixget() and imageaffinematrixconcat() reporting the wrong argument in error messages.</li>
+</ul></li>
+<li>FPM:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/19320">GH-19320</a> (FPM UID and GID overflow).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-62xp-839h-2637">GHSA-62xp-839h-2637</a> (IPv6 ACL bypass in FastCGI listen.allowed_clients due to partial address comparison). (CVE-2026-91768)</li>
+</ul></li>
+<li>Intl:
+<ul>
+  <li>Fixed grapheme_strpos() and grapheme_strrpos() with an empty needle returning UTF-16 offsets instead of grapheme offsets.</li>
+  <li>Fixed a memory leak when dumping IntlCalendar instances.</li>
+  <li>Fixed a memory leak when iterating IntlBreakIterator::getPartsIterator() results.</li>
+  <li>Fixed a double-free when IntlGregorianCalendar construction fails after the ICU constructor adopts the TimeZone.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23094">GH-23094</a> (NumberFormatter parsing offsets use UTF-16 positions for UTF-8 strings).</li>
+  <li>Fixed Locale::parseLocale() reading past a trailing '-' or '_'.</li>
+  <li>Fixed grapheme_str_split() treating UBRK_DONE as a byte index.</li>
+  <li>Fixed a leak in Locale::getKeywords() when a keyword value cannot be read.</li>
+  <li>Fixed a use-after-free when IntlRuleBasedBreakIterator is constructed from compiled rules.</li>
+</ul></li>
+<li>MBString:
+<ul>
+  <li>Fixed mb_ereg_replace() emitting a NUL or out-of-bounds bytes in the replacement when a \k&lt;name&gt; backref has no closing delimiter.</li>
+</ul></li>
+<li>MySQLnd:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-r6x9-5r99-36j7">GHSA-r6x9-5r99-36j7</a> (Various packet overreads in mysqlnd wire protocol). (CVE-2025-1218)</li>
+</ul></li>
+<li>ODBC:
+<ul>
+  <li>Fixed odbc_field_len(), odbc_field_scale() and odbc_field_type() returning uninitialized memory when SQLColAttribute fails.</li>
+</ul></li>
+<li>Opcache:
+<ul>
+  <li>Fixed opcache.protect_memory race under ZTS.</li>
+  <li>Fixed a tracing JIT crash when compiling a side trace for a method of a class that could not be stored in the inheritance cache.</li>
+  <li>Fixed a crash when the huge page SHM remap discarded mappings outside the reserved address range.</li>
+</ul></li>
+<li>OpenSSL:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-vvx9-73fr-5jjx">GHSA-vvx9-73fr-5jjx</a> (TLS hostname verification falls back to CN after SAN mismatch). (CVE-2026-91769)</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-xr7j-rvgx-xq5p">GHSA-xr7j-rvgx-xq5p</a> (Heap buffer overflow in php_openssl_matches_wildcard_name() on crafted server certificate wildcard CN). (CVE-2026-91767)</li>
+</ul></li>
+<li>PDO:
+<ul>
+  <li>Fixed a leak when a persistent connection failed a liveness check with no other live PDO handle.</li>
+</ul></li>
+<li>PDO_PGSQL:
+<ul>
+  <li>Fixed PDO::CURSOR_SCROLL statements failing under lazy fetching (PDO::ATTR_PREFETCH =&gt; 0).</li>
+</ul></li>
+<li>PDO Sqlite:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/20214">GH-20214</a> (PDO::FETCH_DEFAULT unexpected behavior with PDOStatement::setFetchMode).</li>
+</ul></li>
+<li>Phar:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23418">GH-23418</a> (Use-after-free when looking up mounted directories).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23477">GH-23477</a> (Memory leak on duplicate native Phar manifest entries).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-j3wh-g957-2m85">GHSA-j3wh-g957-2m85</a> (Integer overflow in phar_tar_number() allowing TAR archive entry injection). (CVE-2026-6103)</li>
+</ul></li>
+<li>Readline:
+<ul>
+  <li>Fixed the interactive shell not waiting for the pager process to exit.</li>
+</ul></li>
+<li>SOAP:
+<ul>
+  <li>Fixed WSDL cache corruption when a soap:header defines headerfaults.</li>
+  <li>Fixed stack overflow when parsing a WSDL with self-referential schema groups or attributeGroups.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-rgrp-mwpx-f6rm">GHSA-rgrp-mwpx-f6rm</a> (Unbounded recursion in server-side cleanup_xml_node()). (CVE-2026-91765)</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-cj93-vc83-wgqv">GHSA-cj93-vc83-wgqv</a> (Integer overflow to buffer overflow in SOAP HTTP parsing). (CVE-2025-14181)</li>
+</ul></li>
+<li>Standard:
+<ul>
+  <li>Fixed a segfault when a stream filter callback unsets StreamBucket::$data before re-attaching the bucket.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-7875-c8px-7q5f">GHSA-7875-c8px-7q5f</a> (Out-of-bounds read in the HTTP stream wrapper when following a redirect with an empty Location header). (CVE-2026-93682)</li>
+  <li>Fixed read buffer compaction in php_stream_filter_flush().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/22410">GH-22410</a> (Incorrect float behavior with large numbers).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/23338">GH-23338</a> (fsockopen()/pfsockopen() ValueError reported wrong argument number for $timeout).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23576">GH-23576</a> (Next index for array returned from array_keys() is wrong).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-88hq-2827-7pg6">GHSA-88hq-2827-7pg6</a> (Out-of-bounds read in convert.* stream filters when line-break-chars contains NUL). (CVE-2026-92842)</li>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-fpwc-w8rq-cr92">GHSA-fpwc-w8rq-cr92</a> (Cross-origin credential leak in HTTP stream wrapper redirects). (CVE-2026-91766)</li>
+</ul></li>
+<li>SimpleXML:
+<ul>
+  <li>Fixed writing to a dimension of the object returned by attributes() not creating the attribute.</li>
+  <li>Fixed child elements of the element returned by SimpleXMLElement::addChild() not being accessible by property name when namespaces are involved.</li>
+</ul></li>
+<li>Windows:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-9f67-6fw4-hpfp">GHSA-9f67-6fw4-hpfp</a> (Reserved device names are not rejected before file and stream I/O). (CVE-2026-17545)</li>
+</ul></li>
+<li>Zip:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/17787">GH-17787</a> (ZipArchive stream stops reading early when the archive is freed while the stream is still open).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23276">GH-23276</a> (ZipArchive subclass storing its own stream cannot be garbage collected).</li>
+</ul></li>
+<li>SAPI:
+<ul>
+  <li>Fixed fuzzer targets failing to build in isolation.</li>
+  <li>Fixed returns uninitialized value on LiteSpeed lsapi SAPI (Go Kudo)</li>
+</ul></li>
+</ul>
+<!-- }}} --></section>
+
+<section class="version" id="8.4.27"><!-- {{{ 8.4.27 -->
+<h3>Version 8.4.27</h3>
+<b><time class='releasedate' datetime='2026-10-22'>22 Oct 2026</time></b>
+<ul><li>Core:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w">GHSA-w8hw-w9fx-j79w</a>, <a href="https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp">GHSA-6wmf-4rv5-p3rp</a> (Avoid state corruption via bailout).</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/21999">GH-21999</a>: GC inconsistency with lazy object, var_dump(), and object comparison.</li>
+  <li>Fixed OSS-Fuzz #536440507 (Immutable class incorrect assertion).</li>
+  <li>Fixed AVX being reported as supported when the OS has not enabled AVX state.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/23980">GH-23980</a> (ZEND_ASSERT violation @ ZEND_INCLUDE_OR_EVAL).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23896">GH-23896</a> (Assertion failure in zend_call_function() after a throwing deprecation).</li>
+  <li>Fixed use-after-free when a dl()-loaded extension declares a frameless function and a later request calls it.</li>
+  <li>Fixed System V shared memory emulation for Windows attaching segments past the end of their mapping.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/24050">GH-24050</a> (GC frees an object still held by a resurrected closure when (object) and use share an array).</li>
+  <li>Fixed exception thrown by destructor during GC in a Fiber not being rethrown into the frame that triggered the GC.</li>
+</ul></li>
+<li>BCMath:
+<ul>
+  <li>Fixed BcMath\Number results that truncate to zero keeping a negative sign and comparing less than zero.</li>
+</ul></li>
+<li>BZ2:
+<ul>
+  <li>Fixed double close of the descriptor and use-after-free of the inner stream when bzopen() is given a stream resource.</li>
+</ul></li>
+<li>CLI:
+<ul>
+  <li>Fix <a href="https://github.com/php/php-src/issues/22567">GH-22567</a> (Windows ZTS CLI SAPI should refresh its TSRMLS cache during request activation).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23764">GH-23764</a> (Built-in server leaks a file descriptor on every HEAD request for a static file).</li>
+  <li>Fixed crash in the built-in server when a client is reset before being accepted.</li>
+  <li>Fixed the built-in server truncating an error page and leaking its unsent part after a partial socket write.</li>
+</ul></li>
+<li>DOM:
+<ul>
+  <li>Fixed use-after-free when re-constructing a DOMXPath whose php:function registrations are freed while still reachable from the cycle collector.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23365">GH-23365</a> (DOMNode::insertBefore($n, $n) drops the node and leaves a self-referencing sibling list).</li>
+  <li>Fixed Dom\HTMLDocument::getElementById() not finding ids of SVG and MathML elements.</li>
+  <li>Fixed Dom\HTMLDocument giving attributes the namespace of their element when a fragment is parsed with an xlink, xml or xmlns context element.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23729">GH-23729</a> (DOMXPath::__construct() use-after-free during an evaluation).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23897">GH-23897</a> (php:function() assertion failure after a failed registerPHPFunctions()).</li>
+  <li>Fixed DOMXPath and Dom\XPath losing the context node and in-scope namespaces of an evaluation after a php:function() callback evaluated another expression on the same object.</li>
+</ul></li>
+<li>FFI:
+<ul>
+  <li>Fixed crashes with FFI callbacks created from __call() trampolines and array callables whose object is released.</li>
+</ul></li>
+<li>FTP:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23619">GH-23619</a> (cryptic error on servers that don't support TLS session resumption on data connection).</li>
+</ul></li>
+<li>GD:
+<ul>
+  <li>Fixed undefined behavior with GD2 images with `INT_MAX`-sized chunks.</li>
+  <li>Fixed undefined behavior with GIFs with problematic LZW compression data.</li>
+</ul></li>
+<li>Intl:
+<ul>
+  <li>Fixed IntlDateFormatter::parse(), localtime() and parseToCalendar() treating the offset as UTF-16 code units instead of bytes.</li>
+  <li>Fixed cloning IntlDateFormatter and MessageFormatter losing PHP-side state such as dateType, timeType, calendar and the message pattern.</li>
+  <li>Fixed Collator attribute and strength methods not rejecting an unconstructed Collator.</li>
+  <li>Fixed grapheme_strstr() and grapheme_stristr() returning incorrect substrings when supplementary characters precede the match.</li>
+  <li>Fixed grapheme_strstr() and grapheme_strpos() missing canonically equivalent matches, and grapheme searches reporting ICU errors for empty haystacks.</li>
+  <li>Fixed grapheme_strrpos() and grapheme_strripos() skipping overlapping matches when using a negative offset.</li>
+</ul></li>
+<li>Lexbor:
+<ul>
+  <li>Merge patches lexbor/lexbor@8a14bc0 and lexbor/lexbor@f67ce4b, fixing a heap buffer overflow in :lexbor-contains() parsing and buffer overflows in malformed decode replay.</li>
+</ul></li>
+<li>MBString:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23106">GH-23106</a> (mb_strpos() reads past the end of a haystack ending in a truncated UTF-8 sequence).</li>
+  <li>Fixed mbstring functions emitting surrogates in UTF-8 output and flagging it as valid UTF-8.</li>
+</ul></li>
+<li>MySQLi:
+<ul>
+  <li>Fix <a href="https://github.com/php/php-src/issues/22854">GH-22854</a>: Fixed failed assertion when accessing mysqli property after failed reconnection.</li>
+</ul></li>
+<li>MySQLnd:
+<ul>
+  <li>Fixed field_count not resetting on OK packet.</li>
+  <li>Fixed memory leak when closing a prepared statement after its connection was killed.</li>
+</ul></li>
+<li>Opcache:
+<ul>
+  <li>Fixed OSS-Fuzz #546798343 (Heap-buffer-overflow in optimizer with FCCs and inlining).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23693">GH-23693</a> (Tracing JIT produces wrong results for a guard on a loop-invariant addition).</li>
+  <li>Fixed OSS-Fuzz #5674034779193344 (Read of uninitialized memory in is_cacheable_stream_path()).</li>
+  <li>Fix zend_analyze_calls() call_stack buffer overrun.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23637">GH-23637</a> (PHP-FPM worker SIGSEGV: run_time_cache map_ptr offset beyond CG(map_ptr_last) when a class is reached through the CE cache).</li>
+  <li>Fix multiple incorrect DCE due to unsound escape analysis.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/24063">GH-24063</a> (OPcache optimizer folds `$cond ? -0.0 : 0.0` into a single `-0.0` constant).</li>
+  <li>Fixed crash when a file cache is reused with a different set of extensions declaring frameless functions.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23991">GH-23991</a> (JIT generates invalid IR for multiple recursive calls).</li>
+  <li>Fix SCCP evaluation of isset()/empty() on dimension of non-escaping object.</li>
+</ul></li>
+<li>OpenSSL:
+<ul>
+  <li>Fixed stream_socket_enable_crypto() leaving the socket non-blocking after a handshake timeout.</li>
+  <li>Fixed feof() on a TLS stream staying false after a close_notify on Windows.</li>
+</ul></li>
+<li>PCNTL:
+<ul>
+  <li>Fixed pcntl_signal_dispatch() dropping the queued signals when it runs while an exception is pending.</li>
+  <li>Fixed pcntl_signal_dispatch() dropping the signals queued behind a handler that throws.</li>
+  <li>Fixed pcntl_setcpuaffinity() error message advertising the cpu count as the inclusive upper bound.</li>
+  <li>Fixed pcntl_setqos_class() requiring its optional $qos_class argument.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23986">GH-23986</a> (/proc/self paths resolve to the parent process after pcntl_fork()).</li>
+</ul></li>
+<li>PDO:
+<ul>
+  <li>Fixed PDOStatement::getColumnMeta() reading out of bounds for an invalid column index.</li>
+  <li>Fixed PDOStatement::bindColumn() registering a binding for a column name that is not in the result set.</li>
+  <li>Fixed PDOStatement::execute() leaving the previous result available after a failed execution.</li>
+  <li>Fixed a use-after-free when bindValue()/execute()/closeCursor() is called from a bound parameter's __toString() during execute().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23962">GH-23962</a> (Destroying a persistent PDO instance rolls back a transaction still in use by another instance).</li>
+  <li>Fixed PDO::setAttribute() installing a PDO::ATTR_STATEMENT_CLASS class whose constructor arguments it rejects.</li>
+  <li>Fixed PDO::ATTR_STATEMENT_CLASS constructor_args type errors reporting "array given" regardless of the value passed.</li>
+  <li>Fixed PDOStatement::bindParam() and bindColumn() leaking the driver options value.</li>
+  <li>Fixed PDOStatement not reporting its bound parameters and columns to the cycle collector.</li>
+  <li>Fixed PDOStatement::setFetchMode() not applying changes atomically.</li>
+</ul></li>
+<li>PDO_DBLIB:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23741">GH-23741</a> (segfault after a failed query inside a PDO transaction). Errors raised by beginTransaction(), commit(), rollBack() and lastInsertId() are now reported instead of being dropped.</li>
+</ul></li>
+<li>PDO_Firebird:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23758">GH-23758</a> (PDO_Firebird returns null for non-null empty BLOBs).</li>
+</ul></li>
+<li>Readline:
+<ul>
+  <li>Fixed a heap over-read in the interactive shell prompt when cli.prompt is set to an empty string.</li>
+</ul></li>
+<li>Session:
+<ul>
+  <li>Fixed session_start() continuing after a failed create_sid() when session.use_strict_mode rejects the supplied ID.</li>
+  <li>Fixed exceptions from user-defined create_sid() handlers being replaced by return-value validation errors.</li>
+</ul></li>
+<li>SimpleXML:
+<ul>
+  <li>Fixed reconstructing a SimpleXMLElement freeing a child element that another variable still references.</li>
+</ul></li>
+<li>SOAP:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/22895">GH-22895</a> (Heap use-after-free while encoding a Traversable with an illegal key).</li>
+  <li>Fixed memory leak when load_wsdl_ex() failed to load.</li>
+</ul></li>
+<li>Sockets:
+<ul>
+  <li>Fixed socket_select() silently truncating sets larger than FD_SETSIZE on Windows.</li>
+</ul></li>
+<li>SPL:
+<ul>
+  <li>Fixed SplFixedArray::setSize() doing nothing on subclasses whose constructor does not call parent::__construct().</li>
+  <li>Fixed memory leak when __construct(), __wakeup() or __unserialize() is called from an element destructor during setSize(0).</li>
+</ul></li>
+<li>SQLite:
+<ul>
+  <li>Fixed a crash when SQLite3::close() is called from a userland callback.</li>
+</ul></li>
+<li>Standard:
+<ul>
+  <li>Fixed sha1_file() returning a digest for incomplete data after a stream read failure.</li>
+  <li>Fixed iptcembed() corrupting JPEG headers when called recursively from an output handler.</li>
+  <li>Fixed proc_open() leaking descriptor zero when descriptor setup fails.</li>
+  <li>Fixed three Windows-only proc_open() defects: an uninitialized PROCESS_INFORMATION, an indeterminate comspec pointer after a failed lookup, and an unchecked CreateFileA() failure.</li>
+  <li>Fix persistent stream context lifetime during shutdown (Levi Morrison)</li>
+  <li>Fix wordwrap() ignoring an existing break at the end of the string (Nicolas Grekas)</li>
+  <li>Fixed convert.quoted-printable-decode decoding lowercase hex digits to the wrong byte.</li>
+</ul></li>
+<li>Tidy:
+<ul>
+  <li>Fixed a use-after-free when a tidyNode is used after its document is reparsed.</li>
+</ul></li>
+<li>XSL:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23730">GH-23730</a> (use-after-free when XSLTProcessor::importStylesheet() is called during a transformation).</li>
+</ul></li>
+<li>Zip:
+<ul>
+  <li>Fixed ZipArchive::extractTo() ignoring files given in a non-list array.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/23747">GH-23747</a> (ZipArchive::close() use-after-free from a progress or cancel callback).</li>
+</ul></li>
+</ul>
+<!-- }}} --></section>
+
+<section class="version" id="8.4.1"><!-- {{{ 8.4.1 -->
+<h3>Version 8.4.1</h3>
+<b><time class='releasedate' datetime='2024-11-21'>21 Nov 2024</time></b>
+<ul><li>BcMath:
+<ul>
+  <li>[RFC] Add bcfloor, bcceil and bcround to BCMath.</li>
+  <li>Improve performance.</li>
+  <li>Adjust bcround()'s $mode parameter to only accept the RoundingMode enum.</li>
+  <li>Fixed LONG_MAX in BCMath ext.</li>
+  <li>Fixed bcdiv() div by one.</li>
+  <li>[RFC] Support object types in BCMath.</li>
+  <li>bcpow() performance improvement.</li>
+  <li>ext/bcmath: Check for scale overflow.</li>
+  <li>[RFC] ext/bcmath: Added bcdivmod.</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/15968">GH-15968</a> (Avoid converting objects to strings in operator calculations).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16265">GH-16265</a> (Added early return case when result is 0) (Saki Takamachi).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16262">GH-16262</a> (Fixed a bug where size_t underflows) (Saki Takamachi).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/16236">GH-16236</a> (Fixed a bug in BcMath\Number::pow() and bcpow() when raising negative powers of 0) (Saki Takamachi).</li>
+</ul></li>
+<li>Core:
+<ul>
+  <li>Added zend_call_stack_get implementation for NetBSD, DragonFlyBSD, Solaris and Haiku.</li>
+  <li>Enabled ifunc checks on FreeBSD from the 12.x releases.</li>
+  <li>Changed the type of PHP_DEBUG and PHP_ZTS constants to bool.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13142">GH-13142</a> (Undefined variable name is shortened when contains \0).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13178">GH-13178</a> (Iterator positions incorrect when converting packed array to hashed).</li>
+  <li>Fixed zend fiber build for solaris default mode (32 bits).</li>
+  <li>Fixed zend call stack size for macOs/arm64.</li>
+  <li>Added support for Zend Max Execution Timers on FreeBSD.</li>
+  <li>Ensure fiber stack is not backed by THP.</li>
+  <li>Implement <a href="https://github.com/php/php-src/issues/13609">GH-13609</a> (Dump wrapped object in WeakReference class).</li>
+  <li>Added sparc64 arch assembly support for zend fiber.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/13581">GH-13581</a> no space available for TLS on NetBSD.</li>
+  <li>Added fiber Sys-V loongarch64 support.</li>
+  <li>Adjusted closure names to include the parent function's name.</li>
+  <li>Improve randomness of uploaded file names and files created by tempnam().</li>
+  <li>Added gc and shutdown callbacks to zend_mm custom handlers.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/14650">GH-14650</a> (Compute the size of pages before allocating memory).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/11928">GH-11928</a> (The --enable-re2c-cgoto doesn't add the -g flag).</li>
+  <li>Added the #[\Deprecated] attribute.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/11389">GH-11389</a> (Allow suspending fibers in destructors).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/14801">GH-14801</a> (Fix build for armv7).</li>
+  <li>Implemented property hooks RFC.</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/14978">GH-14978</a> (The xmlreader extension phpize build).</li>
+  <li>Throw Error exception when encountering recursion during comparison, rather than fatal error.</li>
+  <li>Added missing cstddef include for C++ builds.</li>
+  <li>Updated build system scripts config.guess to 2024-07-27 and config.sub to 2024-05-27.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15240">GH-15240</a> (Infinite recursion in trait hook).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15140">GH-15140</a> (Missing variance check for abstract set with asymmetric type).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15181">GH-15181</a> (Disabled output handler is flushed again).</li>
+  <li>Passing E_USER_ERROR to trigger_error() is now deprecated.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15292">GH-15292</a> (Dynamic AVX detection is broken for MSVC).</li>
+  <li>Using "_" as a class name is now deprecated.</li>
+  <li>Exiting a namespace now clears seen symbols.</li>
+  <li>The exit (and die) language constructs now behave more like a function. They can be passed liked callables, are affected by the strict_types declare statement, and now perform the usual type coercions instead of casting any non-integer value to a string. As such, passing invalid types to exit/die may now result in a TypeError being thrown.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15438">GH-15438</a> (Hooks on constructor promoted properties without visibility are ignored).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15419">GH-15419</a> (Missing readonly+hook incompatibility check for readonly classes).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15187">GH-15187</a> (Various hooked object iterator issues).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15456">GH-15456</a> (Crash in get_class_vars() on virtual properties).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15501">GH-15501</a> (Windows HAVE_&lt;header&gt;_H macros defined to 1 or undefined).</li>
+  <li>Implemented asymmetric visibility for properties.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15644">GH-15644</a> (Asymmetric visibility doesn't work with hooks).</li>
+  <li>Implemented lazy objects RFC.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15686">GH-15686</a> (Building shared iconv with external iconv library).</li>
+  <li>Fixed missing error when adding asymmetric visibility to unilateral virtual property.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15693">GH-15693</a> (Unnecessary include in main.c bloats binary).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15731">GH-15731</a> (AllowDynamicProperties validation should error on enums).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16040">GH-16040</a> (Use-after-free of object released in hook).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16026">GH-16026</a> (Reuse of dtor fiber during shutdown).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15999">GH-15999</a> (zend_std_write_property() assertion failure with lazy objects).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15960">GH-15960</a> (Foreach edge cases with lazy objects).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16185">GH-16185</a> (Various hooked object iterator issues).</li>
+  <li>Fixed bug OSS-Fuzz #371445205 (Heap-use-after-free in attr_free).</li>
+  <li>Fixed missing error when adding asymmetric visibility to static properties.</li>
+  <li>Fixed bug OSS-Fuzz #71407 (Null-dereference WRITE in zend_lazy_object_clone).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16574">GH-16574</a> (Incorrect error "undefined method" messages).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16577">GH-16577</a> (EG(strtod_state).freelist leaks with opcache.preload).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16615">GH-16615</a> (Assertion failure in zend_std_read_property).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16342">GH-16342</a> (Added ReflectionProperty::isLazy()).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16725">GH-16725</a> (Incorrect access check for non-hooked props in hooked object iterator).</li>
+</ul></li>
+<li>Curl:
+<ul>
+  <li>Deprecated the CURLOPT_BINARYTRANSFER constant.</li>
+  <li>Bumped required libcurl version to 7.61.0.</li>
+  <li>Added feature_list key to the curl_version() return value.</li>
+  <li>Added constants CURL_HTTP_VERSION_3 (libcurl 7.66) and CURL_HTTP_VERSION_3ONLY (libcurl 7.88) as options for CURLOPT_HTTP_VERSION (Ayesh Karunaratne)</li>
+  <li>Added CURLOPT_TCP_KEEPCNT to set the number of probes to send before dropping the connection.</li>
+  <li>Added CURLOPT_PREREQFUNCTION Curl option to set a custom callback after the connection is established, but before the request is performed.</li>
+  <li>Added CURLOPT_SERVER_RESPONSE_TIMEOUT, which was formerly known as CURLOPT_FTP_RESPONSE_TIMEOUT.</li>
+  <li>The CURLOPT_DNS_USE_GLOBAL_CACHE option is now silently ignored.</li>
+  <li>Added CURLOPT_DEBUGFUNCTION as a Curl option.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16359">GH-16359</a> (crash with curl_setopt* CURLOPT_WRITEFUNCTION without null callback).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16723">GH-16723</a> (CURLMOPT_PUSHFUNCTION issues).</li>
+</ul></li>
+<li>Date:
+<ul>
+  <li>Added DateTime[Immutable]::createFromTimestamp.</li>
+  <li>Added DateTime[Immutable]::[get|set]Microsecond.</li>
+  <li>Constants SUNFUNCS_RET_TIMESTAMP, SUNFUNCS_RET_STRING, and SUNFUNCS_RET_DOUBLE are now deprecated.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13773">GH-13773</a> (DatePeriod not taking into account microseconds for end date).</li>
+</ul></li>
+<li>DBA:
+<ul>
+  <li>Passing null or false to dba_key_split() is deprecated.</li>
+</ul></li>
+<li>Debugging:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15923">GH-15923</a> (GDB: Python Exception &lt;class 'TypeError'&gt;: exceptions must derive from BaseException).</li>
+</ul></li>
+<li>DOM:
+<ul>
+  <li>Added DOMNode::compareDocumentPosition().</li>
+  <li>Implement #53655 (Improve speed of DOMNode::C14N() on large XML documents).</li>
+  <li>Fix cloning attribute with namespace disappearing namespace.</li>
+  <li>Implement DOM HTML5 parsing and serialization RFC.</li>
+  <li>Fix DOMElement-&gt;prefix with empty string creates bogus prefix.</li>
+  <li>Handle OOM more consistently.</li>
+  <li>Implemented "Improve callbacks in ext/dom and ext/xsl" RFC.</li>
+  <li>Added DOMXPath::quote() static method.</li>
+  <li>Implemented opt-in ext/dom spec compliance RFC.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/79701">#79701</a> (getElementById does not correctly work with duplicate definitions).</li>
+  <li>Implemented "New ext-dom features in PHP 8.4" RFC.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/14698">GH-14698</a> (segfault on DOM node dereference).</li>
+  <li>Improve support for template elements.</li>
+  <li>Fix trampoline leak in xpath callables.</li>
+  <li>Throw instead of silently failing when creating a too long text node in (DOM)ParentNode and (DOM)ChildNode.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15192">GH-15192</a> (Segmentation fault in dom extension (html5_serializer)).</li>
+  <li>Deprecated DOM_PHP_ERR constant.</li>
+  <li>Removed DOMImplementation::getFeature().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15331">GH-15331</a> (Element::$substitutedNodeValue test failed).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15570">GH-15570</a> (Segmentation fault (access null pointer) in ext/dom/html5_serializer.c).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13988">GH-13988</a> (Storing DOMElement consume 4 times more memory in PHP 8.1 than in PHP 8.0).</li>
+  <li>Fix XML serializer errata: xmlns="" serialization should be allowed.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15910">GH-15910</a> (Assertion failure in ext/dom/element.c).</li>
+  <li>Fix unsetting DOM properties.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16190">GH-16190</a> (Using reflection to call Dom\Node::__construct causes assertion failure).</li>
+  <li>Fix edge-case in DOM parsing decoding.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16465">GH-16465</a> (Heap buffer overflow in DOMNode-&gt;getElementByTagName).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16594">GH-16594</a> (Assertion failure in DOM -&gt; before).</li>
+</ul></li>
+<li>Fileinfo:
+<ul>
+  <li>Update to libmagic 5.45.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/65106">#65106</a> (PHP fails to compile ext/fileinfo).</li>
+</ul></li>
+<li>FPM:
+<ul>
+  <li>Implement <a href="https://github.com/php/php-src/issues/12385">GH-12385</a> (flush headers without body when calling flush()).</li>
+  <li>Added DragonFlyBSD system to the list which set FPM_BACKLOG_DEFAULT to SOMAXCONN.</li>
+  <li>/dev/poll events.mechanism for Solaris/Illumos setting had been retired.</li>
+  <li>Added memory peak to the scoreboard / status page.</li>
+</ul></li>
+<li>FTP:
+<ul>
+  <li>Removed the deprecated inet_ntoa call support.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/63937">#63937</a> (Upload speed 10 times slower with PHP).</li>
+</ul></li>
+<li>GD:
+<ul>
+  <li>Fix parameter numbers and missing alpha check for imagecolorset().</li>
+  <li>imagepng/imagejpeg/imagewep/imageavif now throw an exception on invalid quality parameter.</li>
+  <li>Check overflow/underflow for imagescale/imagefilter.</li>
+  <li>Added gdImageClone to bundled libgd.</li>
+</ul></li>
+<li>Gettext:
+<ul>
+  <li>bind_textdomain_codeset, textdomain and d(*)gettext functions now throw an exception on empty domain.</li>
+</ul></li>
+<li>GMP:
+<ul>
+  <li>The GMP class is now final and cannot be extended anymore.</li>
+  <li>RFC: Change GMP bool cast behavior.</li>
+</ul></li>
+<li>Hash:
+<ul>
+  <li>Changed return type of hash_update() to true.</li>
+  <li>Added HashContext::__debugInfo().</li>
+  <li>Deprecated passing incorrect data types for options to ext/hash functions.</li>
+  <li>Added SSE2 and SHA-NI implementation of SHA-256.</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/15384">GH-15384</a> (Build fails on Alpine / Musl for amd64).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15742">GH-15742</a> (php_hash_sha.h incompatible with C++).</li>
+</ul></li>
+<li>IMAP:
+<ul>
+  <li>Moved to PECL.</li>
+</ul></li>
+<li>Intl:
+<ul>
+  <li>Added IntlDateFormatter::PATTERN constant.</li>
+  <li>Fixed Numberformatter::__construct when the locale is invalid, now throws an exception.</li>
+  <li>Added NumberFormatter::ROUND_TOWARD_ZERO and ::ROUND_AWAY_FROM_ZERO as aliases for ::ROUND_DOWN and ::ROUND_UP.</li>
+  <li>Added NumberFormatter::ROUND_HALFODD.</li>
+  <li>Added PROPERTY_IDS_UNARY_OPERATOR, PROPERTY_ID_COMPAT_MATH_START and PROPERTY_ID_COMPAT_MATH_CONTINUE constants.</li>
+  <li>Added IntlDateFormatter::getIanaID/intltz_get_iana_id method/function.</li>
+  <li>Set to C++17 standard for icu 74 and onwards.</li>
+  <li>resourcebundle_get(), ResourceBundle::get(), and accessing offsets on a ResourceBundle object now throw: - TypeError for invalid offset types - ValueError for an empty string - ValueError if the integer index does not fit in a signed 32 bit integer</li>
+  <li>ResourceBundle::get() now has a tentative return type of: ResourceBundle|array|string|int|null</li>
+  <li>Added the new Grapheme function grapheme_str_split.</li>
+  <li>Added IntlDateFormatter::parseToCalendar.</li>
+  <li>Added SpoofChecker::setAllowedChars to set unicode chars ranges.</li>
+</ul></li>
+<li>LDAP:
+<ul>
+  <li>Added LDAP_OPT_X_TLS_PROTOCOL_MAX/LDAP_OPT_X_TLS_PROTOCOL_TLS1_3 constants.</li>
+</ul></li>
+<li>LibXML:
+<ul>
+  <li>Added LIBXML_RECOVER constant.</li>
+  <li>libxml_set_streams_context() now throws immediately on an invalid context instead of at the use-site.</li>
+  <li>Added LIBXML_NO_XXE constant.</li>
+</ul></li>
+<li>MBString:
+<ul>
+  <li>Added mb_trim, mb_ltrim and mb_rtrim.</li>
+  <li>Added mb_ucfirst and mb_lcfirst.</li>
+  <li>Updated Unicode data tables to Unicode 15.1.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15824">GH-15824</a> (mb_detect_encoding(): Argument $encodings contains invalid encoding "UTF8").</li>
+  <li>Updated Unicode data tables to Unicode 16.0.</li>
+</ul></li>
+<li>Mysqli:
+<ul>
+  <li>The mysqli_ping() function and mysqli::ping() method are now deprecated, as the reconnect feature was removed in PHP 8.2.</li>
+  <li>The mysqli_kill() function and mysqli::kill() method are now deprecated. If this functionality is needed a SQL "KILL" command can be used instead.</li>
+  <li>The mysqli_refresh() function and mysqli::refresh() method are now deprecated. If this functionality is needed a SQL "FLUSH" command can be used instead.</li>
+  <li>Passing explicitly the $mode parameter to mysqli_store_result() has been deprecated. As the MYSQLI_STORE_RESULT_COPY_DATA constant was only used in conjunction with this function it has also been deprecated.</li>
+</ul></li>
+<li>MySQLnd:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13440">GH-13440</a> (PDO quote bottleneck).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/10599">GH-10599</a> (Apache crash on Windows when using a self-referencing anonymous function inside a class with an active mysqli connection).</li>
+</ul></li>
+<li>Opcache:
+<ul>
+  <li>Added large shared segments support for FreeBSD.</li>
+  <li>If JIT is enabled, PHP will now exit with a fatal error on startup in case of JIT startup initialization issues.</li>
+  <li>Increased the maximum value of opcache.interned_strings_buffer to 32767 on 64bit archs.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13834">GH-13834</a> (Applying non-zero offset 36 to null pointer in zend_jit.c).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/14361">GH-14361</a> (Deep recursion in zend_cfg.c causes segfault).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/14873">GH-14873</a> (PHP 8.4 min function fails on typed integer).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15490">GH-15490</a> (Building of callgraph modifies preloaded symbols).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15178">GH-15178</a> (Assertion in tracing JIT on hooks).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15657">GH-15657</a> (Segmentation fault in dasm_x86.h).</li>
+  <li>Added opcache_jit_blacklist() function.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16009">GH-16009</a> (Segmentation fault with frameless functions and undefined CVs).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16186">GH-16186</a> (Assertion failure in Zend/zend_operators.c).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16572">GH-16572</a> (Incorrect result with reflection in low-trigger JIT).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/16839">GH-16839</a> (Error on building Opcache JIT for Windows ARM64).</li>
+</ul></li>
+<li>OpenSSL:
+<ul>
+  <li>Fixed bug <a href="https://bugs.php.net/80269">#80269</a> (OpenSSL sets Subject wrong with extraattribs parameter).</li>
+  <li>Implement request #48520 (openssl_csr_new - allow multiple values in DN).</li>
+  <li>Introduced new serial_hex parameter to openssl_csr_sign.</li>
+  <li>Added X509_PURPOSE_OCSP_HELPER and X509_PURPOSE_TIMESTAMP_SIGN constants.</li>
+  <li>Bumped minimum required OpenSSL version to 1.1.1.</li>
+  <li>Added compile-time option --with-openssl-legacy-provider to enable legacy provider.</li>
+  <li>Added support for Curve25519 + Curve448 based keys.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/13343">GH-13343</a> (openssl_x509_parse should not allow omitted seconds in UTCTimes).</li>
+  <li>Bumped minimum required OpenSSL version to 1.1.0.</li>
+  <li>Implement <a href="https://github.com/php/php-src/issues/13514">GH-13514</a> PASSWORD_ARGON2 from OpenSSL 3.2.</li>
+</ul></li>
+<li>Output:
+<ul>
+  <li>Clear output handler status flags during handler initialization.</li>
+  <li>Fixed bug with url_rewriter.hosts not used by output_add_rewrite_var().</li>
+</ul></li>
+<li>PCNTL:
+<ul>
+  <li>Added pcntl_setns for Linux.</li>
+  <li>Added pcntl_getcpuaffinity/pcntl_setcpuaffinity.</li>
+  <li>Updated pcntl_get_signal_handler signal id upper limit to be more in line with platforms limits.</li>
+  <li>Added pcntl_getcpu for Linux/FreeBSD/Solaris/Illumos.</li>
+  <li>Added pcntl_getqos_class/pcntl_setqos_class for macOs.</li>
+  <li>Added SIGCKPT/SIGCKPTEXIT constants for DragonFlyBSD.</li>
+  <li>Added FreeBSD's SIGTRAP handling to pcntl_siginfo_to_zval.</li>
+  <li>Added POSIX pcntl_waitid.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16769">GH-16769</a>: (pcntl_sigwaitinfo aborts on signal value as reference).</li>
+</ul></li>
+<li>PCRE:
+<ul>
+  <li>Upgrade bundled pcre2lib to version 10.43.</li>
+  <li>Add "/r" modifier.</li>
+  <li>Upgrade bundled pcre2lib to version 10.44.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/16189">GH-16189</a> (underflow on offset argument).</li>
+  <li>Fix UAF issues with PCRE after request shutdown.</li>
+</ul></li>
+<li>PDO:
+<ul>
+  <li>Fixed setAttribute and getAttribute.</li>
+  <li>Implemented PDO driver-specific subclasses RFC.</li>
+  <li>Added support for PDO driver-specific SQL parsers.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/14792">GH-14792</a> (Compilation failure on pdo_* extensions).</li>
+  <li>mysqlnd: support ER_CLIENT_INTERACTION_TIMEOUT.</li>
+  <li>The internal header php_pdo_int.h is no longer installed; it is not supposed to be used by PDO drivers.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16167">GH-16167</a> (Prevent mixing PDO sub-classes with different DSN).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16314">GH-16314</a> ("Pdo\Mysql object is uninitialized" when opening a persistent connection).</li>
+</ul></li>
+<li>PDO_DBLIB:
+<ul>
+  <li>Fixed setAttribute and getAttribute.</li>
+  <li>Added class Pdo\DbLib.</li>
+</ul></li>
+<li>PDO_Firebird:
+<ul>
+  <li>Fixed setAttribute and getAttribute.</li>
+  <li>Feature: Add transaction isolation level and mode settings to pdo_firebird.</li>
+  <li>Added class Pdo\Firebird.</li>
+  <li>Added Pdo\Firebird::ATTR_API_VERSION.</li>
+  <li>Added getApiVersion() and removed from getAttribute().</li>
+  <li>Supported Firebird 4.0 datatypes.</li>
+  <li>Support proper formatting of time zone types.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/15604">GH-15604</a> (Always make input parameters nullable).</li>
+</ul></li>
+<li>PDO_MYSQL:
+<ul>
+  <li>Fixed setAttribute and getAttribute.</li>
+  <li>Added class Pdo\Mysql.</li>
+  <li>Added custom SQL parser.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/15949">GH-15949</a> (PDO_MySQL not properly quoting PDO_PARAM_LOB binary data).</li>
+</ul></li>
+<li>PDO_ODBC:
+<ul>
+  <li>Added class Pdo\Odbc.</li>
+</ul></li>
+<li>PDO_PGSQL:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/12423">GH-12423</a>, DSN credentials being prioritized over the user/password PDO constructor arguments.</li>
+  <li>Fixed native float support with pdo_pgsql query results.</li>
+  <li>Added class Pdo\Pgsql.</li>
+  <li>Retrieve the memory usage of the query result resource.</li>
+  <li>Added Pdo\Pgsql::setNoticeCallBack method to receive DB notices.</li>
+  <li>Added custom SQL parser.</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/15986">GH-15986</a> (Double-free due to Pdo\Pgsql::setNoticeCallback()).</li>
+  <li>Fixed <a href="https://github.com/php/php-src/issues/12940">GH-12940</a> (Using PQclosePrepared when available instead of the DEALLOCATE command to free statements resources).</li>
+  <li>Remove PGSQL_ATTR_RESULT_MEMORY_SIZE constant as it is provided by the new PDO Subclass as Pdo\Pgsql::ATTR_RESULT_MEMORY_SIZE.</li>
+</ul></li>
+<li>PDO_SQLITE:
+<ul>
+  <li>Added class Pdo\Sqlite.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/81227">#81227</a> (PDO::inTransaction reports false when in transaction).</li>
+  <li>Added custom SQL parser.</li>
+</ul></li>
+<li>PHPDBG:
+<ul>
+  <li>array out of bounds, stack overflow handled for segfault handler on windows.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16041">GH-16041</a> (Support stack limit in phpdbg).</li>
+</ul></li>
+<li>PGSQL:
+<ul>
+  <li>Added the possibility to have no conditions for pg_select.</li>
+  <li>Persistent connections support the PGSQL_CONNECT_FORCE_RENEW flag.</li>
+  <li>Added pg_result_memory_size to get the query result memory usage.</li>
+  <li>Added pg_change_password to alter an user's password.</li>
+  <li>Added pg_put_copy_data/pg_put_copy_end to send COPY commands and signal the end of the COPY.</li>
+  <li>Added pg_socket_poll to poll on the connection.</li>
+  <li>Added pg_jit to get infos on server JIT support.</li>
+  <li>Added pg_set_chunked_rows_size to fetch results per chunk.</li>
+  <li>pg_convert/pg_insert/pg_update/pg_delete ; regexes are now cached.</li>
+</ul></li>
+<li>Phar:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/12532">GH-12532</a> (PharData created from zip has incorrect timestamp).</li>
+</ul></li>
+<li>POSIX:
+<ul>
+  <li>Added POSIX_SC_CHILD_MAX and POSIX_SC_CLK_TCK constants.</li>
+  <li>Updated posix_isatty to set the error number on file descriptors.</li>
+</ul></li>
+<li>PSpell:
+<ul>
+  <li>Moved to PECL.</li>
+</ul></li>
+<li>Random:
+<ul>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15094">GH-15094</a> (php_random_default_engine() is not C++ conforming).</li>
+  <li>lcg_value() is now deprecated.</li>
+</ul></li>
+<li>Readline:
+<ul>
+  <li>Fixed readline_info, rl_line_buffer_length/rl_len globals on update.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/51558">#51558</a> (Shared readline build fails).</li>
+  <li>Fixed UAF with readline_info().</li>
+</ul></li>
+<li>Reflection:
+<ul>
+  <li>Implement <a href="https://github.com/php/php-src/issues/12908">GH-12908</a> (Show attribute name/class in ReflectionAttribute dump).</li>
+  <li>Make ReflectionGenerator::getFunction() legal after generator termination.</li>
+  <li>Added ReflectionGenerator::isClosed().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15718">GH-15718</a> (Segfault on ReflectionProperty::get{Hook,Hooks}() on dynamic properties).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15694">GH-15694</a> (ReflectionProperty::isInitialized() is incorrect for hooked properties).</li>
+  <li>Add missing ReflectionProperty::hasHook[s]() methods.</li>
+  <li>Add missing ReflectionProperty::isFinal() method.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16122">GH-16122</a> (The return value of ReflectionFunction::getNamespaceName() and ReflectionFunction::inNamespace() for closures is incorrect).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16162">GH-16162</a> (No ReflectionProperty::IS_VIRTUAL) (DanielEScherzer)</li>
+  <li>Fixed the name of the second parameter of ReflectionClass::resetAsLazyGhost().</li>
+</ul></li>
+<li>Session:
+<ul>
+  <li>INI settings session.sid_length and session.sid_bits_per_character are now deprecated.</li>
+  <li>Emit warnings for non-positive values of session.gc_divisor and negative values of session.gc_probability.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16590">GH-16590</a> (UAF in session_encode()).</li>
+</ul></li>
+<li>SimpleXML:
+<ul>
+  <li>Fix signature of simplexml_import_dom().</li>
+</ul></li>
+<li>SNMP:
+<ul>
+  <li>Removed the deprecated inet_ntoa call support.</li>
+</ul></li>
+<li>SOAP:
+<ul>
+  <li>Add support for clark notation for namespaces in class map.</li>
+  <li>Mitigate #51561 (SoapServer with a extented class and using sessions, lost the setPersistence()).</li>
+  <li>Fixed bug <a href="https://bugs.php.net/49278">#49278</a> (SoapClient::__getLastResponseHeaders returns NULL if wsdl operation !has output).</li>
+  <li>Fixed bug <a href="https://bugs.php.net/44383">#44383</a> (PHP DateTime not converted to xsd:datetime).</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/11941">GH-11941</a> (soap with session persistence will silently fail when "session" built as a shared object).</li>
+  <li>Passing an int to SoapServer::addFunction() is now deprecated. If all PHP functions need to be provided flatten the array returned by get_defined_functions().</li>
+  <li>The SOAP_FUNCTIONS_ALL constant is now deprecated.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/61525">#61525</a> (SOAP functions require at least one space after HTTP header colon).</li>
+  <li>Implement request #47317 (SoapServer::__getLastResponse()).</li>
+</ul></li>
+<li>Sockets:
+<ul>
+  <li>Removed the deprecated inet_ntoa call support.</li>
+  <li>Added the SO_EXECLUSIVEADDRUSE windows constant.</li>
+  <li>Added the SOCK_CONN_DGRAM/SOCK_DCCP netbsd constants.</li>
+  <li>Added multicast group support for ipv4 on FreeBSD.</li>
+  <li>Added the TCP_SYNCNT constant for Linux to set number of attempts to send SYN packets from the client.</li>
+  <li>Added the SO_EXCLBIND constant for exclusive socket binding on illumos/solaris.</li>
+  <li>Updated the socket_create_listen backlog argument default value to SOMAXCONN.</li>
+  <li>Added the SO_NOSIGPIPE constant to control the generation of SIGPIPE for macOs and FreeBSD.</li>
+  <li>Added SO_LINGER_SEC for macOs, true equivalent of SO_LINGER in other platforms.</li>
+  <li>Add close-on-exec on socket created with socket_accept on unixes.</li>
+  <li>Added IP_PORTRANGE* constants for BSD systems to control ephemeral port ranges.</li>
+  <li>Added SOCK_NONBLOCK/SOCK_CLOEXEC constants for socket_create and socket_create_pair to apply O_NONBLOCK/O_CLOEXEC flags to the newly created sockets.</li>
+  <li>Added SO_BINDTOIFINDEX to bind a socket to an interface index.</li>
+</ul></li>
+<li>Sodium:
+<ul>
+  <li>Add support for AEGIS-128L and AEGIS-256.</li>
+  <li>Enable AES-GCM on aarch64 with the ARM crypto extensions.</li>
+</ul></li>
+<li>SPL:
+<ul>
+  <li>Implement SeekableIterator for SplObjectStorage.</li>
+  <li>The SplFixedArray::__wakeup() method has been deprecated as it implements __serialize() and __unserialize() which need to be overwritten instead.</li>
+  <li>Passing a non-empty string for the $escape parameter of: - SplFileObject::setCsvControl() - SplFileObject::fputcsv() - SplFileObject::fgetcsv() is now deprecated.</li>
+</ul></li>
+<li>Standard:
+<ul>
+  <li>Implement <a href="https://github.com/php/php-src/issues/12188">GH-12188</a> (Indication for the int size in phpinfo()).</li>
+  <li>Partly fix <a href="https://github.com/php/php-src/issues/12143">GH-12143</a> (Incorrect round() result for 0.49999999999999994).</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/12252">GH-12252</a> (round(): Validate the rounding mode).</li>
+  <li>Increase the default BCrypt cost to 12.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/12592">GH-12592</a> (strcspn() odd behaviour with NUL bytes and empty mask).</li>
+  <li>Removed the deprecated inet_ntoa call support.</li>
+  <li>Cast large floats that are within int range to int in number_format so the precision is not lost.</li>
+  <li>Add support for 4 new rounding modes to the round() function.</li>
+  <li>debug_zval_dump() now indicates whether an array is packed.</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/12143">GH-12143</a> (Optimize round).</li>
+  <li>Changed return type of long2ip to string from string|false.</li>
+  <li>Fix <a href="https://github.com/php/php-src/issues/12143">GH-12143</a> (Extend the maximum precision round can handle by one digit).</li>
+  <li>Added the http_get_last_response_headers() and http_clear_last_response_headers() that allows retrieving the same content as the magic $http_response_header variable.</li>
+  <li>Add php_base64_encode_ex() API.</li>
+  <li>Implemented "Raising zero to the power of negative number" RFC.</li>
+  <li>Added array_find(), array_find_key(), array_all(), and array_any().</li>
+  <li>Change highlight_string() and print_r() return type to string|true.</li>
+  <li>Fix references in request_parse_body() options array.</li>
+  <li>Add RoundingMode enum.</li>
+  <li>Unserializing the uppercase 'S' tag is now deprecated.</li>
+  <li>Enables crc32 auxiliary detection on OpenBSD.</li>
+  <li>Passing a non-empty string for the $escape parameter of: - fputcsv() - fgetcsv() - str_getcsv() is now deprecated.</li>
+  <li>The str_getcsv() function now throws ValueErrors when the $separator and $enclosure arguments are not one byte long, or if the $escape is not one byte long or the empty string. This aligns the behaviour to be identical to that of fputcsv() and fgetcsv().</li>
+  <li>php_uname() now throws ValueErrors on invalid inputs.</li>
+  <li>The "allowed_classes" option for unserialize() now throws TypeErrors and ValueErrors	if it is not an	array of class names.</li>
+  <li>Implemented <a href="https://github.com/php/php-src/issues/15685">GH-15685</a> (improve proc_open error reporting on Windows).</li>
+  <li>Add support for backed enums in http_build_query().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15982">GH-15982</a> (Assertion failure with array_find when references are involved).</li>
+  <li>Fixed parameter names of fpow() to be identical to pow().</li>
+</ul></li>
+<li>Streams:
+<ul>
+  <li>Implemented <a href="https://github.com/php/php-src/issues/15155">GH-15155</a> (Stream context is lost when custom stream wrapper is being filtered).</li>
+</ul></li>
+<li>Tidy:
+<ul>
+  <li>Failures in the constructor now throw exceptions rather than emitting warnings and having a broken object.</li>
+  <li>Add tidyNode::getNextSibling() and tidyNode::getPreviousSibling().</li>
+</ul></li>
+<li>Windows:
+<ul>
+  <li>Update the icon of the Windows executables, e.g. php.exe.</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/16199">GH-16199</a> (GREP_HEADER() is broken).</li>
+</ul></li>
+<li>XML:
+<ul>
+  <li>Added XML_OPTION_PARSE_HUGE parser option.</li>
+  <li>Fixed bug <a href="https://bugs.php.net/81481">#81481</a> (xml_get_current_byte_index limited to 32-bit numbers on 64-bit builds).</li>
+  <li>The xml_set_object() function has been deprecated.</li>
+  <li>Passing non-callable strings to the xml_set_*_handler() functions is now deprecated.</li>
+</ul></li>
+<li>XMLReader:
+<ul>
+  <li>Declares class constant types.</li>
+  <li>Add XMLReader::fromStream(), XMLReader::fromUri(), XMLReader::fromString().</li>
+  <li>Fixed bug <a href="https://github.com/php/php-src/issues/15123">GH-15123</a> (var_dump doesn't actually work on XMLReader).</li>
+</ul></li>
+<li>XMLWriter:
+<ul>
+  <li>Add XMLWriter::toStream(), XMLWriter::toUri(), XMLWriter::toMemory().</li>
+</ul></li>
+<li>XSL:
+<ul>
+  <li>Implement request #64137 (XSLTProcessor::setParameter() should allow both quotes to be used).</li>
+  <li>Implemented "Improve callbacks in ext/dom and ext/xsl" RFC.</li>
+  <li>Added XSLTProcessor::$maxTemplateDepth and XSLTProcessor::$maxTemplateVars.</li>
+  <li>Fix trampoline leak in xpath callables.</li>
+</ul></li>
+<li>Zip:
+<ul>
+  <li>Added ZipArchive::ER_TRUNCATED_ZIP added in libzip 1.11.</li>
+</ul></li>
+</ul>
+<!-- }}} --></section>
+
+<section class="version" id="8.2.35"><!-- {{{ 8.2.35 -->
+<h3>Version 8.2.35</h3>
+<b><time class='releasedate' datetime='2026-10-22'>22 Oct 2026</time></b>
+<ul><li>Core:
+<ul>
+  <li>Fixed <a href="https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w">GHSA-w8hw-w9fx-j79w</a>, <a href="https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp">GHSA-6wmf-4rv5-p3rp</a> (Avoid state corruption via bailout).</li>
+</ul></li>
+</ul>
+<!-- }}} --></section>
+</section>
+</div>
+</body>
+</html>

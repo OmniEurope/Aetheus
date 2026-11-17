@@ -25,7 +25,7 @@ public class SystemPackageUpgradeExecutorTests
 
     [Fact]
     public void BuildAptUpgradeArgv_IsArgvExact()
-        => Assert.Equal(["-n", "/usr/bin/apt-get", "upgrade", "-y"], SystemPackageUpgradeExecutor.BuildAptUpgradeArgv());
+        => Assert.Equal(["-n", "/usr/bin/apt-get", "upgrade", "--with-new-pkgs", "-y"], SystemPackageUpgradeExecutor.BuildAptUpgradeArgv());
 
     private const string Simulation =
         "Inst curl [7.81.0-1ubuntu1.15] (7.81.0-1ubuntu1.16 Ubuntu:22.04/jammy-security [amd64])\n"
@@ -34,7 +34,7 @@ public class SystemPackageUpgradeExecutorTests
     private static (SystemPackageUpgradeExecutor Executor, IShellRunner Shell) BuildWith(ShellExecResult simulation)
     {
         var shell = Substitute.For<IShellRunner>();
-        shell.RunExecAsync("apt-get", Arg.Is<IReadOnlyList<string>>(a => a.SequenceEqual(new[] { "-s", "upgrade" })),
+        shell.RunExecAsync("apt-get", Arg.Is<IReadOnlyList<string>>(a => a.SequenceEqual(new[] { "-s", "upgrade", "--with-new-pkgs" })),
                 Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
             .Returns(simulation);
         return (new(Options.Create(new AetheusAgentOptions()), shell, NullLogger<SystemPackageUpgradeExecutor>.Instance), shell);
@@ -88,6 +88,42 @@ public class SystemPackageUpgradeExecutorTests
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(log, line => line.StartsWith("Aborting: the upgrade would touch blocked critical package(s): htop.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task APendingKernel_IsReportedAndNeverBlocked_ItNeedsNewPackagesAndARestart()
+    {
+        const string kernel =
+            "Inst linux-image-6.8.0-149-generic (6.8.0-149.149 Ubuntu:24.04/noble-security [amd64])\n"
+            + "Inst linux-generic [6.8.0-147.147] (6.8.0-149.149 Ubuntu:24.04/noble-security [amd64])\n";
+        var (executor, _) = BuildWith(new ShellExecResult(0, kernel, ""));
+
+        var (result, log) = await UpgradeAsync(executor, new() { [PatchingConstants.DryRunEnvVar] = "1" });
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("  linux-image-6.8.0-149-generic  -> 6.8.0-149.149 [security]", log);
+        Assert.DoesNotContain(log, line => line.StartsWith("Aborting", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheSimulationArgv_AddsNewPackagesAndNeverRemovesOne() =>
+        Assert.Equal(["-s", "upgrade", "--with-new-pkgs"], SystemPackageUpgradeExecutor.BuildAptSimulateArgv());
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public async Task AfterAnUpgrade_RestartNeededIsReportedOnlyWhenTheRebootRequiredFileExists(bool exists, int expectedLines)
+    {
+        string? probed = null;
+        var executor = new SystemPackageUpgradeExecutor(Options.Create(new AetheusAgentOptions()), Substitute.For<IShellRunner>(),
+            NullLogger<SystemPackageUpgradeExecutor>.Instance, path => { probed = path; return exists; });
+        var log = new List<string>();
+
+        await executor.ReportRebootRequiredAsync((line, _) => { log.Add(line); return Task.CompletedTask; });
+
+        Assert.Equal("/var/run/reboot-required", probed);
+        Assert.Equal(expectedLines, log.Count);
+        Assert.All(log, line => Assert.StartsWith("Restart needed", line, StringComparison.Ordinal));
     }
 
     [Fact]

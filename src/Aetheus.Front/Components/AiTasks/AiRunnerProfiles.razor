@@ -14,6 +14,8 @@
 @* Keep the grid mounted while IsLoading indicates progress to avoid restarting its initial fetch
    on each render. Show failures with a Retry action. *@
 <OmniStack Class="page-fill-body">
+@* R-12: every profile belongs to an organization; the site Admin narrows the list to one of them. *@
+<AdministrationOrganizationSwitcher Changed="@ReloadPageAsync" />
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger">

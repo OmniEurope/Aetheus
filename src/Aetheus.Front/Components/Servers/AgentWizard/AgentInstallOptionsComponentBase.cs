@@ -12,6 +12,7 @@ public abstract class AgentInstallOptionsComponentBase : ComponentBase
     [Parameter] public bool IncludeDeploymentAgent { get; set; }
     [Parameter] public bool IncludePatchManagement { get; set; }
     [Parameter] public bool IncludeFirewallManagement { get; set; }
+    [Parameter] public bool IncludeHostReboot { get; set; }
     [Parameter] public bool IncludeDocker { get; set; }
     [Parameter] public bool DevModeInsecureTls { get; set; }
 

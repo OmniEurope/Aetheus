@@ -148,7 +148,7 @@ public partial class Backups : IAsyncDisposable
         var policyReload = _policyGrid?.Refresh() ?? Task.CompletedTask;
         var runsReload = _runsFor is null
             ? Task.CompletedTask
-            : _runsGrid?.Refresh() ?? Task.CompletedTask;
+            : _runsGrid?.RestoreRowsAsync() ?? Task.CompletedTask;
         await Task.WhenAll(policyReload, runsReload);
         StateHasChanged();
     }
@@ -189,11 +189,6 @@ public partial class Backups : IAsyncDisposable
         if (_policyGrid is not null) await _policyGrid.GoToPage(0, forceReload: true);
     }
 
-    private async Task ReloadAsync()
-    {
-        if (_policyGrid is not null) await _policyGrid.Reload();
-    }
-
     private void NewPolicy() => _form = new PolicyForm { ProjectId = ProjectId ?? 0 };
 
     private void EditPolicy(BackupPolicyDto p) => _form = new PolicyForm
@@ -223,6 +218,7 @@ public partial class Backups : IAsyncDisposable
         _saving = true;
         try
         {
+            BackupPolicyDto saved;
             var files = _form.FilePathsText
                 .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
@@ -246,6 +242,7 @@ public partial class Backups : IAsyncDisposable
                     RestoreCheckCron = _form.RestoreCheckCron
                 });
                 if (created is null) { Toast.Error("BackupSaveFailed", "BackupSaveFailed"); return; }
+                saved = created;
             }
             else
             {
@@ -265,11 +262,13 @@ public partial class Backups : IAsyncDisposable
                     RestoreCheckCron = _form.RestoreCheckCron
                 });
                 if (updated is null) { Toast.Error("BackupSaveFailed", "BackupSaveFailed"); return; }
+                saved = updated;
             }
 
             Toast.Success("BackupSaved", "BackupSaved");
             _form = null;
-            await ReloadAsync();
+            // R-10: the policy shows what the save answered at once; the read behind it confirms.
+            if (_policyGrid is not null) await _policyGrid.ShowRowAsync(saved);
         }
         catch (HttpRequestException)
         {
@@ -295,11 +294,12 @@ public partial class Backups : IAsyncDisposable
             {
                 Toast.Success("BackupDeleted", "BackupDeleted");
                 if (_runsFor?.Id == p.Id) _runsFor = null;
-                await ReloadAsync();
+                if (_policyGrid is not null) await _policyGrid.HideRowAsync(p);
             }
             else
             {
                 Toast.Error("BackupDeleteFailed", "BackupDeleteFailed");
+                if (_policyGrid is not null) await _policyGrid.RestoreRowsAsync();
             }
         });
     }

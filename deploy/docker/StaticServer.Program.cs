@@ -73,9 +73,11 @@ app.UseForwardedHeaders(forwardedHeadersOptions);
 app.UseResponseCompression();
 
 var cspConnectSources = new List<string> { "'self'" };
+var cspFrameSources = new List<string> { "'self'" };
 if (Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiUri))
 {
     cspConnectSources.Add(apiUri.GetLeftPart(UriPartial.Authority));
+    cspFrameSources.Add(apiUri.GetLeftPart(UriPartial.Authority));
     var webSocketScheme = apiUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws";
     cspConnectSources.Add($"{webSocketScheme}://{apiUri.Authority}");
 }
@@ -124,6 +126,9 @@ var contentSecurityPolicy =
     "img-src 'self' data: blob:; " +
     "font-src 'self' data:; " +
     $"connect-src {string.Join(' ', cspConnectSources.Distinct())}; " +
+    // The mailbox reader frames the message document the API serves under its own policy (no script,
+    // inline styles only); the shell itself still frames nothing else than its own pages.
+    $"frame-src {string.Join(' ', cspFrameSources)}; " +
     "frame-ancestors 'none'; " +
     "base-uri 'self'; " +
     "form-action 'self'" +

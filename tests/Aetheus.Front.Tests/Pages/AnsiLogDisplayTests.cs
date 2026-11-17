@@ -91,7 +91,8 @@ public sealed class AnsiLogDisplayTests : BunitContext
 
         await cut.FindAll(".omni-data-grid__export-button")[0].ClickAsync(new());
         cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));
-        var markdown = Encoding.UTF8.GetString(Assert.IsType<byte[]>(module.Invocations["download"].Single().Arguments[2]));
+        var markdown = Aetheus.Front.Tests.Shared.MarkdownExportText.AsRead(
+            Encoding.UTF8.GetString(Assert.IsType<byte[]>(module.Invocations["download"].Single().Arguments[2])));
         Assert.Contains(GitleaksLine, markdown, StringComparison.Ordinal);
     }
 }

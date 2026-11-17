@@ -10,14 +10,14 @@
 
 @if (_loading)
 {
-    <AetheusLoader />
+    <VeilHold Busy="true" />
 }
 else
 {
     <div class="omni-u-mt-lg form-narrow"><OmniTemplateForm TModel="OrganizationFormModel" Model="@_model"
         OnValidSubmit="@OnSubmit">
         <OmniDataAnnotationsValidator Localizer="@L" />
-        <OmniStack Gap="OmniSpacing.Large">
+        <OmniStack Gap="OmniSpacing.Small">
             <OmniFormField For="oe-pages-organizations-organizationedit-1"><LabelContent>@L["Name"]</LabelContent><ChildContent>
                 <OmniTextBox @bind-Value="_model.Name" Id="oe-pages-organizations-organizationedit-1" />
             </ChildContent></OmniFormField>

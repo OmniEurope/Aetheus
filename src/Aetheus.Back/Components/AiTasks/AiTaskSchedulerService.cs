@@ -9,20 +9,12 @@ public sealed class AiTaskSchedulerService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<AiTaskSchedulerService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:ai-task-scheduler")
 {
     private static readonly TimeSpan CheckInterval = BackendRuntimeDefaults.SchedulerCheckInterval;
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(2);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync(
-                "aetheus:ai-task-scheduler",
-                RunLeaderLoopAsync,
-                stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(CheckInterval, timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))

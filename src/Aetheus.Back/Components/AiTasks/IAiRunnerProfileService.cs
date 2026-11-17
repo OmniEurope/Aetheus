@@ -5,7 +5,8 @@ namespace Aetheus.Back.Components.AiTasks;
 /// encrypted at rest and never returned.</summary>
 public interface IAiRunnerProfileService
 {
-    Task<PaginatedResult<AiRunnerProfileDto>> GetProfilesAsync(PaginationRequest request, CancellationToken ct);
+    /// <summary>One page of the profiles; with <paramref name="organizationId"/>, that organization's only (R-12).</summary>
+    Task<PaginatedResult<AiRunnerProfileDto>> GetProfilesAsync(PaginationRequest request, CancellationToken ct, int? organizationId = null);
     Task<List<AiRunnerProfileDto>> GetProfileOptionsAsync(List<int> organizationIds, CancellationToken ct);
     Task<AiRunnerProfileDto?> GetProfileAsync(int id, CancellationToken ct);
     Task<AiRunnerProfileDto> CreateProfileAsync(CreateAiRunnerProfileRequest request, CancellationToken ct);

@@ -42,8 +42,8 @@ public sealed class ServerRevivalEnrollmentTests
         Assert.Equal(ServerId, (await new PipelineServerResolver(db).FindOnlineServerInPoolAsync(PoolName, ct: Ct))?.Id);
         Assert.Single(await db.ServerPortReservations.Where(reservation => reservation.ServerId == ServerId).ToListAsync(Ct));
         var auth = new AuthRepository(db, _scenario.Clock);
-        Assert.Equal(ServerId, await auth.ValidateServerTokenHashAsync(AuthTokenHelper.HashToken(SigningKey, response.BearerToken), Ct));
-        Assert.Null(await auth.ValidateServerTokenHashAsync(OldTokenHash, Ct));
+        Assert.Equal(ServerId, await auth.ValidateServerTokenHashAsync([Keys.Hash(TokenHashPurpose.ServerToken, response.BearerToken)], Ct));
+        Assert.Null(await auth.ValidateServerTokenHashAsync([OldTokenHash], Ct));
         await _scenario.Audit.Received(1).LogAsync("Revived", "Server", ServerId,
             Arg.Is<string?>(detail => detail != null && detail.Contains("machine-id", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());

@@ -118,7 +118,8 @@ public sealed class TokenRenewalCoordinationTests
     [InlineData(HttpStatusCode.BadGateway, true, false)]
     public void ShouldRetry_ByStatusAndRenewalMarker(HttpStatusCode status, bool renewal, bool expected)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "http://localhost/api/auth/token/refresh");
+        // A renewal is a POST; the ordinary request of the 5xx/429/404 cases is a GET (a POST is not retried, see ApiRetryPolicyTests).
+        using var request = new HttpRequestMessage(renewal ? HttpMethod.Post : HttpMethod.Get, "http://localhost/api/auth/token/refresh");
         if (renewal) request.Headers.Add(AuthDelegatingHandler.RenewalMarkerHeader, "1");
         using var response = new HttpResponseMessage(status);
 

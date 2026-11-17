@@ -71,7 +71,7 @@ public sealed class PipelineSetupLanguageDetectionTests
         var service = new PipelineSetupReadinessService(
             _templates, _repo, _git, Substitute.For<IGitLightRepository>(), Substitute.For<IPipelineTemplateResolver>(),
             Substitute.For<IPipelineRequirementsChecker>(), Substitute.For<IProjectConfigRepositoryService>(),
-            Substitute.For<ILogger<PipelineSetupReadinessService>>());
+            ReadinessVariableResolver.Create(), Substitute.For<IPipelineSetupServerRepository>(), Substitute.For<ILogger<PipelineSetupReadinessService>>());
         return (await service.CheckAsync(7, ["application-quality"], organizationId: 3, CancellationToken.None)).Detection;
     }
 

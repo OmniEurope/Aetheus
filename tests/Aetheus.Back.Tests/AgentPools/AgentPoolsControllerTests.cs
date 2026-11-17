@@ -17,6 +17,9 @@ public class AgentPoolsControllerTests
     public AgentPoolsControllerTests()
     {
         _sut = new AgentPoolsController(_serviceMock, _authzMock);
+        // R-12: by default the caller may create pools in exactly one organization (5).
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.AgentPool, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(new List<int> { 5 });
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -139,6 +142,49 @@ public class AgentPoolsControllerTests
         }, TestContext.Current.CancellationToken);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePool_WithoutOrganization_GoesToTheCallersOnlyWritableOrganization()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.AgentPool, null, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _serviceMock.CreatePoolAsync(Arg.Any<CreateAgentPoolRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentPoolDto { Id = 1, Name = "New", OrganizationId = 5 });
+
+        var result = await _sut.CreatePool(new CreateAgentPoolRequest { Name = "New" }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        await _serviceMock.Received(1).CreatePoolAsync(
+            Arg.Is<CreateAgentPoolRequest>(request => request.OrganizationId == 5), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreatePool_WithoutOrganization_AndSeveralWritable_AsksForIt()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.AgentPool, null, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.AgentPool, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(new List<int> { 5, 6 });
+
+        var result = await _sut.CreatePool(new CreateAgentPoolRequest { Name = "New" }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await _serviceMock.DidNotReceive().CreatePoolAsync(Arg.Any<CreateAgentPoolRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreatePool_InAnOrganizationTheCallerCannotWrite_ReturnsForbid()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.AgentPool, null, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _authzMock.CanCreateInOrganizationAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.AgentPool, 9, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.CreatePool(new CreateAgentPoolRequest { Name = "New", OrganizationId = 9 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().CreatePoolAsync(Arg.Any<CreateAgentPoolRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

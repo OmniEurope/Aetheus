@@ -1,14 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Projects
-@using Microsoft.AspNetCore.Components.Sections
 @* ADR-021 phase 1: monitored-apps (availability) list for a project. *@
-@* The main action sits in the project header, on the title line. *@
-@if (_canWrite)
-{
-    <SectionContent SectionName="@PageHeaderActions.SectionName">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["AddMonitoredApp"]</span></ChildContent></OmniButton>
-    </SectionContent>
-}
+@* R-32: the project header keeps Settings as its blue main action; Add sits in the header menu (see PublishHeader). *@
 
 <OmniStack>
 <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between">

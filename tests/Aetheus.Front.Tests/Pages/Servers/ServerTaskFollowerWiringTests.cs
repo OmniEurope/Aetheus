@@ -123,7 +123,7 @@ public sealed class ServerTaskFollowerWiringTests : BunitContext
         await cut.InvokeAsync(() => cut.Find(".omni-menu__item[title='Restart']").Click());
         cut.WaitForAssertion(() => Assert.Contains("ServerTaskRequested", cut.Find(".server-task-follower").TextContent));
 
-        await QueueAsync(cut, 61004, "DockerRestart");
+        await QueueAsync(cut, 61004, "Compose Restart - monitoring");
         cut.WaitForAssertion(() => Assert.Contains("/tasks/61004", cut.Markup));
     }
 

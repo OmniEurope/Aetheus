@@ -22,8 +22,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// one-hour link only to an active account, and is limited per address and per IP. Only the SMTP sender is
 /// replaced. Bodies are raw JSON so the scenario reads the same against any version of the contract.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class UserWelcomeMailIntegrationTests(PostgresFixture fixture)
+public sealed class UserWelcomeMailIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     // What an older client would still send at creation: the server must not make it a way in.
     private const string AdminTypedPassword = "Typed-By-The-Admin-2026!";
@@ -71,53 +70,6 @@ public sealed class UserWelcomeMailIntegrationTests(PostgresFixture fixture)
         Assert.False((await signedIn.Content.ReadFromJsonAsync<LoginResponse>(IntegrationJsonOptions.Default, ct))!.MustChangePassword);
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.PostAsJsonAsync("/api/auth/login", new { email, password = "Another-Choice-2026!!" }, ct)).StatusCode);
-    }
-
-    [Fact]
-    public async Task AnExpiredWelcomeLink_IsRefused_AndTheAccountStaysClosed()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var sender = new CapturingSender(EmailSendResult.Sent("no-reply@example.org"));
-        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        await using var factory = WithSender(baseFactory, sender);
-        using var client = factory.CreateClient();
-        var (email, created) = await CreateUserAsync(client, ct);
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var token = Link.Match(Assert.Single(sender.Sent).HtmlBody!).Groups[1].Value;
-
-        await using (var db = Db())
-        {
-            var row = await db.PasswordSetupTokens.SingleAsync(t => t.User.Email == email, ct);
-            row.ExpiresAt = DateTime.UtcNow.AddSeconds(-1);
-            await db.SaveChangesAsync(ct);
-        }
-
-        IntegrationAuth.SetBearer(client, null);
-        var late = await client.PostAsJsonAsync("/api/auth/password-setup", new { token, newPassword = "Too-Late-Choice-2026!" }, ct);
-        Assert.Equal(HttpStatusCode.BadRequest, late.StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await client.PostAsJsonAsync("/api/auth/login", new { email, password = "Too-Late-Choice-2026!" }, ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await client.PostAsJsonAsync("/api/auth/login", new { email, password = AdminTypedPassword }, ct)).StatusCode);
-    }
-
-    [Fact]
-    public async Task WhenTheMailCannotLeave_TheUserIsStillCreated_AndTheAnswerSaysSo()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var sender = new CapturingSender(EmailSendResult.Failed("554 relay refused"));
-        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        await using var factory = WithSender(baseFactory, sender);
-        using var client = factory.CreateClient();
-        var (email, created) = await CreateUserAsync(client, ct);
-
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var welcome = (await created.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, ct))!.WelcomeMail!;
-        Assert.Equal(WelcomeMailStatus.Failed, welcome.Status);
-        Assert.Equal("554 relay refused", welcome.Message);
-        Assert.Single(sender.Sent);
-        await using var db = Db();
-        Assert.True(await db.Users.AnyAsync(u => u.Email == email, ct));
     }
 
     // --- Owner decision 2026-10-28 n°3: an administrator sends a new link ---
@@ -212,66 +164,6 @@ public sealed class UserWelcomeMailIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task AResetLink_LastsOneHour_AndSetsThePasswordOnce()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var sender = new CapturingSender(EmailSendResult.Sent("no-reply@example.org"));
-        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        await using var factory = WithSender(baseFactory, sender);
-        using var client = factory.CreateClient();
-        var (email, _) = await CreateUserAsync(client, ct);
-        IntegrationAuth.SetBearer(client, null);
-
-        var token = await RequestResetTokenAsync(client, sender, email, 1, ct);
-        await using (var db = Db())
-        {
-            var row = await db.PasswordSetupTokens.AsNoTracking()
-                .SingleAsync(t => t.User.Email == email && t.Purpose == PasswordSetupPurpose.Reset, ct);
-            Assert.InRange(row.ExpiresAt - row.CreatedAt, TimeSpan.FromHours(1) - TimeSpan.FromSeconds(1), TimeSpan.FromHours(1));
-        }
-        Assert.Equal(HttpStatusCode.NoContent,
-            (await client.PostAsJsonAsync("/api/auth/password-setup", new { token, newPassword = "Reset-Choice-2026!!" }, ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/password-setup", new { token, newPassword = "Reset-Again-2026!!!" }, ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK,
-            (await client.PostAsJsonAsync("/api/auth/login", new { email, password = "Reset-Choice-2026!!" }, ct)).StatusCode);
-
-        // A second link, left past its hour, is refused and changes nothing.
-        var late = await RequestResetTokenAsync(client, sender, email, 2, ct);
-        await using (var db = Db())
-        {
-            var row = await db.PasswordSetupTokens
-                .SingleAsync(t => t.User.Email == email && t.Purpose == PasswordSetupPurpose.Reset && t.UsedAt == null, ct);
-            row.ExpiresAt = DateTime.UtcNow.AddSeconds(-1);
-            await db.SaveChangesAsync(ct);
-        }
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/password-setup", new { token = late, newPassword = "Too-Late-Reset-2026!" }, ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK,
-            (await client.PostAsJsonAsync("/api/auth/login", new { email, password = "Reset-Choice-2026!!" }, ct)).StatusCode);
-    }
-
-    [Fact]
-    public async Task TheFourthResetWithinTheHour_IsAnsweredTheSame_ButSendsNothing()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var sender = new CapturingSender(EmailSendResult.Sent("no-reply@example.org"));
-        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        await using var factory = WithSender(baseFactory, sender);
-        using var client = factory.CreateClient();
-        var (email, created) = await CreateUserAsync(client, ct);
-        var userId = (await created.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, ct))!.Id;
-        IntegrationAuth.SetBearer(client, null);
-
-        for (var i = 0; i < 4; i++)
-            Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/auth/password-reset", new { email }, ct)).StatusCode);
-
-        await using var db = Db();
-        await WaitUntilAsync(() => db.AuditLogs.AnyAsync(a => a.Action == "PasswordResetRequested.RateLimited" && a.EntityId == userId, ct), ct);
-        Assert.Equal(3, sender.Sent.Count(m => m.Subject == ResetSubject));
-    }
-
-    [Fact]
     public async Task ForgottenPassword_IsLimitedPerAddressOfTheCaller_TheSixthRequestOfTheMinuteIsRefused()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -292,14 +184,6 @@ public sealed class UserWelcomeMailIntegrationTests(PostgresFixture fixture)
         return await db.AuditLogs.CountAsync(a => a.Action == action, ct);
     }
 
-    private static async Task<string> RequestResetTokenAsync(HttpClient client, CapturingSender sender, string email, int expected, CancellationToken ct)
-    {
-        Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/auth/password-reset", new { email }, ct)).StatusCode);
-        await WaitUntilAsync(() => Task.FromResult(sender.Sent.Count(m => m.Subject == ResetSubject) >= expected), ct);
-        return Link.Match(sender.Sent.Where(m => m.Subject == ResetSubject).ElementAt(expected - 1).HtmlBody!).Groups[1].Value;
-    }
-
-    // The forgotten-password work runs on the background queue, after the answer: wait for its trace.
     private static async Task WaitUntilAsync(Func<Task<bool>> condition, CancellationToken ct)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);

@@ -123,7 +123,7 @@ internal static class AnalysisReportNormalizer
         await repository.MarkFindingsFixedAsync(context.ProjectId, outcome.NoLongerCrossed, now, ct).ConfigureAwait(false);
     }
 
-    private static AnalysisFindingStatus? StandingDecisionStatus(AnalysisFinding finding, DateTime now) =>
+    internal static AnalysisFindingStatus? StandingDecisionStatus(AnalysisFinding finding, DateTime now) =>
         finding.Decisions
             .Where(decision => decision.RevokedAt == null && (decision.ExpiresAt == null || decision.ExpiresAt > now))
             .OrderByDescending(decision => decision.CreatedAt)
@@ -145,14 +145,18 @@ internal static class AnalysisReportNormalizer
         var baseline = await repository.GetBaselineFingerprintsAsync(
             context.ProjectId, baselineBranch, context.PipelineRunId,
             report.ScannerKey, report.Category, ct).ConfigureAwait(false);
-        var fingerprints = parsed.Select(finding => finding.Fingerprint).Distinct(StringComparer.Ordinal).ToList();
         var findings = new Dictionary<string, AnalysisFinding>(
-            await repository.GetFindingsByFingerprintsAsync(context.ProjectId, fingerprints, ct).ConfigureAwait(false),
+            await repository.GetFindingsByFingerprintsAsync(
+                context.ProjectId, AnalysisFindingIdentityResolver.CandidateFingerprints(parsed), ct).ConfigureAwait(false),
             StringComparer.Ordinal);
+        // What the sweep below treats as still seen: the fingerprints the findings are stored under, which are not
+        // always the parsed ones (a vulnerability another scanner stored under an alias keeps its fingerprint).
+        var fingerprints = new List<string>();
 
         foreach (var item in parsed.DistinctBy(finding => finding.LocationHash))
         {
-            if (!findings.TryGetValue(item.Fingerprint, out var finding))
+            var finding = AnalysisFindingIdentityResolver.Resolve(findings, item);
+            if (finding is null)
             {
                 finding = new AnalysisFinding
                 {
@@ -187,6 +191,7 @@ internal static class AnalysisReportNormalizer
                 }
             }
 
+            fingerprints.Add(finding.Fingerprint);
             report.Occurrences.Add(new AnalysisFindingOccurrence
             {
                 AnalysisFinding = finding,
@@ -201,7 +206,7 @@ internal static class AnalysisReportNormalizer
                 Message = item.Message,
                 BranchName = context.BranchName,
                 CommitHash = context.CommitHash,
-                IsNew = !baseline.Contains(item.Fingerprint)
+                IsNew = !AnalysisFindingIdentityResolver.WasInBaseline(baseline, item, finding)
             });
         }
 

@@ -18,8 +18,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// written to the test output; the guard asserts the shape (one command, no YAML column read, the
 /// finding index used), never a wall-clock bound.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class AnalysisFindingOccurrencesPerformanceIntegrationTests(PostgresFixture fixture)
+public sealed class AnalysisFindingOccurrencesPerformanceIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const int RunCount = 200;
     private const int FindingCount = 2000;

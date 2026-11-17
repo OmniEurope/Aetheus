@@ -44,6 +44,19 @@ public static class NotificationEventTypes
     /// certificate, expiry date and lead time). Carries no project, so it reaches the notification rules only.</summary>
     public const string CertificateExpiring = "certbot.certificate-expiring";
 
+    /// <summary>PLAN-004: the vulnerability watch found, for one project and in one matching pass, packages
+    /// affected by a Critical, High (published) or exploited (KEV) advisory. One event per project and pass,
+    /// never repeated for a match already announced; a match that comes back is announced again.</summary>
+    public const string CveDetected = "analysis.cve.detected";
+
+    /// <summary>R-30: the CI and the QA of an automatic dependency update both succeeded. Its pull request was opened (internal
+    /// repository), or has to be opened on the origin (mirror repository). Once per update.</summary>
+    public const string DependencyUpdateReady = "analysis.dependency-update.ready";
+
+    /// <summary>R-30: the vulnerability an automatic dependency update fixes is closed, and its branch was deleted (internal repository),
+    /// or was kept and has to be deleted on the origin by the user (mirror repository). Once per update.</summary>
+    public const string DependencyUpdateClosed = "analysis.dependency-update.closed";
+
     public static IReadOnlyList<NotificationEventTypeDescriptor> All { get; } =
     [
         new(PipelineFailed, DefaultEnabled: true, CarriesProjectId: true),
@@ -62,9 +75,15 @@ public static class NotificationEventTypes
         new("analysis.gate.blocked", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.gate.error", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.cve-sync.failed", DefaultEnabled: false, CarriesProjectId: true),
+        // On by default: the owner asked for an immediate mail on Critical, High and exploited vulnerabilities.
+        new(CveDetected, DefaultEnabled: true, CarriesProjectId: true),
+        // R-30: the owner asked to be told by e-mail what an automatic update did with its branch.
+        new(DependencyUpdateReady, DefaultEnabled: true, CarriesProjectId: true),
+        new(DependencyUpdateClosed, DefaultEnabled: true, CarriesProjectId: true),
         new("analysis.governance.expiring", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.operational.cve-sync-failed", DefaultEnabled: false, CarriesProjectId: true),
-        // Raised per project (stale sync) and per server (stale Trivy database); only the first reaches users.
+        // Raised per project (stale sync), per server (stale Trivy database) and for the site (stale vulnerability
+        // feeds); only the first reaches users, the others reach channel rules.
         new("analysis.operational.cve-db-stale", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.operational.storage-drift", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.operational.scanner-obsolete", DefaultEnabled: false, CarriesProjectId: false),

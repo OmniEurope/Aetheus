@@ -257,16 +257,10 @@ public sealed class PipelineRunPreflightService(
         if (depth > PipelineChildPipelineResolver.MaxChildDepth) return;
 
         var stillToCome = PipelineUnresolvedVariableGuard.BuildDeferredNames(definition);
+        var skipped = PipelineStepReach.TriggeredOnlyByStepsThatNeverRun(definition, parentVariables, stillToCome);
         foreach (var named in children.References(definition))
         {
-            // A trigger step's name is substituted at dispatch (an on_success name is not), so the
-            // chain followed is the one the run will start. A name only known later is left to the
-            // warning the reference check records.
-            var reference = named.FromOnSuccess
-                ? named
-                : named with { Name = ExpandAsDispatched(named.Name, parentVariables, stillToCome) };
-            if (!reference.FromOnSuccess && !IsKnownAtLaunch(reference.Name)) continue;
-            if (!state.VisitedPipelines.Add(reference.Name)) continue;
+            if (ReferenceToFollow(named, skipped, parentVariables, stillToCome, state) is not { } reference) continue;
             var childPath = path.Length == 0 ? reference.Name : $"{path} -> {reference.Name}";
             var target = await repo.FindPipelineByNameAndProjectAsync(reference.Name, projectId, ct)
                 .ConfigureAwait(false);
@@ -544,6 +538,10 @@ public sealed class PipelineRunPreflightService(
     /// value the run only produces later (a step output); it is noted, not refused. Whether that
     /// reference can be provided at all is <see cref="PipelineUnresolvedVariableGuard"/>'s decision,
     /// taken before this check, and it refuses a reference nothing can ever supply.
+    ///
+    /// A step certain not to run on the launch's variables (<see cref="PipelineStepReach"/>) names a
+    /// pipeline the run never starts, so it is not judged: a wizard-default nightly leaves extended QA off
+    /// and has no <c>application-qa-extended</c> pipeline.
     /// </summary>
     private async Task CheckReferencedPipelinesExistAsync(
         PipelineYamlDefinition definition,
@@ -561,12 +559,17 @@ public sealed class PipelineRunPreflightService(
             .SelectMany(stage =>
             {
                 var stageVariables = DispatchVariables(stage, resolvedVariables);
-                return stage.Steps.SelectMany(step => ReferencedPipelines(step).Select(reference => (
-                    StageName: stage.Name,
-                    PipelineName: ExpandAsDispatched(reference.Name, stageVariables, stillToCome),
-                    reference.What,
-                    StepName: step.Name,
-                    reference.ArtifactSource)));
+                // A step the stage or step condition certainly skips on this launch's variables is never
+                // dispatched (the nightly's extended QA stage, off by APPLICATION_QA_EXTENDED_ENABLED), so
+                // the pipeline it names is not needed. A condition that cannot be decided keeps the check.
+                return stage.Steps
+                    .Where(step => !PipelineStepReach.NeverRuns(stage, step, resolvedVariables, stillToCome))
+                    .SelectMany(step => ReferencedPipelines(step).Select(reference => (
+                        StageName: stage.Name,
+                        PipelineName: ExpandAsDispatched(reference.Name, stageVariables, stillToCome),
+                        reference.What,
+                        StepName: step.Name,
+                        reference.ArtifactSource)));
             })
             .ToList();
 
@@ -630,6 +633,23 @@ public sealed class PipelineRunPreflightService(
     /// pipeline is preflighted with the names its parent forwards seeded empty, as placeholders.</summary>
     private static bool IsKnownAtLaunch(string expandedName)
         => expandedName.Length > 0 && !expandedName.Contains("$(", StringComparison.Ordinal);
+
+    /// <summary>The child reference whose chain the launch judges, or null. A trigger step conditioned out
+    /// on the launch's variables starts nothing, so its chain is not judged. A trigger step's name is
+    /// substituted at dispatch (an on_success name is not), so the chain followed is the one the run will
+    /// start; a name only known later is left to the warning the reference check records. A pipeline
+    /// already visited is not judged twice.</summary>
+    private static ChildPipelineReference? ReferenceToFollow(
+        ChildPipelineReference named, IReadOnlySet<string> skipped, IReadOnlyDictionary<string, string> parentVariables,
+        IReadOnlySet<string> stillToCome, ChainPreflightState state)
+    {
+        if (!named.FromOnSuccess && skipped.Contains(named.Name)) return null;
+        var reference = named.FromOnSuccess
+            ? named
+            : named with { Name = ExpandAsDispatched(named.Name, parentVariables, stillToCome) };
+        if (!reference.FromOnSuccess && !IsKnownAtLaunch(reference.Name)) return null;
+        return state.VisitedPipelines.Add(reference.Name) ? reference : null;
+    }
 
     private static IEnumerable<(string Name, string What, bool ArtifactSource)> ReferencedPipelines(PipelineStepDefinition step)
     {

@@ -9,7 +9,7 @@ public interface IPersonalAccessTokenRepository
 
     /// <summary>Resolves an active (not revoked, not expired, active user) token by its hash, with the
     /// owning user and their current roles loaded so the caller can build a live principal.</summary>
-    Task<PersonalAccessToken?> FindActiveByHashWithUserAsync(string tokenHash, DateTime now, CancellationToken ct = default);
+    Task<PersonalAccessToken?> FindActiveByHashWithUserAsync(IReadOnlyCollection<string> tokenHashes, DateTime now, CancellationToken ct = default);
 
     Task<List<PersonalAccessToken>> GetForUserAsync(int userId, CancellationToken ct = default);
 

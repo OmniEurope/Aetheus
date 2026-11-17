@@ -11,7 +11,7 @@
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Play" Class="run-tile-icon" /> @L["ReleaseCreatedByRun"]</OmniText>
         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-            <a href="/pipelines/runs/@creator.RunId" class="detail-value-link">#@creator.RunId</a>
+            <a href="/pipelines/runs/@creator.RunId" class="detail-value-link">#@creator.BuildNumber</a>
             <PipelineRunStatusBadge Status="creator.Status" />
         </OmniStack>
     </OmniStack>
@@ -26,7 +26,7 @@ else
     {
         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted" title="@L["ReleaseLastRecordedByHelp"]"><OmniIcon Name="OmniIconName.Play" Class="run-tile-icon" /> @L["ReleaseLastRecordedBy"]</OmniText>
-            <a href="/pipelines/runs/@lastRunId" class="detail-value-link">#@lastRunId</a>
+            <a href="/pipelines/runs/@lastRunId" class="detail-value-link">@PipelineRunPresentation.Label(L["PipelineRun"].Value, Provenance?.LastRecordedBy?.BuildNumber)</a>
         </OmniStack>
     }
 }
@@ -38,7 +38,7 @@ else
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted" title="@L["ReleaseDeliverablesBuiltByHelp"]"><OmniIcon Name="OmniIconName.Wrench" Class="run-tile-icon" /> @L["ReleaseDeliverablesBuiltBy"]</OmniText>
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                 <a href="/pipelines/@run.PipelineId" class="detail-value-link">@run.PipelineName</a>
-                <a href="/pipelines/runs/@run.RunId" class="detail-value-link">#@run.RunId</a>
+                <a href="/pipelines/runs/@run.RunId" class="detail-value-link">#@run.BuildNumber</a>
             </OmniStack>
         </OmniStack>
     }

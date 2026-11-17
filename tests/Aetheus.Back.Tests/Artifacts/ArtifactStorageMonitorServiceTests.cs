@@ -25,7 +25,8 @@ public sealed class ArtifactStorageMonitorServiceTests
             var (hub, proxy) = AlertHub();
             var service = new ArtifactStorageMonitorService(
                 Configuration(root.FullName, budgetBytes: 16, growthWarningBytesPerDay: 0),
-                hub, Measurements(), TimeProvider.System, NullLogger<ArtifactStorageMonitorService>.Instance);
+                hub, Measurements(), TimeProvider.System, NullLogger<ArtifactStorageMonitorService>.Instance,
+                leaderLease: LeaderLeaseDouble.Leader());
             AlertTriggeredDto? alert = null;
             proxy.SendCoreAsync("AlertTriggered", Arg.Do<object?[]>(arguments =>
                     alert = Assert.IsType<AlertTriggeredDto>(arguments[0])), Arg.Any<CancellationToken>())
@@ -60,7 +61,8 @@ public sealed class ArtifactStorageMonitorServiceTests
             var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero));
             var service = new ArtifactStorageMonitorService(
                 Configuration(root.FullName, budgetBytes: 500, growthWarningBytesPerDay: 50),
-                hub, Measurements(), time, NullLogger<ArtifactStorageMonitorService>.Instance);
+                hub, Measurements(), time, NullLogger<ArtifactStorageMonitorService>.Instance,
+                leaderLease: LeaderLeaseDouble.Leader());
 
             await service.EvaluateAsync(TestContext.Current.CancellationToken);
             // +20 bytes in one hour: the former normalisation (x24) read 480 bytes per day against 50.
@@ -89,7 +91,8 @@ public sealed class ArtifactStorageMonitorServiceTests
             var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 17, 10, 0, 0, TimeSpan.Zero));
             var service = new ArtifactStorageMonitorService(
                 Configuration(root.FullName, budgetBytes: 1000, growthWarningBytesPerDay: 100),
-                hub, Measurements(), time, NullLogger<ArtifactStorageMonitorService>.Instance);
+                hub, Measurements(), time, NullLogger<ArtifactStorageMonitorService>.Instance,
+                leaderLease: LeaderLeaseDouble.Leader());
 
             await service.EvaluateAsync(TestContext.Current.CancellationToken);
             await proxy.DidNotReceive().SendCoreAsync(
@@ -130,7 +133,8 @@ public sealed class ArtifactStorageMonitorServiceTests
             var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 17, 10, 0, 0, TimeSpan.Zero));
             var service = new ArtifactStorageMonitorService(
                 Configuration(root.FullName, budgetBytes: 100_000, growthWarningBytesPerDay: 100),
-                hub, Measurements(), time, NullLogger<ArtifactStorageMonitorService>.Instance);
+                hub, Measurements(), time, NullLogger<ArtifactStorageMonitorService>.Instance,
+                leaderLease: LeaderLeaseDouble.Leader());
 
             await service.EvaluateAsync(TestContext.Current.CancellationToken);
             // 200 bytes per day, budget reached in about 500 days: no real risk.
@@ -180,7 +184,8 @@ public sealed class ArtifactStorageMonitorServiceTests
             var configuration = Configuration(root.FullName, budgetBytes: 1000, growthWarningBytesPerDay: 100);
 
             await new ArtifactStorageMonitorService(configuration, hub, database, time,
-                NullLogger<ArtifactStorageMonitorService>.Instance).EvaluateAsync(TestContext.Current.CancellationToken);
+                NullLogger<ArtifactStorageMonitorService>.Instance,
+                leaderLease: LeaderLeaseDouble.Leader()).EvaluateAsync(TestContext.Current.CancellationToken);
 
             // A deploy every few hours: each new process measures once, none of them holds a day of
             // history in memory, yet the fourth one sees the growth of the last 24 hours.
@@ -189,7 +194,8 @@ public sealed class ArtifactStorageMonitorServiceTests
                 time.Advance(TimeSpan.FromHours(8));
                 await File.WriteAllBytesAsync(artifact, new byte[70 * (deploy + 1)], cancellationToken: TestContext.Current.CancellationToken);
                 await new ArtifactStorageMonitorService(configuration, hub, database, time,
-                    NullLogger<ArtifactStorageMonitorService>.Instance).EvaluateAsync(TestContext.Current.CancellationToken);
+                    NullLogger<ArtifactStorageMonitorService>.Instance,
+                    leaderLease: LeaderLeaseDouble.Leader()).EvaluateAsync(TestContext.Current.CancellationToken);
             }
 
             await proxy.Received(1).SendCoreAsync(
@@ -220,7 +226,8 @@ public sealed class ArtifactStorageMonitorServiceTests
             for (var hour = 0; hour <= 30; hour += 6)
             {
                 await new ArtifactStorageMonitorService(configuration, hub, database, time,
-                    NullLogger<ArtifactStorageMonitorService>.Instance).EvaluateAsync(TestContext.Current.CancellationToken);
+                    NullLogger<ArtifactStorageMonitorService>.Instance,
+                    leaderLease: LeaderLeaseDouble.Leader()).EvaluateAsync(TestContext.Current.CancellationToken);
                 time.Advance(TimeSpan.FromHours(6));
             }
 

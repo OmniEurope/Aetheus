@@ -17,6 +17,10 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
     private string _search = string.Empty;
     private int? _runningTaskId;
 
+    // Recette R-12: the runs the live task feed holds (queued or started), whichever page or schedule launched them.
+    // A row whose definition runs is shown busy again when the user comes back.
+    private IReadOnlyList<ServerTaskDto> _inFlight = [];
+
     // The profile names the profile column's checkable filter offers, and the status texts.
     private IReadOnlyList<string> _profileNames = [];
     private Func<string, string>? _enabledText;
@@ -27,7 +31,24 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
     {
         Permissions.OnPermissionsChanged += OnPermissionsChanged;
         TaskTracker.OnTaskCompleted += OnTaskCompleted;
+        TaskTracker.OnChanged += OnTrackerChanged;
+        _inFlight = ReadInFlight();
     }
+
+    private IReadOnlyList<ServerTaskDto> ReadInFlight() => [.. TaskTracker.Tasks.Where(task => task.PipelineRunId is null
+        && ServerTaskAdoption.IsInFlight(task))];
+
+    private void OnTrackerChanged() => _ = InvokeAsync(() =>
+    {
+        _inFlight = ReadInFlight();
+        StateHasChanged();
+    });
+
+    /// <summary>The run of this definition is queued or running. The feed links an AI run to its definition by id,
+    /// never by name: a renamed definition keeps its run in progress, and another definition with the same name does
+    /// not take it.</summary>
+    internal bool RunInProgress(AiTaskDefinitionDto definition) =>
+        _inFlight.Any(task => task.Operation == OperationKind.AiRun && task.AiTaskDefinitionId == definition.Id);
 
     // The filter values load after the first render: awaiting them before would let the grid load
     // first and OnParametersSetAsync load it a second time.
@@ -77,6 +98,8 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
 
     private Task ReloadAsync() => ReloadPageAsync();
 
+    private Task ReadBehindRowsAsync() => _grid is not null ? _grid.RestoreRowsAsync() : ReloadAsync();
+
     internal Task LoadDataAsync(GridLoadArgs args) => LoadPageFromArgsAsync(args);
 
     /// <summary>One page of the export, with the search, sort and column filters of the
@@ -120,7 +143,8 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
                 ["FixedProjectId"] = ProjectId
             },
             new OmniDialogOptions { Width = "780px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        if (result is true) await ReloadAsync();
+        // The dialog answers no row: the list is read again behind the rows, quietly (R-10, no bar).
+        if (result is true) await ReadBehindRowsAsync();
     }
 
     private async Task RunAsync(AiTaskDefinitionDto definition)
@@ -190,7 +214,8 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
         await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Ai.DeleteAiTaskAsync(definition.Id),
             "Deleted",
-            ReloadAsync,
+            // R-10: the task leaves the grid at once, the quiet read behind it confirms.
+            () => _grid is not null ? _grid.HideRowAsync(definition) : ReloadAsync(),
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
     }
@@ -231,6 +256,7 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
     {
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
         TaskTracker.OnTaskCompleted -= OnTaskCompleted;
+        TaskTracker.OnChanged -= OnTrackerChanged;
     }
 
     /// <summary>The export writes the source the cell links to.</summary>

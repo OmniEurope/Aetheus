@@ -18,12 +18,12 @@ namespace Aetheus.Back.IntegrationTests;
 /// table, hash lookups, chain revocation) that InMemory cannot model.
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
+public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string AdminPassword = "Integr@tion-Test-Admin-Pwd-2026";
 
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task RefreshToken_ReturnsNewTokenPair_AndOldTokenStillWorksInGrace()
     {
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
@@ -139,7 +139,51 @@ public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.OK, next.StatusCode);
     }
 
+    /// <summary>BACK-001: A->B->C, then the live C is revoked the way a password reset revokes every token.
+    /// B still names its replacement, but the chain is over, so A presented inside the grace window is
+    /// refused. While C was live, the same use of A got its access token (another tab's rotation).</summary>
     [Fact]
+    public async Task RotatedTwice_ThenTheChainEndRevoked_TheFirstTokenIsRefusedInsideTheGraceWindow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        using var client = factory.CreateClient();
+        var a = await (await client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest { Email = IntegrationAuth.AdminEmail, Password = AdminPassword }, cancellationToken: ct))
+            .Content.ReadFromJsonAsync<LoginResponse>(IntegrationJsonOptions.Default, cancellationToken: ct);
+        var b = await RefreshAsync(client, a!.RefreshToken!, ct);
+        var c = await RefreshAsync(client, b.RefreshToken!, ct);
+        Assert.False(string.IsNullOrEmpty(c.RefreshToken));
+
+        var whileLive = await client.PostAsJsonAsync("/api/auth/token/refresh",
+            new RefreshTokenRequest { RefreshToken = a.RefreshToken! }, cancellationToken: ct);
+        Assert.Equal(HttpStatusCode.OK, whileLive.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var userId = (await db.Users.SingleAsync(u => u.Username == "admin", ct)).Id;
+            await scope.ServiceProvider.GetRequiredService<Aetheus.Back.Components.Auth.IAuthRepository>()
+                .RevokeAllUserRefreshTokensAsync(userId, ct);
+        }
+
+        var afterEnd = await client.PostAsJsonAsync("/api/auth/token/refresh",
+            new RefreshTokenRequest { RefreshToken = a.RefreshToken! }, cancellationToken: ct);
+        Assert.Equal(HttpStatusCode.Unauthorized, afterEnd.StatusCode);
+        var error = await afterEnd.Content.ReadFromJsonAsync<ApiError>(IntegrationJsonOptions.Default, cancellationToken: ct);
+        Assert.Equal(Aetheus.Shared.Components.Auth.RefreshRejectionCodes.Replay, error!.Code);
+    }
+
+    private static async Task<LoginResponse> RefreshAsync(HttpClient client, string refreshToken, CancellationToken ct)
+    {
+        var response = await client.PostAsJsonAsync("/api/auth/token/refresh",
+            new RefreshTokenRequest { RefreshToken = refreshToken }, cancellationToken: ct);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<LoginResponse>(IntegrationJsonOptions.Default, cancellationToken: ct))!;
+    }
+
+    [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task InvalidRefreshToken_Returns401()
     {
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);

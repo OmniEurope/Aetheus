@@ -11,6 +11,7 @@ public sealed record AnalysisPortfolioRow(
     int? PipelineId,
     string? PipelineName,
     int? PipelineRunId,
+    int? PipelineRunNumber,
     string? BranchName,
     string? CommitHash,
     AnalysisCategory Category,
@@ -28,4 +29,5 @@ public sealed record AnalysisPortfolioRow(
     // The run's snapshotted clone URL, and the internal repository it names (resolved after
     // materialisation by PipelineRunRepositoryLinks, one query per page).
     string? RepositoryUrl = null,
-    int? RepositoryId = null);
+    int? RepositoryId = null,
+    string ScannerKey = "");

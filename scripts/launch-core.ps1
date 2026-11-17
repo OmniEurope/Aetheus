@@ -40,6 +40,9 @@ function Show-Options {
     Write-Host "  -tb, -TestBack         Run backend unit tests"
     Write-Host "  -tf, -TestFront        Run frontend unit tests"
     Write-Host "  -tg, -TestAgent        Run agent-core unit tests in a Linux container of the pinned .NET SDK image (as CI), never on the host"
+    Write-Host "  -tl, -TestLinux        Run the FULL suite (back, front, analyzers, agent, observability, integration) in ONE CPU/memory-limited Linux"
+    Write-Host "                         container of the pinned SDK image, Release + analyzers as the CI; run before a candidate, never by pre-push"
+    Write-Host "                         (E2E not included: -vb -BenchLevel 2). -LinuxSuites A,B restricts it; -LinuxTestArgs passes dotnet test args"
     Write-Host "  -t,  -TestUnit         Run ALL unit tests (back + front + agent-core in a Linux container + analyzers + observability + JavaScript + the locked ESLint from a clean npm ci in the pipeline's Node container)"
     Write-Host "  -ti, -TestIntegration  Run integration tests (Aetheus.Back.IntegrationTests, Testcontainers)"
     Write-Host "  -te                    Run ALL E2E tests (isolated dedicated DB :15433, dev DB untouched) in the QA browser image (Dockerfile.e2e)"
@@ -68,7 +71,22 @@ function Show-Options {
     Write-Host "  -full, -Full           With -vps: use the fully-provisioned box instead"
     Write-Host "                         (Docker + apache/certbot/mail/.../teamspeak baked)"
     Write-Host "  -aa, -AgentAutoInstall With -vps -full: self-install the agent at boot"
-    Write-Host "  -net10, -Net10         With -vps: pre-bake .NET SDK 10.0 into the box"
+    Write-Host "  -net10, -Net10         With -vps: pre-bake .NET SDK 11.0 into the box"
+    Write-Host "  -vb, -VpsBench         VPS bench (occasional): integration suite (level 1) or E2E (level 2) in CPU/memory-limited"
+    Write-Host "                         containers, only the containers limited, never the host; one pass, then exit"
+    Write-Host "  -BenchLevel 1|2        1 = integration suite (default), 2 = E2E against a compose stack"
+    Write-Host "  -BenchCpus N           Simulated VPS CPUs, default 4 (an ESTIMATE: the VPS core count is not measured)"
+    Write-Host "  -BenchMemoryGb N       Simulated VPS memory, default 8 (an ESTIMATE; the VPS has 15.6 GB)"
+    Write-Host "  -BenchFilter <text>    Level 1: extra dotnet test args (--filter-class *X*); level 2: a VSTest filter"
+    Write-Host "  -BenchKeepCache        Keep the aetheus-bench-nuget packages cache volume after the run"
+    Write-Host "  -BenchKeepStack        Level 2: leave the stack up (aetheus-bench-<id>-*) to re-run E2E on it; removal command printed"
+    Write-Host "  -BenchReuse <id>       Level 2: run E2E again on a kept stack (skips publish, images and start)"
+    Write-Host "  -pr, -PipelineRehearsal Pipeline rehearsal (R-29): stack + simulated VPS + agent in limited containers, a project of"
+    Write-Host "                         tests/fixtures/rehearsal-blazor, pipelines made by the real wizard, then candidate, deploy,"
+    Write-Host "                         nightly, a moved file, candidate, deploy, fast release, all run and checked; then exit"
+    Write-Host "  -RehearsalKeep         Keep the rehearsal stack (aetheus-rehearsal-<id>-*) to rerun the scenario on it"
+    Write-Host "  -RehearsalReuse <id>   Rerun the scenario on a kept rehearsal stack (new project, same stack and agent)"
+    Write-Host "  -RehearsalCpus N       CPUs of the whole rehearsal, default 4; -RehearsalMemoryGb N, default 12"
     Write-Host "  -h,  -Help             Show available options"
     Write-Host "  -hl, -HelpLong         Show detailed help with examples"
     Write-Host ""
@@ -105,7 +123,7 @@ if ($HelpLong) {
     Write-Host "  .\launch-windows.ps1 -w          Assign fresh free ports to this worktree + launch"
     Write-Host "  .\launch-windows.ps1 -vps        Build + start the BLANK VPS-sim (bare Ubuntu)"
     Write-Host "  .\launch-windows.ps1 -vps -full  Build + start the fully-provisioned VPS-sim"
-    Write-Host "  .\launch-windows.ps1 -vps -net10 Build + start the BLANK VPS-sim with .NET SDK 10.0 baked in"
+    Write-Host "  .\launch-windows.ps1 -vps -net10 Build + start the BLANK VPS-sim with .NET SDK 11.0 baked in"
     Write-Host "  .\launch-windows.ps1 -vps -r     Reset the current VPS-sim flavor (drops volumes)"
     Write-Host "  .\launch-windows.ps1 -vps -full -aa  Full VPS-sim + self-install the agent at boot"
     Write-Host "  .\launch-windows.ps1 -ma         Build + start Agent only"
@@ -466,12 +484,12 @@ if ($VpsSim) {
         $env:VPSSIM_AGENT = "0"
     }
 
-    # Optional .NET SDK 10.0 pre-bake (-net10): a build-time install into the image so the
+    # Optional .NET SDK 11.0 pre-bake (-net10): a build-time install into the image so the
     # box can `dotnet build/test/run` out of the box. Passed to the Dockerfile via the
     # INSTALL_DOTNET build arg (compose reads $env:VPSSIM_DOTNET). Works for either flavor.
     $env:VPSSIM_DOTNET = if ($Net10) { "1" } else { "0" }
     if ($Net10) {
-        Write-Host "  .NET SDK 10.0: pre-baking into the $flavor box (-net10)" -ForegroundColor Yellow
+        Write-Host "  .NET SDK 11.0: pre-baking into the $flavor box (-net10)" -ForegroundColor Yellow
     }
 
     # Honor the per-worktree port override (.ylaunch.local): the VPS-sim agent must
@@ -556,7 +574,7 @@ if ($VpsSim) {
     Write-Host "  VPS-sim ($flavor) is up." -ForegroundColor Green
     Write-Host "    Shell : docker exec -it aetheus-vpssim bash" -ForegroundColor DarkGray
     if ($Net10) {
-        Write-Host "    dotnet: .NET SDK 10.0 baked in (docker exec -it aetheus-vpssim dotnet --version)" -ForegroundColor DarkGray
+        Write-Host "    dotnet: .NET SDK 11.0 baked in (docker exec -it aetheus-vpssim dotnet --version)" -ForegroundColor DarkGray
     }
     Write-Host "    SSH   : ssh root@localhost -p $sshPort" -ForegroundColor DarkGray
     Write-Host "    Pass  : aetheus  (root, fixed, local-only/disposable)" -ForegroundColor DarkGray
@@ -578,6 +596,30 @@ function Write-Step([string]$msg) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  $msg" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
+}
+
+# Serialises every step that compiles the local OmniEurope.Blazor sources (UseLocalOmniEurope, one shared obj folder
+# for all checkouts): two concurrent builds collide on OmniEurope.Blazor.dll (MSB4018). Machine-wide named mutex,
+# waits indefinitely, an abandoned mutex (owner killed) counts as acquired. The script block's native exit code
+# stays in $LASTEXITCODE for the caller. Only the build steps are wrapped, never the test runs.
+function Invoke-WithOeBuildLock([scriptblock]$Script) {
+    $mutex = [System.Threading.Mutex]::new($false, "Global\OmniEurope.Blazor.LocalBuild")
+    $held = $false
+    try {
+        try {
+            $held = $mutex.WaitOne(0)
+            if (-not $held) {
+                Write-Host "  Waiting for another OE local build..." -ForegroundColor Yellow
+                $held = $mutex.WaitOne()
+            }
+        } catch [System.Threading.AbandonedMutexException] {
+            $held = $true
+        }
+        & $Script
+    } finally {
+        if ($held) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
 }
 
 function Ensure-DevDb {
@@ -662,6 +704,24 @@ function Ensure-E2eDb {
     Write-Host "  E2E database not healthy after 60s - aborting before backend startup." -ForegroundColor Red
     & docker logs --tail 80 aetheus-e2e-database 2>$null | Out-Host
     exit 1
+}
+
+# The console stream names a failed test and its duration, nothing more, and the last lines of the log can start
+# after the assertion message: the TRX is the complete record, so every failed test is printed with its message.
+function Write-FailedTestMessages($TrxDocument) {
+    $failedTests = @($TrxDocument.TestRun.Results.UnitTestResult | Where-Object { $_.outcome -eq 'Failed' })
+    if ($failedTests.Count -eq 0) { return }
+    Write-Host "  Failed tests ($($failedTests.Count)), with their assertion message:" -ForegroundColor Red
+    foreach ($failedTest in ($failedTests | Select-Object -First 40)) {
+        Write-Host "  FAILED $($failedTest.testName)" -ForegroundColor Red
+        $message = [string]$failedTest.Output.ErrorInfo.Message
+        if (-not $message) { $message = "(the TRX holds no message for this test)" }
+        if ($message.Length -gt 1500) { $message = $message.Substring(0, 1500) + "..." }
+        foreach ($messageLine in @($message -split "\r?\n" | Select-Object -First 15)) {
+            Write-Host "      $messageLine" -ForegroundColor DarkRed
+        }
+    }
+    if ($failedTests.Count -gt 40) { Write-Host "  ... $($failedTests.Count - 40) more failed tests: see the TRX." -ForegroundColor Red }
 }
 
 function Write-TestSummary([string]$summaryLine, [double]$elapsedSec) {
@@ -814,6 +874,7 @@ function Complete-TestRun([hashtable]$Run) {
         try {
             [xml]$trxDocument = Get-Content -Raw $trxPath
             $trxCounters = $trxDocument.TestRun.ResultSummary.Counters
+            if ([int]$trxCounters.failed -gt 0) { Write-FailedTestMessages $trxDocument }
         } catch {
             Write-Warning "Could not read authoritative TRX counters from '$trxPath': $($_.Exception.Message)"
         }
@@ -1172,7 +1233,13 @@ function Invoke-CrapGate([string]$GatePath, [string]$CoverageRoot, [string]$Scor
 $e2eContainerHost = "host.docker.internal"
 # CI builds the suite in Release (aetheus-ci.yaml) and the image refuses an output that is not under bin/Release.
 $e2eImageConfiguration = "Release"
-$e2eCheckoutId = (Split-Path $root -Leaf).ToLowerInvariant() -replace '[^a-z0-9_.-]', '-'
+# The folder name keeps the id readable; a stable short hash of the full checkout path keeps two checkouts that share
+# a folder name (two clones called Aetheus) from sharing, and so from `docker rm -f`-ing, each other's containers.
+$e2eCheckoutPathHash = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.SHA256]::HashData(
+        [System.Text.Encoding]::UTF8.GetBytes(([System.IO.Path]::GetFullPath($root)).TrimEnd('\', '/').ToLowerInvariant()))
+).Replace('-', '').Substring(0, 8).ToLowerInvariant()
+$e2eCheckoutId = ((Split-Path $root -Leaf).ToLowerInvariant() -replace '[^a-z0-9_.-]', '-') + "-$e2eCheckoutPathHash"
 $e2eImageTag = "aetheus-browser-smoke-local:$e2eCheckoutId"
 $e2eImageContext = Join-Path $root "TestResults\YLaunchE2eImageContext"
 $e2eContainerResults = "/tmp/aetheus-e2e-results"
@@ -1203,7 +1270,8 @@ function Build-E2eRunnerImage {
     # Always, even after a Release solution build: a build on Windows copies only the Windows Playwright driver,
     # and the image runs the linux-x64 one (CI builds on Linux, where that is the default).
     Write-Step "Building the E2E suite in $e2eImageConfiguration with the linux-x64 Playwright driver (as CI does)..."
-    dotnet build $e2eProject --configuration $e2eImageConfiguration -p:PlaywrightPlatform=linux-x64 --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false | Out-Host
+    Invoke-WithOeBuildLock { dotnet build $e2eProject --configuration $e2eImageConfiguration -p:PlaywrightPlatform=linux-x64 --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false | Out-Host }
+
     if ($LASTEXITCODE -ne 0) { Write-Host "  E2E suite build failed." -ForegroundColor Red; return $false }
     Write-Step "Building the QA browser image $e2eImageTag (deploy\docker\Dockerfile.e2e)..."
     if (Test-Path -LiteralPath $e2eImageContext) { Remove-Item -LiteralPath $e2eImageContext -Recurse -Force }
@@ -1215,15 +1283,15 @@ function Build-E2eRunnerImage {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination $e2eImageContext
     }
     Copy-Item -LiteralPath $e2eProject -Destination $contextProject
-    $suiteOutput = Join-Path $root "tests\Aetheus.E2E\bin\$e2eImageConfiguration\net10.0"
+    $suiteOutput = Join-Path $root "tests\Aetheus.E2E\bin\$e2eImageConfiguration\net11.0"
     if (-not (Test-Path -LiteralPath (Join-Path $suiteOutput "Aetheus.E2E.dll"))) {
         Write-Host "  The E2E suite output is missing: $suiteOutput" -ForegroundColor Red
         return $false
     }
     Copy-Item -LiteralPath $suiteOutput -Destination $contextBin -Recurse
-    Get-ChildItem -LiteralPath (Join-Path $contextBin "net10.0\.playwright\node") -Directory |
+    Get-ChildItem -LiteralPath (Join-Path $contextBin "net11.0\.playwright\node") -Directory |
         Where-Object Name -ne "linux-x64" | Remove-Item -Recurse -Force
-    if (-not (Test-Path -LiteralPath (Join-Path $contextBin "net10.0\.playwright\node\linux-x64\node"))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $contextBin "net11.0\.playwright\node\linux-x64\node"))) {
         Write-Host "  The Playwright driver for linux-x64 is missing from the E2E suite output." -ForegroundColor Red
         return $false
     }
@@ -1366,6 +1434,16 @@ rm -f /tmp/src.tar
 # it the C# raw-string scripts of the tests carry a CR and the shell refuses them.
 grep -rIlZ -e "$(printf '\r')" /work --exclude='*.ps1' --exclude='*.cmd' --exclude='*.bat' | xargs -0 -r sed -i 's/\r$//'
 cd /work
+# The publication harness tests compare packages with the pinned Node.js, which the CI agent has on its PATH
+# (PinnedNodeRuntime): the official archive of that exact version, verified against the pinned SHA-256, cached in a volume.
+NODE_ARCHIVE="/opt/node-cache/node-v$NODE_VERSION-linux-x64.tar.gz"
+if [ ! -f "$NODE_ARCHIVE" ]; then
+  curl -fsSL --retry 3 -o "$NODE_ARCHIVE.part" "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.gz" \
+    && mv "$NODE_ARCHIVE.part" "$NODE_ARCHIVE" || { echo "Could not download Node.js $NODE_VERSION." >&2; exit 1; }
+fi
+echo "$NODE_SHA256  $NODE_ARCHIVE" | sha256sum -c - >/dev/null || { rm -f "$NODE_ARCHIVE"; echo "Node.js archive does not match its pinned SHA-256." >&2; exit 1; }
+mkdir -p /opt/node && tar -xzf "$NODE_ARCHIVE" -C /opt/node --strip-components=1 || { echo "Could not unpack Node.js." >&2; exit 1; }
+export PATH="/opt/node/bin:$PATH"
 RAW_EXIT=0
 dotnet test --project tests/Aetheus.Agent.Core.Tests --configuration Release --no-progress \
   --report-trx --report-trx-filename agent.trx --results-directory "$RESULTS" $AGENT_TEST_ARGS || RAW_EXIT=$?
@@ -1401,6 +1479,12 @@ function Start-AgentSuiteContainerRun {
     if (-not $image) {
         return New-UnlaunchedAgentSuiteRun $Label "The SDK image of the agent suite was not found in deploy\docker\Dockerfile.back (the build-source stage)."
     }
+    # The Node.js pin and its cache volume are the Linux suite's (linux-suite.ps1 only defines them).
+    . (Join-Path $PSScriptRoot "linux-suite.ps1")
+    $nodePin = Get-LinuxSuiteNodePin
+    if (-not $nodePin) {
+        return New-UnlaunchedAgentSuiteRun $Label "The pinned Node.js version and digest were not found in src\Aetheus.Agent.Core\Functions\PinnedNodeRuntime.cs."
+    }
     $resultDirectory = if ($Coverage) { $coverageDir } else { Join-Path $root "TestResults\Launcher" }
     New-Item -ItemType Directory -Path $resultDirectory -Force | Out-Null
     $safeLabel = ($Label -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant()
@@ -1412,6 +1496,8 @@ function Start-AgentSuiteContainerRun {
                     "--mount", "type=bind,src=$root,dst=/src,readonly",
                     "-v", "${agentSuiteNuGetVolume}:/nuget",
                     "-e", "NUGET_PACKAGES=/nuget",
+                    "-v", "${linuxSuiteNodeVolume}:/opt/node-cache",
+                    "-e", "NODE_VERSION=$($nodePin.Version)", "-e", "NODE_SHA256=$($nodePin.Sha256)",
                     "-e", "AGENT_TEST_ARGS=$($ExtraArgs -join ' ')",
                     "-e", "DOTNET_CLI_TELEMETRY_OPTOUT=1", "-e", "DOTNET_NOLOGO=1",
                     $image, "sh", "/tmp/ylaunch-agent-run.sh")
@@ -1551,6 +1637,7 @@ $E2eCategories = @(
     'Logs',
     'Accessibility',
     'ResponsiveAdmin',
+    'MobileGrid',
     'ProductionSmoke',
     'RollbackRelevant',
     'PageRules'
@@ -2135,6 +2222,34 @@ function Show-YRulesPreflight([string]$Root) {
 #  MAIN FLOW
 # ============================================================
 
+# ---------- 0a. Linux suite (-tl): the full suite in one limited Linux container, then exit ----------
+
+if ($TestLinux) {
+    . (Join-Path $PSScriptRoot "linux-suite.ps1")
+    $linuxOutput = @(Invoke-LinuxSuite -Suites $LinuxSuites -TestArgs $LinuxTestArgs)
+    $script:ylaunchExitCode = [int]$linuxOutput[-1]
+    return
+}
+
+# ---------- 0a'. VPS bench (-vb): one pass in CPU/memory-limited containers, then exit ----------
+
+if ($VpsBench) {
+    . (Join-Path $PSScriptRoot "vps-bench.ps1")
+    $benchOutput = @(Invoke-VpsBench -Level $BenchLevel -Cpus $BenchCpus -MemoryGb $BenchMemoryGb -Filter $BenchFilter -KeepCache:$BenchKeepCache -KeepStack:$BenchKeepStack -Reuse $BenchReuse)
+    $script:ylaunchExitCode = [int]$benchOutput[-1]
+    return
+}
+
+# ---------- 0b. Pipeline rehearsal (-pr): wizard-generated pipelines run for real on a simulated VPS, then exit ----------
+
+if ($PipelineRehearsal) {
+    . (Join-Path $PSScriptRoot "vps-bench.ps1")
+    . (Join-Path $PSScriptRoot "pipeline-rehearsal.ps1")
+    $rehearsalOutput = @(Invoke-PipelineRehearsal -Cpus $RehearsalCpus -MemoryGb $RehearsalMemoryGb -Keep:$RehearsalKeep -Reuse $RehearsalReuse)
+    $script:ylaunchExitCode = [int]$rehearsalOutput[-1]
+    return
+}
+
 # ---------- 0. Tunnel-only mode (-ra without other flags) ----------
 
 if ($tunnelOnly) {
@@ -2212,7 +2327,8 @@ if ($HotReload) {
             (Join-Path $root "src\Aetheus.Front\Aetheus.Front.csproj"),
             (Join-Path $root "tests\Aetheus.E2E\Aetheus.E2E.csproj")
         )) {
-            dotnet build $project --configuration $buildConfiguration --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false
+            Invoke-WithOeBuildLock { dotnet build $project --configuration $buildConfiguration --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false }
+
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "BUILD FAILED." -ForegroundColor Red
                 $script:ylaunchExitCode = 1
@@ -2221,7 +2337,8 @@ if ($HotReload) {
         }
     } else {
         Write-Step "Building solution..."
-        dotnet build $solution --configuration $buildConfiguration --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false
+        Invoke-WithOeBuildLock { dotnet build $solution --configuration $buildConfiguration --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false }
+
         if ($LASTEXITCODE -ne 0) {
             Write-Host "BUILD FAILED." -ForegroundColor Red
             $script:ylaunchExitCode = 1
@@ -2239,7 +2356,8 @@ if ($HotReload) {
     # runtime installed (matches the Docker/prod build, and launch-linux.sh). A framework-
     # dependent build here ships an apphost that aborts with "No frameworks were found"
     # on any box lacking .NET 10 - the failure that bit the agent install. (S-TECH-39)
-        dotnet publish $linuxAgentDir -r linux-x64 -c Debug --self-contained true -v q --nologo -p:UseSharedCompilation=false -nodeReuse:false
+        Invoke-WithOeBuildLock { dotnet publish $linuxAgentDir -r linux-x64 -c Debug --self-contained true -v q --nologo -p:UseSharedCompilation=false -nodeReuse:false }
+
         if ($LASTEXITCODE -ne 0) {
         # Loud + non-silent: this is the linux-x64/publish output the /downloads endpoint serves. A
         # silent failure here means a remote agent self-update/install would pull the LAST good build
@@ -2306,11 +2424,11 @@ function Copy-RuntimeSnapshot([string]$name, [string]$sourceDir, [string]$entryD
 }
 if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     Write-Step "Copying Backend runtime snapshot..."
-    $backSnapshotDir = Copy-RuntimeSnapshot $(if ($script:testRun) { "YLaunchE2eBack" } else { "YLaunchBack" }) (Join-Path $backDir "bin\$buildConfiguration\net10.0") "Aetheus.Back.dll"
+    $backSnapshotDir = Copy-RuntimeSnapshot $(if ($script:testRun) { "YLaunchE2eBack" } else { "YLaunchBack" }) (Join-Path $backDir "bin\$buildConfiguration\net11.0") "Aetheus.Back.dll"
 }
 if ($ModeAgent -and -not $HotReload -and -not $anyTest) {
     Write-Step "Copying Agent runtime snapshot..."
-    $agentSnapshotDir = Copy-RuntimeSnapshot "YLaunchAgent" (Join-Path $agentDir "bin\$buildConfiguration\net10.0-windows") "Aetheus.Agent.Windows.dll"
+    $agentSnapshotDir = Copy-RuntimeSnapshot "YLaunchAgent" (Join-Path $agentDir "bin\$buildConfiguration\net11.0-windows") "Aetheus.Agent.Windows.dll"
 }
 if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     Write-Step "Publishing a stable frontend snapshot..."
@@ -2339,7 +2457,8 @@ if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
         if (Test-Path -LiteralPath $frontSnapshotDir) {
             Remove-Item -LiteralPath $frontSnapshotDir -Recurse -Force
         }
-        dotnet publish (Join-Path $frontDir "Aetheus.Front.csproj") -c $buildConfiguration -o $frontSnapshotSiteDir --no-restore -p:RunAnalyzers=false -p:PublishTrimmed=false -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo
+        Invoke-WithOeBuildLock { dotnet publish (Join-Path $frontDir "Aetheus.Front.csproj") -c $buildConfiguration -o $frontSnapshotSiteDir --no-restore -p:RunAnalyzers=false -p:PublishTrimmed=false -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo }
+
         if ($LASTEXITCODE -ne 0) { Write-Host "FRONTEND SNAPSHOT FAILED." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
         dotnet publish (Join-Path $root "deploy\docker\StaticServer.csproj") -c Debug -o $frontSnapshotHostDir -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo
         if ($LASTEXITCODE -ne 0) { Write-Host "STATIC SERVER SNAPSHOT FAILED." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }

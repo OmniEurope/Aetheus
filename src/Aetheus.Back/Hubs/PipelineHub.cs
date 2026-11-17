@@ -4,7 +4,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace Aetheus.Back.Hubs;
 
 [Authorize]
-public class PipelineHub(IPipelineRunLookupReader runLookup, IResourceAuthorizationService authz) : Hub
+public class PipelineHub(
+    IPipelineRunLookupReader runLookup, IResourceAuthorizationService authz) : Hub
 {
     public async Task JoinPipelineRunGroup(int runId)
     {
@@ -31,7 +32,10 @@ public class PipelineHub(IPipelineRunLookupReader runLookup, IResourceAuthorizat
             return;
         }
         if (accessibleIds.Count == 0)
+        {
+            // A user without a readable pipeline is an expected case; HubRefusalLogFilter logs it at information level (R-2).
             throw new HubException("Access denied.");
+        }
         foreach (var id in accessibleIds)
             await Groups.AddToGroupAsync(Context.ConnectionId, $"pipeline-{id}").ConfigureAwait(false);
     }

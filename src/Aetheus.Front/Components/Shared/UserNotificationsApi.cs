@@ -80,6 +80,24 @@ public sealed class UserNotificationsApi(HttpClient http) : ApiClientBase(http)
         UpdateNotificationPreferencesRequest request, CancellationToken ct = default) =>
         PutJsonAsync<UpdateNotificationPreferencesRequest, List<NotificationPreferenceDto>>($"{Root}/preferences", request, ct);
 
+    /// <summary>Whether the user is e-mailed when the pipeline fails; null when the call failed.</summary>
+    public async Task<PipelineFailureMailPreferenceDto?> GetPipelineFailureMailAsync(int pipelineId, CancellationToken ct = default)
+    {
+        var response = await Http.GetAsync($"{Root}/pipelines/{pipelineId}/failure-mail", ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode) return null;
+        return await response.Content.ReadFromJsonAsync<PipelineFailureMailPreferenceDto>(JsonOptions.Web, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Saves the user's own choice for the pipeline and returns the effective preference, or null when the call failed.</summary>
+    public Task<PipelineFailureMailPreferenceDto?> SetPipelineFailureMailAsync(
+        int pipelineId, bool isEnabled, CancellationToken ct = default) =>
+        PutJsonAsync<SetPipelineFailureMailPreferenceRequest, PipelineFailureMailPreferenceDto>(
+            $"{Root}/pipelines/{pipelineId}/failure-mail", new SetPipelineFailureMailPreferenceRequest { IsEnabled = isEnabled }, ct);
+
+    /// <summary>The pipelines the user saved a failure-mail choice for.</summary>
+    public async Task<List<PipelineFailureMailChoiceDto>> GetPipelineFailureMailChoicesAsync(CancellationToken ct = default) =>
+        await GetJsonAsync<List<PipelineFailureMailChoiceDto>>($"{Root}/pipeline-failure-mails", ct).ConfigureAwait(false) ?? [];
+
     public async Task<List<ProjectSubscriptionDto>> GetSubscriptionsAsync(CancellationToken ct = default) =>
         await GetJsonAsync<List<ProjectSubscriptionDto>>($"{Root}/subscriptions", ct).ConfigureAwait(false) ?? [];
 

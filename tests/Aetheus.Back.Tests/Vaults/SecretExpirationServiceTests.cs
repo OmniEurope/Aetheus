@@ -26,7 +26,7 @@ public class SecretExpirationServiceTests
             .BuildServiceProvider();
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var logger = Substitute.For<ILogger<SecretExpirationService>>();
-        return (new SecretExpirationService(scopeFactory, config, logger, clock), vaultRepo, notifier);
+        return (new SecretExpirationService(scopeFactory, config, logger, clock, leaderLease: LeaderLeaseDouble.Leader()), vaultRepo, notifier);
     }
 
     [Fact]
@@ -103,7 +103,8 @@ public class SecretExpirationServiceTests
             sp.GetRequiredService<IServiceScopeFactory>(),
             new ConfigurationBuilder().Build(),
             Substitute.For<ILogger<SecretExpirationService>>(),
-            clock);
+            clock,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await sut.ProcessExpiringSecretsAsync(ct);
 

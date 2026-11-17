@@ -11,6 +11,13 @@ namespace Aetheus.Back.Data;
 /// </summary>
 public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
+    /// <summary>
+    /// Command timeout of the migration bundle. Npgsql's 30-second default cut the production
+    /// deploy #152 on an index build over the vulnerability feed tables, which only lasts that
+    /// long on production-sized data. Stays below the 3600-second migrate step timeout.
+    /// </summary>
+    internal static readonly TimeSpan MigrationCommandTimeout = TimeSpan.FromMinutes(30);
+
     public AppDbContext CreateDbContext(string[] args)
     {
         var configuration = new ConfigurationBuilder()
@@ -24,7 +31,9 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
         var connectionString = ResolveConnectionString(configuration, args);
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(
+            connectionString,
+            npgsql => npgsql.CommandTimeout((int)MigrationCommandTimeout.TotalSeconds));
         return new AppDbContext(optionsBuilder.Options);
     }
 

@@ -31,6 +31,11 @@ public class Server
     public string? AgentSessionId { get; set; }
     /// <summary>Monotone fencing token incremented whenever a different agent session acquires the lease.</summary>
     public long AgentSessionFencingToken { get; set; }
+    /// <summary>
+    /// ADR-060: the highest <see cref="ServerTask.Number"/> reserved on this server. Only moves under this
+    /// row's lock, in the transaction that inserts the task (<c>ServerTaskNumbering</c>).
+    /// </summary>
+    public int TaskCounter { get; set; }
     /// <summary>UTC expiry of the current agent polling lease.</summary>
     public DateTime? AgentSessionLeaseExpiresAt { get; set; }
     public string Tags { get; set; } = string.Empty; // JSON array
@@ -188,6 +193,16 @@ public class Server
     /// baseline and raises nothing.</summary>
     public string? SshConfigStateJson { get; set; }
 
+    /// <summary>Recette R-11: the reboots the machine decides by itself, as its agent last reported them
+    /// (<c>MachineRebootDataDto</c> as JSON, read by the planner). Null until a heartbeat carried a completed reading;
+    /// an empty list means the agent read the host and found none.</summary>
+    public string? MachineRebootJson { get; set; }
+
+    /// <summary>Recette R-27: the jobs the machine schedules by itself and its time zone, as its agent last reported them
+    /// (<c>MachineJobsDataDto</c> as JSON, read by the planner). Null until a heartbeat carried a completed reading;
+    /// an empty list means the agent read the host and found none.</summary>
+    public string? MachineJobsJson { get; set; }
+
     /// <summary>The distinct filesystems of the last heartbeat (<c>DiskInfoDto</c> list as JSON), drawn
     /// one by one in the storage section. Null until a heartbeat carried disks.</summary>
     public string? DisksJson { get; set; }
@@ -232,6 +247,7 @@ public class Server
     public List<PortsentryBlockedIp> PortsentryBlockedIps { get; set; } = [];
     public List<PortsentryWhitelistIp> PortsentryWhitelistIps { get; set; } = [];
     public RkhunterState? RkhunterState { get; set; }
+    public ServerRebootSchedule? RebootSchedule { get; set; }
     public SecurityUpdatesState? SecurityUpdatesState { get; set; }
     public FirewallState? FirewallState { get; set; }
     public List<RkhunterWarning> RkhunterWarnings { get; set; } = [];

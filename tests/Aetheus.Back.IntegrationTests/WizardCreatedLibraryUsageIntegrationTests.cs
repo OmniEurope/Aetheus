@@ -3,6 +3,7 @@ using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Seeding;
+using Aetheus.Back.Tests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -14,7 +15,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// shipped templates seeded the way the backend seeds them, the wizard's YAML (<c>extends: template@N</c>, the
 /// production block), the template resolver, the usage repository and service, on PostgreSQL.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class WizardCreatedLibraryUsageIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -45,7 +45,7 @@ public sealed class WizardCreatedLibraryUsageIntegrationTests(PostgresFixture fi
             + $"variables:\n  APPLICATION_PREFIX: \"{prefix}\"\n  APPLICATION_HAS_FRONTEND: \"true\"\n"
             + $"  APPLICATION_DEPLOY_PIPELINE: \"{prefix}-deploy-prod\"\n"
             + (template == "application-deploy-prod"
-                ? "  COMPOSE_FILE: \"docker-compose.yml\"\n  DEPLOY_STRATEGY: \"bluegreen\"\n  DEPLOY_HAS_API: \"false\"\n"
+                ? "  COMPOSE_FILE: \"docker-compose.yml\"\n  DEPLOY_STRATEGY: \"bluegreen\"\n"
                 : string.Empty)
             + "stages: []";
     }
@@ -61,7 +61,7 @@ public sealed class WizardCreatedLibraryUsageIntegrationTests(PostgresFixture fi
         var project = new Project { Name = "W6", Organization = customer };
         db.Projects.Add(project);
         await db.SaveChangesAsync(Ct);
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(Ct);
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader()).SeedAsync(Ct);
 
         var latest = await db.PipelineTemplates.ToDictionaryAsync(template => template.Name, template => template.LatestVersion, Ct);
         foreach (var (suffix, template) in Roles)

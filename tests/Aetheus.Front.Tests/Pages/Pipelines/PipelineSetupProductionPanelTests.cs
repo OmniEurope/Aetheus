@@ -66,7 +66,7 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
 
     /// <summary>The wizard on its summary step, the production pipeline being ticked by default.</summary>
     private async Task<IRenderedComponent<PipelineSetupWizard>> OpenSummaryAsync(
-        PipelineProductionAnalysisDto analysis, TaskCompletionSource<PipelineProductionAnalysisDto>? heldAnalysis = null)
+        PipelineProductionAnalysisDto analysis, TaskCompletionSource<PipelineProductionAnalysisDto>? heldAnalysis = null, bool sameProject = false, string[]? strategies = null)
     {
         Arrange(analysis);
         // A reading of the repository that answers when the test lets it, to act while it is still running.
@@ -77,8 +77,10 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Atlas", cut.Markup, StringComparison.Ordinal));
         var wizard = cut.FindComponent<WizardDialog>();
         await cut.InvokeAsync(wizard.Instance.NextStep);
-        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject);
         await cut.InvokeAsync(wizard.Instance.NextStep);
+        // R-19: the strategy is chosen on the Capabilities step, before the summary reads the Compose file.
+        foreach (var strategy in strategies ?? []) await ChooseStrategyAsync(cut, strategy);
         // The last step reads the repository before it returns: with that reading held back, it is not awaited.
         var summary = cut.InvokeAsync(wizard.Instance.NextStep);
         if (heldAnalysis is null) await summary;
@@ -109,8 +111,10 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
         Assert.Equal("vps", cut.Find("[data-testid='setup-production-server-name']").TextContent);
         // Recette R-89: the strategy is a choice, no longer a deduction shown as text; R-23 (W8): the one this file follows
         // (its published ports, a replacement) is the one proposed.
-        Assert.Equal("replace", StrategyDropdown(cut).Instance.Value);
-        Assert.NotEmpty(cut.FindAll("[data-testid='setup-production-variables']"));
+        Assert.Equal("PipelineSetupProdReplace", cut.Find("[data-testid='setup-production-strategy-chosen']").TextContent);
+        // R-40: what is generated is folded away; the values to fill are in view.
+        Assert.NotEmpty(cut.FindAll("[data-testid='setup-production-generated']"));
+        Assert.NotEmpty(cut.FindAll("[data-testid='setup-production-to-fill']"));
         // What the deployment provides itself or defaults is not asked; what is generated or conventional is only told.
         Assert.Empty(cut.FindAll("#setup-production-value-DB_PASSWORD"));
         Assert.Empty(cut.FindAll("#setup-production-value-APPNAME"));
@@ -119,11 +123,8 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
         Assert.Empty(cut.FindAll("#setup-production-value-ADMIN_EMAIL"));
     }
 
-    private static IRenderedComponent<OmniDropDown<string>> StrategyDropdown(IRenderedComponent<PipelineSetupWizard> cut) =>
-        cut.FindComponents<OmniDropDown<string>>().Single(item => item.Instance.Id == "setup-production-strategy");
-
     private static Task ChooseStrategyAsync(IRenderedComponent<PipelineSetupWizard> cut, string strategy) =>
-        cut.InvokeAsync(() => StrategyDropdown(cut).Instance.ValueChanged.InvokeAsync(strategy));
+        PipelineSetupStrategyTileTests.ChooseStrategyAsync(cut, strategy);
 
     private PipelineProductionApplyRequest AppliedRequest() => JsonSerializer.Deserialize<PipelineProductionApplyRequest>(
         Posts().Single(post => post.Url.EndsWith(Apply, StringComparison.OrdinalIgnoreCase)).Body!,
@@ -137,40 +138,39 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
         DeclaresBlueGreen = true
     };
 
-    /// <summary>Recette R-89 (user decision 2026-10-25) made the strategy a choice; recette R-23 (W8, user decision 2026-10-26,
-    /// option a) preselects the one the Compose file follows, so a file that reads only the published ports is no longer
-    /// proposed a blue-green deployment it cannot run. The user can still pick the other.</summary>
+    /// <summary>Recette R-89 (user decision 2026-10-25) made the strategy a choice; recette R-19 (user decision 2026-11-09)
+    /// makes the replacement of the services the default, whatever the Compose file declares (a file that reads the blue
+    /// and green ports then gets the mismatch warning, never a blue-green deployment it was not asked for). The choice is
+    /// made on the Capabilities step (PipelineSetupStrategyTileTests); the summary says which one is applied.</summary>
     [Theory]
-    [InlineData(false, "replace")]
-    [InlineData(true, "bluegreen")]
-    public async Task TheStrategy_IsProposedAsAChoice_PreselectingTheOneTheComposeFileFollows(bool blueGreenFile, string expected)
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public async Task TheSummary_AppliesTheReplacement_ByDefault_AndWarnsWhenTheFileReadsColourPorts(bool blueGreenFile, int mismatches)
     {
         var cut = await OpenSummaryAsync(blueGreenFile ? BlueGreenAnalysis() : ReadableAnalysis("vps"));
 
-        var dropdown = StrategyDropdown(cut).Instance;
-        Assert.Equal(expected, dropdown.Value);
-        Assert.Equal(["bluegreen", "replace"], dropdown.Options.Select(option => option.Value));
-        Assert.Empty(cut.FindAll("[data-testid='setup-production-strategy-mismatch']"));
+        Assert.Equal("PipelineSetupProdReplace", cut.Find("[data-testid='setup-production-strategy-chosen']").TextContent);
+        Assert.Equal(mismatches, cut.FindAll("[data-testid='setup-production-strategy-mismatch']").Count);
     }
 
     [Theory]
-    [InlineData(false, "replace")]
-    [InlineData(true, "bluegreen")]
-    public async Task Finishing_SendsTheStrategyTheComposeFileFollows_WhenTheUserNeverTouchedIt(bool blueGreenFile, string expected)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Finishing_SendsTheReplacement_WhenTheUserNeverTouchedTheStrategy(bool blueGreenFile)
     {
         var cut = await OpenSummaryAsync(blueGreenFile ? BlueGreenAnalysis() : ReadableAnalysis("vps"));
 
         await FinishAsync(cut);
 
         cut.WaitForAssertion(() => Assert.Equal(7, Created().Length));
-        Assert.Equal(expected, AppliedRequest().Strategy);
+        Assert.Equal("replace", AppliedRequest().Strategy);
     }
 
     [Fact]
     public async Task Finishing_SendsTheStrategyTheUserPicked()
     {
-        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"));
-        await ChooseStrategyAsync(cut, "bluegreen");
+        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"), strategies: ["bluegreen"]);
+        Assert.Equal("PipelineSetupProdBlueGreen", cut.Find("[data-testid='setup-production-strategy-chosen']").TextContent);
 
         await FinishAsync(cut);
 
@@ -204,9 +204,7 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
     [Fact]
     public async Task BlueGreenOnAFileThatReadsNoColourPorts_IsSaid_AndDoesNotBlockTheCreation()
     {
-        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"));
-
-        await ChooseStrategyAsync(cut, "bluegreen");
+        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"), strategies: ["bluegreen"]);
 
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-production-strategy-mismatch']")));
         await FinishAsync(cut);
@@ -217,20 +215,22 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
     public async Task ReplaceOnAFileThatReadsTheColourPorts_IsSaid()
     {
         var cut = await OpenSummaryAsync(BlueGreenAnalysis());
-        Assert.Empty(cut.FindAll("[data-testid='setup-production-strategy-mismatch']"));
 
-        await ChooseStrategyAsync(cut, "replace");
+        Assert.Single(cut.FindAll("[data-testid='setup-production-strategy-mismatch']"));
+    }
 
-        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-production-strategy-mismatch']")));
+    [Fact]
+    public async Task BlueGreenOnAFileThatReadsTheColourPorts_ShowsNoWarning()
+    {
+        var cut = await OpenSummaryAsync(BlueGreenAnalysis(), strategies: ["bluegreen"]);
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid='setup-production-strategy-mismatch']")));
     }
 
     [Fact]
     public async Task AStrategyTheComposeFileFollows_ShowsNoWarning()
     {
-        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"));
-        await ChooseStrategyAsync(cut, "bluegreen");
-
-        await ChooseStrategyAsync(cut, "replace");
+        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"), strategies: ["bluegreen", "replace"]);
 
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid='setup-production-strategy-mismatch']")));
     }
@@ -272,7 +272,7 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
         var variables = (Dictionary<object, object>)deploy["variables"];
         Assert.Equal("deploy/compose/remote.compose.yml", variables["COMPOSE_FILE"]);
         Assert.Equal("replace", variables["DEPLOY_STRATEGY"]);
-        Assert.Equal("true", variables["DEPLOY_HAS_API"]);
+        Assert.False(variables.ContainsKey("DEPLOY_HAS_API"));
         var parameter = (Dictionary<object, object>)((List<object>)deploy["parameters"]).Single();
         Assert.Equal("deployServer", parameter["name"]);
         Assert.Equal("vps", parameter["default"]);
@@ -283,20 +283,79 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
             pipeline => Assert.DoesNotContain("COMPOSE_FILE", pipeline.YamlDefinition, StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task WithSeveralServers_NoneIsGuessed_AndTheRunAsksForOneAmongThem()
+    /// <summary>R-11: the Full-stack tile (a monolith) picks the monolith template, never a switch read from the Compose file; its
+    /// strategy is the replacement only, whatever the file reads, and nothing about an API is written.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheFullStackTile_PicksTheMonolithTemplate_WithTheReplacementOnly(bool blueGreenFile)
     {
-        var cut = await OpenSummaryAsync(ReadableAnalysis("vps-a", "vps-b"));
+        var analysis = blueGreenFile ? BlueGreenAnalysis() : ReadableAnalysis("vps") with { DeclaresBackPort = false };
+        var cut = await OpenSummaryAsync(analysis, sameProject: true);
 
+        Assert.Empty(cut.FindAll("#setup-production-strategy"));
+        // The localizer stub of these tests returns the key of the replacement.
+        Assert.Equal("PipelineSetupProdReplace", cut.Find("[data-testid='setup-production-strategy-fixed']").TextContent);
+        await FinishAsync(cut);
+
+        cut.WaitForAssertion(() => Assert.Equal(7, Created().Length));
+        Assert.Equal("replace", AppliedRequest().Strategy);
+        // The setup service decides the API's virtual hosts from the shape chosen, so the request names it.
+        Assert.True(AppliedRequest().Monolith);
+        var deploy = Assert.Single(Created(), pipeline => pipeline.Name == "atlas-deploy-prod").YamlDefinition;
+        var parsed = Parse(deploy);
+        Assert.Equal("application-deploy-prod@1", parsed["extends"]);
+        var variables = (Dictionary<object, object>)parsed["variables"];
+        Assert.Equal("replace", variables["DEPLOY_STRATEGY"]);
+        Assert.False(variables.ContainsKey("DEPLOY_HAS_API"));
+    }
+
+    /// <summary>R-11: the other tile (a front and an API) picks the front-and-API template.</summary>
+    [Fact]
+    public async Task TheFrontAndBackTile_PicksTheFrontAndApiTemplate_AndKeepsTheStrategyChoice()
+    {
+        var cut = await OpenSummaryAsync(ReadableAnalysis("vps"));
+
+        Assert.NotEmpty(cut.FindAll("#setup-production-strategy"));
         await FinishAsync(cut);
 
         cut.WaitForAssertion(() => Assert.Equal(7, Created().Length));
         var deploy = Parse(Assert.Single(Created(), pipeline => pipeline.Name == "atlas-deploy-prod").YamlDefinition);
-        var parameter = (Dictionary<object, object>)((List<object>)deploy["parameters"]).Single();
-        Assert.Equal("deployServer", parameter["name"]);
-        Assert.False(parameter.ContainsKey("default"));
-        Assert.Equal(["vps-a", "vps-b"], ((List<object>)parameter["allowed_values"]).Cast<string>());
-        Assert.True(((Dictionary<object, object>)deploy["variables"]).ContainsKey("COMPOSE_FILE"));
+        Assert.Equal("application-deploy-prod-front-back@1", deploy["extends"]);
+        Assert.False(((Dictionary<object, object>)deploy["variables"]).ContainsKey("DEPLOY_HAS_API"));
+        Assert.False(AppliedRequest().Monolith);
+    }
+
+    /// <summary>R-11: the Compose file only checks the shape chosen: when it disagrees, the panel says so and the creation goes
+    /// on with the template of the shape the user chose.</summary>
+    [Theory]
+    [InlineData(true, true, true, "application-deploy-prod")]
+    [InlineData(true, false, false, "application-deploy-prod")]
+    [InlineData(false, false, true, "application-deploy-prod-front-back")]
+    [InlineData(false, true, false, "application-deploy-prod-front-back")]
+    public async Task TheComposeFile_ChecksTheShapeChosen_ByAWarningThatNeverBlocks(
+        bool fullStack, bool publishesBackPort, bool warned, string template)
+    {
+        var cut = await OpenSummaryAsync(ReadableAnalysis("vps") with { DeclaresBackPort = publishesBackPort }, sameProject: fullStack);
+
+        Assert.Equal(warned ? 1 : 0, cut.FindAll("[data-testid='setup-production-shape-mismatch']").Count);
+        await FinishAsync(cut);
+
+        cut.WaitForAssertion(() => Assert.Equal(7, Created().Length));
+        Assert.Equal($"{template}@1", Parse(Assert.Single(Created(), pipeline => pipeline.Name == "atlas-deploy-prod").YamlDefinition)["extends"]);
+    }
+
+    [Fact]
+    public async Task WithSeveralServers_NoneIsGuessed_AndTheCreationWaitsForTheChoice()
+    {
+        // R-36: the candidate starts the deployment (the default of the wizard) and gives it no server, so the choice is
+        // required before the creation instead of leaving a pipeline the chain would refuse. The same case with the chain
+        // unticked (the run asks for the server) is PipelineSetupDeployServerRequiredTests.
+        var cut = await OpenSummaryAsync(ReadableAnalysis("vps-a", "vps-b"));
+
+        Assert.Null(cut.FindComponents<OmniDropDown<string>>().Single(item => item.Instance.Id == "setup-production-server").Instance.Value);
+        Assert.True(cut.Find(".omni-wizard__actions button.omni-wizard__finish").HasAttribute("disabled"));
+        Assert.Empty(Created());
     }
 
     [Fact]
@@ -576,7 +635,7 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
 
         var yaml = PipelineSetupYamlBuilder.Build(
             "atlas-deploy-prod", "application-deploy-prod", 1, input,
-            new PipelineSetupProductionInput("deploy/compose/remote.compose.yml", "bluegreen", true, "vps \"eu\""));
+            new PipelineSetupProductionInput("deploy/compose/remote.compose.yml", "bluegreen", "vps \"eu\""));
 
         var parsed = Parse(yaml);
         var parameter = (Dictionary<object, object>)((List<object>)parsed["parameters"]).Single();
@@ -589,7 +648,7 @@ public sealed class PipelineSetupProductionPanelTests : BunitContext
         .. new[]
         {
             "application-ci", "application-quality", "application-security", "application-qa",
-            "application-candidate", "application-nightly", "application-deploy-prod"
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
         }.Select(name => new PipelineTemplateSummaryDto { Id = name.GetHashCode(StringComparison.Ordinal), Name = name, Version = 1 })
     ];
 }

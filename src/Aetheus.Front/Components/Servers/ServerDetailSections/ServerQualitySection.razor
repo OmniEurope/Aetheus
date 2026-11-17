@@ -1,0 +1,143 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@using Aetheus.Front.Components.Analysis
+@* R-7: the quality of the servers' host systems. R-17: a server's own page has the structure of the project Quality page (tabs,
+   grade card, tiles, tables, grids); the general page lists the servers, with the same fixable / no-fix split. *@
+@if (!_loaded)
+{
+    <ZoneVeil />
+}
+else if (_loadFailed)
+{
+    <OmniAlert Severity="OmniSeverity.Danger">
+        @L["LoadFailed"]
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync())"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+    </OmniAlert>
+}
+else if (_servers.Count == 0)
+{
+    <EmptyState Icon="shield" Title="@L["ServerQualityNoneTitle"]" Description="@L["ServerQualityNoneDescription"]" />
+}
+else
+{
+    <OmniStack Gap="OmniSpacing.Large" data-testid="server-quality">
+        @if (ServerId is null)
+        {
+            <OmniCard Class="omni-u-p-md" data-testid="server-quality-overview">
+                <OmniStack>
+                    <div class="analysis-run-gate-heading">
+                        <OmniIcon Name="OmniIconName.ShieldCheck" />
+                        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ServerQualityTitle"]</OmniHeading>
+                    </div>
+                    <OmniTileGrid Columns="6" MinColumnWidth="12rem" Gap="OmniSpacing.Small">
+                        <OmniStatTile Value="@($"{_servers.Count}")" Title="@L["ServerQualityTileServers"]" data-testid="server-quality-tile-servers">
+                            <Icon><OmniIcon Name="OmniIconName.HardDrive" /></Icon>
+                        </OmniStatTile>
+                        <OmniStatTile Value="@(WorstGrade?.ToString() ?? L["NotAvailable"].Value)" Title="@L["ServerQualityTileWorstGrade"]" data-testid="server-quality-tile-worst">
+                            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+                        </OmniStatTile>
+                        <OmniStatTile Value="@($"{_servers.Sum(server => server.OpenCount)}")" Title="@L["ServerQualityTileOpen"]" data-testid="server-quality-tile-open">
+                            <Icon><OmniIcon Name="OmniIconName.Bug" /></Icon>
+                        </OmniStatTile>
+                        <OmniStatTile Value="@($"{_servers.Sum(server => server.Exploited)}")" Title="@L["ServerQualityTileExploited"]" data-testid="server-quality-tile-exploited">
+                            <Icon><OmniIcon Name="OmniIconName.Lightning" /></Icon>
+                        </OmniStatTile>
+                        <OmniStatTile Value="@($"{_servers.Sum(server => server.FixableCount)}")" Title="@L["ServerQualityTileFixable"]" data-testid="server-quality-tile-fixable">
+                            <Icon><OmniIcon Name="OmniIconName.ArrowUp" /></Icon>
+                        </OmniStatTile>
+                        @* The same split as the server page: what has no published fix is counted beside what has one. *@
+                        <OmniStatTile Value="@($"{_servers.Sum(server => server.WithoutFixCount)}")" Title="@L["ServerQualityTileNoFix"]" data-testid="server-quality-tile-nofix">
+                            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+                        </OmniStatTile>
+                    </OmniTileGrid>
+                    <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["ServerQualityAllServers"]</OmniHeading>
+                    <OmniDataGrid TItem="ServerQualityDto" Items="@_servers" KeyOf="@(server => server.ServerId)" Density="OmniDensity.Compact"
+                                  ExportTitle="@ExportContext.Title(L["ServerQualityTitle"])" ExportFields="@ExportContext.Fields()"
+                                  ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
+                                  Class="aetheus-clickable-rows" OnRowClick="@(args => OpenServer(args.Item.ServerId))" data-testid="server-quality-servers">
+                        <Columns>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="ServerName" Title="@L["Server"]">
+                                <Template Context="server"><EntityNameLink Kind="EntityNameKind.Server" Id="server.ServerId" Name="@server.ServerName" /></Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="Grade" Filterable="false" Title="@L["ServerQualityColumnGrade"]" Width="7rem">
+                                <Template Context="server"><GradeBadge Value="@server.Grade" Title="@L["ServerQualityGateLabel"]" /></Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="Counts.Critical" Title="@L["Critical"]" Width="8rem">
+                                <Template Context="server">@server.Counts.Critical</Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="Counts.High" Title="@L["High"]" Width="8rem">
+                                <Template Context="server">@server.Counts.High</Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="OtherCount" Title="@L["ServerQualityColumnOther"]" Width="11rem">
+                                <Template Context="server">@server.OtherCount</Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="Exploited" Title="@L["CveWatchExploited"]" Width="9rem">
+                                <Template Context="server">@server.Exploited</Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="FixableCount" Title="@L["ServerQualityColumnFixable"]" Width="11rem">
+                                <Template Context="server">@FixableText(server)</Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="WithoutFixCount" Title="@L["ServerQualityTileNoFix"]" Width="11rem">
+                                <Template Context="server">@server.WithoutFixCount</Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="ServerQualityDto" Property="MatchedAt" Title="@L["ServerQualityColumnLastAnalysis"]" Width="12rem">
+                                <Template Context="server">@DateText(server.MatchedAt)</Template>
+                            </OmniDataGridColumn>
+                            @* The row opens the page of the server (same content, the server fixed); the icon is the keyboard way to it. *@
+                            <OmniDataGridColumn TItem="ServerQualityDto" Sortable="false" Filterable="false" Exportable="false" Title="" Width="4rem">
+                                <Template Context="server">
+                                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenServer(server.ServerId))"
+                                                    Label="@L["ServerQualityShowDetail"]" title="@L["ServerQualityShowDetail"]">
+                                            <Icon><OmniIcon Name="OmniIconName.Eye" /></Icon>
+                                        </OmniButton>
+                                    </span>
+                                </Template>
+                            </OmniDataGridColumn>
+                        </Columns>
+                    </OmniDataGrid>
+                </OmniStack>
+            </OmniCard>
+        }
+
+        @if (Selected is { } server)
+        {
+            @* R-17: the same structure as the project Quality page: the tabs, then their panel (Overview card and tables, then the grids). R-19: the
+               Findings tab holds the vulnerabilities with a published fix and the next one those with none, two grids split by the one
+               fixable rule (ServerHostFixability), each tab counted in its title. *@
+            <OmniStack Class="@($"analysis-quality-workspace {(_tabIndex > 0 ? "analysis-quality-findings" : string.Empty)}")" data-testid="server-quality-detail">
+                <UrlSyncedTabs Slugs="@TabSlugs" RenderAllPanels="true" @bind-SelectedIndex="_tabIndex" class="analysis-workspace-tabs">
+                    <Tabs>
+                        <OmniTabsItem Key="overview" Title="@L["AnalysisOverview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("insights"))" /></Icon></OmniTabsItem>
+                        <OmniTabsItem Key="findings" Title="@SectionText(L["ServerQualityTabFindings"], server.FixableCount)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("policy"))" /></Icon></OmniTabsItem>
+                        <OmniTabsItem Key="nofix" Title="@SectionText(L["ServerQualityTabNoFix"], server.WithoutFixCount)"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon></OmniTabsItem>
+                    </Tabs>
+                </UrlSyncedTabs>
+
+                <OmniStack Class="analysis-workspace-panel" role="tabpanel">
+                    @if (_tabIndex == 0)
+                    {
+                        <ServerQualityOverview Server="@server" OnSelectTab="@SelectTab" />
+                    }
+                    else
+                    {
+                        @* The veil lives in the branch that waits (ZoneVeil contract): left beside the grid it kept its 10rem host once
+                           the findings were there. *@
+                        @if (_findingsLoading)
+                        {
+                            <ZoneVeil />
+                        }
+                        else if (_findings is { State: HostVulnerabilityWatchState.Watched })
+                        {
+                            @* Keyed by the tab so each grid starts from its own rows. *@
+                            <ServerHostFindingsGrid @key="_tabIndex" Items="@(_tabIndex == FindingsTabIndex ? _fixableFindings : _withoutFixFindings)">
+                                <EmptyContent>
+                                    <EmptyState Icon="verified_user" Title="@L["ServerQualityNoFindingsTitle"]" Description="@L["ServerQualityNoFindingsDescription"]" />
+                                </EmptyContent>
+                            </ServerHostFindingsGrid>
+                        }
+                    }
+                </OmniStack>
+            </OmniStack>
+        }
+    </OmniStack>
+}

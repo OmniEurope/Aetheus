@@ -28,6 +28,7 @@ internal static class DailyRecapComposer
             blocks.Add(Expiring(report, t, report.Secrets, "SecretsTitle", "SecretsSummary", report.SecretHorizonDays));
         if (report.Has(DailyRecapSection.Findings)) blocks.Add(Findings(report, t, frontOrigin));
         if (report.Has(DailyRecapSection.Mail)) blocks.Add(Mail(report, t));
+        if (report.Has(DailyRecapSection.Cve)) blocks.Add(Cve(report, t, frontOrigin));
         var shown = blocks.OfType<RecapBlock>().ToList();
         if (shown.Count == 0) shown.Add(new RecapBlock(t["QuietDayTitle"], t["QuietDaySummary"], []));
 
@@ -81,7 +82,7 @@ internal static class DailyRecapComposer
             // Two lines at most (recette R-58): the badge and the run's name, which opens the run, then where and when.
             .Select(run => new RecapItem(
                 run.PipelineName,
-                Join(run.ProjectName, run.BranchName, t.Format("RunNumber", run.RunId, t.Time(run.CompletedAtUtc, report.TimeZone))),
+                Join(run.ProjectName, run.BranchName, t.Format("RunNumber", run.RunNumber, t.Time(run.CompletedAtUtc, report.TimeZone))),
                 new RecapBadge(PipelineTone(run.Status), t[$"Run{run.Status}"]),
                 [],
                 run.RunId > 0 ? Link(frontOrigin, $"/pipelines/runs/{run.RunId}", t["RunLink"]) : null,
@@ -220,6 +221,57 @@ internal static class DailyRecapComposer
             newTotal,
             t.Plural("FindingsResolvedCount", findings.Resolved, findings.Resolved));
         return new RecapBlock(t["FindingsTitle"], summary, [], Link: Link(frontOrigin, "/analysis", t["FindingsLink"]));
+    }
+
+    /// <summary>
+    /// No vulnerability is listed (the platform's own pages do): the section counts them, the worst first, and
+    /// closes with the attribution their sources require. Nothing to report, nothing shown, so the attribution
+    /// appears exactly when the data does.
+    /// </summary>
+    private static RecapBlock? Cve(DailyRecapReport report, DailyRecapText t, string? frontOrigin)
+    {
+        var watch = report.CveWatch;
+        var servers = report.CveServers.Where(server => server.Open > 0)
+            .Select(server => new RecapItem(
+                server.ServerName,
+                WithBreakdown(t, t.Plural("CveServerOpen", server.Open, server.Open), server.Exploited, server.BySeverity, server.Unrated),
+                null, []))
+            .ToList();
+        if (watch.IsQuiet && servers.Count == 0) return null;
+        var open = WithBreakdown(t, t.Plural("CveOpen", watch.OpenTotal, watch.OpenTotal), watch.OpenExploited, watch.OpenBySeverity, watch.OpenUnrated);
+
+        var parts = new List<string> { open };
+        if (watch.OpenToVerify > 0) parts.Add(t.Plural("CveToVerify", watch.OpenToVerify, watch.OpenToVerify));
+        parts.Add(t.Plural("CveNew", watch.NewInDay, watch.NewInDay));
+        parts.Add(t.Plural("CveClosed", watch.ClosedInDay, watch.ClosedInDay));
+        var summary = t.Format("CveSummary", string.Join(", ", parts));
+        var sources = string.Join("; ", report.CveSources.Select(source =>
+            source.Licence.Length == 0 ? source.Name : t.Format("CveSourceWithLicence", source.Name, source.Licence)));
+        var note = sources.Length == 0 ? null : t.Format("CveSources", sources);
+        // Recette R-25: what stays open is said here, per project, never mailed again; a project with none shows nothing.
+        var projects = report.CveProjects.Where(project => project.Open > 0)
+            .Select(project => new RecapItem(
+                project.ProjectName,
+                WithBreakdown(t, t.Plural("CveProjectOpen", project.Open, project.Open), project.Exploited, project.BySeverity, project.Unrated),
+                null, []))
+            .ToList();
+        // R-41: the host systems of the servers come after the projects, in the same section and with the same sources.
+        projects.AddRange(servers);
+        return new RecapBlock(t["CveTitle"], summary, projects, note, Link(frontOrigin, "/analysis", t["CveLink"]));
+    }
+
+    /// <summary>"3 open (1 exploited, 2 critical)": the count, then the worst first, when there is a split to tell.</summary>
+    private static string WithBreakdown(
+        DailyRecapText t, string count, int exploited, IReadOnlyDictionary<AnalysisSeverity, int> bySeverity, int unrated)
+    {
+        var breakdown = new List<string>();
+        if (exploited > 0) breakdown.Add(t.Plural("CveCountExploited", exploited, exploited));
+        breakdown.AddRange(Enum.GetValues<AnalysisSeverity>()
+            .OrderByDescending(severity => severity)
+            .Where(severity => bySeverity.GetValueOrDefault(severity) > 0)
+            .Select(severity => t.Plural($"CveCount{severity}", bySeverity[severity], bySeverity[severity])));
+        if (unrated > 0) breakdown.Add(t.Plural("CveCountUnrated", unrated, unrated));
+        return breakdown.Count > 0 ? t.Format("CveOpenWithBreakdown", count, string.Join(", ", breakdown)) : count;
     }
 
     private static RecapBlock? Mail(DailyRecapReport report, DailyRecapText t)

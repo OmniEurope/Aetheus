@@ -194,6 +194,46 @@ public sealed class SessionEndTests
         Assert.Equal("r2", tabB.RefreshToken);
     }
 
+    /// <summary>
+    /// M1: tab A logged out (its refresh token, shared with B, is revoked server-side, and the storage
+    /// is emptied). Tab B must never send that stale refresh token: the server reads it as a replay
+    /// and revokes the user's whole chain, signing out their other devices.
+    /// </summary>
+    [Fact]
+    public async Task AfterAnotherTabLoggedOut_TheStaleRefreshTokenIsNeverSent()
+    {
+        var storage = new FakeLocalStorage();
+        var (tabB, clientB, serverB) = Tab(storage, HttpStatusCode.Unauthorized,
+            new ApiError { Message = "x", Code = RefreshRejectionCodes.Replay });
+        await tabB.LoginAsync(Expired, "r1");
+        var tabA = new AuthStateProvider(storage, NullLogger<AuthStateProvider>.Instance);
+        await tabA.LogoutAsync();
+        Assert.Empty(storage.Items);
+
+        using var response = await clientB.GetAsync("api/data", Ct);
+
+        Assert.DoesNotContain(serverB.Requests, request => request.Path == "/api/auth/token/refresh");
+        Assert.DoesNotContain(serverB.Requests, request => request.Body?.Contains("\"r1\"", StringComparison.Ordinal) == true);
+        Assert.Null(tabB.RefreshToken);
+    }
+
+    /// <summary>D50 kept: a storage that lost only the access token (refresh token still there) is not a
+    /// logout; the tab keeps and uses its refresh token.</summary>
+    [Fact]
+    public async Task AStorageStillHoldingARefreshToken_KeepsTheTabsRefreshToken()
+    {
+        var storage = new FakeLocalStorage();
+        var fresh = Fresh();
+        var (tabB, clientB, serverB) = Tab(storage, HttpStatusCode.OK, new LoginResponse { Token = fresh, RefreshToken = "r2" });
+        await tabB.LoginAsync(Expired, "r1");
+        storage.Items.Remove(StorageKeys.AuthToken);
+
+        using var response = await clientB.GetAsync("api/data", Ct);
+
+        Assert.Contains("\"r1\"", Assert.Single(serverB.Requests, request => request.Path == "/api/auth/token/refresh").Body, StringComparison.Ordinal);
+        Assert.Equal("r2", tabB.RefreshToken);
+    }
+
     /// <summary>D50: the storage event carries the other tab's new values; a removal is not followed.</summary>
     [Fact]
     public async Task TheStorageEvent_AdoptsNewValues_AndIgnoresRemovals()

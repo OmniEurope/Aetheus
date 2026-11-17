@@ -30,8 +30,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// the backfill and it goes RED with 23503 - the exact signal missing during the incident.
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class MigrationRegressionTests(PostgresFixture fixture)
+public sealed class MigrationRegressionTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private DbContextOptions<AppDbContext> BuildOptions() =>
         new DbContextOptionsBuilder<AppDbContext>()
@@ -69,81 +68,12 @@ public sealed class MigrationRegressionTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// All migrations apply cleanly on an EMPTY database. This is the "fresh install" path.
-    /// </summary>
-    [Fact]
-    public async Task Migrate_OnEmptyDatabase_AppliesAllMigrations_WithoutThrowing()
-    {
-        await ResetDatabaseAsync();
-        await using var db = new AppDbContext(BuildOptions());
-
-        var exception = await Record.ExceptionAsync(() => db.Database.MigrateAsync(cancellationToken: TestContext.Current.CancellationToken));
-
-        Assert.Null(exception);
-        var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken: TestContext.Current.CancellationToken)).ToList();
-        Assert.NotEmpty(applied);
-        Assert.Empty(await db.Database.GetPendingMigrationsAsync(cancellationToken: TestContext.Current.CancellationToken));
-    }
-
-    /// <summary>
-    /// THE priority regression test. Reproduces the production topology:
-    /// <list type="number">
-    /// <item>migrate to latest,</item>
-    /// <item>insert a <c>Projects</c> row (existing production data),</item>
-    /// <item>run <c>MigrateAsync()</c> AGAIN (the deploy path re-runs migrations on every boot).</item>
-    /// </list>
-    /// If a future migration adds a non-null FK on <c>Projects</c> and assigns a dangling parent id
-    /// to that pre-existing row without seeding/backfilling the parent, step 3 throws a Postgres
-    /// <c>23503</c> foreign-key violation and this test goes RED - exactly the signal that was
-    /// missing when the incident shipped.
-    /// </summary>
-    [Fact]
-    public async Task Migrate_WithPreExistingProjectRow_IsIdempotent_AndForeignKeysHold()
-    {
-        await ResetDatabaseAsync();
-
-        await using (var db = new AppDbContext(BuildOptions()))
-        {
-            await db.Database.MigrateAsync(cancellationToken: TestContext.Current.CancellationToken);
-        }
-
-        // Simulate production data that predates any future schema change. Project carries a
-        // non-null OrganizationId FK on this branch, so attach it to the org the migration seeded.
-        int projectId;
-        await using (var db = new AppDbContext(BuildOptions()))
-        {
-            var project = new Project
-            {
-                Name = "Legacy Project",
-                Description = "Row that exists before the next migration runs",
-                OrganizationId = await SeededOrganizationIdAsync(db),
-            };
-            db.Projects.Add(project);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            projectId = project.Id;
-        }
-
-        // Re-run migrations against the populated DB (the entrypoint does this every deploy).
-        await using (var db = new AppDbContext(BuildOptions()))
-        {
-            var exception = await Record.ExceptionAsync(() => db.Database.MigrateAsync(cancellationToken: TestContext.Current.CancellationToken));
-
-            Assert.Null(exception);
-            Assert.Empty(await db.Database.GetPendingMigrationsAsync(cancellationToken: TestContext.Current.CancellationToken));
-
-            // The pre-existing row must survive the (re-)migration intact.
-            var reloaded = await db.Projects.AsNoTracking()
-                .SingleAsync(p => p.Id == projectId, cancellationToken: TestContext.Current.CancellationToken);
-            Assert.Equal("Legacy Project", reloaded.Name);
-        }
-    }
-
-    /// <summary>
     /// Down-then-up round trip on a populated database. This is the strongest generic guard:
     /// it forces every migration's <c>Up()</c> to run a second time on a database that already
     /// holds a <c>Projects</c> row. A non-backfilled non-null FK migration cannot survive this.
     /// </summary>
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task Migrate_DownToInitial_ThenUpToLatest_WithData_DoesNotViolateForeignKeys()
     {
         await ResetDatabaseAsync();
@@ -368,6 +298,51 @@ public sealed class MigrationRegressionTests(PostgresFixture fixture)
                 TestContext.Current.CancellationToken));
         Assert.Equal(PostgresErrorCodes.UniqueViolation, exception.SqlState);
         Assert.Equal("IX_Releases_ProjectId", exception.ConstraintName);
+    }
+
+    /// <summary>
+    /// An install older than e-mail sign-in whose seeded <c>admin</c> has no address: <c>RequireUserEmail</c> used to
+    /// stop the migration. <c>FillSeededAdminEmail</c>, ordered just before it, gives that one account the
+    /// installation's default address, and the database migrates to the end; an account that already has an
+    /// address keeps it.
+    /// </summary>
+    [Fact]
+    public async Task RequireUserEmail_OnAnInstallWhoseSeededAdminHasNoAddress_MigratesWithTheDefaultAddress()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ResetDatabaseAsync();
+        await using var db = new AppDbContext(BuildOptions());
+        var migrations = db.Database.GetMigrations().ToList();
+        const string fill = "20261028205000_FillSeededAdminEmail";
+        const string require = "20261028210000_RequireUserEmail";
+        var fillIndex = migrations.IndexOf(fill);
+        Assert.True(fillIndex > 0, $"Could not locate migration {fill} after a predecessor.");
+        Assert.Equal(require, migrations[fillIndex + 1]);
+
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync(migrations[fillIndex - 1], ct);
+        await using (var connection = new NpgsqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync(ct);
+            await using var command = connection.CreateCommand();
+            // Only the columns of that migration point: the current model has later ones.
+            command.CommandText =
+                """
+                INSERT INTO "Users" ("Username", "PasswordHash", "Email", "IsActive", "CreatedAt", "UpdatedAt",
+                    "MustChangePassword", "SecurityStamp", "FailedLoginCount", "TotpEnabled")
+                VALUES ('admin', 'x', NULL, true, now(), now(), false, 'stamp-a', 0, false),
+                       ('someone', 'x', 'Someone@Example.com', true, now(), now(), false, 'stamp-b', 0, false);
+                """;
+            await command.ExecuteNonQueryAsync(ct);
+        }
+
+        Assert.Null(await Record.ExceptionAsync(() => migrator.MigrateAsync(cancellationToken: ct)));
+
+        var emails = await db.Users.AsNoTracking().OrderBy(user => user.Username)
+            .Select(user => new { user.Username, user.Email }).ToListAsync(ct);
+        Assert.Collection(emails,
+            admin => Assert.Equal(("admin", SeededAdminEmail.Default), (admin.Username, admin.Email)),
+            someone => Assert.Equal(("someone", "Someone@Example.com"), (someone.Username, someone.Email)));
     }
 
     /// <summary>

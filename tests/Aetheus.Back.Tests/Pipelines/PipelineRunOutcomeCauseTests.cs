@@ -96,6 +96,30 @@ public sealed class PipelineRunOutcomeCauseTests : IDisposable
         Assert.Single(await repo.GetFailedStepsAsync(5, 1, ct));
     }
 
+    [Fact]
+    public async Task GetFirstStoppedStepAsync_PrefersFailedOrTimedOutOverCancelled_AndReadsTheTasksOwnFields()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _db.Tasks.Add(new ServerTask { Id = 71, FailureCode = "TASK_CODE", FailureReason = "task said so" });
+        _db.PipelineStepRuns.AddRange(
+            new PipelineStepRun { PipelineRunId = 15, Order = 1, Status = TaskExecutionStatus.Cancelled, StageName = "A", StepName = "cancelled first" },
+            new PipelineStepRun { PipelineRunId = 15, Order = 2, Status = TaskExecutionStatus.Timeout, StageName = "B", StepName = "slow", TaskId = 71, MatrixLeg = "arm" },
+            new PipelineStepRun { PipelineRunId = 16, Order = 1, Status = TaskExecutionStatus.Failed, StageName = "Z", StepName = "other run" });
+        await _db.SaveChangesAsync(ct);
+        var repo = new PipelineRepository(_db, TimeProvider.System, NullLogger<PipelineRepository>.Instance,
+            new PipelineTaskLifecycleRepository(_db, TimeProvider.System), new PipelineRunLineageRepository(_db));
+
+        var stopped = await repo.GetFirstStoppedStepAsync(15, ct);
+
+        Assert.NotNull(stopped);
+        Assert.Equal("slow", stopped.StepName);
+        Assert.Equal(TaskExecutionStatus.Timeout, stopped.Status);
+        Assert.Equal("TASK_CODE", stopped.FailureCode);
+        Assert.Equal("task said so", stopped.FailureReason);
+        Assert.Equal("arm", stopped.MatrixLeg);
+        Assert.Null(await repo.GetFirstStoppedStepAsync(99, ct));
+    }
+
     [Theory]
     [InlineData("en", "Cause", "Step concerned")]
     [InlineData("fr", "Cause", "Étape concernée")]

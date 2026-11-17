@@ -30,6 +30,10 @@ public interface IAiTaskService
     Task<AiTaskDefinitionDto> CreateDefinitionAsync(CreateAiTaskDefinitionRequest request, CancellationToken ct);
     Task<AiTaskDefinitionDto?> UpdateDefinitionAsync(
         int id, UpdateAiTaskDefinitionRequest request, CancellationToken ct);
+    /// <summary>Replaces only the schedule of a task (a move in the planner, recette R-8): the six-field cron
+    /// expression, seconds first. An expression the scheduler cannot parse is a <see cref="BadRequestException"/>; null
+    /// when the task does not exist. The caller has already checked the Write right on the task's owner.</summary>
+    Task<AiTaskDefinitionDto?> SetScheduleAsync(int id, string schedule, CancellationToken ct);
     Task<bool> DeleteDefinitionAsync(int id, CancellationToken ct);
     Task<ServerTask> RunNowAsync(int definitionId, string? eventPayload, CancellationToken ct);
     /// <summary>Builds the run of a pipeline AI step with the profile <see cref="AiProfileResolver"/>

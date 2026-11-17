@@ -128,6 +128,21 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
             .ConfigureAwait(false);
     }
 
+    public async Task<HashSet<string>> GetFingerprintsOfEarlierReportsAsync(
+        int runId,
+        int reportId,
+        CancellationToken ct)
+    {
+        var fingerprints = await db.AnalysisFindingOccurrences.AsNoTracking()
+            .Where(occurrence => occurrence.AnalysisReport.PipelineRunId == runId
+                && occurrence.AnalysisReportId < reportId)
+            .Select(occurrence => occurrence.AnalysisFinding.Fingerprint)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return fingerprints.ToHashSet(StringComparer.Ordinal);
+    }
+
     /// <summary>Metrics inserted per SaveChanges. Each batch is detached once written, so the change
     /// tracker never holds more than this many of them.</summary>
     private const int MetricBatchSize = 2_000;

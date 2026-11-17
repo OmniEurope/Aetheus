@@ -32,6 +32,43 @@ public sealed class PipelineYamlLinesTests
         Assert.Null(line.PipelineRef);
     }
 
+    [Theory]
+    [InlineData("extends: ci@2", "extends: ", "ci@2", "")]
+    [InlineData("  extends: 'ci@2'", "  extends: '", "ci@2", "'")]
+    [InlineData("extends: \"ci@2\"  # base", "extends: \"", "ci@2", "\"  # base")]
+    [InlineData("extends: legacy-name", "extends: ", "legacy-name", "")]
+    public void Parse_WithTemplateReferences_RecognizesExtendsLines(
+        string yaml, string expectedPrefix, string expectedReference, string expectedSuffix)
+    {
+        var line = Assert.Single(PipelineYamlLines.Parse(yaml, templateReferences: true));
+
+        Assert.Equal(expectedPrefix, line.Text);
+        Assert.Equal(expectedReference, line.TemplateRef);
+        Assert.Equal(expectedSuffix, line.Suffix);
+        Assert.Null(line.PipelineRef);
+    }
+
+    [Fact]
+    public void Parse_WithoutTemplateReferences_KeepsTheExtendsLineWhole()
+    {
+        var line = Assert.Single(PipelineYamlLines.Parse("extends: ci@2"));
+
+        Assert.Equal("extends: ci@2", line.Text);
+        Assert.Null(line.TemplateRef);
+    }
+
+    [Theory]
+    [InlineData("# extends: ci@2")]
+    [InlineData("script: echo extends: ci@2")]
+    [InlineData("  extends_from: ci@2")]
+    public void Parse_WithTemplateReferences_LeavesCommentsAndOtherKeysAlone(string yaml)
+    {
+        var line = Assert.Single(PipelineYamlLines.Parse(yaml, templateReferences: true));
+
+        Assert.Equal(yaml, line.Text);
+        Assert.Null(line.TemplateRef);
+    }
+
     [Fact]
     public void Parse_NormalizesWindowsLineEndingsAndPreservesBlankLines()
     {

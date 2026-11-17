@@ -65,7 +65,8 @@ internal sealed class DailyRecapRepository(AppDbContext db) : IDailyRecapReposit
                 run.Pipeline.Project != null ? run.Pipeline.Project.Name : null,
                 run.Status,
                 run.CompletedAt!.Value,
-                run.BranchName))
+                run.BranchName,
+                run.BuildNumber))
             .ToListAsync(ct);
     }
 
@@ -156,6 +157,91 @@ internal sealed class DailyRecapRepository(AppDbContext db) : IDailyRecapReposit
         var resolved = await db.AnalysisFindings.AsNoTracking()
             .CountAsync(finding => finding.ResolvedAt >= startUtc && finding.ResolvedAt < endUtc, ct).ConfigureAwait(false);
         return new RecapFindings(appeared.ToDictionary(row => row.Severity, row => row.Count), resolved);
+    }
+
+    // The same rule as the announcement: a risk someone accepted or dismissed is no longer open news. A match
+    // whose finding is not published yet (a pass in progress) still counts.
+    private IQueryable<VulnerabilityMatch> OpenMatches() =>
+        db.VulnerabilityMatches.AsNoTracking().Where(match => match.ClosedAt == null
+            && (match.AnalysisFinding == null || match.AnalysisFinding.Status == AnalysisFindingStatus.Open));
+
+    public async Task<List<RecapProjectCve>> GetOpenCvesByProjectAsync(CancellationToken ct = default)
+    {
+        var rows = await OpenMatches()
+            .Where(match => match.Status == VulnerabilityMatchStatus.Affected)
+            .GroupBy(match => new
+            {
+                match.ProjectId,
+                ProjectName = match.Project.Name,
+                match.Advisory.SeverityPublished,
+                match.Advisory.Severity,
+                Exploited = match.Advisory.KevAddedAt != null
+            })
+            .Select(group => new { group.Key.ProjectId, group.Key.ProjectName, group.Key.SeverityPublished, group.Key.Severity, group.Key.Exploited, Count = group.Count() })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return [.. rows.GroupBy(row => (row.ProjectId, row.ProjectName))
+            .OrderBy(project => project.Key.ProjectName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(project => project.Key.ProjectId)
+            .Select(project => new RecapProjectCve(
+                project.Key.ProjectId,
+                project.Key.ProjectName,
+                project.Where(row => row.SeverityPublished).GroupBy(row => row.Severity).ToDictionary(group => group.Key, group => group.Sum(row => row.Count)),
+                project.Where(row => row.Exploited).Sum(row => row.Count),
+                project.Where(row => !row.SeverityPublished).Sum(row => row.Count)))];
+    }
+
+    public async Task<List<RecapServerCve>> GetOpenCvesByServerAsync(CancellationToken ct = default)
+    {
+        var rows = await db.ServerVulnerabilityFindings.AsNoTracking()
+            .Where(finding => finding.Status == VulnerabilityMatchStatus.Affected)
+            .GroupBy(finding => new
+            {
+                finding.ServerId,
+                ServerName = finding.Server.Name,
+                finding.Advisory.SeverityPublished,
+                finding.Advisory.Severity,
+                Exploited = finding.Advisory.KevAddedAt != null
+            })
+            .Select(group => new { group.Key.ServerId, group.Key.ServerName, group.Key.SeverityPublished, group.Key.Severity, group.Key.Exploited, Count = group.Count() })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return [.. rows.GroupBy(row => (row.ServerId, row.ServerName))
+            .OrderBy(server => server.Key.ServerName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(server => server.Key.ServerId)
+            .Select(server => new RecapServerCve(
+                server.Key.ServerId,
+                server.Key.ServerName,
+                server.Where(row => row.SeverityPublished).GroupBy(row => row.Severity).ToDictionary(group => group.Key, group => group.Sum(row => row.Count)),
+                server.Where(row => row.Exploited).Sum(row => row.Count),
+                server.Where(row => !row.SeverityPublished).Sum(row => row.Count)))];
+    }
+
+    public Task<string?> FindActiveUsernameByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var address = email.Trim().ToLowerInvariant();
+        return db.Users.AsNoTracking()
+            .Where(user => user.IsActive && user.Email.ToLower() == address)
+            .OrderBy(user => user.Id)
+            .Select(user => user.Username)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<RecapCveWatch> GetCveWatchAsync(DateTime startUtc, DateTime endUtc, CancellationToken ct = default)
+    {
+        var open = OpenMatches();
+        var affected = open.Where(match => match.Status == VulnerabilityMatchStatus.Affected);
+        var bySeverity = await affected
+            .Where(match => match.Advisory.SeverityPublished)
+            .GroupBy(match => match.Advisory.Severity)
+            .Select(group => new { Severity = group.Key, Count = group.Count() })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var exploited = await affected.CountAsync(match => match.Advisory.KevAddedAt != null, ct).ConfigureAwait(false);
+        var unrated = await affected.CountAsync(match => !match.Advisory.SeverityPublished, ct).ConfigureAwait(false);
+        var toVerify = await open.CountAsync(match => match.Status == VulnerabilityMatchStatus.ToVerify, ct).ConfigureAwait(false);
+        var appeared = await db.VulnerabilityMatches.AsNoTracking().CountAsync(match =>
+            match.Status == VulnerabilityMatchStatus.Affected && match.FirstMatchedAt >= startUtc && match.FirstMatchedAt < endUtc, ct).ConfigureAwait(false);
+        var closed = await db.VulnerabilityMatches.AsNoTracking()
+            .CountAsync(match => match.ClosedAt >= startUtc && match.ClosedAt < endUtc, ct).ConfigureAwait(false);
+        return new RecapCveWatch(bySeverity.ToDictionary(row => row.Severity, row => row.Count), exploited, unrated, toVerify, appeared, closed);
     }
 
     public Task<List<RecapMailServer>> GetMailServersAsync(CancellationToken ct = default) =>

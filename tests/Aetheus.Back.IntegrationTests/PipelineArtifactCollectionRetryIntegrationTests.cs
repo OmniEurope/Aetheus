@@ -12,7 +12,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// step the definition allows to fail (<c>continue_on_error</c>) must not fail the run on its own.
 /// Real PostgreSQL, because both answers are relational queries over tasks and step runs.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineArtifactCollectionRetryIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

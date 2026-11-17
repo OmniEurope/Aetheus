@@ -20,13 +20,15 @@
         </OmniOverflowMenu>
     }
 </OmniRow>
+@* R-1: the page veil is held while a queue task is pending. *@
+<VeilHold Busy="@(_pendingTaskId is not null)" />
 @if (_loaded && _items.Count == 0)
 {
-    <OmniText Element="OmniTextElement.Paragraph" Class="@(_pendingTaskId is not null ? "omni-busy action-veil-placeholder" : null)" aria-busy="@(_pendingTaskId is not null ? "true" : "false")">@L["MailQueueEmpty"]</OmniText>
+    <OmniText Element="OmniTextElement.Paragraph" Class="@(_pendingTaskId is not null ? "action-veil-placeholder" : null)">@L["MailQueueEmpty"]</OmniText>
 }
 else
 {
-    <OmniDataGrid @ref="_grid" Class="@(_pendingTaskId is not null ? "omni-busy" : null)" aria-busy="@(_pendingTaskId is not null ? "true" : "false")" ExportTitle="@ExportContext.Title(L["MailQueue"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_items" TItem="MailQueueItemDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+    <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["MailQueue"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_items" TItem="MailQueueItemDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="MailQueueItemDto" Property="Id" Title="ID" Width="7.5rem" Filterable="true" />
             <OmniDataGridColumn TItem="MailQueueItemDto" Property="Sender" Title="@L["Sender"]" Width="12.5rem" Filterable="true" />

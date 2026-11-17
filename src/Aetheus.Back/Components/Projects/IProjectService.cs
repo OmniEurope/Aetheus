@@ -10,6 +10,13 @@ public interface IProjectService
     /// has a user row, so project events reach the creator.</summary>
     Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, int? creatorUserId, CancellationToken ct = default);
     Task<ProjectDto?> UpdateProjectAsync(int id, UpdateProjectRequest request, CancellationToken ct = default);
+
+    /// <summary>R-31: writes the branch chosen in the pipeline setup wizard to the project's default branch, leaving every
+    /// other field alone. Null when the project does not exist.</summary>
+    Task<ProjectDto?> SetDefaultBranchAsync(int id, string branch, CancellationToken ct = default);
+
+    /// <summary>R-13: turns the project's expand/contract model (its migration gate) on or off. False when the project does not exist.</summary>
+    Task<bool> SetMigrationGateEnabledAsync(int id, bool enabled, CancellationToken ct = default);
     Task<List<ProjectDto>> GetProjectsWithRepoUrlAsync(CancellationToken ct = default);
     Task<List<ProjectServerDto>> GetProjectServersAsync(int projectId, CancellationToken ct = default);
     Task<PaginatedResult<ProjectServerDto>> GetProjectServersPageAsync(

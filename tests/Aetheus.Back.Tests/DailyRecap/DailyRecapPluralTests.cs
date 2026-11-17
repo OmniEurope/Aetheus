@@ -22,6 +22,22 @@ public sealed class DailyRecapPluralTests
         MailServers = [new RecapMailServer("exemple-vps", true, true, 1, Generated)]
     };
 
+    // R-8: the recap names a run by its number within the pipeline, not by the site-wide key.
+    [Fact]
+    public void ARun_IsNamedByItsNumberWithinThePipeline()
+    {
+        var report = OneOfEverything() with
+        {
+            PipelineRuns = [new RecapPipelineRun(3008, "exemple-ci", null, PipelineStatus.Failed, Generated, "develop", 12)]
+        };
+
+        var document = DailyRecapComposer.Compose(report, new DailyRecapText(CultureInfo.GetCultureInfo("en")));
+        var text = string.Join('\n', document.Blocks.SelectMany(block => block.Items).Select(item => item.Subtitle));
+
+        Assert.Contains("run #12", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("3008", text, StringComparison.Ordinal);
+    }
+
     private static string AllText(string language, DailyRecapReport report)
     {
         var document = DailyRecapComposer.Compose(report, new DailyRecapText(CultureInfo.GetCultureInfo(language)));

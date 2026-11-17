@@ -153,6 +153,11 @@ Aetheus.setTitlePrefix = function (prefix) {
     window._aetheusTitlePrefixObserver = observer;
 };
 
+// Whether the page is under the 40rem breakpoint: the build planner opens on its cards there, its calendar being wider than a phone.
+Aetheus.isNarrowViewport = function () {
+    return window.matchMedia('(max-width: 39.99rem)').matches;
+};
+
 Aetheus.copyToClipboard = async function (text) {
     try {
         await navigator.clipboard.writeText(text);

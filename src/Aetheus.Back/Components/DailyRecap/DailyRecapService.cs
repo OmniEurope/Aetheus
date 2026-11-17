@@ -16,6 +16,7 @@ namespace Aetheus.Back.Components.DailyRecap;
 internal sealed class DailyRecapService(
     IDailyRecapRepository repo,
     DailyRecapCollector collector,
+    DailyRecapRecipientScope recipientScope,
     IEmailSender sender,
     IMailTemplateRenderer templates,
     IAuditService audit,
@@ -153,15 +154,18 @@ internal sealed class DailyRecapService(
         var report = await collector.CollectAsync(day, timeZone, settings.Sections, Now, ct).ConfigureAwait(false);
         // Recette R1-8: each recipient reads the recap in their own language and colours; an address with no
         // account or no language preference gets the language the recap is configured in. The recap is
-        // composed once per language, rendered once per recipient.
+        // composed once per language and per set of readable projects (R-25), rendered once per recipient.
         var fallbackLanguage = MailTemplateLanguages.Normalize(settings.Culture.Name);
         var documents = new Dictionary<string, RecapDocument>(StringComparer.Ordinal);
         var messages = new List<EmailMessage>(recipients.Count);
         foreach (var address in recipients)
         {
             var style = await templates.ResolveRecipientAsync(address, fallbackLanguage, ct).ConfigureAwait(false);
-            if (!documents.TryGetValue(style.Language, out var document))
-                documents[style.Language] = document = DailyRecapComposer.Compose(report, new DailyRecapText(CultureOf(style.Language)), FrontOrigin);
+            var scoped = await recipientScope.ForAsync(report, address, ct).ConfigureAwait(false);
+            var key = style.Language + "|" + string.Join(',', scoped.CveProjects.Select(project => project.ProjectId))
+                + "|" + string.Join(',', scoped.CveServers.Select(server => server.ServerId));
+            if (!documents.TryGetValue(key, out var document))
+                documents[key] = document = DailyRecapComposer.Compose(scoped, new DailyRecapText(CultureOf(style.Language)), FrontOrigin);
             var mail = await templates.RenderAsync(MailTemplateKind.DailyRecap,
                 DailyRecapHtmlRenderer.Data(document, style.BlockColours), style, ct).ConfigureAwait(false);
             messages.Add(new EmailMessage(address, mail.Subject, mail.Text, mail.Html));

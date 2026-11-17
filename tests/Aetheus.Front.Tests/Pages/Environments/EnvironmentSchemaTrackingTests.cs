@@ -59,10 +59,11 @@ public sealed class EnvironmentSchemaTrackingTests : BunitContext
     }
 
     [Fact]
-    public async Task WithoutAVerdictOfItsOwnDeployments_RendersNothing()
+    public async Task WithoutAVerdictOfItsOwnDeployments_ShowsAnEmptyStateAndNoPlan()
     {
         // Recette R-81: the tracking is the one recorded by this environment's own deployments. Without a verdict
-        // (the production environment of another project) the section is absent, not a list of someone else's tables.
+        // (the production environment of another project) the block is not a list of someone else's tables; R-10
+        // says so in an empty state, since the tab it sits in never disappears.
         var answer = new TaskCompletionSource<EnvironmentSchemaDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/environments/1/schema-tracking", _ => answer.Task);
 
@@ -77,6 +78,7 @@ public sealed class EnvironmentSchemaTrackingTests : BunitContext
         await cut.WhenRenderedAsync(() => cut.RenderCount > rendersBeforeTheAnswer);
         Assert.Empty(cut.FindAll("[data-testid='environment-schema-tracking']"));
         Assert.Empty(cut.FindAll("[data-testid='schema-pending-contractions']"));
+        Assert.Contains("SchemaTrackingNoVerdictTitle", cut.Find("[data-testid='environment-schema-tracking-empty']").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -88,26 +90,55 @@ public sealed class EnvironmentSchemaTrackingTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Url.Contains("/environments/1/schema-tracking", StringComparison.Ordinal)));
         Assert.Empty(cut.FindAll("[data-testid='environment-schema-tracking']"));
+        Assert.Empty(cut.FindAll("[data-testid='environment-schema-tracking-empty']"));
+    }
+
+    [Fact]
+    public void TheTracking_OffersOneVisibleMarkdownCopyAndTheDownloadInTheMenu_AndExplainsTheTwoSteps()
+    {
+        // Recette R-66: one main action visible (copy the Markdown for an AI), the other in the overflow menu, and the
+        // explanation of the two releases folded away rather than printed as a block of text.
+        _handler.SetJsonResponse("api/environments/1/schema-tracking", Schema(withGate: true));
+
+        var cut = Render<EnvironmentSchemaTracking>(p => p.Add(c => c.EnvironmentId, 1));
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='schema-export-copy']")));
+        Assert.NotNull(cut.Find("[data-testid='schema-export-menu']"));
+        Assert.Contains("SchemaPendingHelpBody", cut.Find("[data-testid='schema-pending-help']").TextContent, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(EnvironmentType.Production, true)]
-    [InlineData(EnvironmentType.Staging, false)]
-    public void ThePage_AsksForTheTrackingOfAProductionEnvironmentOnly(EnvironmentType type, bool expected)
+    [InlineData(EnvironmentType.Production)]
+    [InlineData(EnvironmentType.Staging)]
+    public void ThePage_HasTwoTabs_TheFormFirst_AndTheTrackingUnderTheSecondOne(EnvironmentType type)
     {
+        // Recette R-10: the form stays as it was under "Overview"; the tracking (any environment, not only
+        // production) is the second tab and is read only once that tab is opened.
         _handler.SetJsonResponse("api/environments/1", new EnvironmentDto { Id = 1, Name = "env", Type = type, ProjectId = 1, ProjectName = "P" });
         _handler.SetJsonResponse("api/environments/1/schema-tracking", Schema(withGate: true));
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
 
-        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Url.EndsWith("api/environments/1", StringComparison.Ordinal)));
-        if (expected)
-            cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='environment-schema-tracking']")));
-        else
-        {
-            cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("form")));
-            Assert.Empty(cut.FindAll("[data-testid='environment-schema-tracking']"));
-            Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("schema-tracking", StringComparison.Ordinal));
-        }
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("form")));
+        var tabs = cut.FindAll("[role='tab']").Select(tab => tab.TextContent.Trim()).ToList();
+        Assert.Equal(2, tabs.Count);
+        Assert.Contains("Overview", tabs[0], StringComparison.Ordinal);
+        Assert.Contains("SchemaTrackingTabEnvironment", tabs[1], StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='environment-schema-tracking']"));
+        Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("schema-tracking", StringComparison.Ordinal));
+
+        cut.FindAll("[role='tab']")[1].Click();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='environment-schema-tracking']")));
+        Assert.Contains(_handler.Requests, r => r.Url.EndsWith("api/environments/1/schema-tracking", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ANewEnvironment_HasNoTabs_ItsFormStaysAlone()
+    {
+        var cut = Render<EnvironmentEdit>();
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("form")));
+        Assert.Empty(cut.FindAll("[role='tab']"));
     }
 }

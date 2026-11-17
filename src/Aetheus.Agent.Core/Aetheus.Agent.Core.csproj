@@ -1,9 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <Version Condition="'$(Version)' == ''">1.2.0</Version>
-  </PropertyGroup>
-
   <ItemGroup>
     <InternalsVisibleTo Include="Aetheus.Agent.Core.Tests" />
     <!-- SudoersAuditTests pins the sudoers argv form to BuildAptArgv. -->
@@ -11,12 +7,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Cronos" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>

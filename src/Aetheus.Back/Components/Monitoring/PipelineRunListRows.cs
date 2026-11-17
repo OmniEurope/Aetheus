@@ -19,9 +19,11 @@ public static class PipelineRunListRows
     public static readonly Expression<Func<PipelineRun, PipelineRunDto>> Projection = r => new PipelineRunDto
     {
         Id = r.Id,
+        Uid = r.Uid,
         PipelineId = r.PipelineId,
         ProjectId = r.Pipeline != null ? r.Pipeline.ProjectId : null,
         PipelineName = r.Pipeline != null ? r.Pipeline.Name : string.Empty,
+        BuildNumber = r.BuildNumber,
         Status = r.Status,
         RunToEnd = r.RunToEnd,
         ProjectedWarningsJson = r.WarningsJson,

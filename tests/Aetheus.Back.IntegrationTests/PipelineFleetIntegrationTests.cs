@@ -290,6 +290,109 @@ public sealed class PipelineFleetIntegrationTests(ApiSmokeFixture fixture)
         }
     }
 
+    /// <summary>R-8: "Update all pipelines" of a project moves its pipeline pinned on an older version of a shipped
+    /// generic template to the latest one through the real fleet update (Git commit, audit), and a second click
+    /// finds nothing left to move.</summary>
+    [Fact]
+    public async Task BulkUpdate_OfAProject_MovesItsGenericPinThroughTheRealUpdatePathOnce()
+    {
+        using var client = fixture.CreateAdminClient();
+        var ct = TestContext.Current.CancellationToken;
+        var suffix = Guid.NewGuid().ToString("N");
+        const string templateName = "package-web-analytics-browser";
+        var projectResponse = await client.PostAsJsonAsync("/api/projects", new CreateProjectRequest
+        {
+            Name = $"bulk-{suffix}",
+            Description = "generic template bulk update"
+        }, cancellationToken: ct);
+        projectResponse.EnsureSuccessStatusCode();
+        var project = await projectResponse.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default, cancellationToken: ct);
+        Assert.NotNull(project);
+
+        GitLightRepoDto? repository = null;
+        PipelineDto? pipeline = null;
+        try
+        {
+            var repositoryResponse = await client.PostAsJsonAsync("/api/git/repos", new CreateGitLightRepoRequest
+            {
+                ProjectId = project.Id,
+                Name = $"bulk-repo-{suffix}",
+                DefaultBranch = "main"
+            }, cancellationToken: ct);
+            repositoryResponse.EnsureSuccessStatusCode();
+            repository = await repositoryResponse.Content.ReadFromJsonAsync<GitLightRepoDto>(IntegrationJsonOptions.Default, cancellationToken: ct);
+            Assert.NotNull(repository);
+
+            int pinned;
+            using (var scope = fixture.Factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                pinned = await db.PipelineTemplates.AsNoTracking()
+                    .Where(template => template.Organization.Slug == "aetheus" && template.Name == templateName)
+                    .Select(template => template.LatestVersion)
+                    .SingleAsync(ct);
+            }
+            var pipelineName = $"bulk-{suffix}";
+            pipeline = await CreatePipelineAsync(client, project.Id, pipelineName,
+                $"name: {pipelineName}\nextends: {templateName}@{pinned}\nstages: []");
+
+            // The shipped template gains a version after the pipeline was created, as a new backend start does.
+            using (var scope = fixture.Factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var template = await db.PipelineTemplates.Include(item => item.Versions)
+                    .SingleAsync(item => item.Organization.Slug == "aetheus" && item.Name == templateName, ct);
+                var latest = template.Versions.Single(version => version.Version == template.LatestVersion);
+                template.Versions.Add(new Aetheus.Back.Data.Entities.PipelineTemplateVersion
+                {
+                    Version = pinned + 1,
+                    YamlContent = latest.YamlContent,
+                    ChangelogEntry = "R-8 bulk update test",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedByUsername = "system"
+                });
+                template.LatestVersion = pinned + 1;
+                await db.SaveChangesAsync(ct);
+            }
+
+            var first = await BulkUpdateAsync(client, project.Id);
+            var second = await BulkUpdateAsync(client, project.Id);
+
+            var item = Assert.Single(first.Items);
+            Assert.True(item.Outcome == PipelineFleetBulkUpdateOutcome.Updated, item.Reason);
+            Assert.Equal((pipeline.Id, pinned, pinned + 1), (item.PipelineId, item.FromVersion, item.ToVersion));
+            Assert.Empty(second.Items);
+            var updated = await client.GetFromJsonAsync<PipelineDto>($"/api/pipelines/{pipeline.Id}", IntegrationJsonOptions.Default, ct);
+            Assert.NotNull(updated);
+            Assert.Contains($"{templateName}@{pinned + 1}", updated.YamlDefinition, StringComparison.Ordinal);
+            Assert.Contains("stages: []", updated.YamlDefinition, StringComparison.Ordinal);
+            var commits = await client.GetFromJsonAsync<PaginatedResult<GitLightCommitDto>>(
+                $"/api/git/repos/{repository.Id}/commits?page=1&pageSize=10", IntegrationJsonOptions.Default, ct);
+            Assert.NotNull(commits);
+            Assert.Contains(commits.Items, commit => commit.Message.Contains(
+                $"update {pipelineName} via Aetheus", StringComparison.Ordinal));
+            using var verify = fixture.Factory.Services.CreateScope();
+            Assert.True(await verify.ServiceProvider.GetRequiredService<AppDbContext>().AuditLogs.AsNoTracking()
+                .AnyAsync(log => log.EntityType == "Pipeline" && log.EntityId == pipeline.Id
+                    && log.Action == "TemplateVersionAdopted", ct));
+        }
+        finally
+        {
+            if (pipeline is not null) await client.DeleteAsync($"/api/pipelines/{pipeline.Id}", ct);
+            if (repository is not null) await client.DeleteAsync($"/api/git/repos/{repository.Id}", ct);
+            await client.DeleteAsync($"/api/projects/{project.Id}", ct);
+        }
+    }
+
+    private static async Task<PipelineFleetBulkUpdateResultDto> BulkUpdateAsync(HttpClient client, int projectId)
+    {
+        var response = await client.PostAsJsonAsync("/api/pipelines/fleet-update/generic-templates",
+            new PipelineFleetBulkUpdateRequest { ProjectId = projectId }, TestContext.Current.CancellationToken);
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return Assert.IsType<PipelineFleetBulkUpdateResultDto>(await response.Content.ReadFromJsonAsync<PipelineFleetBulkUpdateResultDto>(
+            IntegrationJsonOptions.Default, TestContext.Current.CancellationToken));
+    }
+
     private static async Task<PipelineDto> CreatePipelineAsync(
         HttpClient client, int projectId, string name, string yaml)
     {

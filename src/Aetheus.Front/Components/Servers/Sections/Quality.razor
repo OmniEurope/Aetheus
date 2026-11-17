@@ -1,0 +1,10 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inherits ServerLoaderSectionBase
+@page "/servers/{Id:int}/quality"
+@layout Aetheus.Front.Layout.ServerDetailLayout
+@inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
+
+<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["Quality"] - Aetheus</PageTitle>
+
+@* R-7: the quality of this server's host system, the same content as the general page with the server fixed. *@
+<Aetheus.Front.Components.Servers.ServerDetailSections.ServerQualitySection ServerId="@Id" />

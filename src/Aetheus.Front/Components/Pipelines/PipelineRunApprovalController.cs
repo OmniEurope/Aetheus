@@ -17,6 +17,11 @@ public sealed class PipelineRunApprovalController(
     public string? Comments { get; set; }
     public bool Deciding { get; private set; }
 
+    private void Adopt(PipelineApprovalDto? next)
+    {
+        Pending = next;
+    }
+
     /// <summary>
     /// The run says it waits for an approval, and there is none to make. Either the load failed or the
     /// backend really holds no pending approval for it, and both looked the same from the page: the
@@ -44,7 +49,7 @@ public sealed class PipelineRunApprovalController(
         try
         {
             var approvals = await api.Pipelines.GetApprovalsAsync(run.Id, ct);
-            Pending = approvals.FirstOrDefault(a => a.Status == ApprovalStatus.Pending);
+            Adopt(approvals.FirstOrDefault(a => a.Status == ApprovalStatus.Pending));
             LoadFailed = false;
             // Instructions belong to the approval being shown and accompany its response, so
             // environment read access and an additional request are unnecessary.
@@ -54,7 +59,7 @@ public sealed class PipelineRunApprovalController(
         }
         catch (HttpRequestException)
         {
-            Pending = null;
+            Adopt(null);
             LoadFailed = true;
         }
         WaitingWithoutApproval = Pending is null;
@@ -64,7 +69,7 @@ public sealed class PipelineRunApprovalController(
     /// when it still waits; any other state shows no banner.</summary>
     public void Show(PipelineApprovalDto? approval)
     {
-        Pending = approval is { Status: ApprovalStatus.Pending } ? approval : null;
+        Adopt(approval is { Status: ApprovalStatus.Pending } ? approval : null);
         EnvironmentInstructions = Pending is { Scope: ApprovalScope.Environment } ? Pending.EnvironmentInstructions : null;
         WaitingWithoutApproval = false;
         LoadFailed = false;
@@ -89,7 +94,11 @@ public sealed class PipelineRunApprovalController(
         Deciding = true;
         try
         {
-            var request = new ApprovalDecisionRequest { Decision = decision, Comments = Comments };
+            var request = new ApprovalDecisionRequest
+            {
+                Decision = decision,
+                Comments = Comments
+            };
             var outcome = await api.Pipelines.DecideApprovalAsync(Pending.Id, request);
             if (outcome.IsSuccess)
                 Comments = null;

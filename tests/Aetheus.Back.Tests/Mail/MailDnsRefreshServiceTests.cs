@@ -26,7 +26,7 @@ public sealed class MailDnsRefreshServiceTests
     private MailDnsRefreshService Sut(IPostgresLeaderLease? lease = null) => new(
         BackgroundServiceTestKit.ScopeFactory(
             (typeof(IMailInventoryRepository), _repo), (typeof(IMailDnsVerifier), _verifier), (typeof(IServerRepository), _servers)),
-        _clock, _logger, lease);
+        _clock, _logger, lease ?? LeaderLeaseDouble.Leader());
 
     private void Due(params MailDomain[] domains) =>
         _repo.GetTrackedDomainsDueForDnsCheckAsync(Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<CancellationToken>())

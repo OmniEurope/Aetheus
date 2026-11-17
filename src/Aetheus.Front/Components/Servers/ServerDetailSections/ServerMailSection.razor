@@ -5,7 +5,7 @@
 <AgentOfflineNotice Server="@Server" />
 
 @* R-119: what became of the task an action of this page queued; the page is veiled until it ends. *@
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Mail" SettleOnHeartbeat="true" OnSettled="ReloadAfterSettleAsync" />
+<ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="Mail" AdoptPrefixes="@ServerTaskNames.MailAdoptedPrefixes" SettleOnHeartbeat="true" OnSettled="ReloadAfterSettleAsync" />
 
 <ServerMailReinstall @ref="_reinstall" Server="@Server" ServerId="@ServerId" Mail="@Mail" CanManage="@Server.MailSetupAvailable" RunningChanged="@(() => StateHasChanged())" />
 
@@ -31,7 +31,7 @@ else if (_countsFailed)
 }
 else if (!_countsRead)
 {
-    <AetheusLoader Size="OmniControlSize.Small" Class="mail-counts-loading" />
+    <ZoneVeil />
 }
 else if (_domainCount == 0 && _accountCount == 0)
 {
@@ -93,7 +93,7 @@ else
                                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenMailbox(a))" Disabled="@(!a.IsActive || a.MissingSince is not null)" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></Icon></OmniButton>
                                     <OmniOverflowMenu Label="@L["MoreActions"]">
                                         <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteAccount"], string.Format(L["ConfirmDeleteMailAccount"], a.Email),
-                                                () => DeleteAccountAsync(a.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                                                () => DeleteAccountAsync(a)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
                                     </OmniOverflowMenu>
                                 </OmniStack>
                             </Template>
@@ -145,7 +145,7 @@ else
                                         <OmniMenuItem OnClick="@(() => VerifyDnsAsync(d))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["MailVerifyDns"]</ChildContent></OmniMenuItem>
                                         <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ShowDkimRotation(d))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["RotateDkimKey"]</ChildContent></OmniMenuItem>
                                         <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteDomain"], string.Format(L["ConfirmDeleteMailDomain"], d.Name),
-                                                () => DeleteDomainAsync(d.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                                                () => DeleteDomainAsync(d)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
                                     </OmniOverflowMenu>
                                 </OmniStack>
                             </Template>
@@ -188,7 +188,7 @@ else
                             <OmniDataGridColumn TItem="MailAliasDto" Title="" Width="80px" TextAlign="OmniAlignment.End" Filterable="false" >
                                 <Template Context="a">
                                     <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteAlias"], L["ConfirmDeleteAlias"],
-                                            () => DeleteAliasAsync(a.Id)))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                                            () => DeleteAliasAsync(a)))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                                 </Template>
                             </OmniDataGridColumn>
                         </Columns>

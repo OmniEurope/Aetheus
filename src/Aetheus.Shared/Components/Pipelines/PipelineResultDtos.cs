@@ -76,6 +76,9 @@ public sealed record CoverageAssemblyDto
 public sealed record CoverageTrendPointDto
 {
     public int RunId { get; init; }
+    public int RunNumber { get; init; }
+    /// <summary>Name of the run's pipeline: a project spans several pipelines, so a number alone is ambiguous in a project trend.</summary>
+    public string? PipelineName { get; init; }
     public DateTime Date { get; init; }
     public double LineRate { get; init; }
     public double BranchRate { get; init; }
@@ -86,6 +89,9 @@ public sealed record CoverageTrendPointDto
 public sealed record ComplexityTrendPointDto
 {
     public int RunId { get; init; }
+    public int RunNumber { get; init; }
+    /// <summary>Name of the run's pipeline: a project spans several pipelines, so a number alone is ambiguous in a project trend.</summary>
+    public string? PipelineName { get; init; }
     public DateTime Date { get; init; }
     public double AvgCyclomatic { get; init; }
     public double MaxCyclomatic { get; init; }
@@ -96,6 +102,9 @@ public sealed record ComplexityTrendPointDto
 public sealed record TestTrendPointDto
 {
     public int RunId { get; init; }
+    public int RunNumber { get; init; }
+    /// <summary>Name of the run's pipeline: a project spans several pipelines, so a number alone is ambiguous in a project trend.</summary>
+    public string? PipelineName { get; init; }
     public DateTime Date { get; init; }
     public int Passed { get; init; }
     public int Failed { get; init; }

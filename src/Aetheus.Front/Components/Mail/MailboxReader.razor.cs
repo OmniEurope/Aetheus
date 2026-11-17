@@ -6,6 +6,7 @@ namespace Aetheus.Front.Components.Mail;
 public partial class MailboxReader
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private ApiClient Api { get; set; } = default!;
 
     [Parameter, EditorRequired] public MailboxMessageDto Message { get; set; } = new();
     [Parameter] public bool CanWrite { get; set; }
@@ -18,7 +19,7 @@ public partial class MailboxReader
 
     internal string Subject => string.IsNullOrWhiteSpace(Message.Subject) ? "-" : Message.Subject;
 
-    /// <summary>The sanitized HTML as the frame's own document; links target a new tab.</summary>
-    internal string Document =>
-        $"<!DOCTYPE html><html><head><meta charset=\"utf-8\"><base target=\"_blank\"></head><body>{Message.Html}</body></html>";
+    /// <summary>The absolute URL of the sanitized document the API serves for the frame, or null when the
+    /// message has none (the plain text is shown instead).</summary>
+    internal string? DocumentUrl => Message.DocumentPath is { Length: > 0 } path ? Api.Mailbox.DocumentUrl(path) : null;
 }

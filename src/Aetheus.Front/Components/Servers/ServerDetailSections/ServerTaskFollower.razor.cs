@@ -55,6 +55,32 @@ public partial class ServerTaskFollower
     /// name a narrower one when it calls <see cref="Expect"/>.</summary>
     [Parameter] public string NamePrefix { get; set; } = string.Empty;
 
+    /// <summary>Recette R-12: a task of this server whose name starts with <see cref="NamePrefix"/> and that is already
+    /// queued or running when the page opens (or starts while the follower is idle, for instance after the live feed
+    /// has just been read) is followed like one the page launched, veil included, so leaving a page and coming back
+    /// never hides an action in progress. Pipeline tasks are not adopted (their run page reports them), and a
+    /// follower without a <see cref="NamePrefix"/> adopts nothing: it would match every task of the server.</summary>
+    [Parameter] public bool AdoptRunning { get; set; } = true;
+
+    /// <summary>Recette R-12: the starts of the task names a page adopts on arrival when they are not all one
+    /// <see cref="NamePrefix"/> (the patch page launches "System update check" and "System package upgrade", the
+    /// services page "Service", "Install" and "Uninstall"). Absent, <see cref="NamePrefix"/> is the only start
+    /// adopted; with neither, nothing is adopted.</summary>
+    [Parameter] public IReadOnlyList<string>? AdoptPrefixes { get; set; }
+
+    /// <summary>Recette R-12: the starts of task names that are never adopted on arrival although they match
+    /// <see cref="NamePrefix"/> (the Docker page shares its "Docker" prefix with reads of a few seconds, which must not
+    /// veil it). A task the page launches itself is still followed through <see cref="Expect"/>.</summary>
+    [Parameter] public IReadOnlyList<string>? NotAdoptedPrefixes { get; set; }
+
+    /// <summary>Recette R-12: names, for the user, a task adopted on arrival from its raw backend name (for instance
+    /// "Certbot RenewalCheck" becomes "Test à blanc"), as the page names the task it launches itself. Absent, or
+    /// returning null or blank, the raw name is shown.</summary>
+    [Parameter] public Func<string, string?>? AdoptedTitle { get; set; }
+
+    // Recette R-37: which tasks veil the page (a task adopted on arrival, a task the page launches itself) is decided in
+    // one place, ServerBlockingTasks; every other task shows its progress block and nothing is veiled.
+
     private string _expectedPrefix = string.Empty;
 
     private ServerTaskFollowState _state = ServerTaskFollowState.Idle;
@@ -71,14 +97,34 @@ public partial class ServerTaskFollower
     {
         Tracker.OnChanged += OnTrackerChanged;
         Tracker.OnTaskCompleted += OnTaskCompleted;
+        TryAdopt();
+    }
+
+    // Recette R-12: the global feed (TaskTrackerService) knows every task in flight, whichever page launched it.
+    private void TryAdopt()
+    {
+        if (!AdoptRunning || _state != ServerTaskFollowState.Idle) return;
+        var prefixes = AdoptPrefixes ?? (NamePrefix.Length == 0 ? [] : (IReadOnlyList<string>)[NamePrefix]);
+        var task = ServerTaskAdoption.FindInFlight(Tracker.Tasks, ServerId, prefixes, NotAdoptedPrefixes);
+        if (task is null) return;
+        _expectedPrefix = NamePrefix;
+        var localized = AdoptedTitle?.Invoke(task.Name);
+        _title = string.IsNullOrWhiteSpace(localized) ? task.Name : localized;
+        _group = null;
+        _taskId = task.Id;
+        _cause = null;
+        _known = [];
+        _state = task.Status == TaskExecutionStatus.Running ? ServerTaskFollowState.Running : ServerTaskFollowState.Queued;
+        Launched(veil: ServerBlockingTasks.Veils(task.Name), adopted: true);
     }
 
     /// <summary>Called by the page as it launches a task: <paramref name="title"/> names what it does.
-    /// R-119: the section is veiled until the task ends, unless <paramref name="veil"/> is false (a read the page
-    /// repeats on its own, such as following a log). A task that only reads (a log, a configuration test) passes
-    /// <paramref name="settle"/> false: it changed nothing, so on an inventory page the veil does not wait for a
+    /// R-19: a one-off action (disable a site, revoke a certificate, delete...) shows the progress block and veils
+    /// nothing; <paramref name="veil"/> is true only for a blocking task (see ServerBlockingTasks), whose section
+    /// is then veiled until the task ends (R-119). A task that only reads (a log, a configuration test) passes
+    /// <paramref name="settle"/> false: it changed nothing, so on an inventory page the block does not wait for a
     /// new server state after it.</summary>
-    public void Expect(string title, string? namePrefix = null, bool veil = true, bool settle = true)
+    public void Expect(string title, string? namePrefix = null, bool veil = false, bool settle = true)
     {
         _title = title;
         _expectedPrefix = namePrefix ?? NamePrefix;
@@ -92,7 +138,7 @@ public partial class ServerTaskFollower
     }
 
     /// <summary>Follows the task the backend just returned, by its id: no name matching needed.</summary>
-    public void Follow(string title, int taskId, bool veil = true, bool settle = true)
+    public void Follow(string title, int taskId, bool veil = false, bool settle = true)
     {
         _title = title;
         _group = null;
@@ -115,7 +161,7 @@ public partial class ServerTaskFollower
         _cause = null;
         _state = ServerTaskFollowState.Requested;
         _known = Tracker.Tasks.Select(task => task.Id).ToHashSet();
-        Launched(veil: true);
+        Launched(veil: false);
     }
 
     /// <summary>One task of the group could not be launched: it is not waited for; when none is left,
@@ -146,10 +192,11 @@ public partial class ServerTaskFollower
     }
 
     // A new launch ends the wait of the previous one and decides, for itself, whether it veils the section.
-    private void Launched(bool veil, bool settle = true, bool followUnseen = false)
+    private void Launched(bool veil, bool settle = true, bool followUnseen = false, bool adopted = false)
     {
         EndSettle();
         _veil = veil;
+        _adopted = adopted;
         _settleWanted = settle;
         _unboundGaveUp = false;
         _followUnseen = followUnseen;
@@ -173,14 +220,39 @@ public partial class ServerTaskFollower
 
     internal bool Veiling => _hold is not null;
 
+    /// <summary>Recette R-12: true while a task adopted on arrival runs (until it has ended and its settle wait is over).
+    /// The page, which did not launch it and so holds no "launching" state of its own, disables its actions on it: a
+    /// second launch is impossible meanwhile. A task the page launched is covered by the page's own state. It does not
+    /// depend on a loader being present.</summary>
+    public bool Busy => _adopted && !_unboundGaveUp && (_settling || InFlight);
+
+    private bool _adopted;
+
+    /// <summary>Raised when <see cref="Busy"/> changes, so the owning page re-renders its actions.</summary>
+    public event Action? BusyChanged;
+
+    private bool _lastBusy;
+
+    private void NotifyBusy()
+    {
+        var busy = Busy;
+        if (busy == _lastBusy) return;
+        _lastBusy = busy;
+        BusyChanged?.Invoke();
+    }
+
     private bool InFlight => _state is ServerTaskFollowState.Requested or ServerTaskFollowState.Queued or ServerTaskFollowState.Running;
 
     /// <summary>The veil is held from the launch until the task has ended and, when the page asked for it,
     /// the server's next state has arrived.</summary>
     private void SyncVeil()
     {
+        NotifyBusy();
         if (Loader is null) return;
-        var wanted = _veil && !_unboundGaveUp && (_settling || InFlight);
+        // R-19: the task is followed (its timers run) whether or not the section is veiled; only a global
+        // operation holds the veil.
+        var active = !_unboundGaveUp && (_settling || InFlight);
+        var wanted = _veil && active;
         if (wanted) _hold ??= Loader.HoldTaskVeil();
         else
         {
@@ -188,7 +260,7 @@ public partial class ServerTaskFollower
             _hold = null;
         }
 
-        var kind = !wanted ? VeilTimer.None : _settling ? VeilTimer.Settle : _state == ServerTaskFollowState.Requested || _followUnseen ? VeilTimer.Unbound : VeilTimer.None;
+        var kind = !active ? VeilTimer.None : _settling ? VeilTimer.Settle : _state == ServerTaskFollowState.Requested || _followUnseen ? VeilTimer.Unbound : VeilTimer.None;
         if (kind == _timerKind) return;
         _timer?.Dispose();
         _timerKind = kind;
@@ -215,7 +287,7 @@ public partial class ServerTaskFollower
 
     private void BeginSettle()
     {
-        if (!SettleOnHeartbeat || !_settleWanted || Loader is null || !_veil) return;
+        if (!SettleOnHeartbeat || !_settleWanted || Loader is null) return;
         _settleAfter = Loader.LastUpdated ?? DateTime.MinValue;
         if (!_settling) Loader.OnChanged += OnLoaderChanged;
         _settling = true;
@@ -266,6 +338,11 @@ public partial class ServerTaskFollower
 
     private void OnTrackerChanged()
     {
+        if (_state == ServerTaskFollowState.Idle)
+        {
+            TryAdopt();
+            return;
+        }
         if (_state is not (ServerTaskFollowState.Requested or ServerTaskFollowState.Queued or ServerTaskFollowState.Running))
             return;
         if (_group is { } group)
@@ -279,7 +356,12 @@ public partial class ServerTaskFollower
             ? Tracker.Tasks.FirstOrDefault(candidate => candidate.Id == id)
             : Tracker.Tasks.FirstOrDefault(candidate =>
                 !_known.Contains(candidate.Id) && Matches(candidate.ServerId, candidate.Name));
-        if (task is null) return;
+        if (task is null)
+        {
+            // R-19: a task of the zone other than the followed one came or went: the block's count may have changed.
+            _ = InvokeAsync(StateHasChanged);
+            return;
+        }
         _taskId = task.Id;
         _followUnseen = false;
         _state = task.Status == TaskExecutionStatus.Running ? ServerTaskFollowState.Running : ServerTaskFollowState.Queued;
@@ -305,13 +387,61 @@ public partial class ServerTaskFollower
             ? notification.TaskId == id
             // A task so fast it finished before the feed listed it is still the one this page asked for.
             : !_known.Contains(notification.TaskId) && Matches(notification.ServerId, notification.TaskName);
-        if (!ours) return;
+        if (!ours)
+        {
+            _ = InvokeAsync(StateHasChanged);
+            return;
+        }
         _taskId = notification.TaskId;
         _ = InvokeAsync(() => CompleteAsync(notification));
     }
 
+    // ---- R-19: one progress block per zone, whatever the number of tasks ------------------------------------
+
+    /// <summary>True while the block shows work in progress: a task requested, waiting or running, or one that
+    /// succeeded and whose new server state has not arrived yet (nothing is veiled meanwhile unless the task is a global
+    /// operation). A failure is shown at once, with its cause.</summary>
+    internal bool Progressing => !_unboundGaveUp && (InFlight || (_settling && _state == ServerTaskFollowState.Succeeded));
+
+    /// <summary>How many tasks the block stands for: the followed one plus every other task of this server in flight
+    /// that this page launches (same name starts). One, the block names its task; more, it says how many are running.</summary>
+    internal int RunningCount => !Progressing ? 0 : _group is not null ? 1 : 1 + OtherInFlight(_taskId).Count();
+
+    private IEnumerable<ServerTaskDto> OtherInFlight(int? exceptTaskId)
+    {
+        var starts = new List<string>(AdoptPrefixes ?? []);
+        if (NamePrefix.Length > 0) starts.Add(NamePrefix);
+        if (_expectedPrefix.Length > 0) starts.Add(_expectedPrefix);
+        return Tracker.Tasks.Where(task => task.ServerId == ServerId
+            && task.PipelineRunId is null
+            && task.Id != exceptTaskId
+            && ServerTaskAdoption.IsInFlight(task)
+            && starts.Any(start => start.Length > 0 && task.Name.StartsWith(start, StringComparison.OrdinalIgnoreCase))
+            && !(NotAdoptedPrefixes ?? []).Any(excluded => task.Name.StartsWith(excluded, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    // The followed task succeeded while another one of the zone still runs: the block goes on with that one, it does not
+    // announce "done" over work in progress.
+    private bool FollowAnotherInFlight(int endedTaskId)
+    {
+        if (_group is not null) return false;
+        var other = OtherInFlight(endedTaskId).FirstOrDefault();
+        if (other is null) return false;
+        var localized = AdoptedTitle?.Invoke(other.Name);
+        _title = string.IsNullOrWhiteSpace(localized) ? other.Name : localized;
+        _taskId = other.Id;
+        _cause = null;
+        _state = other.Status == TaskExecutionStatus.Running ? ServerTaskFollowState.Running : ServerTaskFollowState.Queued;
+        return true;
+    }
+
     private async Task CompleteAsync(TaskCompletedNotification notification)
     {
+        if (notification.Status == TaskExecutionStatus.Success && FollowAnotherInFlight(notification.TaskId))
+        {
+            StateHasChanged();
+            return;
+        }
         if (notification.Status == TaskExecutionStatus.Success)
         {
             _state = ServerTaskFollowState.Succeeded;

@@ -53,10 +53,10 @@ public class DashboardsCoverageTests : BunitContext
     // ── Non-admin redirects ────────────────────────────────────────────────────
 
     [Fact]
-    public void NonAdmin_Renders_WithoutDashboardList()
+    public async Task NonAdmin_Renders_WithoutDashboardList()
     {
         // RegisterServices with isAdmin=false → Auth.IsAdmin = false → navigate to "/"
-        using var ctx = new BunitContext();
+        await using var ctx = new BunitContext();
         BunitTestHelper.RegisterServices(ctx, isAdmin: false);
         ctx.JSInterop.Mode = Bunit.JSRuntimeMode.Loose;
         var cut = ctx.Render<Dashboards>();

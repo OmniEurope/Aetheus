@@ -1,0 +1,51 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-005 lot 4, recette R-21: the plan drawn on OmniScheduler. The night is one day view from 20:00 to 08:00
+   (the grid crosses midnight), the day (R-38) the same view over the 24 hours, the week the week grid; a block is one
+   occurrence the server expanded, its length the duration. A drop is reported to the page, which writes it once.
+   A click on a block opens its small info (R-44). The calendar draws the page's own plan (Items) whenever it covers
+   the span shown, so a new plan after a write is a redraw and not a second read (R-43); only a span outside it
+   is loaded on demand (Load). *@
+<OmniStack Gap="OmniSpacing.Medium" data-testid="schedule-plan-view">
+    <OmniHeading Level="OmniHeadingLevel.H2" Help="@L["ScheduleCalendarHelp"].Value">@L["ScheduleCalendar"]</OmniHeading>
+    @* The view and orientation bars share one line with the navigation of the scheduler (previous, today, next): OmniScheduler
+       writes its header itself and offers no slot for other controls, so the bars float beside it (see .schedule-plan-calendar in
+       app.css) and the date is only the day header of the grid, under that line. *@
+    <div class="schedule-plan-calendar">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true" Class="schedule-plan-bars" data-testid="schedule-plan-bars">
+        <OmniSelectBar TValue="string" Options="@ModeOptions" Label="@L["ScheduleViewLabel"]" Id="schedule-view-mode"
+                       Value="@_mode" ValueExpression="@(() => _mode)" ValueChanged="@OnModeChanged">
+            <IconTemplate Context="mode"><OmniIcon Name="@ModeIcon(mode)" /></IconTemplate>
+        </OmniSelectBar>
+        @if (_mode != Cards)
+        {
+            @* R-3: the time axis runs down the page (vertical) or across it (horizontal); not drawn for the cards. *@
+            <OmniSelectBar TValue="OmniOrientation" Options="@OrientationOptions" Label="@L["ScheduleOrientationLabel"]" Id="schedule-orientation"
+                           Value="@_orientation" ValueExpression="@(() => _orientation)" ValueChanged="@OnOrientationChanged">
+                <IconTemplate Context="orientation"><OmniIcon Name="@OrientationIcon(orientation)" /></IconTemplate>
+            </OmniSelectBar>
+        }
+    </OmniStack>
+    @if (_mode == Night)
+    {
+        <OmniScheduler Orientation="@_orientation" @key="Night" Id="schedule-night" Class="schedule-plan-view" View="OmniCalendarView.Day" ShowViewPicker="false" ShowOverlaps="false" SlotHeight="OmniSchedulerSlotHeight.Compact" DayHeaderFormat="dddd d MMMM yyyy" Date="@_nightDate" DateChanged="@OnDateChanged"
+                       DayStart="@NightStart" DayEnd="@NightEnd" SlotDuration="@Slot" MarkPastSlots="true" TimeZone="@Zone"
+                       Items="@_items" Load="@_loadParameter" OnAppointmentClick="@OpenInfoAsync" OnAppointmentMove="@MoveAsync" />
+    }
+    else if (_mode == Day)
+    {
+        <OmniScheduler Orientation="@_orientation" @key="Day" Id="schedule-day" Class="schedule-plan-view" View="OmniCalendarView.Day" ShowViewPicker="false" ShowOverlaps="false" SlotHeight="OmniSchedulerSlotHeight.Compact" DayHeaderFormat="dddd d MMMM yyyy" Date="@_dayDate" DateChanged="@OnDateChanged"
+                       DayStart="@DayStart" DayEnd="@DayEnd" SlotDuration="@Slot" MarkPastSlots="true" TimeZone="@Zone"
+                       Items="@_items" Load="@_loadParameter" OnAppointmentClick="@OpenInfoAsync" OnAppointmentMove="@MoveAsync" />
+    }
+    else if (_mode == Week)
+    {
+        <OmniScheduler Orientation="@_orientation" @key="Week" Id="schedule-week" Class="schedule-plan-view" View="OmniCalendarView.Week" ShowViewPicker="false" ShowOverlaps="false" SlotHeight="OmniSchedulerSlotHeight.Compact" DayHeaderFormat="dddd d MMMM yyyy" Date="@_weekDate" DateChanged="@OnDateChanged"
+                       SlotDuration="@Slot" MarkPastSlots="true" TimeZone="@Zone"
+                       Items="@_items" Load="@_loadParameter" OnAppointmentClick="@OpenInfoAsync" OnAppointmentMove="@MoveAsync" />
+    }
+    </div>
+    @if (_mode != Cards && SwitchedOff > 0)
+    {
+        <OmniText Tone="OmniTextTone.Muted" data-testid="schedule-view-off">@string.Format(L["ScheduleSwitchedOffNotDrawn"].Value, SwitchedOff)</OmniText>
+    }
+</OmniStack>

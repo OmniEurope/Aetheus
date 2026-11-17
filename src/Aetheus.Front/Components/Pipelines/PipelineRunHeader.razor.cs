@@ -20,6 +20,10 @@ public partial class PipelineRunHeader
     [Parameter] public bool RunInProgress { get; set; }
     [Parameter] public bool CanRerun { get; set; }
     [Parameter] public bool HasFailedSteps { get; set; }
+    /// <summary>R-22: the run stopped on a missed stage confirmation, so "retry failed steps" is a button of the
+    /// header rather than a menu entry.</summary>
+    [Parameter] public bool ConfirmationMissed { get; set; }
+    private bool RetryFailedPinned => CanRerun && HasFailedSteps && ConfirmationMissed;
     [Parameter] public bool Cancelling { get; set; }
     [Parameter] public bool Rerunning { get; set; }
     [Parameter] public bool Retrying { get; set; }

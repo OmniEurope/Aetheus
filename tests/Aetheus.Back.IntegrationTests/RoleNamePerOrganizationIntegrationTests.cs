@@ -14,8 +14,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// refusal never names the other organization; a role named in an assignment is the organization's own; and the
 /// rights of a holder of A's role are those of A's role only, whatever B's role of the same name grants.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class RoleNamePerOrganizationIntegrationTests(PostgresFixture fixture)
+public sealed class RoleNamePerOrganizationIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

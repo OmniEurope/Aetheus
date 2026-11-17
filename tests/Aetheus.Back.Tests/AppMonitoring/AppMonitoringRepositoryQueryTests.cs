@@ -435,7 +435,7 @@ public sealed class AppMonitoringRepositoryQueryTests : IDisposable
         });
         await SaveAsync();
 
-        var resolution = await _repository.ResolveIngestKeyHashAsync("current", Now, Ct);
+        var resolution = await _repository.ResolveIngestKeyHashAsync(["current"], Now, Ct);
 
         Assert.Equal(1, resolution!.Value.AppId);
         Assert.Null(resolution.Value.ValidUntilUtc);
@@ -457,9 +457,36 @@ public sealed class AppMonitoringRepositoryQueryTests : IDisposable
         });
         await SaveAsync();
 
-        var resolution = await _repository.ResolveIngestKeyHashAsync("previous", Now, Ct);
+        var resolution = await _repository.ResolveIngestKeyHashAsync(["previous"], Now, Ct);
 
         Assert.Equal(graceEnd, resolution!.Value.ValidUntilUtc);
+    }
+
+    [Fact]
+    public async Task R53_ResolveIngestKeyHashAsync_MatchesAnyCandidate_AndReportsWhichOneMatched()
+    {
+        var graceEnd = Now.AddHours(6);
+        _db.MonitoredApps.Add(new MonitoredApp
+        {
+            Id = 1,
+            Name = "web",
+            ProjectId = 10,
+            IngestKeyHash = "current-new",
+            IngestKeyExpiresAt = Now.AddDays(1),
+            PreviousIngestKeyHash = "previous-legacy",
+            PreviousIngestKeyValidUntil = graceEnd
+        });
+        await SaveAsync();
+
+        var legacy = await _repository.ResolveIngestKeyHashAsync(["previous-new", "previous-legacy"], Now, Ct);
+        var current = await _repository.ResolveIngestKeyHashAsync(["current-new", "current-legacy"], Now, Ct);
+
+        Assert.Equal(1, legacy!.Value.AppId);
+        Assert.Equal(graceEnd, legacy.Value.ValidUntilUtc);
+        Assert.Equal("previous-legacy", legacy.Value.MatchedHash);
+        Assert.Null(current!.Value.ValidUntilUtc);
+        Assert.Equal("current-new", current.Value.MatchedHash);
+        Assert.Null(await _repository.ResolveIngestKeyHashAsync(["unknown-new", "unknown-legacy"], Now, Ct));
     }
 
     [Fact]
@@ -480,11 +507,11 @@ public sealed class AppMonitoringRepositoryQueryTests : IDisposable
         });
         await SaveAsync();
 
-        var resolution = await _repository.ResolveIngestKeyHashAsync("second-previous", Now, Ct);
+        var resolution = await _repository.ResolveIngestKeyHashAsync(["second-previous"], Now, Ct);
 
         Assert.Equal(1, resolution!.Value.AppId);
         Assert.Equal(graceEnd, resolution.Value.ValidUntilUtc);
-        Assert.Null(await _repository.ResolveIngestKeyHashAsync("second-previous", graceEnd.AddSeconds(1), Ct));
+        Assert.Null(await _repository.ResolveIngestKeyHashAsync(["second-previous"], graceEnd.AddSeconds(1), Ct));
     }
 
     [Fact]
@@ -518,10 +545,10 @@ public sealed class AppMonitoringRepositoryQueryTests : IDisposable
             });
         await SaveAsync();
 
-        Assert.Null(await _repository.ResolveIngestKeyHashAsync("expired-key", Now, Ct));
-        Assert.Null(await _repository.ResolveIngestKeyHashAsync("stale-key", Now, Ct));
-        Assert.Null(await _repository.ResolveIngestKeyHashAsync("disabled-key", Now, Ct));
-        Assert.Null(await _repository.ResolveIngestKeyHashAsync("never-issued", Now, Ct));
+        Assert.Null(await _repository.ResolveIngestKeyHashAsync(["expired-key"], Now, Ct));
+        Assert.Null(await _repository.ResolveIngestKeyHashAsync(["stale-key"], Now, Ct));
+        Assert.Null(await _repository.ResolveIngestKeyHashAsync(["disabled-key"], Now, Ct));
+        Assert.Null(await _repository.ResolveIngestKeyHashAsync(["never-issued"], Now, Ct));
     }
 
     // ---------- analytics ----------

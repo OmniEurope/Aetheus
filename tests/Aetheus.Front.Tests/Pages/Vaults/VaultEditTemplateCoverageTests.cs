@@ -2,6 +2,7 @@
 using System.Reflection;
 using Aetheus.Front.Components.Vaults;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
@@ -164,7 +165,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
     /// spinner renders instead of the form.
     /// </summary>
     [Fact]
-    public void Template_ExistingVault_Loading_ShowsAetheusLoader()
+    public void Template_ExistingVault_Loading_HoldsTheContentAreaVeil()
     {
         _handler.SetResponse("api/vaults/3", System.Net.HttpStatusCode.OK);
 
@@ -182,7 +183,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
         // screen and the edit form (its Save/Create button) is not yet rendered.
         var isNew = (bool)typeof(VaultEdit).GetProperty("_isNew", priv)!.GetValue(cut.Instance)!;
         Assert.False(isNew);
-        Assert.Contains("aetheus-loader-logo", cut.Markup);
+        Assert.True(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy);
     }
 
     // ── AddSecret method ──────────────────────────────────────────────────────

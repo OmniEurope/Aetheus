@@ -27,6 +27,7 @@ internal enum PageEntity
     TaskItem,
     AlertOccurrence,
     AnalysisFinding,
+    CveWatchRun,
     Artifact,
     AiTask,
     GitRepository,
@@ -34,6 +35,7 @@ internal enum PageEntity
     GitCommit,
     GitCommitSha,
     HelpArticleKey,
+    CveSourceKey,
     SettingsTab
 }
 
@@ -54,7 +56,7 @@ internal sealed record PageRoute(string Template, string Component, params PageE
 }
 
 /// <summary>
-/// Every routable page of <c>Aetheus.Front</c>, copied from its <c>@page</c> directives (136 of them, one entry per
+/// Every routable page of <c>Aetheus.Front</c>, copied from its <c>@page</c> directives (139 of them, one entry per
 /// directive, so a component with two routes appears twice). The build captures the directives of the front into the
 /// <c>front-page-directives.txt</c> resource, and <see cref="PageRulesTests"/> fails when this list differs from it: a
 /// page added to or removed from the front must be added here, with the entity that fills its parameters.
@@ -101,10 +103,13 @@ internal static class PageInventory
     [
         new("/", "Components/Dashboards/Home.razor"),
         new("/account/change-password", "Components/Auth/ChangePasswordRequired.razor"),
+        new("/account/setup", "Components/Auth/AccountSetup.razor"),
         new("/admin", "Components/Settings/Administration.razor"),
         new("/admin/ai-profiles", "Components/AiTasks/AiRunnerProfiles.razor"),
         new("/admin/api-reference", "Components/Help/ApiReference.razor"),
         new("/admin/audit", "Components/Audit/AuditLogs.razor"),
+        new("/admin/cve-sources", "Components/VulnerabilityWatch/CveSourcesPage.razor"),
+        new("/admin/cve-sources/{FeedKey}", "Components/VulnerabilityWatch/CveSourceDetailPage.razor", PageEntity.CveSourceKey),
         new("/admin/dashboards", "Components/Dashboards/Dashboards.razor"),
         new("/admin/mail-templates", "Components/MailTemplates/MailTemplates.razor"),
         new("/admin/notifications", "Components/Notifications/NotificationsAdmin.razor"),
@@ -130,6 +135,7 @@ internal static class PageInventory
         new("/alerts/{AlertId:long}", "Components/Alerts/AlertOccurrenceDetail.razor", PageEntity.AlertOccurrence),
         new("/analysis", "Components/Analysis/AnalysisPortfolio.razor"),
         new("/analysis/findings/{Id:int}", "Components/Analysis/AnalysisFindingDetail.razor", PageEntity.AnalysisFinding),
+        new("/analysis/cve-watch/runs/{Id:int}", "Components/Analysis/CveWatchRunPage.razor", PageEntity.CveWatchRun),
         new("/api-reference", "Components/Help/ApiReference.razor"),
         new("/artifacts/{ArtifactId:int}", "Components/Artifacts/ArtifactDetail.razor", PageEntity.Artifact),
         new("/audit", "Components/Audit/AuditLogs.razor"),
@@ -160,6 +166,7 @@ internal static class PageInventory
         new("/pipelines/new", "Components/Pipelines/PipelineEdit.razor"),
         new("/pipelines/runs/{RunId:int}", "Components/Pipelines/PipelineRun.razor", PageEntity.PipelineRun),
         new("/pipelines/runs/{RunId:int}/approvals/{ApprovalId:int}", "Components/Pipelines/PipelineApprovalLink.razor", PageEntity.PipelineApprovalRun, PageEntity.PipelineApproval),
+        new("/pipelines/schedule", "Components/Pipelines/PipelineSchedule.razor"),
         new("/pipelines/setup", "Components/Pipelines/PipelineSetupWizard.razor"),
         new("/pipelines/{Id:int}", "Components/Pipelines/PipelineEdit.razor", PageEntity.Pipeline),
         new("/pipelines/{PipelineId:int}/template/extract", "Components/Pipelines/PipelineTemplateExtract.razor", PageEntity.Pipeline),
@@ -191,6 +198,7 @@ internal static class PageInventory
         new("/releases/{ReleaseId:int}", "Components/Releases/ReleaseDetail.razor", PageEntity.Release),
         new("/servers", "Components/Servers/Servers.razor"),
         new("/servers/add-agent", "Components/Servers/AddAgent.razor"),
+        new("/servers/quality", "Components/Servers/ServersQuality.razor"),
         new("/servers/{Id:int}", "Components/Servers/ServerDetail.razor", PageEntity.Server),
         new("/servers/{Id:int}/apache", Servers + "Apache.razor", PageEntity.Server),
         new("/servers/{Id:int}/apps", Servers + "Apps.razor", PageEntity.Server),
@@ -209,6 +217,7 @@ internal static class PageInventory
         new("/servers/{Id:int}/ports", Servers + "Ports.razor", PageEntity.Server),
         new("/servers/{Id:int}/portsentry", Servers + "Portsentry.razor", PageEntity.Server),
         new("/servers/{Id:int}/projects", Servers + "Projects.razor", PageEntity.Server),
+        new("/servers/{Id:int}/quality", Servers + "Quality.razor", PageEntity.Server),
         new("/servers/{Id:int}/properties", Servers + "Properties.razor", PageEntity.Server),
         new("/servers/{Id:int}/releases", Servers + "Releases.razor", PageEntity.Server),
         new("/servers/{Id:int}/rkhunter", Servers + "Rkhunter.razor", PageEntity.Server),
@@ -221,7 +230,7 @@ internal static class PageInventory
         new("/settings", "Components/Settings/Settings.razor"),
         new("/settings/{Tab}", "Components/Settings/Settings.razor", PageEntity.SettingsTab),
         new("/tasks", "Components/Tasks/Tasks.razor"),
-        new("/tasks/{TaskId:int}", "Components/Tasks/TaskDetail.razor", PageEntity.TaskItem),
+        new("/tasks/{TaskKey}", "Components/Tasks/TaskDetail.razor", PageEntity.TaskItem),
         new("/templates", "Components/Pipelines/Pipelines.razor"),
         new("/templates/new", "Components/Pipelines/PipelineTemplateEdit.razor"),
         new("/templates/{Id:int}", "Components/Pipelines/PipelineTemplateEdit.razor", PageEntity.PipelineTemplate),

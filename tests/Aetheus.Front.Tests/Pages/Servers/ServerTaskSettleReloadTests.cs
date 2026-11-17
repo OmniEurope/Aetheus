@@ -71,7 +71,7 @@ public sealed class ServerTaskSettleReloadTests : BunitContext
             if (!Loader.TaskPending && atLift < 0) atLift = reads();
         };
 
-        await cut.InvokeAsync(() => FollowerOf(section).Follow("Task", taskId));
+        await cut.InvokeAsync(() => FollowerOf(section).Follow("Task", taskId, veil: true));
         await cut.InvokeAsync(() => Tracker.HandleTerminal(
             new TaskCompletedNotification { TaskId = taskId, ServerId = Sid, TaskName = "Task", Status = TaskExecutionStatus.Success }));
         cut.WaitForAssertion(() => Assert.Contains("ServerTaskSucceeded", cut.Markup));

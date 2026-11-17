@@ -154,6 +154,8 @@ public class PipelineArtifactService(
         return rows.Select(r => new CoverageTrendPointDto
         {
             RunId = r.RunId,
+            RunNumber = r.RunNumber,
+            PipelineName = r.PipelineName,
             Date = r.Date,
             LineRate = r.LineRate,
             BranchRate = r.BranchRate
@@ -166,6 +168,8 @@ public class PipelineArtifactService(
         return rows.Select(r => new ComplexityTrendPointDto
         {
             RunId = r.RunId,
+            RunNumber = r.RunNumber,
+            PipelineName = r.PipelineName,
             Date = r.Date,
             AvgCyclomatic = r.AvgCyclomatic,
             MaxCyclomatic = r.MaxCyclomatic,
@@ -185,6 +189,8 @@ public class PipelineArtifactService(
             Coverage = coverage.Select(r => new CoverageTrendPointDto
             {
                 RunId = r.RunId,
+                RunNumber = r.RunNumber,
+                PipelineName = r.PipelineName,
                 Date = r.Date,
                 LineRate = r.LineRate,
                 BranchRate = r.BranchRate
@@ -192,6 +198,8 @@ public class PipelineArtifactService(
             Complexity = complexity.Select(r => new ComplexityTrendPointDto
             {
                 RunId = r.RunId,
+                RunNumber = r.RunNumber,
+                PipelineName = r.PipelineName,
                 Date = r.Date,
                 AvgCyclomatic = r.AvgCyclomatic,
                 MaxCyclomatic = r.MaxCyclomatic,
@@ -200,6 +208,8 @@ public class PipelineArtifactService(
             Tests = tests.Select(r => new TestTrendPointDto
             {
                 RunId = r.RunId,
+                RunNumber = r.RunNumber,
+                PipelineName = r.PipelineName,
                 Date = r.Date,
                 Passed = r.Passed,
                 Failed = r.Failed,

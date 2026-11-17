@@ -92,7 +92,7 @@ public sealed class PipelineSetupWizardTests : BunitContext
         });
         Assert.Contains("extends: application-candidate@1", requests[4].YamlDefinition, StringComparison.Ordinal);
         Assert.Contains("APPLICATION_SECURITY_ENABLED: \"true\"", requests[4].YamlDefinition, StringComparison.Ordinal);
-        Assert.Contains("extends: application-deploy-prod@1", requests[6].YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("extends: application-deploy-prod-front-back@1", requests[6].YamlDefinition, StringComparison.Ordinal);
     }
 
     /// <summary>R-60: the end of the wizard lands on the project's overview, not on its pipelines page.</summary>
@@ -188,12 +188,12 @@ public sealed class PipelineSetupWizardTests : BunitContext
         // the pipelines is a legitimate order of work.
         Assert.False(cut.Find(".omni-wizard__actions button.omni-wizard__finish").HasAttribute("disabled"));
 
-        // Recette R2-24: the summary and what is left to do are told apart by a rule (OmniDivider), and so
-        // is each card of the to-do block from the one before it.
+        // Recette R-18 (user decision 2026-11-09, replacing R2-24): no rule between the summary and what is left to do; each
+        // card of the to-do block is still told apart from the one before it.
         var recap = cut.Find("[data-testid='setup-recap']");
         var order = recap.Children.Select(child => child.ClassList.Contains("omni-divider") ? "divider" : child.GetAttribute("data-testid")).ToList();
         // ADR-057: the production pipeline is selected, and the repository of this project could not be read.
-        Assert.Equal(["setup-summary", "divider", "setup-readiness", "setup-production-unreadable"], order);
+        Assert.Equal(["setup-summary", "setup-readiness", "setup-production-unreadable"], order);
         var readiness = cut.Find("[data-testid='setup-readiness']");
         var cards = readiness.Children.Where(child => child.ClassList.Contains("omni-card")).ToList();
         Assert.True(cards.Count >= 2, "the blocking finding is a second card after the to-do card");
@@ -631,6 +631,7 @@ public sealed class PipelineSetupWizardTests : BunitContext
         Template("application-candidate"),
         Template("application-nightly"),
         Template("application-deploy-prod"),
+        Template("application-deploy-prod-front-back"),
         Template("application-release-fast"),
         Template("package-telemetry"),
         Template("package-web-analytics-dotnet"),

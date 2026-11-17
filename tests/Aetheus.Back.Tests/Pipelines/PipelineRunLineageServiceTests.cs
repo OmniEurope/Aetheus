@@ -17,11 +17,47 @@ public sealed class PipelineRunLineageServiceTests
 
     public PipelineRunLineageServiceTests() => _service = new PipelineRunLineageService(_reader, _audit, _time);
 
-    private void Launch(string username) => _audit
-        .GetLogsPagedAsync(1, 1, action: "Triggered", entityType: "PipelineRun", entityId: 7,
+    private void Launch(string username) => Audited("Triggered", username);
+
+    private void Audited(string action, string? username) => _audit
+        .GetLogsPagedAsync(1, 1, action: action, entityType: "PipelineRun", entityId: 7,
             dateFrom: Started - PipelineRunLineageService.LaunchSlack, dateTo: Started + PipelineRunLineageService.LaunchSlack,
             ct: Arg.Any<CancellationToken>())
-        .Returns(new PaginatedResult<AuditLogDto> { Items = [new AuditLogDto { Username = username }], TotalCount = 1 });
+        .Returns(username is null
+            ? new PaginatedResult<AuditLogDto> { Items = [], TotalCount = 0 }
+            : new PaginatedResult<AuditLogDto> { Items = [new AuditLogDto { Username = username }], TotalCount = 1 });
+
+    [Fact]
+    public async Task ARefusedManualLaunch_NamesWhoAskedForIt_FromTheRefusalAudit()
+    {
+        // R-36: a refused launch starts nothing, so no "Triggered" entry; its failed run is audited
+        // "LaunchRefused" under the caller, and the page must not say "automatic".
+        var ct = TestContext.Current.CancellationToken;
+        _reader.GetRunWindowAsync(7, ct).Returns(new PipelineRunWindow(Started, Started));
+        _reader.GetDownstreamRunsAsync(7, Started, Started + PipelineRunLineageService.LaunchSlack, ct).Returns([]);
+        Audited("Triggered", null);
+        Audited("LaunchRefused", "admin");
+
+        var lineage = await _service.GetLineageAsync(7, ct);
+
+        Assert.NotNull(lineage);
+        Assert.Equal("admin", lineage.TriggeredBy);
+    }
+
+    [Fact]
+    public async Task ARefusedAutomatedLaunch_StaysAutomatic()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _reader.GetRunWindowAsync(7, ct).Returns(new PipelineRunWindow(Started, Started));
+        _reader.GetDownstreamRunsAsync(7, Started, Started + PipelineRunLineageService.LaunchSlack, ct).Returns([]);
+        Audited("Triggered", null);
+        Audited("LaunchRefused", PipelineRunLineageService.SystemActor);
+
+        var lineage = await _service.GetLineageAsync(7, ct);
+
+        Assert.NotNull(lineage);
+        Assert.Null(lineage.TriggeredBy);
+    }
 
     [Fact]
     public async Task AFinishedRun_NamesWhoLaunchedIt_AndTheRunsItStartedUntilJustAfterItsEnd()

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using Aetheus.Back.Components.Inventory;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Options;
@@ -18,7 +19,8 @@ internal sealed class AnalysisReportPublisher(
     IEntityChangeNotifier notifier,
     INotificationService notifications,
     IDependencyTrackOutbox dependencyTrackOutbox,
-    IOptions<AnalysisPlatformOptions> platformOptions)
+    IOptions<AnalysisPlatformOptions> platformOptions,
+    IProjectInventoryTrigger? inventoryTrigger = null)
 {
     private readonly AnalysisPlatformOptions _platformOptions = platformOptions.Value;
 
@@ -53,6 +55,7 @@ internal sealed class AnalysisReportPublisher(
             && request.Status is AnalysisReportStatus.Passed or AnalysisReportStatus.Failed)
             await dependencyTrackOutbox.EnqueueSbomAsync(report.Id, ct).ConfigureAwait(false);
         if (!outcome.Created) return report;
+        if (request.Category == AnalysisCategory.Sbom) inventoryTrigger?.Request(report.ProjectId);
 
         await notifier.BroadcastAsync(
             ResourceType.Project,

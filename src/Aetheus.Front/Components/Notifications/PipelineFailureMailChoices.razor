@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette decision of 2026-11-16: the pipelines the user saved a failure-mail choice for (from the pipeline's
+   Settings tab), one switch each, so a choice made there can be found and undone from /settings. A pipeline
+   started by a schedule mails nothing on failure until the user turns it on. Nothing is drawn without a choice. *@
+@if (_choices.Count > 0)
+{
+    <OmniSettingsSection Title="@L["PipelineFailureMailsTitle"]" Description="@L["PipelineFailureMailsHint"]" Paired="true">
+        @foreach (var choice in _choices)
+        {
+            <OmniSettingsTile Title="@choice.PipelineName" Class="pipeline-failure-mail-choice">
+                <Icon><OmniIcon Name="@NotificationLabels.EventIcon(NotificationEventTypes.PipelineFailed)" /></Icon>
+                <ChildContent>
+                    <OmniSwitch Value="@choice.IsEnabled" ValueExpression="@(() => choice.IsEnabled)" aria-label="@choice.PipelineName"
+                                ValueChanged="@((bool value) => SaveAsync(choice, value))" />
+                </ChildContent>
+            </OmniSettingsTile>
+        }
+    </OmniSettingsSection>
+}

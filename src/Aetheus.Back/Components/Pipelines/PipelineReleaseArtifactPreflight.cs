@@ -83,7 +83,7 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
 
         var skippable = step.AllowMissing
             && PipelineReleaseArtifactRules.IsBootstrapSelector(selector)
-            && error?.Contains(PipelineReleaseArtifactRules.NoRetainedArtifact, StringComparison.Ordinal) == true
+            && error?.Code == PipelineProblemCodes.ArtifactReleaseNotRetained
             && !await PipelineReleaseArtifactRules.IsRequiredByPriorContractAsync(
                 artifacts, selector, projectId, commit, step.Artifact, ct).ConfigureAwait(false);
         if (skippable) return null;

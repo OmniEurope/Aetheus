@@ -66,7 +66,7 @@ public class AuthServiceTests
             _repo,
             _config,
             _audit,
-            jwtOptions,
+            jwtOptions, new TokenHashKeys(jwtOptions),
                 Substitute.For<IMemoryCache>(),
                 orgRepo,
                 Substitute.For<ITotpService>(),
@@ -75,7 +75,7 @@ public class AuthServiceTests
                 Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),
                 Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
 
-        _enrollment = new ServerEnrollmentService(_repo, _config, _audit, hubContext, Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), jwtOptions, TimeProvider.System);
+        _enrollment = new ServerEnrollmentService(_repo, _config, _audit, hubContext, Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), new TokenHashKeys(jwtOptions), TimeProvider.System);
     }
 
     // --- LoginAsync ---
@@ -281,7 +281,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ValidateServerTokenAsync_ValidToken_ReturnsServerId()
     {
-        _repo.ValidateServerTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.ValidateServerTokenHashAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(42);
 
         var result = await _sut.ValidateServerTokenAsync("some-token", ct: TestContext.Current.CancellationToken);
@@ -292,7 +292,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ValidateServerTokenAsync_InvalidToken_ReturnsNull()
     {
-        _repo.ValidateServerTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.ValidateServerTokenHashAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns((int?)null);
 
         var result = await _sut.ValidateServerTokenAsync("bad-token", ct: TestContext.Current.CancellationToken);
@@ -305,7 +305,7 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterServerAsync_InvalidToken_ReturnsNull()
     {
-        _repo.FindValidRegistrationTokenAsync("bad", Arg.Any<CancellationToken>())
+        _repo.FindValidRegistrationTokenAsync(["bad"], Arg.Any<CancellationToken>())
             .Returns((RegistrationToken?)null);
 
         var result = await _enrollment.RegisterServerAsync(new ServerRegistrationRequest
@@ -325,7 +325,7 @@ public class AuthServiceTests
     {
         var regToken = new RegistrationToken { Id = 1, Token = "valid-token" };
         Server? captured = null;
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(regToken);
         _repo.FindServerByHostnameAsync("contract-host", Arg.Any<CancellationToken>())
             .Returns((Server?)null);
@@ -371,7 +371,7 @@ public class AuthServiceTests
     public async Task RegisterServerAsync_NewServer_CreatesAndReturns()
     {
         var regToken = new RegistrationToken { Id = 1, Token = "valid-token" };
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(regToken);
         _repo.FindServerByHostnameAsync("new-host", Arg.Any<CancellationToken>())
             .Returns((Server?)null);
@@ -397,7 +397,7 @@ public class AuthServiceTests
     public async Task RegisterServerAsync_AtomicPersistenceLosesTokenRace_ReturnsNullWithoutNotifications()
     {
         var regToken = new RegistrationToken { Id = 7, Token = "valid-token", OrganizationId = 1 };
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(regToken);
         _repo.FindServerByHostnameAsync("race-loser", Arg.Any<CancellationToken>())
             .Returns((Server?)null);
@@ -425,7 +425,7 @@ public class AuthServiceTests
     {
         var regToken = new RegistrationToken { Id = 1, Token = "valid-token" };
         var existingServer = new Server { Id = 5, Name = "existing", Hostname = "existing-host" };
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(regToken);
         _repo.FindServerByHostnameAsync("existing-host", Arg.Any<CancellationToken>())
             .Returns(existingServer);
@@ -466,7 +466,7 @@ public class AuthServiceTests
             Hostname = "existing-host",
             OrganizationId = 1
         };
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(regToken);
         _repo.FindServerByHostnameAsync("existing-host", Arg.Any<CancellationToken>())
             .Returns(existingServer);
@@ -495,7 +495,7 @@ public class AuthServiceTests
     {
         var regToken = new RegistrationToken { Id = 1, Token = "valid-token" };
         Server? captured = null;
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(regToken);
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>()).Returns(regToken);
         _repo.FindServerByHostnameAsync("new-host", Arg.Any<CancellationToken>()).Returns((Server?)null);
         _repo.TryPersistServerEnrollmentAsync(
                 regToken.Id,
@@ -532,7 +532,7 @@ public class AuthServiceTests
     {
         var regToken = new RegistrationToken { Id = 1, Token = "valid-token" };
         Server? captured = null;
-        _repo.FindValidRegistrationTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(regToken);
+        _repo.FindValidRegistrationTokenAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>()).Returns(regToken);
         _repo.FindServerByHostnameAsync("new-host", Arg.Any<CancellationToken>()).Returns((Server?)null);
         _repo.TryPersistServerEnrollmentAsync(
                 regToken.Id,

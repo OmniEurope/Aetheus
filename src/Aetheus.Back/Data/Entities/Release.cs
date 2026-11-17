@@ -22,6 +22,10 @@ public class Release
     /// <c>ReleaseRepository</c>; null for releases published before it existed and for releases
     /// only detected from a branch.</summary>
     public int? CreatedByPipelineRunId { get; set; }
+    /// <summary>The release that was Deployed when <see cref="PipelineRunId"/> recorded this one as
+    /// deployed, and which that same recording made Superseded. Demoting the release of this run puts
+    /// that release back to Deployed; null when the recording superseded nothing.</summary>
+    public int? SupersededReleaseId { get; set; }
     public string? Changelog { get; set; }
     public int BuildNumber { get; set; }
     public string? CommitHash { get; set; }

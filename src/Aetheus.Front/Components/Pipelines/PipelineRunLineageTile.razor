@@ -10,7 +10,7 @@
             <OmniFactTileRow Term="@L["ParentPipeline"]"><Icon><OmniIcon Name="OmniIconName.Path" /></Icon><ChildContent>
                 @if (ParentRunId is { } parentRunId)
                 {
-                    <OmniLink Href="@PipelineRunPresentation.Href(parentRunId, ProjectId, ServerId)" Class="run-lineage-parent">@parentPipeline #@parentRunId</OmniLink>
+                    <OmniLink Href="@PipelineRunPresentation.Href(parentRunId, ProjectId, ServerId)" Class="run-lineage-parent">@parentPipeline@(_lineage?.UpstreamBuildNumber is { } parentNumber ? $" #{parentNumber}" : string.Empty)</OmniLink>
                 }
                 else
                 {

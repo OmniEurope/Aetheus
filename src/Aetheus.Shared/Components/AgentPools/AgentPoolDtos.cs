@@ -9,6 +9,8 @@ public sealed record AgentPoolDto
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public int MaxConcurrency { get; init; }
+    /// <summary>The organization that owns the pool (R-12).</summary>
+    public int OrganizationId { get; init; }
     public List<AgentPoolServerDto> Servers { get; init; } = [];
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
@@ -37,6 +39,12 @@ public abstract record AgentPoolMutationRequest
     public List<int> ServerIds { get; init; } = [];
 }
 
-public sealed record CreateAgentPoolRequest : AgentPoolMutationRequest;
+public sealed record CreateAgentPoolRequest : AgentPoolMutationRequest
+{
+    /// <summary>The organization the pool goes to (R-12); without it, the one organization where the caller may
+    /// create a pool, or the default organization for a site Admin.</summary>
+    [Range(1, int.MaxValue)]
+    public int? OrganizationId { get; init; }
+}
 
 public sealed record UpdateAgentPoolRequest : AgentPoolMutationRequest;

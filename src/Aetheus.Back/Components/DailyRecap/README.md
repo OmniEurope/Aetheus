@@ -2,7 +2,7 @@
 
 ## Responsabilité
 
-Envoie chaque matin (07:00 Europe/Paris par défaut) un e-mail de synthèse de la veille : exécutions des pipelines parents, état des serveurs (mises à jour système, agent, disque), versions promues ou restaurées, sauvegardes, certificats et secrets proches de l'expiration, constats de sécurité et de qualité, serveurs de messagerie.
+Envoie chaque matin (07:00 Europe/Paris par défaut) un e-mail de synthèse de la veille : exécutions des pipelines parents, état des serveurs (mises à jour système, agent, disque), versions promues ou restaurées, sauvegardes, certificats et secrets proches de l'expiration, constats de sécurité et de qualité, serveurs de messagerie, vulnérabilités connues (CVE) avec l'attribution des sources de données exigée par leurs licences.
 
 ## Points d’entrée
 

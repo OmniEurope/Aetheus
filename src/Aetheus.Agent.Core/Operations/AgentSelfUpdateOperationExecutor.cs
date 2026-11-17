@@ -152,10 +152,13 @@ public sealed class AgentSelfUpdateOperationExecutor(
         CancellationToken ct)
     {
         AgentSelfUpdateFileSystem.PrepareCleanDirectory(stagingRoot);
-        var release = await _releaseResolver.ResolveAsync(envVars, isWindows, onOutput, ct).ConfigureAwait(false);
+        var resolution = await _releaseResolver.ResolveAsync(envVars, isWindows, onOutput, ct).ConfigureAwait(false);
+        var release = resolution.Release;
         if (release is null && envVars?.ContainsKey("AETHEUS_AGENT_TARGET_VERSION") == true)
         {
-            await ReportPhaseAsync(AgentUpdatePhase.Failed, 20, "release manifest invalid", ct).ConfigureAwait(false);
+            await ReportPhaseAsync(
+                AgentUpdatePhase.Failed, 20, resolution.FailureDiagnostic ?? AgentReleaseArchiveResolver.InvalidDiagnostic, ct)
+                .ConfigureAwait(false);
             return SelfUpdatePreparationResult.Failed(new ExecutorResult(-1, false));
         }
         if (!isWindows && release is null)

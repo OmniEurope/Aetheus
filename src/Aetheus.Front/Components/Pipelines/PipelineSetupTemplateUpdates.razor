@@ -1,0 +1,17 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-33: a pipeline of the project pinned to an older template version keeps running as it did; the summary says
+   which ones a newer version exists for and opens the fleet's update preview of each (the same page as the fleet). *@
+@if (_outdated.Count > 0)
+{
+    <OmniAlert Severity="OmniSeverity.Info" Title="@L["PipelineSetupTemplateUpdatesTitle"]" data-testid="setup-template-updates">
+        <OmniStack Gap="OmniSpacing.Small">
+            <span>@L["PipelineSetupTemplateUpdatesDetail"]</span>
+            @foreach (var item in _outdated)
+            {
+                <OmniLink Href="@UpdateUrl(item)" data-testid="setup-template-update-link">
+                    @string.Format(L["PipelineSetupTemplateUpdateLink"], item.PipelineName, item.TemplateName, item.PinnedVersion, item.LatestVersion)
+                </OmniLink>
+            }
+        </OmniStack>
+    </OmniAlert>
+}

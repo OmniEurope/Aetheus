@@ -56,13 +56,13 @@ public sealed class AppDatabaseSizeViewTests : BunitContext
     }
 
     [Fact]
-    public void WithoutAMeasurement_TheTabSaysWhereItComesFrom()
+    public void WithoutAMeasurement_TheTabSaysThereIsNone()
     {
         _handler.SetJsonResponse("api/appmonitoring/apps/7/database", new AppDatabaseSizeReportDto());
 
         var cut = Render<AppDatabaseSizeView>(parameters => parameters.Add(component => component.AppId, 7));
 
-        cut.WaitForAssertion(() => Assert.Contains("AppDatabaseNoDataHint", cut.Markup, StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.Contains("AppDatabaseNoData", cut.Markup, StringComparison.Ordinal));
         Assert.Empty(cut.FindAll("[data-testid='app-database-total']"));
     }
 

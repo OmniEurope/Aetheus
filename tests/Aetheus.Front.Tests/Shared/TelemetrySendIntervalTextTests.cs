@@ -42,14 +42,12 @@ public sealed class TelemetrySendIntervalTextTests
     }
 
     [Fact]
-    public void WithoutAnObservedInterval_TheVersionThatAppliesItIsNamed()
+    public void R27_WithoutAnObservedInterval_ThereIsNothingToSay()
     {
         var observation = TelemetrySendIntervalText.Observation(ResxLocalizer.French(),
             new AppTelemetrySendIntervalDto { ServerIntervalSeconds = 300, ObservedIntervalSeconds = null });
 
-        Assert.Equal(
-            "L'intervalle du serveur ne s'applique qu'à partir d'Aetheus.Telemetry 1.1.0 ; une version antérieure garde son propre intervalle.",
-            observation);
+        Assert.Null(observation);
     }
 
     [Theory]

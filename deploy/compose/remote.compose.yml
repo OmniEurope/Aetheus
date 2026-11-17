@@ -68,6 +68,7 @@ services:
       - BackgroundServices__ServerHeartbeatTimeout=${SERVER_HEARTBEAT_TIMEOUT:-00:02:00}
       # Prod keeps rate limiting ON (default false). QA sets RATE_LIMITING_DISABLED=true so the E2E suite's
       # ~85 per-test logins from one IP are not throttled by the login policy (5/min/IP) -> stuck on /login.
+      # R-51: the backend refuses to start with it true outside ASPNETCORE_ENVIRONMENT=Development (QA uses Development).
       - RateLimiting__Disabled=${RATE_LIMITING_DISABLED:-false}
       # Nightly AI model list read (R3-7): on by default (prod). QA sets AI_MODEL_LIST_REFRESH_ENABLED=false:
       # its nightly run falls in the 01:00-05:00 UTC window and its seeded profiles hold fake keys.

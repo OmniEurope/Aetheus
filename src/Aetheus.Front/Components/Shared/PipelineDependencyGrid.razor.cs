@@ -7,6 +7,8 @@ public partial class PipelineDependencyGrid
 {
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private ApiClient Api { get; set; } = default!;
+    [Inject] private NotifyHelper Toast { get; set; } = default!;
 
     [Parameter, EditorRequired] public IReadOnlyList<PipelineDependencyDto> Items { get; set; } = [];
     [Parameter, EditorRequired] public Func<int, string> PipelineHref { get; set; } = default!;
@@ -26,13 +28,35 @@ public partial class PipelineDependencyGrid
     [Parameter] public bool CanWrite { get; set; }
     [Parameter] public int? ServerId { get; set; }
 
+    /// <summary>R-11: raised after an imported pipeline was synchronized with its external repository, so the host
+    /// reads the list again and shows the new commit.</summary>
+    [Parameter] public EventCallback ExternalSynchronized { get; set; }
+
     private IReadOnlyList<PipelineDependencyDto> DisplayItems => Items;
+
+    // The grid reads its open rows back from the host on every render, so a host that does not keep them
+    // sees every re-render (a live refresh, any state change above) close the row the reader just opened;
+    // keyed by pipeline id because a refresh brings freshly read items (E2E 2026-11-02).
+    private IReadOnlyList<object> _expandedKeys = [];
+
+    // R-17: the row's Run button is busy for as long as its launch lasts, in the look of the pipeline page's button.
+    private readonly HashSet<int> _launchingPipelineIds = [];
+
+    private bool IsLaunching(int pipelineId) => _launchingPipelineIds.Contains(pipelineId);
+
+    private async Task RunAsync(int pipelineId, string? mode)
+    {
+        if (!_launchingPipelineIds.Add(pipelineId)) return;
+        try { await RunPipeline(pipelineId, mode); }
+        finally { _launchingPipelineIds.Remove(pipelineId); }
+    }
 
     // Header filters of the catalogue. The model and status columns have no property of their own,
     // so they carry a key and read the fleet data; every delegate is built once so the columns see
     // the same one on every render.
     internal const string TemplateColumn = "Template";
     internal const string StatusColumn = "CatalogStatus";
+    internal const string LastRunColumn = "LastRun";
     private static readonly string[] AllStatusCandidates =
         [.. PipelineCatalogView.Statuses(fleetAvailable: true).Select(status => status.ToString())];
     private static readonly string[] RunStatusCandidates =
@@ -40,6 +64,7 @@ public partial class PipelineDependencyGrid
     private Func<string, string>? _triggerText;
     private Func<string, string>? _statusText;
     private Func<PipelineDependencyDto, object?>? _templateValue;
+    private Func<PipelineDependencyDto, object?>? _lastRunValue;
     private Func<PipelineDependencyDto, string, bool>? _statusPredicate;
     private Func<string, string> TriggerText => _triggerText ??= GridFilterText.ForEnum<PipelineTriggerType>(L);
     private IReadOnlyList<string> StatusCandidates => FleetAvailable ? AllStatusCandidates : RunStatusCandidates;
@@ -47,6 +72,9 @@ public partial class PipelineDependencyGrid
         Enum.TryParse<PipelineCatalogStatus>(value, ignoreCase: true, out var status)
             ? L[PipelineCatalogView.LabelKey(status)].Value
             : value;
+    // R-19: the latest run date (null when the pipeline never ran, which sorts lowest, so last in the newest-first order).
+    private Func<PipelineDependencyDto, object?> LastRunValue => _lastRunValue ??= pipeline =>
+        pipeline.RecentRuns.FirstOrDefault()?.StartedAt;
     private Func<PipelineDependencyDto, object?> TemplateValue => _templateValue ??= pipeline =>
         FleetItem(pipeline.Id) is { } fleetItem
             ? string.IsNullOrWhiteSpace(fleetItem.TemplateName) ? L["AutonomousPipeline"].Value : fleetItem.TemplateName
@@ -98,6 +126,13 @@ public partial class PipelineDependencyGrid
 
     private void OnRowClick(PipelineDependencyDto pipeline) =>
         Nav.NavigateTo(PipelineHref(pipeline.Id));
+
+    private async Task SynchronizeAsync(PipelineDependencyDto pipeline, int projectId)
+    {
+        var sync = new ExternalPipelineSync(Api.ExternalPipelines, Toast);
+        if (await sync.SyncAsync(projectId, pipeline.Id, pipeline.Name))
+            await ExternalSynchronized.InvokeAsync();
+    }
 
     private void EditPipeline(int id)
     {

@@ -129,7 +129,7 @@ public class OrganizationDetailDirtyGuardTests : BunitContext
 
         var callback = InvokeAdminEntityCallbackAsync(cut, AdminEntities.Organization, 1);
         await refreshStarted.Task.WaitAsync(
-            TimeSpan.FromSeconds(2),
+            Aetheus.Front.Tests.TestDoubles.HangGuard.Limit,
             Xunit.TestContext.Current.CancellationToken);
 
         Assert.Empty(cut.FindAll(".aetheus-loader"));

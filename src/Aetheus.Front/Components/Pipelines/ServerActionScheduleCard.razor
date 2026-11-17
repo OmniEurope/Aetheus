@@ -1,0 +1,80 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-8: one scheduled action (a server's scan, an AI task, a backup), as a card of the planner's grid, beside the
+   pipelines'. It says what it is (a kind badge, its name and where it runs), when it runs at the reader's clock, how long
+   it takes, when it runs next and whether it shares time with another run, never by colour alone. The menu opens the page
+   where the schedule is kept. *@
+<OmniCard data-testid="@($"schedule-server-card-{Item.Id}")">
+    <HeaderContent>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Small">
+            <OmniText Element="OmniTextElement.Strong" Truncate="true"><OmniLink Href="@Link">@Title</OmniLink></OmniText>
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem Href="@Link" data-testid="schedule-server-open">
+                    <Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent>@L[ServerActionPlannerTask.OpenKey(Item.Kind)]</ChildContent>
+                </OmniMenuItem>
+            </OmniOverflowMenu>
+        </OmniStack>
+    </HeaderContent>
+    <ChildContent>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                <OmniBadge Tone="OmniTone.Info" Fill="OmniFill.Tonal" data-testid="schedule-server-kind"><Icon><OmniIcon Name="@ServerActionPlannerTask.Icon(Item.Kind)" /></Icon><ChildContent>@L[ServerActionPlannerTask.KindKey(Item.Kind)]</ChildContent></OmniBadge>
+                @if (Where.Length > 0)
+                {
+                    <span data-testid="schedule-server-name">@Where</span>
+                }
+            </OmniStack>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                <OmniIcon Name="OmniIconName.CalendarBlank" />
+                <span data-testid="schedule-frequency">@FrequencyText</span>
+                @if (UtcText.Length > 0)
+                {
+                    <OmniText Tone="OmniTextTone.Muted" data-testid="schedule-utc">(@UtcText)</OmniText>
+                }
+            </OmniStack>
+            @if (Item.Frequency == ScheduleFrequency.Custom && !IsDaily && Item.MachineReboot is null && Item.MachineJob is null)
+            {
+                <OmniText Tone="OmniTextTone.Muted"><code data-testid="schedule-cron">@Item.CronExpression</code></OmniText>
+            }
+            @if (MachineRebootSourceText is { } machineSource)
+            {
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                    <OmniIcon Name="OmniIconName.Info" />
+                    <span data-testid="schedule-machine-reboot-source">@machineSource</span>
+                </OmniStack>
+            }
+            @if (MachineJobSourceText is { } jobSource)
+            {
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                    <OmniIcon Name="OmniIconName.Info" />
+                    <span data-testid="schedule-machine-job-source">@jobSource</span>
+                </OmniStack>
+            }
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniIcon Name="OmniIconName.Timer" />
+                <span data-testid="schedule-duration">@DurationText</span>
+            </OmniStack>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniIcon Name="OmniIconName.ArrowRight" />
+                <span data-testid="schedule-next">@NextText</span>
+            </OmniStack>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                @if (!CountsInOverlaps)
+                {
+                    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" title="@L["ScheduleNotCountedHint"].Value" data-testid="schedule-not-counted"><Icon><OmniIcon Name="OmniIconName.Layers" /></Icon><ChildContent>@L["ScheduleNotCounted"]</ChildContent></OmniBadge>
+                }
+                else if (Partners.Count > 0)
+                {
+                    <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" data-testid="schedule-overlap"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>@OverlapText</ChildContent></OmniBadge>
+                }
+                else
+                {
+                    <OmniBadge Tone="OmniTone.Success" Fill="OmniFill.Tonal" data-testid="schedule-no-overlap"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@NoOverlapText</ChildContent></OmniBadge>
+                }
+                @if (!Item.Movable)
+                {
+                    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" title="@L[ServerActionPlannerTask.ReadOnlyKey(Item.Kind)].Value" data-testid="schedule-read-only"><Icon><OmniIcon Name="OmniIconName.Lock" /></Icon><ChildContent>@L["ScheduleReadOnly"]</ChildContent></OmniBadge>
+                }
+            </OmniStack>
+        </OmniStack>
+    </ChildContent>
+</OmniCard>

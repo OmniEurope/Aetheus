@@ -1,0 +1,55 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-44: the small info of a block of the planner's calendar, opened by a click on it. OmniScheduler draws a
+   block as text, so what a block carries beyond its title (a link, a status) is shown here: the link to the pipeline,
+   its average duration, its latest run with the link to it, its state and duration, and the gate and grade of that
+   run's analysis when there is one. Nothing more. *@
+<OmniStack Gap="OmniSpacing.Small" data-testid="schedule-block-info">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniIcon Name="OmniIconName.Graph" />
+        <OmniLink Href="@($"pipelines/{Task.PipelineId}")" OnClick="@(_ => Dialog.Close())" data-testid="schedule-info-pipeline">@L["ScheduleOpenPipeline"]</OmniLink>
+    </OmniStack>
+    @if (Task.CanChooseSourceBranch)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+            <OmniIcon Name="OmniIconName.GitFork" />
+            <span data-testid="schedule-info-source">@SourceText</span>
+        </OmniStack>
+    }
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniIcon Name="OmniIconName.Timer" />
+        <span data-testid="schedule-info-duration">@DurationText</span>
+    </OmniStack>
+    @if (Task.LastRun is { } run)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true" data-testid="schedule-info-run">
+            <OmniIcon Name="OmniIconName.Play" />
+            <span>@L["LastRun"]</span>
+            <OmniLink Href="@PipelineRunPresentation.Href(run.RunId, null, null)" OnClick="@(_ => Dialog.Close())" data-testid="schedule-info-run-link">#@run.BuildNumber</OmniLink>
+            <PipelineRunStatusBadge Status="run.Status" data-testid="schedule-info-run-status" />
+            @if (run.DurationMinutes is { } minutes)
+            {
+                <OmniText Tone="OmniTextTone.Muted" data-testid="schedule-info-run-duration">@SchedulePhrases.Minutes(minutes)</OmniText>
+            }
+        </OmniStack>
+        @if (run.GateStatus is { } gate)
+        {
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true" data-testid="schedule-info-gate">
+                <OmniIcon Name="OmniIconName.ListChecks" />
+                <span>@L["AnalysisGateTab"]</span>
+                <OmniBadge Icon="@(BadgeIcon.ForState(GateTone(gate)))" Fill="OmniFill.Solid" Tone="@GateTone(gate)">@L.Localize(gate)</OmniBadge>
+                @if (run.Grade is { } grade)
+                {
+                    <span>@L["AnalysisGrade"]</span>
+                    <GradeBadge Value="@grade" />
+                }
+            </OmniStack>
+        }
+    }
+    else
+    {
+        <OmniText Tone="OmniTextTone.Muted" data-testid="schedule-info-never">@L["ScheduleLastRunNever"]</OmniText>
+    }
+    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
+        <Aetheus.Front.Components.Servers.DialogCloseButton />
+    </OmniStack>
+</OmniStack>

@@ -184,6 +184,32 @@ public sealed class AiTasksControllerTests
         Assert.IsType<ForbidResult>((await _controller.RunNow(11, ct)).Result);
     }
 
+    // R-8: a move in the planner needs the Write right on the task's owner, as an update does, and nothing less.
+    [Fact]
+    public async Task SetSchedule_NeedsWriteOnTheOwner_AndOnlyThenChangesTheSchedule()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var definition = Definition();
+        var request = new SetAiTaskScheduleRequest { Schedule = "0 0 2 * * *" };
+        _service.GetDefinitionAsync(11, ct).Returns(definition);
+        _service.GetDefinitionAsync(404, ct).Returns((AiTaskDefinitionDto?)null);
+        _service.SetScheduleAsync(11, request.Schedule, ct).Returns(definition);
+        _authorization.HasPermissionAsync(
+                Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 12, Permission.Write, ct)
+            .Returns(false);
+
+        Assert.IsType<ForbidResult>((await _controller.SetSchedule(11, request, ct)).Result);
+        await _service.DidNotReceive().SetScheduleAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        _authorization.HasPermissionAsync(
+                Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 12, Permission.Write, ct)
+            .Returns(true);
+
+        Assert.IsType<OkObjectResult>((await _controller.SetSchedule(11, request, ct)).Result);
+        Assert.IsType<NotFoundResult>((await _controller.SetSchedule(404, request, ct)).Result);
+        await _service.Received(1).SetScheduleAsync(11, "0 0 2 * * *", ct);
+    }
+
     [Fact]
     public async Task ResultConsumptionAndAgentEndpoints_ReturnAuthorizedResults()
     {

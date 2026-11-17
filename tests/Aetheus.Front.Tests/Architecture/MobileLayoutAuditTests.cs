@@ -99,6 +99,51 @@ public sealed class MobileLayoutAuditTests
         Assert.Matches(@"min-inline-size\s*:\s*0\b", box.Groups["body"].Value);
     }
 
+    /// <summary>R-22: measured at 375 x 650 on production, four run tiles in one column pushed the Executions grid
+    /// to y=654 (0 px visible). The tile grids that sit right above a data grid keep two columns on a phone.</summary>
+    [Theory]
+    [InlineData("Pipelines/PipelineEdit.razor", "pipeline-runs-summary")]
+    [InlineData("Analysis/CveWatchTab.razor", "cve-watch-tiles")]
+    [InlineData("Monitoring/Supervision.razor", "supervision-totals")]
+    [InlineData("AiTasks/AiTasks.razor", "tiles-above-grid")]
+    [InlineData("Logs/Performance.razor", "tiles-above-grid")]
+    [InlineData("Shared/AppPerformanceView.razor", "tiles-above-grid")]
+    [InlineData("Shared/AppDatabaseSizeView.razor", "tiles-above-grid")]
+    [InlineData("VulnerabilityWatch/CveSourcesPage.razor", "tiles-above-grid")]
+    [InlineData("Pipelines/PipelineRunGateFindings.razor", "tiles-above-grid")]
+    public void ATileGridAboveADataGrid_KeepsTwoColumnsOnAPhone(string file, string className)
+    {
+        var source = File.ReadAllText(Path.Combine(Components, file));
+        Assert.Matches($@"<OmniTileGrid\b[^>]*Class=""([^""]* )?{Regex.Escape(className)}( [^""]*)?""", source);
+
+        var media = Regex.Match(Css, @"@media \(max-width: 39\.99rem\) \{\s*\.omni-tile-grid\.omni-tile-grid:is\((?<names>[^)]*)\)\s*\{(?<body>[^}]*)\}");
+        Assert.True(media.Success, "The phone rule for the tile grids above a data grid is missing from app.css.");
+        Assert.Contains(className, media.Groups["names"].Value);
+        Assert.Matches(@"grid-template-columns\s*:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)", media.Groups["body"].Value);
+    }
+
+    /// <summary>R-22 (OEAPP-08/09): a creation form above a page's only grid is folded by default, so the grid sits
+    /// right under the header on a 375 x 650 phone. The form is a collapsible OmniFieldset that starts closed.</summary>
+    [Theory]
+    [InlineData("Settings/PersonalAccessTokens.razor", "pat-create-form")]
+    [InlineData("Servers/ServerDetailSections/ServerPortsSection.razor", "port-registry-form")]
+    [InlineData("Servers/ServerDetailSections/ServerFirewallSection.razor", "firewall-rule-form")]
+    public void ACreationFormAboveTheOnlyGrid_IsFoldedByDefault(string file, string className)
+    {
+        var source = File.ReadAllText(Path.Combine(Components, file));
+        var fieldset = Regex.Match(source, $@"<OmniFieldset\b[^>]*Class=""{Regex.Escape(className)}""[^>]*>");
+        Assert.True(fieldset.Success, $"{file}: the creation form is not wrapped in a '{className}' OmniFieldset.");
+        Assert.Contains("Collapsible=\"true\"", fieldset.Value);
+        Assert.DoesNotMatch(@"Expanded=""true""", fieldset.Value);
+
+        // The form is declared before the grid, and the field that backs the fold starts closed.
+        var grid = Regex.Match(source, @"<(OmniDataGrid|AetheusDataGrid)\b");
+        Assert.True(grid.Success);
+        Assert.True(fieldset.Index < grid.Index, $"{file}: the fold must sit above the grid it protects.");
+        var code = File.ReadAllText(Path.Combine(Components, file + ".cs"));
+        Assert.Matches(@"private bool _formExpanded;", code);
+    }
+
     private static string? InnermostHorizontalStackAround(string source, int position)
     {
         var open = new Stack<(int Start, string Attributes)>();

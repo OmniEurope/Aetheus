@@ -51,6 +51,13 @@ public sealed class StartupSecretsTests
     [InlineData("Auth:EncryptionKey", null, "Auth:EncryptionKey must be configured")]
     [InlineData("Auth:EncryptionSalt", null, "Auth:EncryptionSalt must be configured")]
     [InlineData("Auth:AdminPassword", "ADMIN", "Auth:AdminPassword must not be the default 'admin' value")]
+    [InlineData("Auth:AdministratorSetupRequired", "false", "Auth:AdministratorSetupRequired=false is a development setting")]
+    [InlineData("Auth:AdminPassword", "aetheus-dev-admin-pwd", "Auth:AdminPassword must not be the committed development password")]
+    [InlineData("Auth:AdminPassword", "AETHEUS-DEV-ADMIN-PWD", "Auth:AdminPassword must not be the committed development password")]
+    [InlineData("Aetheus:PublicApiBaseUrl", null, "Aetheus:PublicApiBaseUrl must be configured")]
+    [InlineData("Aetheus:PublicApiBaseUrl", "", "Aetheus:PublicApiBaseUrl must be configured")]
+    [InlineData("Aetheus:PublicApiBaseUrl", "api.example.com", "Aetheus:PublicApiBaseUrl must be configured")]
+    [InlineData("Aetheus:PublicApiBaseUrl", "ftp://api.example.com", "Aetheus:PublicApiBaseUrl must be configured")]
     public void ResolveJwtSigningKey_ProductionWithUnsafeSecret_Throws(string key, string? value, string expected)
     {
         var secrets = SafeSecrets();
@@ -60,6 +67,44 @@ public sealed class StartupSecretsTests
             () => StartupSecrets.ResolveJwtSigningKey(Build(secrets), isDevelopment: false));
 
         Assert.StartsWith(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveJwtSigningKey_DevelopmentWithoutPublicApiUrlAndWithTheDevelopmentPassword_Starts()
+    {
+        // M5: both refusals hold outside Development only; the local instance keeps its committed settings.
+        var secrets = SafeSecrets();
+        secrets["Aetheus:PublicApiBaseUrl"] = null;
+        secrets["Auth:AdminPassword"] = "aetheus-dev-admin-pwd";
+
+        Assert.Equal(SafeJwtKey, StartupSecrets.ResolveJwtSigningKey(Build(secrets), isDevelopment: true));
+    }
+
+    [Theory]
+    [InlineData("https://api.example.com")]
+    [InlineData("http://aetheus-qa-back:8080")]
+    public void ResolveJwtSigningKey_ProductionWithAnAbsolutePublicApiUrl_Starts(string url)
+    {
+        var secrets = SafeSecrets();
+        secrets["Aetheus:PublicApiBaseUrl"] = url;
+
+        Assert.Equal(SafeJwtKey, StartupSecrets.ResolveJwtSigningKey(Build(secrets), isDevelopment: false));
+    }
+
+    [Fact]
+    public void ResolveJwtSigningKey_PublicDemoWithTheDevelopmentPassword_Starts()
+    {
+        // The public demo advertises its administrator password on purpose; 'admin' stays refused there.
+        var secrets = SafeSecrets();
+        secrets["Auth:AdminPassword"] = "aetheus-dev-admin-pwd";
+        secrets["Aetheus:PublicDemo"] = "true";
+        secrets["Seed:Demo"] = "true";
+        secrets["Aetheus:EnvironmentTier"] = "qa";
+
+        Assert.Equal(SafeJwtKey, StartupSecrets.ResolveJwtSigningKey(Build(secrets), isDevelopment: false));
+
+        secrets["Auth:AdminPassword"] = "admin";
+        Assert.Throws<InvalidOperationException>(() => StartupSecrets.ResolveJwtSigningKey(Build(secrets), isDevelopment: false));
     }
 
     [Fact]
@@ -121,7 +166,8 @@ public sealed class StartupSecretsTests
         ["Auth:JwtKey"] = SafeJwtKey,
         ["Auth:EncryptionKey"] = new string('e', 32),
         ["Auth:EncryptionSalt"] = Convert.ToBase64String(new byte[16]),
-        ["Auth:AdminPassword"] = new string('p', 20)
+        ["Auth:AdminPassword"] = new string('p', 20),
+        ["Aetheus:PublicApiBaseUrl"] = "https://api.example.com"
     };
 
     private static IConfiguration Build(Dictionary<string, string?> values) =>

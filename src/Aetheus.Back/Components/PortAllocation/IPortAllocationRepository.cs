@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.VariableLibraries.Events;
+
 namespace Aetheus.Back.Components.PortAllocation;
 
 /// <summary>
@@ -24,7 +26,23 @@ public interface IPortAllocationRepository
         int libraryId, IReadOnlyCollection<string> keys, CancellationToken ct = default);
 
     Task<bool> ServerExistsAsync(int serverId, CancellationToken ct = default);
+
+    /// <summary>The scope of a library as the event describes it (it may no longer exist, or no longer be
+    /// owned that way), resolved to its project and, for a project server, its host.</summary>
+    Task<LibraryScope> ResolveScopeAsync(
+        int libraryId, string libraryName, LibraryPortScope scope, CancellationToken ct = default);
+
+    /// <summary>Whether a <c>PORT_*</c> entry of any library of the project still holds <paramref name="port"/>.
+    /// Read after the write: it tells a deletion whether another entry still stands behind the reservation.</summary>
+    Task<bool> IsPortHeldByProjectEntryAsync(int projectId, int port, CancellationToken ct = default);
+
+    /// <summary>Every library (or only those of one project) holding a <c>PORT_*</c> entry that is a valid port.</summary>
+    Task<List<LibraryPortSource>> GetPortLibrariesAsync(int? projectId = null, CancellationToken ct = default);
 }
+
+/// <summary>A library and the valid <c>PORT_*</c> entries it holds.</summary>
+public sealed record LibraryPortSource(
+    int LibraryId, string LibraryName, LibraryPortScope Scope, IReadOnlyList<LibraryPortEntry> Entries);
 
 /// <summary>An entry a library already holds under a key an allocation asks for.</summary>
 public sealed record ExistingLibraryEntry(int Id, string Key, string Value);

@@ -35,6 +35,13 @@ public sealed record PipelineDto
     /// <summary>The owner is missing or not an active user, so every chained run is
     /// refused.</summary>
     public bool OwnerInactive { get; init; }
+
+    /// <summary>R-11: the external repository file this pipeline was imported from, read-only; null when the
+    /// pipeline is defined in Aetheus.</summary>
+    public string? ExternalImportPath { get; init; }
+
+    /// <summary>R-11: the mirror commit of that import.</summary>
+    public string? ExternalImportCommit { get; init; }
 }
 
 /// <summary>Authoritative Git location of a project-owned pipeline definition. The pipeline YAML is
@@ -75,6 +82,13 @@ public sealed record PipelineDependencyDto
     /// <summary>The owner is missing or not an active user, so every chained run is
     /// refused.</summary>
     public bool OwnerInactive { get; init; }
+
+    /// <summary>R-11: the external repository file this pipeline was imported from, read-only; null for a
+    /// pipeline defined in Aetheus.</summary>
+    public string? ExternalImportPath { get; init; }
+
+    /// <summary>R-11: the mirror commit of that import; set for an imported (read-only) pipeline.</summary>
+    public string? ExternalImportCommit { get; init; }
 }
 
 public sealed record PipelineDependencyReferenceDto(int? Id, string Name);
@@ -82,6 +96,8 @@ public sealed record PipelineDependencyReferenceDto(int? Id, string Name);
 public sealed record PipelineRunSummaryDto
 {
     public int Id { get; init; }
+    /// <summary>R-8: the number a person reads, unique within the pipeline.</summary>
+    public int BuildNumber { get; init; }
     public PipelineStatus Status { get; init; }
     public DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
@@ -186,12 +202,24 @@ public sealed record PipelineRunPaginationRequest : PaginationRequest
 public sealed record PipelineRunDto
 {
     public int Id { get; init; }
+
+    /// <summary>ADR-060: the public identifier, read by nothing yet. Null until the backfill reaches a run of an older version.</summary>
+    public Guid? Uid { get; init; }
+
     public int PipelineId { get; init; }
     public int? ProjectId { get; init; }
     public string PipelineName { get; init; } = string.Empty;
+    /// <summary>R-8: the number a person reads, unique within the pipeline (<c>#12</c>). <see cref="Id"/> stays the technical key of URLs and logs.</summary>
+    public int BuildNumber { get; init; }
     public PipelineStatus Status { get; init; }
     public DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
+
+    /// <summary>R-33: seconds the run spent waiting for approvals (overlapping waits counted once, an unresolved
+    /// wait lasting until <see cref="CompletedAt"/>). Zero for a run that has not finished and on the run detail;
+    /// filled on the run list, which feeds the average-duration tile.</summary>
+    public double ApprovalWaitSeconds { get; init; }
+
     public Dictionary<string, string> ResolvedVariables { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
     /// <summary>True after the cancellation request has been durably accepted, while mandatory
@@ -279,6 +307,46 @@ public sealed record PipelineRunDto
     /// elsewhere). Null for a run that did not deploy and for one whose address is not known. Carried on
     /// the run DETAIL only.</summary>
     public PipelineRunDeployedAddressDto? DeployedAddress { get; init; }
+
+    /// <summary>R-34: the release a deployment run delivers (the candidate it restores), which is not the
+    /// commit the run itself checked out (<see cref="CommitHash"/>, the head of the source branch at launch).
+    /// Null for a run that names no release, or one this project has no record of. Filled on run lists and on
+    /// the run detail.</summary>
+    public PipelineRunDeployedReleaseDto? DeployedRelease { get; init; }
+}
+
+/// <summary>R-34: the release a deployment run delivers, as the project records it, set beside the source head the
+/// run checked out. The two differ whenever a candidate older than the branch is redeployed, and the run page and
+/// the approval must say which one production gets.</summary>
+public sealed record PipelineRunDeployedReleaseDto
+{
+    public int ReleaseId { get; init; }
+
+    /// <summary>The release version the run restores (<c>AETHEUS_CANDIDATE_VERSION</c>).</summary>
+    public string Version { get; init; } = string.Empty;
+
+    /// <summary>The commit the release was built from: what production actually runs once the run is done.</summary>
+    public string? CommitHash { get; init; }
+
+    public ReleaseStatus Status { get; init; }
+
+    /// <summary>The branch the run was launched on, and the commit it checked out there (its head at launch).</summary>
+    public string? SourceBranch { get; init; }
+    public string? SourceCommitHash { get; init; }
+
+    /// <summary>The internal repository the run built, when the backend resolved it: the commits link to its pages.</summary>
+    public int? RepositoryId { get; init; }
+
+    /// <summary>The release was not built from the source head the run checked out: it is older than the branch.</summary>
+    public bool IsBehindSourceHead { get; init; }
+
+    /// <summary>The release is already the one in production, so the deployment brings nothing new. Only read
+    /// for an approval still waiting (a finished run marks its own release deployed).</summary>
+    public bool IsAlreadyDeployed { get; init; }
+
+    /// <summary>The approver is warned, and must confirm to approve.</summary>
+    [JsonIgnore]
+    public bool NeedsConfirmation => IsBehindSourceHead || IsAlreadyDeployed;
 }
 
 /// <summary>The address a deployment run put the application at: the application, and the API when it has an
@@ -296,6 +364,9 @@ public sealed record PipelineRunLineageDto
     /// <summary>The account that launched the run. Null when nobody did: a schedule, a push, a
     /// webhook, or a run started by another run.</summary>
     public string? TriggeredBy { get; init; }
+
+    /// <summary>R-8: the number of the run that started this one, null when no run did.</summary>
+    public int? UpstreamBuildNumber { get; init; }
 
     /// <summary>The runs this run started, oldest first.</summary>
     public List<PipelineRunLinkDto> Downstream { get; init; } = [];
@@ -330,6 +401,10 @@ public sealed record PipelineRunParameterDto
 
     /// <summary>The launch dialog tucks this parameter in its folded "Advanced" zone.</summary>
     public bool Advanced { get; init; }
+
+    /// <summary>R-33: what the run takes when the field is left empty, shown greyed in it (the version Aetheus would
+    /// allocate); null shows nothing.</summary>
+    public string? Placeholder { get; init; }
 }
 
 public sealed record PipelineStepRunDto

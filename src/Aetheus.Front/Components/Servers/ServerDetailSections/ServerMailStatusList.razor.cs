@@ -20,9 +20,7 @@ public partial class ServerMailStatusList : IAsyncDisposable
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private ILogger<ServerMailStatusList> Logger { get; set; } = default!;
     [Inject] private TimeProvider Clock { get; set; } = default!;
-
-    /// <summary>R-119: the server layout, asked to veil the section while a task of this list runs.</summary>
-    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+    [Inject] private TaskTrackerService Tracker { get; set; } = default!;
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter, EditorRequired] public MailDataDto Mail { get; set; } = new();
@@ -66,6 +64,12 @@ public partial class ServerMailStatusList : IAsyncDisposable
     /// <summary>The first failing status line, with its resolution.</summary>
     internal MailDiagnosticItemDto? FirstRed => StatusItems.FirstOrDefault(item => item.Verdict != MailCheckVerdict.Ok);
 
+    protected override void OnInitialized()
+    {
+        Tracker.OnChanged += OnTrackerChanged;
+        AdoptRunning();
+    }
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -106,8 +110,7 @@ public partial class ServerMailStatusList : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _veil?.Dispose();
-        _veil = null;
+        Tracker.OnChanged -= OnTrackerChanged;
         if (_liveFeed is not null)
             await _liveFeed.DisposeAsync();
     }
@@ -192,8 +195,55 @@ public partial class ServerMailStatusList : IAsyncDisposable
     /// <summary>The end of the failed task's log, shown under <see cref="Failure"/>.</summary>
     internal string? FailureLog => _failureLog;
 
-    /// <summary>The task kind is being queued or runs: its button is busy.</summary>
-    internal bool IsBusy(MailTaskKind kind) => _queuing.Contains(kind) || _running.Values.Any(task => task.Kind == kind);
+    /// <summary>The task kind is being queued or runs: its button is busy. Starting the stopped services is busy too
+    /// while a Postfix, Dovecot or OpenDKIM action runs (it is the same start, so a second click would launch it
+    /// twice), whether that action was launched here or found again on arrival.</summary>
+    internal bool IsBusy(MailTaskKind kind) =>
+        _queuing.Contains(kind) || _running.Values.Any(task => task.Kind == kind
+            || (kind == MailTaskKind.StartServices && task.Kind is MailTaskKind.Postfix or MailTaskKind.Dovecot or MailTaskKind.OpenDkim));
+
+    // ---- Recette R-12: the actions of this list found again when the user comes back ---------------------------------
+
+    private void OnTrackerChanged() => _ = InvokeAsync(() =>
+    {
+        if (AdoptRunning()) StateHasChanged();
+    });
+
+    /// <summary>Follows, like a task launched here, every action of this list that is queued or running on the server
+    /// when the user opens the page (or that enters the live feed afterwards): its banner names it, its button stays
+    /// locked and its outcome is read when it ends. A task that ended is not in the feed, so it never shows as running.
+    /// The setup, the purge, the other tabs' tasks and the reads are not taken (see <see cref="ClassifyTask"/>).</summary>
+    private bool AdoptRunning()
+    {
+        var adopted = false;
+        foreach (var task in Tracker.Tasks)
+        {
+            if (task.ServerId != ServerId || task.PipelineRunId is not null || _running.ContainsKey(task.Id)) continue;
+            if (!ServerTaskAdoption.IsInFlight(task)) continue;
+            if (ClassifyTask(task.Name) is not { } known) continue;
+            var queuedAt = task.CreatedAt == default ? Clock.GetUtcNow() : new DateTimeOffset(DateTime.SpecifyKind(task.CreatedAt, DateTimeKind.Utc));
+            _running[task.Id] = new RunningMailTask(known.Kind, known.Label, queuedAt);
+            adopted = true;
+        }
+        return adopted;
+    }
+
+    /// <summary>What a task of the server is for this list, by the name the backend gives it
+    /// (<see cref="ServerTaskNames"/>); null for a task another part of the page follows or a read.</summary>
+    private (MailTaskKind Kind, string Label)? ClassifyTask(string name)
+    {
+        foreach (var unit in MailServiceUnits)
+            foreach (var verb in MailServiceVerbs)
+                if (name == ServerTaskNames.MailActionTask(ServiceAction(unit, verb)))
+                    return (unit == "postfix" ? MailTaskKind.Postfix : MailTaskKind.Dovecot, ServiceLabel(unit, verb));
+        if (name == ServerTaskNames.MailActionTask(MailAction.RestartOpenDkim)) return (MailTaskKind.OpenDkim, L["MailRestartOpenDkim"]);
+        if (name == ServerTaskNames.MailActionTask(MailAction.TestConfig)) return (MailTaskKind.ServerCheck, L["MailRunServerCheck"]);
+        // The obtain and the install buttons queue the same task: the first is named, both stay locked (see MailStatusFix).
+        if (name.StartsWith(ServerTaskNames.MailTlsCertificatePrefix, StringComparison.Ordinal)) return (MailTaskKind.ObtainCertificate, L["MailObtainCertificate"]);
+        if (name.StartsWith(ServerTaskNames.MailDeliveryTestPrefix, StringComparison.Ordinal)) return (MailTaskKind.DeliveryTest, L["MailSendTest"]);
+        if (name == ServerTaskNames.MailMailboxUsage) return (MailTaskKind.Usage, L["MailMeasureUsage"]);
+        return null;
+    }
 
     private IReadOnlyList<string> RunningLabels => [.. _running.Values.OrderBy(task => task.QueuedAt).Select(task => task.Label).Distinct()];
 
@@ -204,20 +254,6 @@ public partial class ServerMailStatusList : IAsyncDisposable
         _failure = null;
         _failureLog = null;
         _running[taskId] = new RunningMailTask(kind, label, Clock.GetUtcNow());
-        SyncVeil();
-    }
-
-    private IDisposable? _veil;
-
-    // R-119: the section stays veiled while a followed mail task runs (content kept mounted, the banner stays readable).
-    private void SyncVeil()
-    {
-        if (_running.Count > 0) _veil ??= Loader?.HoldTaskVeil();
-        else
-        {
-            _veil?.Dispose();
-            _veil = null;
-        }
     }
 
     /// <summary>The services and actions of the services button's menu, in their listed order.</summary>
@@ -377,7 +413,6 @@ public partial class ServerMailStatusList : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(notification);
         if (!_running.Remove(notification.TaskId, out var task)) return;
-        SyncVeil();
         switch (task.Kind)
         {
             case MailTaskKind.ServerCheck:

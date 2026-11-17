@@ -111,7 +111,9 @@ public partial class Login
                 // skip the permissions prefetch (the user can't reach any gated page yet anyway).
                 if (result.MustChangePassword)
                 {
-                    Nav.NavigateTo(LoginRedirect.WithReturnUrl(LoginRedirect.ChangePasswordPath, ReturnUrl));
+                    // R-1: the seeded administrator of a fresh install first chooses its own account.
+                    var step = result.MustSetUpAccount ? LoginRedirect.AccountSetupPath : LoginRedirect.ChangePasswordPath;
+                    Nav.NavigateTo(LoginRedirect.WithReturnUrl(step, ReturnUrl));
                     return;
                 }
 

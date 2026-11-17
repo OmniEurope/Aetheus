@@ -121,6 +121,61 @@ public sealed class PipelineReleaseGateVariablesTests : IDisposable
         AssertGate(await ResolveStageAsync(DeployRun(ProjectId, "1.4.0")), Accepted, grade.ToString(), ApprovalNotRequired);
     }
 
+    /// <summary>R-60: the wizard's "ask my approval before the production deployment" option is a pipeline variable. It
+    /// asks for the approval even for a release accepted and graded A; it can only add the approval, never lift it.</summary>
+    [Theory]
+    [InlineData("true", ApprovalRequired)]
+    [InlineData("TRUE", ApprovalRequired)]
+    [InlineData("false", ApprovalNotRequired)]
+    [InlineData("", ApprovalNotRequired)]
+    public async Task TheApprovalOption_AsksForAnAcceptedAReleaseOnlyWhenTrue(string option, string approval)
+    {
+        await AddReleaseAsync(ProjectId, "1.4.0", deployable: true, AnalysisGrade.A);
+        var variables = new Dictionary<string, string> { [RequireApprovalVariable] = option };
+
+        var vars = await ResolveStageAsync(DeployRun(ProjectId, "1.4.0"), DeployDefinition(variables));
+
+        AssertGate(vars, Accepted, "A", approval);
+    }
+
+    [Fact]
+    public async Task TheApprovalOption_NeverLiftsTheApprovalOfARejectedRelease()
+    {
+        await AddReleaseAsync(ProjectId, "1.4.0", deployable: false, AnalysisGrade.B);
+        var variables = new Dictionary<string, string> { [RequireApprovalVariable] = "false" };
+
+        AssertGate(await ResolveStageAsync(DeployRun(ProjectId, "1.4.0"), DeployDefinition(variables)), Rejected, "B", ApprovalRequired);
+    }
+
+    /// <summary>R-60: a production environment that requires approval is honoured by a pipeline that does not name it on
+    /// a stage (the generic deployment template): the approval is the template's, asked once, never a second one beside it.</summary>
+    [Theory]
+    [InlineData(ProjectId, true, ApprovalRequired)]
+    [InlineData(ProjectId, false, ApprovalNotRequired)]
+    [InlineData(OtherProjectId, true, ApprovalNotRequired)]
+    public async Task AProductionEnvironmentRequiringApproval_MakesTheTemplateApprovalRequired(
+        int environmentProjectId, bool requireApproval, string approval)
+    {
+        await AddReleaseAsync(ProjectId, "1.4.0", deployable: true, AnalysisGrade.A);
+        _repo.FindEnvironmentByNameAsync("prod", ProjectId, Arg.Any<CancellationToken>()).Returns(
+            new Data.Entities.Environment { Id = 4, Name = "prod", ProjectId = environmentProjectId, RequireApproval = requireApproval });
+
+        AssertGate(await ResolveStageAsync(DeployRun(ProjectId, "1.4.0")), Accepted, "A", approval);
+    }
+
+    [Fact]
+    public async Task AnEnvironmentTheStagesNameThemselves_IsAskedByTheGateNotByTheTemplateApproval()
+    {
+        // The pipeline names prod on its stages: the environment approval is asked at launch by the gate itself, so the
+        // approval variable stays what the release says (a second approval would be asked beside the first).
+        await AddReleaseAsync(ProjectId, "1.4.0", deployable: true, AnalysisGrade.A);
+        _repo.FindEnvironmentByNameAsync("prod", ProjectId, Arg.Any<CancellationToken>()).Returns(
+            new Data.Entities.Environment { Id = 4, Name = "prod", ProjectId = ProjectId, RequireApproval = true });
+        var definition = DeployDefinition() with { Stages = [new PipelineStageDefinition { Name = "Deploy", Environment = "prod" }] };
+
+        AssertGate(await ResolveStageAsync(DeployRun(ProjectId, "1.4.0"), definition), Accepted, "A", ApprovalNotRequired);
+    }
+
     [Fact]
     public async Task AnUnknownRelease_FailsClosed()
     {

@@ -9,6 +9,9 @@ internal sealed class ServerTaskConfiguration : IEntityTypeConfiguration<ServerT
     public void Configure(EntityTypeBuilder<ServerTask> builder)
     {
         builder.HasIndex(e => new { e.ServerId, e.Status });
+        // R-44: the server detail reads the ten newest tasks of one server (ServerId filter, CreatedAt descending, LIMIT);
+        // the index returns them in order instead of sorting every task the server ever ran.
+        builder.HasIndex(e => new { e.ServerId, e.CreatedAt });
         // TaskTimeoutService sweeps (every minute) and the retention purge filter on
         // Status + a date with no ServerId: without these, they seq-scan the whole
         // ever-growing Tasks table.
@@ -16,6 +19,13 @@ internal sealed class ServerTaskConfiguration : IEntityTypeConfiguration<ServerT
         builder.HasIndex(e => new { e.Status, e.AssignedAt });
         builder.HasIndex(e => new { e.Status, e.StartedAt });
         builder.HasIndex(e => new { e.IsDeferredCleanup, e.Status });
+        // ADR-060: both filtered on the filled values, the previous version still inserts without them.
+        builder.HasIndex(e => e.Uid)
+            .IsUnique()
+            .HasFilter("\"Uid\" IS NOT NULL");
+        builder.HasIndex(e => new { e.ServerId, e.Number })
+            .IsUnique()
+            .HasFilter("\"Number\" > 0");
         builder.HasIndex(e => e.PipelineRunId);
         builder.HasIndex(e => new { e.PipelineRunId, e.IsDeferredCleanup })
             .IsUnique()

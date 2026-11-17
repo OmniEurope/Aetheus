@@ -67,6 +67,9 @@ internal static partial class PipelineUnresolvedVariableGuard
         "SYSTEM_DATE", "SYSTEM_DATETIME", "SYSTEM_TIMESTAMP", "SYSTEM_STAGENAME",
         "AGENT_NAME", "AGENT_HOSTNAME", "AGENT_OS", "AGENT_PLATFORM", "AGENT_ID",
         "AETHEUS_VERSION", "CI",
+        // R-33: written by the launch once the release number is allocated, after the pre-launch resolution
+        // (PipelineApplicationVersion), for a definition that allocates and declares APPLICATION_VERSION_PREFIX.
+        "APPLICATION_VERSION",
         // Set when the source block selects another repository for the workspace.
         "AETHEUS_DEFINITION_COMMIT", "AETHEUS_DEFINITION_BRANCH"
     };

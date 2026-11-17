@@ -25,7 +25,7 @@ public class PipelineRetentionServiceTests
             .BuildServiceProvider();
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var logger = Substitute.For<ILogger<PipelineRetentionService>>();
-        return (new PipelineRetentionService(scopeFactory, config, logger, clock), pipelineRepo, logRepo, taskRepo);
+        return (new PipelineRetentionService(scopeFactory, config, logger, clock, leaderLease: LeaderLeaseDouble.Leader()), pipelineRepo, logRepo, taskRepo);
     }
 
     [Fact]

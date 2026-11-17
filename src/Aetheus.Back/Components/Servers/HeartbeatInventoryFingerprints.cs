@@ -14,6 +14,7 @@ internal sealed class HeartbeatInventoryFingerprints
 
     internal const string Services = "services";
     internal const string DockerContainers = "docker-containers";
+    internal const string DockerContainerLiveFields = "docker-container-live-fields";
     internal const string DockerImages = "docker-images";
     internal const string DockerComposeStacks = "docker-compose-stacks";
     internal const string DockerNetworks = "docker-networks";
@@ -52,7 +53,12 @@ internal sealed class HeartbeatInventoryFingerprints
         var current = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [Services] = Hash(heartbeat.Services),
-            [DockerContainers] = Hash(heartbeat.Docker.Containers),
+            // The uptime text ("Up 3 minutes"), the CPU and the memory move between two beats of a healthy container:
+            // they sit in their own section so a container list that did not change is not deleted and
+            // inserted again every minute (R-2).
+            [DockerContainers] = Hash(heartbeat.Docker.Containers.Select(StructureOf).ToList()),
+            [DockerContainerLiveFields] = Hash(heartbeat.Docker.Containers.Select(
+                c => new { c.ContainerId, c.Status, c.CpuPercent, c.MemoryUsageMb }).ToList()),
             [DockerImages] = Hash(heartbeat.Docker.Images),
             [DockerComposeStacks] = Hash(heartbeat.Docker.ComposeStacks),
             [DockerNetworks] = Hash(heartbeat.Docker.Networks),
@@ -88,6 +94,9 @@ internal sealed class HeartbeatInventoryFingerprints
 
     /// <summary>The value to store once every changed section has been staged in the same save.</summary>
     public string ToJson() => JsonSerializer.Serialize(new Stored(_fullRewriteAt, _current));
+
+    private static DockerContainerDto StructureOf(DockerContainerDto container) =>
+        container with { Status = string.Empty, CpuPercent = 0, MemoryUsageMb = 0 };
 
     private static string Hash<T>(T section) =>
         Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(section)).AsSpan(0, 16));

@@ -1,0 +1,20 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-26 (user decision 2026-11-10, replacing R-19's select bar in a double tile): the production strategy is two selectable
+   tiles with an exclusive choice, like the other tiles of the step: the replacement of the services (the default) OR the
+   blue-green deployment. An OE card group binds the choice; each tile has the "?" of the step's tiles (R-22). *@
+<OmniHeading Level="OmniHeadingLevel.H6">@L["PipelineSetupProdStrategyTile"]</OmniHeading>
+<OmniSelectableCardGroup TValue="string" TSelection="string" Columns="2" Class="pipeline-setup-strategy" Label="@L["PipelineSetupProdStrategyTile"]"
+                         Disabled="@Fixed" Value="@Value" ValueChanged="@StrategyChanged" ValueExpression="@(() => Value)"
+                         data-testid="setup-strategy">
+    <PipelineSetupCapabilityTile Key="strategy-replace" Choice="@ProductionStrategy.Replace" Icon="OmniIconName.Refresh"
+                                 Title="@L["PipelineSetupProdReplace"]" Description="@L["PipelineSetupStrategyReplaceHint"]"
+                                 Help="@L["PipelineSetupStrategyReplaceHelp"]" Disabled="@Fixed" />
+    <PipelineSetupCapabilityTile Key="strategy-bluegreen" Choice="@ProductionStrategy.BlueGreen" Icon="OmniIconName.Layers"
+                                 Title="@L["PipelineSetupProdBlueGreen"]" Description="@L["PipelineSetupStrategyBlueGreenHint"]"
+                                 Help="@L["PipelineSetupStrategyBlueGreenHelp"]" Disabled="@Fixed" />
+</OmniSelectableCardGroup>
+@if (Fixed)
+{
+    @* R-11: a monolith is deployed by replacement only, which the two tiles cannot say by themselves. *@
+    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="setup-strategy-hint">@L["PipelineSetupProdMonolithStrategyHelp"]</OmniText>
+}

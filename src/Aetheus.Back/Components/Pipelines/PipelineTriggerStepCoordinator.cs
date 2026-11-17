@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Git;
 using Aetheus.Back.Data.Entities;
 using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 
@@ -41,6 +42,7 @@ public sealed class PipelineTriggerStepCoordinator(
     IPipelineCheckpointReuseService checkpoints,
     IResourceAuthorizationService authz,
     IAuditService audit,
+    IPipelineSetupServerRepository projectServers,
     TimeProvider timeProvider,
     ILogger<PipelineTriggerStepCoordinator> logger) : IPipelineTriggerStepCoordinator
 {
@@ -66,13 +68,31 @@ public sealed class PipelineTriggerStepCoordinator(
         // alias of one travels as its reference, which the child resolves from its own vault and classifies
         // as a secret, or refuses at launch when it cannot provide it. Never its clear value.
         var forwardable = WithoutSecrets(legVars, secretKeys);
-        var (resolved, targetError) = await ResolveTriggerTargetAsync(runId, stepDef, forwardable, ct).ConfigureAwait(false);
+        var targetName = SubstituteVariables(stepDef.Pipeline ?? string.Empty, forwardable).Trim();
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            await FailTriggerStepAsync(runId, stepRun, "missing 'pipeline' name to trigger.", now, ct).ConfigureAwait(false);
+            return;
+        }
+
+        var parent = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
+        // Decision 2026-11-15 (recette R-8): a run on an automatic dependency update branch never launches the pipeline a
+        // trigger step names, as its on_success follow-ups are never started (PipelineRunCompletedDownstreamHandler): a CI or a
+        // QA that triggers a deployment would otherwise deploy from a robot branch. Checked before the target is resolved, so
+        // nothing is materialized either. The step fails with its reason (decision 2026-11-15, replacing the earlier skip).
+        if (DependencyUpdateBranch.IsOurs(parent?.BranchName))
+        {
+            await FailForDependencyUpdateAsync(runId, stepRun, parent!.BranchName!, targetName, now, ct).ConfigureAwait(false);
+            return;
+        }
+
+        var (resolved, targetError) = await ResolveTriggerTargetAsync(parent, targetName, ct).ConfigureAwait(false);
         if (resolved is null)
         {
             await FailTriggerStepAsync(runId, stepRun, targetError!, now, ct).ConfigureAwait(false);
             return;
         }
-        var (run, target, targetName) = resolved;
+        var (run, target, _) = resolved;
 
         // Cycle guard mirrors the on_success handler: refuse if the target is already in the lineage
         // (immediate A→A or deeper A→B→A) or the chain has grown past the safety depth.
@@ -133,27 +153,42 @@ public sealed class PipelineTriggerStepCoordinator(
             runId, [PipelineStepFailureWarning.Trigger(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
+    /// <summary>The trigger step of a run on a dependency update branch: failed with its reason, without launching or
+    /// materializing anything. Same failure path as any other trigger that cannot run, so continue-on-error and the
+    /// finalizer apply as usual.</summary>
+    private async Task FailForDependencyUpdateAsync(
+        int runId, PipelineStepRun stepRun, string branch, string target, DateTime now, CancellationToken ct)
+    {
+        var reason = $"this run tests the dependency update branch '{branch}': the trigger step does not launch pipeline '{target}', "
+            + "production-bound follow-ups are blocked on this branch and left to the user.";
+        logger.LogWarning("Trigger step {Step} of run {RunId} failed: {Reason}", stepRun.StepName, runId, reason);
+        await FailTriggerStepAsync(runId, stepRun, reason, now, ct).ConfigureAwait(false);
+    }
+
     private sealed record TriggerTarget(PipelineRun Run, Pipeline Target, string Name);
 
     /// <summary>The pipeline the step names, in the parent's project, or materialized from the run's
     /// immutable revision; otherwise why the step fails.</summary>
     private async Task<(TriggerTarget? Target, string? Error)> ResolveTriggerTargetAsync(
-        int runId, PipelineStepDefinition stepDef, Dictionary<string, string> forwardable, CancellationToken ct)
+        PipelineRun? run, string targetName, CancellationToken ct)
     {
-        var targetName = SubstituteVariables(stepDef.Pipeline ?? string.Empty, forwardable).Trim();
-        if (string.IsNullOrWhiteSpace(targetName))
-            return (null, "missing 'pipeline' name to trigger.");
-
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         var projectId = run?.Pipeline is null ? null : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
         if (projectId is not { } pid)
             return (null, "trigger is only supported for project-owned pipelines.");
 
-        var target = await repo.FindPipelineByNameAndProjectAsync(targetName, pid, ct).ConfigureAwait(false)
-            ?? await MaterializeMissingTriggerTargetAsync(run!, pid, targetName, ct).ConfigureAwait(false);
+        var target = await repo.FindPipelineByNameAndProjectAsync(targetName, pid, ct).ConfigureAwait(false);
+        if (target is not null)
+            return (new TriggerTarget(run!, target, targetName), null);
+        // Decision 2026-11-10 (point 5): a mirror is untrusted, so it never creates a pipeline. The user imports it.
+        if (await pipelineGit.IsExternalMirrorDefinitionSourceAsync(pid, run!.Pipeline!.SourceRepositoryId, ct)
+                .ConfigureAwait(false))
+            return (null, $"pipeline '{targetName}' is not registered in Aetheus, and the definitions of this pipeline's "
+                + "source repository come from the mirror of an external repository, which is never read to create a "
+                + "pipeline: import it explicitly from the external repository first.");
+        target = await MaterializeMissingTriggerTargetAsync(run, pid, targetName, ct).ConfigureAwait(false);
         return target is null
             ? (null, $"pipeline '{targetName}' not found in the project or at the immutable run revision.")
-            : (new TriggerTarget(run!, target, targetName), null);
+            : (new TriggerTarget(run, target, targetName), null);
     }
 
     /// <summary>The child's preparation once its owner is authorized on the targets it produces, or why
@@ -469,6 +504,11 @@ public sealed class PipelineTriggerStepCoordinator(
             && !string.IsNullOrWhiteSpace(upstreamRelease)
             && preparation.Definition.Parameters.Any(p => string.Equals(p.Name, "candidateVersion", StringComparison.OrdinalIgnoreCase)))
             parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["candidateVersion"] = upstreamRelease };
+        // R-36: a chained run is given nothing but candidateVersion, so a required deployServer without default
+        // is chosen here when the project has exactly one server, and refused by name otherwise.
+        var (withServer, serverRefusal) = await ChooseDeployServerAsync(child, preparation, parameters, ct).ConfigureAwait(false);
+        if (serverRefusal is not null) return PipelineChainedRunOutcome.Refused(serverRefusal);
+        parameters = withServer;
         // BACK-021: authorize the targets of the definition the parameters produce, then launch exactly it.
         var runtimePreparation = await parameterResolver.ResolveRunParametersAsync(preparation, parameters, ct)
             .ConfigureAwait(false);
@@ -479,6 +519,35 @@ public sealed class PipelineTriggerStepCoordinator(
             ? PipelineChainedRunOutcome.Refused(
                 PipelineProblem.Of(PipelineProblemCodes.ChainedLaunchReturnedNoRun, "the launch returned no run"))
             : PipelineChainedRunOutcome.Started(started);
+    }
+
+    /// <summary>The parameters of the chained launch with <c>deployServer</c> filled when it was missing and the project
+    /// has exactly one server; a refusal (never a guess) when it is missing and the choice is not unique. Logs the branch
+    /// taken. Untouched when the pipeline declares no such parameter or it already has a value or a default.</summary>
+    private async Task<(Dictionary<string, string>? Parameters, PipelineProblem? Refusal)> ChooseDeployServerAsync(
+        Pipeline child, PipelineRunPreparation preparation, Dictionary<string, string>? parameters, CancellationToken ct)
+    {
+        var declared = preparation.Definition?.Parameters;
+        if (!PipelineChainedDeployServer.IsMissing(declared, parameters)) return (parameters, null);
+        var projectId = await repo.GetPipelineProjectIdAsync(child, ct).ConfigureAwait(false);
+        var servers = projectId is { } id
+            ? await projectServers.ListProjectServerNamesAsync(id, ct).ConfigureAwait(false)
+            : [];
+        if (PipelineChainedDeployServer.Decide(declared!, parameters, servers) != PipelineChainedDeployServer.Branch.OnlyServer)
+        {
+            logger.LogWarning(
+                "Chained run of pipeline {PipelineId} refused: deployServer has no value and no default and the project has {Servers} server(s).",
+                child.Id, servers.Count);
+            return (parameters, PipelineChainedDeployServer.MissingProblem(child.Name, servers.Count));
+        }
+
+        logger.LogInformation(
+            "Chained run of pipeline {PipelineId}: deployServer has no value and no default, the project's only server '{Server}' is used.",
+            child.Id, servers[0]);
+        return (new Dictionary<string, string>(parameters ?? [], StringComparer.OrdinalIgnoreCase)
+        {
+            [PipelineChainedDeployServer.ParameterName] = servers[0]
+        }, null);
     }
 
     private static PipelineProblem ChainedPipelineGone(int pipelineId) => PipelineProblem.Of(

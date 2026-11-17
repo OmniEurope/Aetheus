@@ -20,6 +20,9 @@ public partial class MonitoredAppsList : IAsyncDisposable
 
     [Parameter] public int ProjectId { get; set; }
 
+    /// <summary>The project header's menu outlet (absent when the list is hosted outside the project layout).</summary>
+    [CascadingParameter] public ProjectSectionMenu? SectionMenu { get; set; }
+
     private List<MonitoredAppDto> _apps = [];
     private AetheusDataGrid<MonitoredAppDto>? _grid;
     // Header filter texts and the hosting-server value the filter lists, built once so the columns
@@ -34,6 +37,7 @@ public partial class MonitoredAppsList : IAsyncDisposable
     private bool _loading = true;
     private bool _canWrite;
     private HubConnection? _hubConnection;
+    private readonly CancellationTokenSource _lifetime = new();
     private string CacheKey => $"monitored-apps:{ProjectId}";
     private sealed record CachedMonitoringData(
         List<MonitoredAppDto> Apps,
@@ -62,6 +66,9 @@ public partial class MonitoredAppsList : IAsyncDisposable
         }
         await LoadAppsAsync();
         _loading = false;
+        // The hub only refreshes the list: it is drawn from what was read, never after the hub has started
+        // (a start that stalls kept the grid on its loading bar).
+        StateHasChanged();
         await StartHubAsync();
     }
 
@@ -71,7 +78,24 @@ public partial class MonitoredAppsList : IAsyncDisposable
         InvokeAsync(StateHasChanged);
     }
 
-    private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Project);
+    private void RefreshCanWrite()
+    {
+        _canWrite = Permissions.CanWrite(ResourceType.Project);
+        PublishHeader();
+    }
+
+    /// <summary>The project header's menu gets Add (one delegate, so republishing raises nothing) and its Settings
+    /// button turns into the blue main action; read-only readers get neither.</summary>
+    private void PublishHeader()
+    {
+        if (SectionMenu is null) return;
+        SectionMenu.Set(_canWrite
+            ? [new ProjectSectionMenuAction("add", L["AddMonitoredApp"], null, false, _openCreate ??= OpenCreateDialogAsync)]
+            : []);
+        SectionMenu.SetSettingsPrimary(true);
+    }
+
+    private Func<Task>? _openCreate;
 
     /// <param name="live">a live event; the grid notes the rows it holds before the new list lands,
     /// so an app added elsewhere reads bold for a few seconds.</param>
@@ -119,11 +143,20 @@ public partial class MonitoredAppsList : IAsyncDisposable
             new Dictionary<string, object?> { ["ProjectId"] = ProjectId, ["App"] = app },
             new OmniDialogOptions { Width = "760px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
 
-        if (result is true)
-        {
-            await LoadAppsAsync();
-            StateHasChanged();
-        }
+        if (result is MonitoredAppDto saved)
+            await UpsertAppAsync(saved);
+    }
+
+    /// <summary>R-10: the created or saved app shows at once from the answer of the action, the list is read again
+    /// behind it without blocking. The answer carries no sparkline, so a known app keeps its samples.</summary>
+    private Task UpsertAppAsync(MonitoredAppDto saved)
+    {
+        var known = _apps.FindIndex(held => held.Id == saved.Id);
+        _apps = known < 0 ? [.. _apps, saved] : [.. _apps.Select(held => held.Id == saved.Id ? saved : held)];
+        // The cached list would seed the previous state again until the read below stores the real one.
+        Cache.Invalidate(CacheKey);
+        _ = InvokeAsync(async () => { await LoadAppsAsync(); StateHasChanged(); });
+        return InvokeAsync(StateHasChanged);
     }
 
     private async Task DeleteAppAsync(MonitoredAppDto app)
@@ -137,9 +170,21 @@ public partial class MonitoredAppsList : IAsyncDisposable
         await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Monitoring.DeleteMonitoredAppAsync(app.Id),
             "MonitoredAppDeleted",
-            async () => await LoadAppsAsync(),
+            () => RemoveAppAsync(app),
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
+    }
+
+    /// <summary>R-10: the deleted app leaves the grid at once, the list is read again behind it without blocking.
+    /// A refused deletion never gets here, so the row stays.</summary>
+    private Task RemoveAppAsync(MonitoredAppDto app)
+    {
+        _apps = [.. _apps.Where(held => held.Id != app.Id)];
+        _samples.Remove(app.Id);
+        // The cached list would seed the deleted app again until the read below stores the real one.
+        Cache.Invalidate(CacheKey);
+        _ = InvokeAsync(async () => { await LoadAppsAsync(); StateHasChanged(); });
+        return InvokeAsync(StateHasChanged);
     }
 
     private async Task StartHubAsync()
@@ -155,8 +200,10 @@ public partial class MonitoredAppsList : IAsyncDisposable
                 await LoadAppsAsync(live: true);
                 StateHasChanged();
             }));
-            await _hubConnection.StartAsync();
-            await _hubConnection.InvokeAsync("JoinEntityUpdates", ResourceType.Project);
+            // Bound to the page: leaving it cancels a negotiate that does not answer instead of holding the
+            // disposal until the HTTP timeout (two minutes).
+            await _hubConnection.StartAsync(_lifetime.Token);
+            await _hubConnection.InvokeAsync("JoinEntityUpdates", ResourceType.Project, _lifetime.Token);
         }
         catch { /* Hub unavailable - degrade to static */ }
     }
@@ -171,11 +218,15 @@ public partial class MonitoredAppsList : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
+        SectionMenu?.Clear();
+        SectionMenu?.SetSettingsPrimary(false);
+        await _lifetime.CancelAsync();
         if (_hubConnection is not null)
         {
             await _hubConnection.LeaveEntityUpdatesAndDisposeAsync(ResourceType.Project);
             _hubConnection = null;
         }
+        _lifetime.Dispose();
     }
 
     /// <summary>The export writes the uptimes the cells show.</summary>

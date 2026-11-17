@@ -28,6 +28,8 @@ public sealed record ProjectDto
     public PipelineStatus? LastRunStatus { get; init; }
     public DateTime? LastRunAt { get; init; }
     public int? LastRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int? LastRunNumber { get; init; }
     public string? LastRunName { get; init; }
 
     /// <summary>Indicates the selected root run is still Running, taking precedence over a newer
@@ -37,9 +39,14 @@ public sealed record ProjectDto
     /// <summary>The step the active run is on, as "stage · step"; null when the run is not active.</summary>
     public string? LastRunCurrentStep { get; init; }
 
-    /// <summary>Current project-wide A-F grade: the latest candidate run's. Null when no complete
-    /// grade has been produced yet.</summary>
+    /// <summary>Current project-wide A-F grade (R-12, R-20): the sealed assurance verdict of the release deployed
+    /// in production, F when its seal refused it. Null when nothing is deployed or the deployed release carries no
+    /// verdict; <see cref="LatestGateGradeQualification"/> says which.</summary>
     public AnalysisGrade? LatestGateGrade { get; init; }
+
+    /// <summary>Where <see cref="LatestGateGrade"/> comes from. Null when the project has no analysis grade and
+    /// no sealed verdict.</summary>
+    public AnalysisQualificationDto? LatestGateGradeQualification { get; init; }
 
     /// <summary>Most recent git activity for the project: the latest of the internal repository's
     /// last push and any external connection's last sync. Null when the project has no git.
@@ -58,8 +65,17 @@ public sealed record ProjectDto
     public ProjectProductionStatus ProductionStatus { get; init; } = ProjectProductionStatus.Unavailable;
 
     /// <summary>Active analytics sessions seen in the last five minutes across production apps.
-    /// Null means web analytics is not available; zero is a measured absence of active sessions.</summary>
+    /// Null means web analytics is not available; zero is a measured absence of active sessions only when
+    /// <see cref="OnlineUserState"/> is <see cref="OnlineAudienceState.Measured"/>.</summary>
     public int? OnlineUserCount { get; init; }
+
+    /// <summary>R-13/R-23: whether <see cref="OnlineUserCount"/> was measured, is waiting for data (nothing
+    /// ingested in the window), or is unavailable (web analytics not enabled).</summary>
+    public OnlineAudienceState OnlineUserState { get; init; } = OnlineAudienceState.Unavailable;
+
+    /// <summary>R-23: when web analytics last ingested an event for the production apps (UTC); null when it never did.
+    /// Told next to a <see cref="OnlineAudienceState.Waiting"/> counter so the wait has a starting point.</summary>
+    public DateTime? OnlineUserLastEventAt { get; init; }
 }
 
 public sealed record ProjectDetailDto
@@ -79,18 +95,36 @@ public sealed record ProjectDetailDto
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 
-    /// <summary>Current project-wide A-F grade: the latest candidate run's. Null when no complete
-    /// grade has been produced yet.</summary>
+    /// <summary>Current project-wide A-F grade (R-12, R-20): the sealed assurance verdict of the release deployed
+    /// in production, F when its seal refused it. Null when nothing is deployed or the deployed release carries no
+    /// verdict; <see cref="LatestGateGradeQualification"/> says which.</summary>
     public AnalysisGrade? LatestGateGrade { get; init; }
 
-    /// <summary>The latest candidate's root run that <see cref="LatestGateGrade"/> was read from
-    /// (its trigger children merged, the worst grade kept, as on the run page), to open
-    /// it.</summary>
+    /// <summary>Where <see cref="LatestGateGrade"/> comes from (deployed release, state). Null when the project
+    /// has no analysis grade and no sealed verdict.</summary>
+    public AnalysisQualificationDto? LatestGateGradeQualification { get; init; }
+
+    /// <summary>The run whose seal published the deployed release's verdict (<see cref="LatestGateGrade"/>), to
+    /// open on its Gate tab.</summary>
     public int? LatestGateGradeRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int? LatestGateGradeRunNumber { get; init; }
+
+    /// <summary>What lowers <see cref="LatestGateGrade"/> below A (the pipeline run of its seal, or the project's own
+    /// open findings); null when the grade is A or has no letter.</summary>
+    public AnalysisGradeCause? LatestGateGradeCause { get; init; }
+
+    /// <summary>The pipeline of <see cref="LatestGateGradeRunId"/>, named when <see cref="LatestGateGradeCause"/> is the pipeline.</summary>
+    public int? LatestGateGradePipelineId { get; init; }
+    [StringLength(200)] public string? LatestGateGradePipelineName { get; init; }
 
     /// <summary>Most recent git activity (internal last push / external last sync); null when the
     /// project has no git. Shown in the overview "Repository" card.</summary>
     public DateTime? LastGitUpdateAt { get; init; }
+
+    /// <summary>R-29: the address (application, and API when it answers elsewhere) deployed by the project's latest successful
+    /// production deployment run. Null when no run deployed to production: nothing is shown then.</summary>
+    public PipelineRunDeployedAddressDto? ProductionAddress { get; init; }
 
     public List<PipelineDto> Pipelines { get; init; } = [];
 
@@ -98,6 +132,10 @@ public sealed record ProjectDetailDto
     public int? ArtifactRetentionDays { get; init; }
     public int? ArtifactLatestRetentionDays { get; init; }
     public string? ReleaseNumberingPattern { get; init; }
+
+    /// <summary>R-13: the project follows the expand/contract model for its database (its migration gate is on): the overview
+    /// shows the expand/contract tracking tab even before an environment and a database are declared.</summary>
+    public bool MigrationGateEnabled { get; init; }
 
     // S-TECH-N8R3: per-section counts so the project detail can render enriched section tiles
     // (Servers / Releases / Vaults / Libraries / Environments) without N extra round-trips.
@@ -156,6 +194,22 @@ public sealed record CreateProjectRequest : ProjectRequest
 public sealed record UpdateProjectRequest : ProjectRequest
 {
     public ProjectStatus Status { get; init; }
+}
+
+/// <summary>R-31: the branch the pipeline setup wizard chose, written to the project's default branch beside the
+/// <c>source_branch:</c> of the pipelines it created.</summary>
+public sealed record SetProjectDefaultBranchRequest
+{
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
+    public string Branch { get; init; } = string.Empty;
+}
+
+/// <summary>R-13: turns the project's expand/contract model (its migration gate) on or off, from the pipeline setup wizard or the
+/// project's settings.</summary>
+public sealed record SetProjectMigrationGateRequest
+{
+    public bool Enabled { get; init; }
 }
 
 public sealed record ProjectActivityDto

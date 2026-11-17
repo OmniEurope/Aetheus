@@ -98,7 +98,7 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
             AgentProtocolVersion = s.AgentProtocolVersion,
             AgentCapabilities = ServerDataMapper.DeserializeDiagnostics(s.AgentCapabilitiesJson),
             AgentUpdateReserved = s.AgentUpdateReserved,
-            AgentUpdateRequest = s.AgentUpdateRequest,
+            AgentUpdateRequest = SupersededAgentUpdateFailure.Drop(s.AgentUpdateRequest, s.AgentVersion),
             Status = s.Status,
             Type = s.Type,
             LastHeartbeat = s.LastHeartbeat,
@@ -176,7 +176,7 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
 
     public async Task<Server?> GetServerDetailAsync(int id, CancellationToken ct = default)
     {
-        return await db.Servers
+        var server = await db.Servers
             .AsNoTracking()
             .Where(s => s.Id == id)
             .Include(s => s.Services)
@@ -195,11 +195,30 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
             .Include(s => s.PortsentryState)
             .Include(s => s.RkhunterState)
             .Include(s => s.RkhunterWarnings)
-            .Include(s => s.Tasks.OrderByDescending(t => t.CreatedAt).Take(10))
-            .Include(s => s.AgentUpdateRequests.OrderByDescending(request => request.RequestedAt).Take(1))
-            .Include(s => s.Metrics.OrderByDescending(m => m.Timestamp).Take(1))
             .AsSplitQuery()
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (server is null) return null;
+
+        // R-44: a filtered Include with Take is translated into ROW_NUMBER() OVER (PARTITION BY ServerId ...), which ranks
+        // every task, update request and metric sample of the server before keeping the first few; the metric table is
+        // the one that grows with every heartbeat. A LIMIT query per collection reads only the rows it keeps, in index
+        // order (Metrics: ServerId + Timestamp, Tasks: ServerId + CreatedAt), and the loaded collections are the same.
+        server.Tasks = await db.Tasks.AsNoTracking()
+            .Where(task => task.ServerId == id)
+            .OrderByDescending(task => task.CreatedAt)
+            .Take(10)
+            .ToListAsync(ct).ConfigureAwait(false);
+        server.AgentUpdateRequests = await db.AgentUpdateRequests.AsNoTracking()
+            .Where(request => request.ServerId == id)
+            .OrderByDescending(request => request.RequestedAt)
+            .Take(1)
+            .ToListAsync(ct).ConfigureAwait(false);
+        server.Metrics = await db.ServerMetrics.AsNoTracking()
+            .Where(metric => metric.ServerId == id)
+            .OrderByDescending(metric => metric.Timestamp)
+            .Take(1)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return server;
     }
 
     public Task<Server?> GetServerWithCollectionsAsync(int id, CancellationToken ct = default)

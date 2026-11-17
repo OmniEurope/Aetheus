@@ -1,32 +1,33 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@* Autocomplete="organization" on the Name field: a bare "Name" field makes browsers offer saved payment cards; this token is not a person or card name, so the browser keeps offering previously typed names (history) instead. Never "off" (R-12). Each field carries its own stable name: the browser keys its history by name, and the member path OE writes by default (_model.Name) is shared by other dialogs (recette R-3, 2026-11-10). *@
 @* Create/Edit project as a dialog. Project == null => create mode; otherwise edit mode.
    Closes with the resulting ProjectDto on success (caller refreshes); a delete navigates away. *@
 <OmniTemplateForm TModel="ProjectFormModel" Model="@_model" OnValidSubmit="@OnSubmit">
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniRow Gap="OmniSpacing.Large">
         <OmniColumn Span="12" MediumSpan="6">
-            <OmniStack Gap="OmniSpacing.Large">
+            <OmniStack Gap="OmniSpacing.Small">
                 <OmniFormField Label="@L["Name"]" Class="omni-u-w-100" For="project-form-name">
                     <OmniTextBox @bind-Value="_model.Name"
-                        Id="project-form-name" Class="omni-u-w-100" />
+                        Id="project-form-name" name="project-name" Autocomplete="organization" Class="omni-u-w-100" />
                     <ValidationMessage For="@(() => _model.Name)" />
                 </OmniFormField>
                 <OmniFormField Label="@L["Description"]" Class="omni-u-w-100" For="Description">
                     <OmniTextArea @bind-Value="_model.Description"
-                        Id="Description" Rows="3" Class="omni-u-w-100" />
+                        Id="Description" name="project-description" Rows="3" Class="omni-u-w-100" />
                     <ValidationMessage For="@(() => _model.Description)" />
                 </OmniFormField>
             </OmniStack>
         </OmniColumn>
         <OmniColumn Span="12" MediumSpan="6">
-            <OmniStack Gap="OmniSpacing.Large">
+            <OmniStack Gap="OmniSpacing.Small">
                 <OmniFormField Label="@L["RepositoryUrl"]" Class="omni-u-w-100" For="RepositoryUrl">
-                    <OmniTextBox @bind-Value="_model.RepositoryUrl" Id="RepositoryUrl"
+                    <OmniTextBox @bind-Value="_model.RepositoryUrl" Id="RepositoryUrl" name="project-repository-url"
                         Placeholder="@L["PlaceholderRepositoryUrl"]" Class="omni-u-w-100" />
                 </OmniFormField>
                 <OmniFormField Label="@L["DefaultBranch"]" Class="omni-u-w-100" For="DefaultBranch">
                     <OmniTextBox @bind-Value="_model.DefaultBranch"
-                        Id="DefaultBranch" Placeholder="main" Class="omni-u-w-100" />
+                        Id="DefaultBranch" name="project-default-branch" Placeholder="main" Class="omni-u-w-100" />
                 </OmniFormField>
                 @if (!_isNew)
                 {
@@ -40,7 +41,7 @@
 
     <OmniFormField Label="@L["TagsCommaSeparated"]" Class="omni-u-mt-md omni-u-w-100" For="Tags">
         <OmniTextBox @bind-Value="_model.TagsRaw"
-            Id="Tags" Class="omni-u-w-100" />
+            Id="Tags" name="project-tags" Class="omni-u-w-100" />
     </OmniFormField>
 
     @* S-FEAT-15 / S-FEAT-16: per-project CI/CD settings (blank = global / built-in default). *@

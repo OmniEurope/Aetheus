@@ -19,8 +19,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// mocks away entirely (it uses <c>Mock&lt;IHubContext&gt;</c>).
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class SignalRBroadcastIntegrationTests(PostgresFixture fixture)
+public sealed class SignalRBroadcastIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static Task<string> LoginAsAdminAsync(HttpClient client)
         => IntegrationAuth.LoginAsAdminAsync(client, TestContext.Current.CancellationToken);

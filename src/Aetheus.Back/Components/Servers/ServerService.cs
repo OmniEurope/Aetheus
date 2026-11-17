@@ -33,7 +33,9 @@ public class ServerService(
     PortRegistry.IPortRegistryService? portRegistry = null,
     // Dispatches MailInventoryReportedEvent from heartbeats; optional for direct test construction,
     // with the real dispatcher supplied by DI.
-    Services.DomainEvents.IDomainEventDispatcher? domainEvents = null)
+    Services.DomainEvents.IDomainEventDispatcher? domainEvents = null,
+    // Where the restart cause an agent reports is kept for the sweep that fails its replaced session's tasks.
+    Services.AgentRestartRegistry? restartRegistry = null)
     : IServerLifecycleService, IServerHeartbeatService, IServerServiceManagementService,
       IServerAgentContactService, IServerDiagnosticService
 {
@@ -41,7 +43,7 @@ public class ServerService(
     // ctor - build the category logger from the (public) factory instead. Optional/null-defaulted so unit
     // tests that new-up the service directly need not thread a factory (DI still injects the real one).
     private readonly ServerHeartbeatProcessor _heartbeat = new(repo, heartbeatRepo, serverHub, alertHub, timeProvider, transaction, updateConfirmation, portRegistry, domainEvents,
-        (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<ServerHeartbeatProcessor>());
+        (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<ServerHeartbeatProcessor>(), restartRegistry);
     private readonly ServerServiceManager _serviceManager = new(repo, heartbeatRepo, audit, taskService);
     private readonly ServerAgentContactProbe _contact = new(repo, backgroundOptions, timeProvider);
     private readonly ServerDiagnosticAnalyzer _diagnostic = new(repo, timeProvider, compatibilityPolicy);
@@ -151,6 +153,12 @@ public class ServerService(
             ? await repo.CountActiveNonUpdateTasksAsync(id, ct).ConfigureAwait(false)
             : 0;
         var latestUpdate = server.AgentUpdateRequests.FirstOrDefault();
+        // A failure the running agent already left behind (a newer version reinstalled) no longer describes the server.
+        if (latestUpdate is not null
+            && SupersededAgentUpdateFailure.IsSuperseded(latestUpdate.Status, latestUpdate.TargetVersion, server.AgentVersion))
+        {
+            latestUpdate = null;
+        }
         var detail = new ServerDetailDto
         {
             HeartbeatHistory = heartbeatHistory,

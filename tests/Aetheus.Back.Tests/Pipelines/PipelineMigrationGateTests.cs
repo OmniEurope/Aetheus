@@ -112,6 +112,7 @@ public sealed class PipelineMigrationGateTests
             events);
         var task = new ServerTask { Id = 21, PipelineRunId = 7, PipelineStepRunId = 11 };
 
+        var output = Line(new MigrationGateReport { Outcome = MigrationGateOutcome.Refused, PendingCount = 1 });
         await finalizer.UpdateStepRunAsync(
             task,
             new TaskResultDto
@@ -119,9 +120,9 @@ public sealed class PipelineMigrationGateTests
                 TaskId = 21,
                 Status = TaskExecutionStatus.Failed,
                 ExitCode = 1,
-                Output = Line(new MigrationGateReport { Outcome = MigrationGateOutcome.Refused, PendingCount = 1 })
+                Output = output
             },
-            21,
+            output,
             ct);
 
         await events.Received(1).DispatchStrictAsync(
@@ -160,8 +161,12 @@ public sealed class PipelineMigrationGateTests
             }
         ]);
 
+        repo.GetRunNumberAsync(7, Arg.Any<CancellationToken>()).Returns(12);
+
         var dto = Assert.Single(await new PipelineMigrationGateService(repo).GetForRunAsync(7, TestContext.Current.CancellationToken));
 
+        Assert.Equal(7, dto.RunId);
+        Assert.Equal(12, dto.RunNumber);
         Assert.Equal(3, dto.Id);
         Assert.Equal(MigrationGateOutcome.Compatible, dto.Outcome);
         Assert.Equal(At, dto.RecordedAt);

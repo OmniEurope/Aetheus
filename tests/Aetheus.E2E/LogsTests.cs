@@ -3,7 +3,6 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Logs")]
-[RollbackRelevant]
 public class LogsTests : E2ETestBase
 {
     protected override bool ShareBrowserContextAcrossTests => true;

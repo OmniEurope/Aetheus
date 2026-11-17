@@ -50,6 +50,12 @@ public sealed class PipelineRunParameterResolver(
             .ConfigureAwait(false) ?? 0;
         var resolution = await templateResolver.ResolveAsync(
             preparation.YamlSnapshot, organizationId, effectiveParameters, ct).ConfigureAwait(false);
+        // R-11 security review, finding 5: the caller's parameters re-resolve the templates after the preparation
+        // checked the definition, so a selector such as `pool: ${{ parameters.pool }}` only takes its value here. An
+        // imported external definition is checked again on exactly what will run.
+        if (preparation.Pipeline is { IsExternalImport: true }
+            && PipelineExternalImportPolicy.Validate(resolution.Definition) is { Count: > 0 } problems)
+            throw new BadRequestException(string.Join(" ", problems));
         var effectiveStages = YamlParsingHelper.FlattenJobs(resolution.Definition);
         var targetIds = await ResolveCandidateTargetServerIdsAsync(
             resolution.Definition, organizationId, preparation.EffectiveProjectId, ct).ConfigureAwait(false);

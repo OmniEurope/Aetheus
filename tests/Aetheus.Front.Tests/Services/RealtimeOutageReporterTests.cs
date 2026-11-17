@@ -134,7 +134,7 @@ public sealed class RealtimeOutageReporterTests
     public async Task APageStillHiddenWhenTheConnectionIsBack_CountsTheOpenStretch()
     {
         var (reporter, clock, sink, visibility) = CreateWithVisibility();
-        clock.Advance(TimeSpan.FromSeconds(20));
+        clock.Advance(TimeSpan.FromSeconds(70));
         visibility.Hidden();
         clock.Advance(TimeSpan.FromSeconds(100));
 
@@ -142,7 +142,7 @@ public sealed class RealtimeOutageReporterTests
         clock.Advance(RealtimeOutageReporter.GroupingWindow);
 
         var report = await sink.NextAsync();
-        Assert.EndsWith("The page was hidden for 100 s and visible for 20 s during the outage.", report.Message, StringComparison.Ordinal);
+        Assert.EndsWith("The page was hidden for 100 s and visible for 70 s during the outage.", report.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -161,6 +161,128 @@ public sealed class RealtimeOutageReporterTests
         Assert.Equal(
             "2 realtime connections came back after one outage: 'pipelines' lost at 2026-10-12 08:06:45Z, back after 404 s (page hidden 304 s, visible 100 s); 'user' lost at 2026-10-12 08:08:25Z, back after 304 s (page hidden 304 s, visible 0 s).",
             report.Message);
+    }
+
+    // R-2 (2026-10-31): a tab parked in the background loses its connections without any fault of the
+    // server and comes back by itself; the outage was never seen on screen, so it reports nothing.
+    // Measured on the export of 2026-10-29: 50 such warnings, the longest visible stretch 31 s.
+    [Fact]
+    public void AnOutageOfAHiddenPage_IsNotReported()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        clock.Advance(TimeSpan.FromSeconds(1));
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(140));
+
+        reporter.Restored("entities", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        AssertNoMore(clock, sink);
+    }
+
+    [Fact]
+    public void AnOutageHiddenButForAShortGlance_IsNotReported()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(200));
+        visibility.Visible();
+        clock.Advance(TimeSpan.FromSeconds(31));
+
+        reporter.Restored("alerts", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        AssertNoMore(clock, sink);
+    }
+
+    [Fact]
+    public async Task AVisiblePageThatCannotReachTheHub_IsStillReported()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(30));
+        visibility.Visible();
+        clock.Advance(RealtimeOutageReporter.ReportedOutage);
+
+        reporter.Restored("servers", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        var report = await sink.NextAsync();
+        Assert.Equal(ClientErrorLogLevels.Warning, report.Level);
+        Assert.EndsWith("The page was hidden for 30 s and visible for 60 s during the outage.", report.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AHiddenHub_JoinsTheReportOfAnIncidentTheUserSaw_InEitherOrder()
+    {
+        foreach (var hiddenFirst in new[] { true, false })
+        {
+            var (reporter, clock, sink, visibility) = CreateWithVisibility();
+            // On screen for the first 70 s, hidden for the next 100 s: the hub lost at the start was seen
+            // on screen for 70 s, the one lost 70 s later only while the page was hidden.
+            clock.Advance(TimeSpan.FromSeconds(70));
+            visibility.Hidden();
+            clock.Advance(TimeSpan.FromSeconds(100));
+            var seenSince = LostAt;
+            var hiddenSince = LostAt.AddSeconds(70);
+
+            reporter.Restored(hiddenFirst ? "user" : "pipelines", hiddenFirst ? hiddenSince : seenSince);
+            reporter.Restored(hiddenFirst ? "pipelines" : "user", hiddenFirst ? seenSince : hiddenSince);
+            clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+            var report = await sink.NextAsync();
+            Assert.Contains("'user'", report.Message, StringComparison.Ordinal);
+            Assert.Contains("'pipelines'", report.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task AHiddenHubNeverReported_IsNotCarriedIntoALaterIncident()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(140));
+        reporter.Restored("entities", LostAt);
+        visibility.Visible();
+        clock.Advance(TimeSpan.FromMinutes(10));
+
+        reporter.Restored("servers", clock.GetUtcNow().AddSeconds(-70));
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        var report = await sink.NextAsync();
+        Assert.DoesNotContain("'entities'", report.Message, StringComparison.Ordinal);
+        Assert.Contains("'servers'", report.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnOutageTheUserSawOnScreen_StaysAWarning()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(30));
+        visibility.Visible();
+        clock.Advance(TimeSpan.FromSeconds(60));
+
+        reporter.Restored("servers", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        Assert.Equal(ClientErrorLogLevels.Warning, (await sink.NextAsync()).Level);
+    }
+
+    [Fact]
+    public async Task AnIncidentWhereOneHubWasSeenOnScreen_StaysAWarning()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(100));
+        visibility.Visible();
+        clock.Advance(TimeSpan.FromSeconds(70));
+
+        reporter.Restored("pipelines", LostAt);
+        reporter.Restored("user", LostAt.AddSeconds(100));
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        Assert.Equal(ClientErrorLogLevels.Warning, (await sink.NextAsync()).Level);
     }
 
     private static (RealtimeOutageReporter Reporter, ObservedFakeClock Clock, ReportSink Sink, PageVisibilityTimeline Visibility) CreateWithVisibility()

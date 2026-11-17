@@ -34,6 +34,11 @@ public partial class ProjectFormDialog
         {
             _model = ProjectFormModel.From(Project);
         }
+        else
+        {
+            // A new project starts on "main", written in the field rather than only shown as its placeholder.
+            _model.DefaultBranch = "main";
+        }
     }
 
     private async Task OnSubmit()

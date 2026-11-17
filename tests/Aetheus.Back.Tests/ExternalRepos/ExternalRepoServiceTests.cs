@@ -141,6 +141,27 @@ public sealed class ExternalRepoServiceTests
     }
 
     [Fact]
+    public async Task AttachAsync_BesideAnInternalRepositoryNothingWasPushedTo_IsRefused_AndNothingIsDeletedOrAttached()
+    {
+        // Recette R-69 (OE2): beside an empty internal repository the external one became an additional source and the empty
+        // repository stayed what the production analysis and the pipelines read.
+        var project = new Project { Id = 1, Name = "OE2", RepositoryUrl = "https://api.example/git/1/api.git", DefaultBranch = "main" };
+        _projects.FindProjectAsync(1, Arg.Any<CancellationToken>()).Returns(project);
+        _light.GetByProjectAsync(1, Arg.Any<CancellationToken>()).Returns([InternalRepo(project, withCode: false)]);
+
+        var refusal = await Assert.ThrowsAsync<ConflictException>(
+            () => Build().AttachAsync(ValidRequest(), ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("'api'", refusal.Message, StringComparison.Ordinal);
+        await _light.DidNotReceive().RemoveAsync(Arg.Any<GitInternalRepo>(), Arg.Any<CancellationToken>());
+        await _light.DidNotReceive().AddAsync(Arg.Any<GitInternalRepo>(), Arg.Any<CancellationToken>());
+        await _git.DidNotReceive().AddConnectionAsync(Arg.Any<GitConnection>(), Arg.Any<CancellationToken>());
+        await _mirror.DidNotReceive().TestConnectivityAsync(
+            Arg.Any<GitProviderType>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<GitAuthType>(), Arg.Any<GitCredentialPayload?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AttachAsync_WhenTheMirrorWouldTakeTheInternalRepositorySlug_NamesItAfterItsOwner()
     {
         var project = new Project { Id = 1, Name = "API" };
@@ -366,12 +387,16 @@ public sealed class ExternalRepoServiceTests
             _time, NullLogger<ExternalRepoService>.Instance);
     }
 
-    private static GitInternalRepo InternalRepo(Project project) => new()
+    // An internal repository the project's code was pushed to (recette R-69: one nothing was pushed to is another case).
+    private static GitInternalRepo InternalRepo(Project project, bool withCode = true) => new()
     {
         Id = 4,
         ProjectId = project.Id,
         Project = project,
+        Name = "api",
         Slug = "api",
+        IsEmpty = !withCode,
+        LastPushAt = withCode ? new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc) : null,
         GitConnectionId = 2,
         GitConnection = new GitConnection { Id = 2, ProjectId = project.Id, ProviderType = GitProviderType.AetheusGit }
     };

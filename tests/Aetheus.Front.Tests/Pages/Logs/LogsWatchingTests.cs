@@ -39,12 +39,16 @@ public sealed class LogsWatchingTests : BunitContext
         return cut;
     }
 
-    private static Task WatchAsync(IRenderedComponent<LogsPage> cut, int taskId) =>
-        cut.InvokeAsync(() =>
+    // StartWatching is the click handler of the Watch button: the framework renders after it, which the helper does by hand.
+    private static async Task WatchAsync(IRenderedComponent<LogsPage> cut, int taskId)
+    {
+        await cut.InvokeAsync(() =>
         {
             cut.Instance._taskIdFilter = taskId;
             return cut.Instance.StartWatching();
         });
+        cut.Render();
+    }
 
     [Fact]
     public async Task WatchingATask_JoinsItsGroup_ShowsItsStoredLines_AndAppendsPushedOnes()

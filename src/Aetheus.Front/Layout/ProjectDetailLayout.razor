@@ -58,6 +58,13 @@
                 }
             </Badges>
             <ActionsContent>
+                @* One main action in the header, every other one in the menu (never a row of buttons): the project settings
+                   show as a button only when the section has no action of its own and made Settings its main action (R-32);
+                   otherwise the menu entry is the way in. On a phone the lone action shows from 40rem only. *@
+                @if (_sectionMenu.SettingsPrimary && Loader.Project is { DeletionRequestedAt: null } settingsProject)
+                {
+                    <OmniButton Variant="OmniButtonVariant.Primary" Class="project-settings-button" OnClick="@(() => Nav.NavigateTo($"/projects/{settingsProject.Id}/edit"))" data-testid="project-settings-button"><Icon><OmniIcon Name="OmniIconName.Settings" /></Icon><ChildContent><span>@L["Settings"]</span></ChildContent></OmniButton>
+                }
                 @* Recette R-51: the hidden section pages of a project waiting for its cleanup offer no action. *@
                 @if (Loader.Project is not { DeletionRequestedAt: not null })
                 {

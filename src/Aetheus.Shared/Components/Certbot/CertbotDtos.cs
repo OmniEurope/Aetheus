@@ -126,7 +126,12 @@ public sealed record CertbotCreateRequest
 /// (or none) is shown as "to update". Bumped together with the <c>aetheus-certbot-helper-version</c> marker.</summary>
 public static class CertbotHelperVersion
 {
-    public const int Current = 9;
+    public const int Current = 11;
+
+    /// <summary>Recette R-19: the first helper version whose <c>renewal-check</c> takes lineage names. An older helper
+    /// ignores them and would rehearse every certificate while the task says it rehearsed one, so the backend
+    /// refuses to queue a targeted rehearsal for it.</summary>
+    public const int TargetedRenewalCheck = 10;
 }
 
 /// <summary>Task variables of the Certbot operations shared by the backend that queues them and the agent.</summary>

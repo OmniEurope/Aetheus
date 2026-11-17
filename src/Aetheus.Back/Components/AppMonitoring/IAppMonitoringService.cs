@@ -2,12 +2,28 @@
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
+/// <summary>The application <see cref="IAppMonitoringService.EnsureCollectionAppAsync"/> settled on, and whether that call created it.</summary>
+public sealed record EnsuredCollectionApp(int AppId, bool Created);
+
 public interface IAppMonitoringService
 {
     Task<List<MonitoredAppDto>> GetAppsForProjectAsync(int projectId, CancellationToken ct = default);
     Task<MonitoredAppDto?> GetAppAsync(int id, CancellationToken ct = default);
     Task<int?> GetAppProjectIdAsync(int id, CancellationToken ct = default);
     Task<MonitoredAppDto> CreateAppAsync(int projectId, CreateMonitoredAppRequest request, CancellationToken ct = default);
+    /// <summary>R-47: configures the telemetry of a project for the pipeline wizard, through the monitored application the
+    /// deployment already reads (the one the project has, else one named after the project). Idempotent. Null when the
+    /// project does not exist.</summary>
+    Task<AppTelemetrySetupDto?> ConfigureTelemetrySetupAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>R-26: the monitored application the collection of a project goes through, the enabled one the project has
+    /// (marked for the telemetry when <paramref name="telemetry"/>), else one created enabled and named after the project.
+    /// Idempotent. Null when the project does not exist.</summary>
+    Task<EnsuredCollectionApp?> EnsureCollectionAppAsync(int projectId, bool telemetry, CancellationToken ct = default);
+
+    /// <summary>R-47: whether the telemetry the wizard configured still waits for the repository's telemetry package.</summary>
+    Task<AppTelemetrySetupDto> GetTelemetrySetupAsync(int projectId, CancellationToken ct = default);
+
     Task<MonitoredAppDto?> UpdateAppAsync(int id, UpdateMonitoredAppRequest request, CancellationToken ct = default);
     /// <summary>
     /// The server whose agent would probe a new target (another server, or another URL on the same

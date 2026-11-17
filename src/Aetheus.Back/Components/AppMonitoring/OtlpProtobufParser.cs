@@ -18,8 +18,6 @@ namespace Aetheus.Back.Components.AppMonitoring;
 /// </summary>
 public static class OtlpProtobufParser
 {
-    private const int MaxAttributesJsonLength = 1024;
-    private const string TruncatedAttributesKey = "_aetheus_truncated";
 
     public static IReadOnlyList<ParsedMetricPoint> ParseMetrics(byte[] payload)
     {
@@ -187,30 +185,10 @@ public static class OtlpProtobufParser
         return DateTimeOffset.FromUnixTimeMilliseconds((long)(nanos / 1_000_000)).UtcDateTime;
     }
 
-    private static string? ReadAttributes(RepeatedField<KeyValue> attributes)
-    {
-        var dictionary = ReadAttributeDictionary(attributes);
-        if (dictionary.Count == 0)
-            return null;
-        var json = JsonSerializer.Serialize(dictionary);
-        if (json.Length <= MaxAttributesJsonLength)
-            return json;
-
-        var bounded = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            [TruncatedAttributesKey] = bool.TrueString
-        };
-        foreach (var attribute in dictionary.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            bounded[attribute.Key] = attribute.Value;
-            var candidate = JsonSerializer.Serialize(bounded);
-            if (candidate.Length <= MaxAttributesJsonLength)
-                continue;
-            bounded.Remove(attribute.Key);
-            break;
-        }
-        return JsonSerializer.Serialize(bounded);
-    }
+    // Same bound as the JSON parser (BACK-005): the route and method are kept first, so an oversized
+    // attribute set still names its route.
+    private static string? ReadAttributes(RepeatedField<KeyValue> attributes) =>
+        OtlpAttributeJson.Serialize(ReadAttributeDictionary(attributes));
 
     private static Dictionary<string, string> ReadAttributeDictionary(RepeatedField<KeyValue> attributes)
     {

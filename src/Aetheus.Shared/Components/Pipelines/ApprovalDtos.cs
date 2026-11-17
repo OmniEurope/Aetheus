@@ -7,6 +7,8 @@ public sealed record PipelineApprovalDto
 {
     public int Id { get; init; }
     public int PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int PipelineRunNumber { get; init; }
     public string StageName { get; init; } = string.Empty;
     public ApprovalScope Scope { get; init; }
     /// <summary>The stage's environment, when it has one; null for an environment-less pipeline approval.</summary>
@@ -22,6 +24,11 @@ public sealed record PipelineApprovalDto
     public int? ResolvedByUserId { get; init; }
     public string? ResolvedByUsername { get; init; }
     public string? Comments { get; init; }
+
+    /// <summary>R-34: for a pending approval of a deployment run, the release the run restores and what is wrong
+    /// with it (older than the source head, already in production). Null when the run names no release, and on
+    /// an approval already decided.</summary>
+    public PipelineRunDeployedReleaseDto? DeployedRelease { get; init; }
 }
 
 public sealed record ApprovalDecisionRequest
@@ -38,6 +45,8 @@ public sealed record PendingApprovalDto
 {
     public int ApprovalId { get; init; }
     public int PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int PipelineRunNumber { get; init; }
     public int PipelineId { get; init; }
     public string PipelineName { get; init; } = string.Empty;
     public int? ProjectId { get; init; }

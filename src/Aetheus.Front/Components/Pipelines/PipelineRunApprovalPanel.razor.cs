@@ -21,6 +21,13 @@ public partial class PipelineRunApprovalPanel : IDisposable
         ? L["PipelineApprovalTitle"]
         : string.Format(L["EnvironmentApprovalTitle"], Approval?.Pending?.EnvironmentName);
 
+    /// <summary>R-34: the commit's page in the repository the run built; null (plain text) when the run's repository is
+    /// not an internal one, since an external clone URL serves git, not a page.</summary>
+    private static string? CommitHref(PipelineRunDeployedReleaseDto release, string? sha) =>
+        release.RepositoryId is { } repositoryId && !string.IsNullOrEmpty(sha)
+            ? $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(sha)}"
+            : null;
+
     protected override void OnInitialized() => VersionState.Changed += VersionChanged;
 
     /// <summary>Approvals wait for a reload when a newer frontend is deployed, so confirmation uses

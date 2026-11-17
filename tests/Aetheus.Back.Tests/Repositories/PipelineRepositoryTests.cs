@@ -59,6 +59,26 @@ public class PipelineRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetActiveRunsAsync_WithAServer_KeepsOnlyTheRunsThatHaveAStepOnIt()
+    {
+        var pipeline = new Pipeline { Name = "Deploy" };
+        _db.Pipelines.Add(pipeline);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var onServer = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running, StartedAt = DateTime.UtcNow };
+        var elsewhere = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running, StartedAt = DateTime.UtcNow };
+        _db.PipelineRuns.AddRange(onServer, elsewhere);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        _db.PipelineStepRuns.AddRange(
+            new PipelineStepRun { PipelineRunId = onServer.Id, StageName = "s", StepName = "a", Order = 1, ServerId = 9 },
+            new PipelineStepRun { PipelineRunId = elsewhere.Id, StageName = "s", StepName = "a", Order = 1, ServerId = 4 });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var runs = await _repo.GetActiveRunsAsync(serverId: 9, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(onServer.Id, Assert.Single(runs).Id);
+    }
+
+    [Fact]
     public async Task IsStepRetryEligibleAsync_TransientScannerDownloadFailure_IsRetryable()
     {
         var pipeline = new Pipeline { Name = "Security" };
@@ -203,6 +223,30 @@ public class PipelineRepositoryTests : IDisposable
 
         Assert.Equal(["Zulu", "Yankee", "Alpha", "Beta"], entities.Select(pipeline => pipeline.Name));
         Assert.Equal(["Zulu", "Yankee", "Alpha", "Beta"], projected.Select(pipeline => pipeline.Name));
+    }
+
+    [Fact]
+    public async Task R8_ThePagedProjection_CarriesTheBuildNumberOfEachRecentRun()
+    {
+        var pipeline = new Pipeline { Name = "numbered" };
+        _db.Pipelines.Add(pipeline);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        _db.PipelineRuns.Add(new PipelineRun
+        {
+            Id = 9_000,
+            PipelineId = pipeline.Id,
+            BuildNumber = 12,
+            Status = PipelineStatus.Success,
+            StartedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var (projected, _) = await _repo.GetPipelinesPagedProjectedAsync(
+            null, null, null, null, null, 1, 10, ct: TestContext.Current.CancellationToken);
+
+        var run = Assert.Single(Assert.Single(projected).RecentRuns);
+        Assert.Equal(9_000, run.Id);
+        Assert.Equal(12, run.BuildNumber);
     }
 
     [Fact]
@@ -479,7 +523,7 @@ public class PipelineRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetCompletedStageNamesAsync_ReturnsOnlyFullySucceededStages()
+    public async Task GetStageProgressAsync_CompletedReturnsOnlyFullySucceededStages()
     {
         var pipeline = new Pipeline { Name = "P" };
         _db.Pipelines.Add(pipeline);
@@ -493,13 +537,13 @@ public class PipelineRepositoryTests : IDisposable
             new PipelineStepRun { PipelineRunId = run.Id, StageName = "deploy", StepName = "s3", Order = 3, Status = TaskExecutionStatus.Failed });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var completed = await _repo.GetCompletedStageNamesAsync(run.Id, ct: TestContext.Current.CancellationToken);
+        var completed = (await _repo.GetStageProgressAsync(run.Id, ct: TestContext.Current.CancellationToken)).Completed;
         Assert.Single(completed);
         Assert.Contains("build", completed);
     }
 
     [Fact]
-    public async Task GetTerminalStageNamesAsync_IncludesEveryTerminalStatusAndExcludesActiveStages()
+    public async Task GetStageProgressAsync_TerminalIncludesEveryTerminalStatusAndExcludesActiveStages()
     {
         var pipeline = new Pipeline { Name = "P" };
         _db.Pipelines.Add(pipeline);
@@ -519,7 +563,7 @@ public class PipelineRepositoryTests : IDisposable
             new PipelineStepRun { PipelineRunId = run.Id, StageName = "mixed", StepName = "s9", Order = 9, Status = TaskExecutionStatus.Running });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var settled = await _repo.GetTerminalStageNamesAsync(run.Id, ct: TestContext.Current.CancellationToken);
+        var settled = (await _repo.GetStageProgressAsync(run.Id, ct: TestContext.Current.CancellationToken)).Terminal;
 
         Assert.Equal(4, settled.Count);
         Assert.Contains("success", settled);

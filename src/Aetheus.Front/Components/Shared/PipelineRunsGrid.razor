@@ -28,11 +28,11 @@
             </div>
         </DetailTemplate>
         <Columns>
-            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="RunId" Title="@L["ID"]" Width="7rem" Frozen="true"
+            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="BuildNumber" Title="@L["RunNumberColumn"]" Width="7rem" Frozen="true"
                 Class="pipeline-run-id-actions-column" HeaderClass="pipeline-run-id-actions-column" Filterable="true">
                 <Template Context="run">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                        <a href="@RunHref(run)" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">#@run.RunId</a>
+                        <a href="@RunHref(run)" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">#@run.BuildNumber</a>
                         @if (CanCancel(run))
                         {
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => CancelRunAsync(run))" Disabled="@(_cancelling == run.RunId)" title="@L["CancelRun"]" Label="@L["CancelRun"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon></OmniButton></span>
@@ -133,6 +133,12 @@
                         @* The one short form, linked to the commit; a null Href (no page known for
                            that commit) renders it as text. *@
                         <ShortId Value="@run.CommitHash" Href="@CommitHref(run)" Copyable="false" Class="pipeline-run-ref-link" />
+                        @if (run.DeployedVersion is { Length: > 0 } deployedVersion)
+                        {
+                            @* R-34: the commit above is the one of the release this run delivers, not the source head it checked out. *@
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="pipeline-run-deployed-version"
+                                      title="@string.Format(L["RunDeployedReleaseHint"], deployedVersion, ShortSourceCommit(run))">@ShortId.Shorten(deployedVersion)</OmniText>
+                        }
                     }
                     else
                     {

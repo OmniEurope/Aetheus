@@ -19,6 +19,9 @@ public interface IServerHeartbeatRepository
 {
     Task ReplaceServicesAsync(int serverId, List<ServiceInfo> services, CancellationToken ct = default);
     Task ReplaceDockerContainersAsync(int serverId, List<DockerContainer> containers, CancellationToken ct = default);
+    /// <summary>Refreshes, in place and only where a value differs, the fields of the stored containers that move
+    /// between two beats without the container changing (uptime text, CPU, memory).</summary>
+    Task UpdateDockerContainerLiveFieldsAsync(int serverId, List<DockerContainer> reported, CancellationToken ct = default);
     Task ReplaceDockerImagesAsync(int serverId, List<DockerImage> images, CancellationToken ct = default);
     Task ReplaceDockerComposeStacksAsync(int serverId, List<DockerComposeStack> stacks, CancellationToken ct = default);
     Task ReplaceDockerNetworksAsync(int serverId, List<DockerNetwork> networks, CancellationToken ct = default);

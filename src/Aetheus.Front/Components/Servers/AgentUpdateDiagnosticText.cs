@@ -15,6 +15,7 @@ public static partial class AgentUpdateDiagnosticText
     private static readonly Dictionary<string, string> AgentDiagnostics = new(StringComparer.Ordinal)
     {
         ["release manifest invalid"] = "AgentUpdateDiag_ManifestInvalid",
+        ["release archive absent"] = "AgentUpdateDiag_ArchiveAbsent",
         ["qualified release manifest required"] = "AgentUpdateDiag_QualifiedManifestRequired",
         ["download failed"] = "AgentUpdateDiag_DownloadFailed",
         ["extraction failed"] = "AgentUpdateDiag_ExtractionFailed",

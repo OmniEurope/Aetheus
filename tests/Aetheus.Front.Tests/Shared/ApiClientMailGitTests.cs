@@ -75,7 +75,7 @@ public class ApiClientMailGitTests
         var result = await _api.Mail.CreateMailDomainAsync(1, new CreateMailDomainRequest(), Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal("new.example.com", result!.Name);
-        AssertRequest(HttpMethod.Post, url);
+        AssertRequest(HttpMethod.Post, url, new CreateMailDomainRequest());
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class ApiClientMailGitTests
         var result = await _api.Mail.CreateMailAccountAsync(1, new CreateMailAccountRequest(), Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal("user@example.com", result!.Email);
-        AssertRequest(HttpMethod.Post, url);
+        AssertRequest(HttpMethod.Post, url, new CreateMailAccountRequest());
     }
 
     [Theory]
@@ -125,7 +125,7 @@ public class ApiClientMailGitTests
         };
 
         Assert.True(result.Success);
-        AssertRequest(HttpMethod.Post, url);
+        AssertRequest(HttpMethod.Post, url, command == "action" ? (object)new MailActionRequest() : new MailLogRequest());
     }
 
     [Theory]
@@ -142,7 +142,7 @@ public class ApiClientMailGitTests
             : await _api.Mail.PurgeMailStackAsync(1, new MailPurgeRequest { Confirmation = "example.com" }, Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal(42, result?.TaskId);
-        AssertRequest(HttpMethod.Post, url);
+        AssertRequest(HttpMethod.Post, url, command == "setup" ? (object)new MailSetupRequest() : new MailPurgeRequest { Confirmation = "example.com" });
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public class ApiClientMailGitTests
         var result = await _api.Git.CreateGitRepoAsync(new CreateGitLightRepoRequest(), Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal("new-repo", result!.Slug);
-        AssertRequest(HttpMethod.Post, url);
+        AssertRequest(HttpMethod.Post, url, new CreateGitLightRepoRequest());
     }
 
     [Fact]
@@ -259,11 +259,10 @@ public class ApiClientMailGitTests
         AssertRequest(HttpMethod.Get, url);
     }
 
-    private void AssertRequest(HttpMethod method, string relativeUrl)
+    private void AssertRequest(HttpMethod method, string relativeUrl, object? body = null)
     {
-        var request = Assert.Single(_handler.Requests);
-        Assert.Equal(method.Method, request.Method);
-        Assert.Equal($"http://test/{relativeUrl}", request.Url);
+        Assert.Single(_handler.Requests);
+        _handler.LastSent(method, relativeUrl, body);
     }
 
     private static PaginatedResult<T> Page<T>(params T[] items) => new()

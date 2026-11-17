@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @if (Project is null)
 {
-    <AetheusLoader />
+    <ZoneVeil />
 }
 else
 {
@@ -10,7 +10,7 @@ else
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField For="oe-pages-projects-projectdetailsections-projecteditsection-1"><LabelContent>@L["Name"]</LabelContent><ChildContent>
                         <OmniTextBox @bind-Value="_model.Name" Id="oe-pages-projects-projectdetailsections-projecteditsection-1" />
                         <ValidationMessage For="@(() => _model.Name)" />
@@ -22,20 +22,22 @@ else
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
                 <OmniStack Gap="OmniSpacing.Large">
-                    <OmniFormField For="oe-pages-projects-projectdetailsections-projecteditsection-3"><LabelContent>@L["RepositoryUrl"]</LabelContent><ChildContent>
-                        <OmniTextBox @bind-Value="_model.RepositoryUrl" Placeholder="@L["PlaceholderUrl"]" Id="oe-pages-projects-projectdetailsections-projecteditsection-3" />
-                    </ChildContent></OmniFormField>
-                    <OmniFormField For="oe-pages-projects-projectdetailsections-projecteditsection-4"><LabelContent>@L["DefaultBranch"]</LabelContent><ChildContent>
-                        @if (_branchesLoaded)
-                        {
-                            <OmniDropDown Id="oe-pages-projects-projectdetailsections-projecteditsection-4" Label="@L["DefaultBranch"]" @bind-Value="_model.DefaultBranch" Options="@(_branches.ToOptions(item => item, item => item))" name="DefaultBranch"
-                                AllowEmpty="false" Filterable="true" />
-                        }
-                        else
-                        {
-                            <OmniTextBox @bind-Value="_model.DefaultBranch" Placeholder="main" Id="oe-pages-projects-projectdetailsections-projecteditsection-4" />
-                        }
-                    </ChildContent></OmniFormField>
+                    <OmniStack Gap="OmniSpacing.Small">
+                        <OmniFormField For="oe-pages-projects-projectdetailsections-projecteditsection-3"><LabelContent>@L["RepositoryUrl"]</LabelContent><ChildContent>
+                            <OmniTextBox @bind-Value="_model.RepositoryUrl" Placeholder="@L["PlaceholderUrl"]" Id="oe-pages-projects-projectdetailsections-projecteditsection-3" />
+                        </ChildContent></OmniFormField>
+                        <OmniFormField For="oe-pages-projects-projectdetailsections-projecteditsection-4"><LabelContent>@L["DefaultBranch"]</LabelContent><ChildContent>
+                            @if (_branchesLoaded)
+                            {
+                                <OmniDropDown Id="oe-pages-projects-projectdetailsections-projecteditsection-4" Label="@L["DefaultBranch"]" @bind-Value="_model.DefaultBranch" Options="@(_branches.ToOptions(item => item, item => item))" name="DefaultBranch"
+                                    AllowEmpty="false" Filterable="true" />
+                            }
+                            else
+                            {
+                                <OmniTextBox @bind-Value="_model.DefaultBranch" Placeholder="main" Id="oe-pages-projects-projectdetailsections-projecteditsection-4" />
+                            }
+                        </ChildContent></OmniFormField>
+                    </OmniStack>
                     @if (DefaultBranchesDiffer)
                     {
                         <OmniAlert Severity="OmniSeverity.Warning">
@@ -82,4 +84,32 @@ else
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniTemplateForm>
+
+    <OmniStack Gap="OmniSpacing.Medium">
+    @* PLAN-007 (R-9): saved as soon as it is switched, apart from the form above. *@
+    <OmniSettingsSection Title="@L["DependencyUpdatesTitle"]">
+        <OmniSettingsTile Title="@L["DependencyUpdatesSetting"]" Description="@L["DependencyUpdatesSettingHint"]" data-testid="project-dependency-updates-setting">
+            <Icon><OmniIcon Name="OmniIconName.Package" /></Icon>
+            <ChildContent>
+                @if (_dependencyUpdatesEnabled is { } enabled)
+                {
+                    <OmniSwitch Value="@enabled" ValueExpression="@(() => enabled)" aria-label="@L["DependencyUpdatesSetting"]"
+                                Disabled="@_savingDependencyUpdates" ValueChanged="@((bool value) => SetDependencyUpdatesAsync(value))" />
+                }
+            </ChildContent>
+        </OmniSettingsTile>
+    </OmniSettingsSection>
+
+    @* R-13: the expand/contract model of the database (the migration gate), saved as soon as it is switched. It also shows the
+       expand/contract tab of the overview, which the setup wizard's choice turns on at creation. *@
+    <OmniSettingsSection Title="@L["ProjectMigrationsTitle"]">
+        <OmniSettingsTile Title="@L["MigrationGateSetting"]" Description="@L["MigrationGateSettingHint"]" data-testid="project-migration-gate-setting">
+            <Icon><OmniIcon Name="OmniIconName.Database" /></Icon>
+            <ChildContent>
+                <OmniSwitch Value="@_migrationGateEnabled" ValueExpression="@(() => _migrationGateEnabled)" aria-label="@L["MigrationGateSetting"]"
+                            Disabled="@_savingMigrationGate" ValueChanged="@((bool value) => SetMigrationGateAsync(value))" />
+            </ChildContent>
+        </OmniSettingsTile>
+    </OmniSettingsSection>
+    </OmniStack>
 }

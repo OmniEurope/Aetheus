@@ -14,8 +14,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// Read on projects and servers and Read on B's own vault and pipeline, so every list must show B's row (positive control: the filter is not simply "nothing") and
 /// never A's, and every by-id read of A's row is refused.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class OrganizationTenantIsolationHttpIntegrationTests(PostgresFixture fixture)
+public sealed class OrganizationTenantIsolationHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     public static TheoryData<string> Families => ["projects", "servers", "vaults", "pipeline-runs"];
 

@@ -20,14 +20,20 @@ namespace Aetheus.Agent.Core.Functions;
 /// never rebuilt.</item>
 /// <item>The tested source picks the runner: Microsoft.Testing.Platform when its <c>global.json</c>
 /// names it, VSTest otherwise; both write <c>.qa-test-results/&lt;label&gt;/integration.trx</c>.</item>
+/// <item>The run may select its tests: <c>test_filter</c> <c>Category=RollbackRelevant</c> (xunit's
+/// <c>--filter-trait</c>, or VSTest's <c>--filter</c>), or <c>test_methods</c>, fully qualified methods
+/// for a source tree that predates the category (the rerun's method filter). Each parameter falls back
+/// to a run variable named after the label (<see cref="Suite.FilterVariable"/>), which a control plane whose
+/// catalog predates the parameters still hands on.</item>
 /// <item>The TRX is classified by <see cref="DotnetTestResultClassifier"/> (the rule of
 /// <c>classify-dotnet-test-result.mjs</c>): unusable evidence fails the step, failures are status 1,
 /// published as <c>INTEGRATION_SUITE_STATUS</c> where the script exited 10, with the failed names in
 /// <c>failed-tests.txt</c>.</item>
 /// <item>Failures are rerun once, alone (<see cref="FailedTestRerun"/>), into
 /// <c>integration-rerun.trx</c> beside the first TRX: a test that passes on the rerun is flaky, named
-/// in the log and in <c>flaky-tests.txt</c>, and still fails the suite: the status and
-/// <c>failed-tests.txt</c> keep the tests that failed on both attempts and the flaky ones.</item>
+/// in the log and in <c>flaky-tests.txt</c>, and does not fail the suite on its own (owner decision of 2026-11-05,
+/// PLAN-006; the assurance contract grades the candidate on how many there are): the status and
+/// <c>failed-tests.txt</c> keep only the tests that failed on both attempts.</item>
 /// </list>
 /// Differences, deliberate: the test project and the static web assets manifest are parameters instead
 /// of the Aetheus paths, and no Node.js is resolved, since nothing here runs in Node any more.
@@ -37,6 +43,10 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
     private const string Configuration = "Release";
     private const string TrxName = "integration.trx";
     private const string RerunTrxName = "integration-rerun.trx";
+
+    /// <summary>The MSBuild property, read from the environment, whose arguments <c>dotnet test</c> hands
+    /// to a Microsoft.Testing.Platform test application.</summary>
+    internal const string TransitionSelectionProperty = "TestingPlatformCommandLineArguments";
 
     private readonly IPipelineFunctionTools _tools;
     private readonly PinnedDotnetSdk _sdk;
@@ -87,6 +97,7 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
         var testcontainers = new TestcontainersRunScope(_tools, context);
         await testcontainers.RemoveStaleAsync(cancellationToken).ConfigureAwait(false);
         var run = new TestRun(context, sdk.Executable, suite, testcontainers, interval.Value);
+        await context.Log($"Integration suite {suite.Label} test filter: {suite.Selection}.").ConfigureAwait(false);
         try
         {
             var rawExitCode = await RunTestsAsync(run, $"Integration tests ({suite.Label})", TestArguments(suite), cancellationToken)
@@ -113,6 +124,11 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
         var test = Dotnet(run.Context, run.Dotnet, run.Suite.SourceRoot, arguments);
         foreach (var (name, value) in run.Testcontainers.Variables)
             test.Environment[name] = value;
+        // The suite's own selection is the only one: the MSBuild property through which a pipeline hands
+        // the same selection to an agent that predates test_filter would add to it (the rerun's methods
+        // then widened back to the whole selection).
+        if (run.Suite.HasSelection)
+            test.Environment.Remove(TransitionSelectionProperty);
         return FunctionProgress.RunAsync(_tools, run.Context, title, run.Interval, test, cancellationToken);
     }
 
@@ -121,14 +137,14 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
     private async Task<FailedTestRerun.Verdict?> RerunAsync(TestRun run, string trx, CancellationToken cancellationToken)
     {
         var description = $"Integration suite {run.Suite.Label}";
-        if (await FailedTestRerun.PlanAsync(run.Context, description, trx).ConfigureAwait(false) is not { } plan)
+        if (await FailedTestRerun.PlanAsync(run.Context.Log, description, trx).ConfigureAwait(false) is not { } plan)
             return null;
         var rerunTrx = Path.Combine(run.Suite.Results, RerunTrxName);
         var rawExitCode = await RunTestsAsync(run, $"Integration tests rerun ({run.Suite.Label})",
             TestArguments(suite: run.Suite, trxName: RerunTrxName, rerunMethods: plan.Methods), cancellationToken).ConfigureAwait(false);
         var verdict = DotnetTestResultClassifier.Classify(rawExitCode, rerunTrx, null, new PhysicalFileSystemReader());
         if (verdict.IsValue)
-            return await FailedTestRerun.ReconcileAsync(run.Context, description, plan, rerunTrx).ConfigureAwait(false);
+            return await FailedTestRerun.ReconcileAsync(run.Context.Log, description, plan, rerunTrx).ConfigureAwait(false);
         await run.Context.Log($"{description}: the rerun evidence cannot be graded ({verdict.Failure.Reason}); the first attempt's failures stand.",
             TaskLogLevel.Warning).ConfigureAwait(false);
         return null;
@@ -209,11 +225,18 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
                 "--logger", "console;verbosity=minimal", "--logger", $"trx;LogFileName={trxName}",
                 "--results-directory", suite.Results
             ];
-        if (rerunMethods is null)
+        // The rerun's methods already lie inside the selection, so it carries only them.
+        if ((rerunMethods ?? suite.TestMethods) is { } methods)
+            return testingPlatform
+                ? [.. arguments, .. FailedTestRerun.TestingPlatformFilter(methods)]
+                : [.. arguments, "--filter", FailedTestRerun.VsTestFilter(methods)];
+        if (suite.TestFilter is null)
             return arguments;
+        // xunit's trait filter on the testing platform, the Category expression on VSTest (xunit and
+        // NUnit both expose their category there).
         return testingPlatform
-            ? [.. arguments, .. FailedTestRerun.TestingPlatformFilter(rerunMethods)]
-            : [.. arguments, "--filter", FailedTestRerun.VsTestFilter(rerunMethods)];
+            ? [.. arguments, "--filter-trait", suite.TestFilter]
+            : [.. arguments, "--filter", suite.TestFilter];
     }
 
     /// <summary>The status over both attempts when the failed tests were rerun, else the first one's;
@@ -225,9 +248,9 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
         var status = (rerun?.Status ?? firstStatus).ToString(CultureInfo.InvariantCulture);
         await context.Log($"Integration suite {suite.Label} produced an executed-test proof with findings status {status}.").ConfigureAwait(false);
         if (rerun is not null)
-            await FailedTestRerun.RecordAsync(context, $"Integration suite {suite.Label}", suite.Results, rerun, cancellationToken).ConfigureAwait(false);
+            await FailedTestRerun.RecordAsync(context.Log, $"Integration suite {suite.Label}", suite.Results, rerun, cancellationToken).ConfigureAwait(false);
         else if (firstStatus != 0)
-            await FailedTestNames.RecordAsync(context, trx, Path.Combine(suite.Results, FailedTestRerun.FailedList), cancellationToken).ConfigureAwait(false);
+            await FailedTestNames.RecordAsync(context.Log, trx, Path.Combine(suite.Results, FailedTestRerun.FailedList), cancellationToken).ConfigureAwait(false);
         context.SetOutput("INTEGRATION_SUITE_STATUS", status);
         return PipelineFunctionResult.Success();
     }
@@ -243,36 +266,80 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
     }
 
     internal sealed record Suite(
-        string Label, string SourceRoot, string TestProject, string Results, string? StaticWebAssetsManifest, string? StaticWebAssetsProject)
+        string Label, string SourceRoot, string TestProject, string Results, string? StaticWebAssetsManifest, string? StaticWebAssetsProject,
+        string? TestFilter = null, IReadOnlyList<string>? TestMethods = null)
     {
+        /// <summary>The only test filter the suite takes, as the E2E suite's <c>test_filter</c>.</summary>
+        internal const string RollbackRelevantFilter = E2eRun.RollbackRelevantFilter;
+
         private string ProjectName => Path.GetFileName(TestProject.Replace('\\', '/').TrimEnd('/'));
 
         public string ProjectFile => Path.Combine(SourceRoot, TestProject, ProjectName + ".csproj");
 
         public string NuGetProps => Path.Combine(SourceRoot, TestProject, "obj", ProjectName + ".csproj.nuget.g.props");
 
+        /// <summary>The run variable that stands in for the <c>test_filter</c> parameter of one result label,
+        /// for instance <c>QA_INTEGRATION_TEST_FILTER_PREVIOUS</c>: a control plane whose catalog predates the
+        /// parameter refuses it in <c>with:</c>, while a variable reaches the function through any of them,
+        /// and its label keeps it from selecting the tests of another suite of the same run.</summary>
+        internal static string FilterVariable(string label) => "QA_INTEGRATION_TEST_FILTER_" + VariableSuffix(label);
+
+        /// <summary>The run variable that stands in for the <c>test_methods</c> parameter of one result label
+        /// (<see cref="FilterVariable"/>).</summary>
+        internal static string MethodsVariable(string label) => "QA_INTEGRATION_TEST_METHODS_" + VariableSuffix(label);
+
+        private static string VariableSuffix(string label) => label.ToUpperInvariant().Replace('-', '_');
+
         public static Suite From(PipelineFunctionContext context)
         {
             var label = context.Parameters["label"];
+            var methods = FunctionShell.Input(context, "test_methods", MethodsVariable(label))
+                ?.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries);
             return new Suite(
                 label,
                 Path.TrimEndingDirectorySeparator(Path.GetFullPath(context.Parameters["source_root"], context.Workspace!)),
                 context.Parameters["test_project"],
                 Path.Combine(context.Workspace!, ".qa-test-results", label),
                 Optional(context, "static_web_assets_manifest"),
-                Optional(context, "static_web_assets_project"));
+                Optional(context, "static_web_assets_project"),
+                FunctionShell.Input(context, "test_filter", FilterVariable(label)),
+                methods is { Length: > 0 } ? methods : null);
         }
 
         public string? Refusal()
         {
             if (!RunQaDeployedProbesFunction.Label().IsMatch(Label))
                 return "Invalid integration result label.";
+            if (SelectionRefusal() is { } selection)
+                return selection;
             if (!File.Exists(ProjectFile))
                 return $"The test project is missing: {ProjectFile}";
             return (StaticWebAssetsManifest is null) == (StaticWebAssetsProject is null)
                 ? null
                 : "static_web_assets_manifest and static_web_assets_project go together.";
         }
+
+        /// <summary>The tests to run: all of them, the RollbackRelevant category, or named methods for a
+        /// source tree that predates the category; never both, and never a method a filter cannot carry
+        /// verbatim.</summary>
+        private string? SelectionRefusal()
+        {
+            if (TestFilter is not null && TestMethods is not null)
+                return "test_filter and test_methods are exclusive.";
+            if (TestFilter is not null && TestFilter != RollbackRelevantFilter)
+                return $"test_filter must be empty or {RollbackRelevantFilter}.";
+            return TestMethods?.FirstOrDefault(method => !FailedTestRerun.IsFilterableMethod(method)) is { } invalid
+                ? $"test_methods names a method a filter cannot carry: '{invalid}'."
+                : null;
+        }
+
+        public bool HasSelection => TestFilter is not null || TestMethods is not null;
+
+        /// <summary>The selection, said in the log before the run.</summary>
+        public string Selection =>
+            TestFilter ?? (TestMethods is { } methods
+                ? string.Create(CultureInfo.InvariantCulture, $"{methods.Count} named test method(s): {string.Join(", ", methods)}")
+                : "none, every test runs");
 
         private static string? Optional(PipelineFunctionContext context, string name) =>
             context.Parameters.GetValueOrDefault(name) is { Length: > 0 } value ? value : null;

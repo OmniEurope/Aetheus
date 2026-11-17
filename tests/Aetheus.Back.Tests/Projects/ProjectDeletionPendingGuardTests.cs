@@ -26,7 +26,6 @@ public sealed class ProjectDeletionPendingGuardTests
     public async Task ARun_OfAPipelineOfAProjectWaitingForItsCleanup_IsRefused_BeforeAnythingIsRead()
     {
         var repo = Substitute.For<IPipelineRepository>();
-        var gitCli = Substitute.For<IGitCliService>();
         var pipelineGit = Substitute.For<IPipelineGitService>();
         // An environment-owned pipeline: its project is found through the environment.
         var pipeline = new Pipeline { Id = 3, EnvironmentId = 21, Name = "deploy", YamlDefinition = "name: deploy\nstages: []\n" };
@@ -34,7 +33,7 @@ public sealed class ProjectDeletionPendingGuardTests
         repo.GetPipelineProjectIdAsync(pipeline, Arg.Any<CancellationToken>()).Returns(7);
         repo.IsProjectDeletionPendingAsync(7, Arg.Any<CancellationToken>()).Returns(true);
         var sut = new PipelineRunPreparationService(
-            repo, pipelineGit, new PipelineTemplateResolver(repo), Substitute.For<IPipelineRunParameterResolver>(), gitCli,
+            repo, pipelineGit, new PipelineTemplateResolver(repo), Substitute.For<IPipelineRunParameterResolver>(),
             Substitute.For<IPipelineWorkspaceSourceResolver>(),
             new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
 
@@ -42,7 +41,6 @@ public sealed class ProjectDeletionPendingGuardTests
             () => sut.PrepareRunAsync(3, null, null, null, TestContext.Current.CancellationToken));
 
         Assert.Contains("deleted project", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(gitCli.ReceivedCalls());
         Assert.Empty(pipelineGit.ReceivedCalls());
     }
 

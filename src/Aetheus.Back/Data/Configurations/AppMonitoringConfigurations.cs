@@ -230,6 +230,7 @@ internal sealed class AppAnalyticsPeriodIdentityConfiguration : IEntityTypeConfi
     public void Configure(EntityTypeBuilder<AppAnalyticsPeriodIdentity> builder)
     {
         builder.Property(e => e.Pseudonym).HasMaxLength(64).IsRequired();
+        builder.Property(e => e.EntryRoute).HasMaxLength(256);
         builder.HasIndex(e => new { e.MonitoredAppId, e.PeriodKind, e.PeriodStartUtc, e.Pseudonym }).IsUnique();
         builder.HasIndex(e => e.LastSeenAtUtc);
         builder.HasMonitoredAppCascade(e => e.MonitoredApp, e => e.MonitoredAppId);

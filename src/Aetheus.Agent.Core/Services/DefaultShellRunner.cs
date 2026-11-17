@@ -85,7 +85,7 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
 
     public async Task<ShellExecResult> RunExecAsync(string fileName, IReadOnlyList<string> args, CancellationToken ct, TimeSpan? timeout = null)
         => await RunExecCoreAsync(
-            fileName, args, null, null, inheritEnvironment: true, null, ct, timeout).ConfigureAwait(false);
+            fileName, args, null, null, inheritEnvironment: true, null, null, ct, timeout).ConfigureAwait(false);
 
     public async Task<ShellExecResult> RunExecAsync(
         string fileName,
@@ -98,22 +98,34 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
         TimeSpan? timeout = null)
         => await RunExecCoreAsync(
             fileName, args, environmentVariables, workingDirectory, inheritEnvironment,
-            maxCapturedOutputBytes, ct, timeout)
+            maxCapturedOutputBytes, null, ct, timeout)
             .ConfigureAwait(false);
 
-    private async Task<ShellExecResult> RunExecCoreAsync(
+    public async Task<ShellExecResult> RunExecStreamingAsync(
+        string fileName,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string> environmentVariables,
+        string workingDirectory,
+        bool inheritEnvironment,
+        int maxCapturedOutputBytes,
+        Func<string, bool, Task> onLine,
+        CancellationToken ct,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(onLine);
+        return await RunExecCoreAsync(
+            fileName, args, environmentVariables, workingDirectory, inheritEnvironment,
+            maxCapturedOutputBytes, onLine, ct, timeout)
+            .ConfigureAwait(false);
+    }
+
+    private static ProcessStartInfo BuildStartInfo(
         string fileName,
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string>? environmentVariables,
         string? workingDirectory,
-        bool inheritEnvironment,
-        int? maxCapturedOutputBytes,
-        CancellationToken ct,
-        TimeSpan? timeout)
+        bool inheritEnvironment)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        ArgumentNullException.ThrowIfNull(args);
-
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -142,6 +154,34 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
         // ArgumentList escapes each argument independently - no shell, no interpolation.
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
+        return psi;
+    }
+
+    private static Task<CapturedOutput> ReadChannelAsync(
+        StreamReader reader,
+        bool isStandardError,
+        int? maxCapturedOutputBytes,
+        Func<string, bool, Task>? onLine,
+        CancellationToken ct) =>
+        onLine is null
+            ? ReadOutputAsync(reader, maxCapturedOutputBytes, ct)
+            : ReadLinesAsync(reader, isStandardError, maxCapturedOutputBytes, onLine, ct);
+
+    private async Task<ShellExecResult> RunExecCoreAsync(
+        string fileName,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        string? workingDirectory,
+        bool inheritEnvironment,
+        int? maxCapturedOutputBytes,
+        Func<string, bool, Task>? onLine,
+        CancellationToken ct,
+        TimeSpan? timeout)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        ArgumentNullException.ThrowIfNull(args);
+
+        var psi = BuildStartInfo(fileName, args, environmentVariables, workingDirectory, inheritEnvironment);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(timeout ?? AgentRuntimeDefaults.ShellCommandTimeout);
@@ -152,10 +192,10 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
         bool truncated;
         try
         {
-            var stdoutTask = ReadOutputAsync(
-                process.StandardOutput, maxCapturedOutputBytes, timeoutCts.Token);
-            var stderrTask = ReadOutputAsync(
-                process.StandardError, maxCapturedOutputBytes, timeoutCts.Token);
+            var stdoutTask = ReadChannelAsync(
+                process.StandardOutput, false, maxCapturedOutputBytes, onLine, timeoutCts.Token);
+            var stderrTask = ReadChannelAsync(
+                process.StandardError, true, maxCapturedOutputBytes, onLine, timeoutCts.Token);
             await Task.WhenAll(stdoutTask, stderrTask, process.WaitForExitAsync(timeoutCts.Token)).ConfigureAwait(false);
 
             var capturedStdout = await stdoutTask.ConfigureAwait(false);
@@ -212,6 +252,39 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
             truncated = true;
         }
         return new CapturedOutput(value, truncated);
+    }
+
+    /// <summary>
+    /// Reads a stream line by line, handing each line to <paramref name="onLine"/> as soon as it
+    /// arrives while still capturing a bounded copy of the text for the caller.
+    /// </summary>
+    internal static async Task<CapturedOutput> ReadLinesAsync(
+        StreamReader reader,
+        bool isStandardError,
+        int? maxCapturedOutputBytes,
+        Func<string, bool, Task> onLine,
+        CancellationToken ct)
+    {
+        var maximum = Math.Max(1, maxCapturedOutputBytes ?? int.MaxValue);
+        var retained = new StringBuilder();
+        var retainedBytes = 0L;
+        var truncated = false;
+        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+        {
+            // Whole lines only, counted in UTF-8 bytes like the non-streaming capture.
+            var lineBytes = Encoding.UTF8.GetByteCount(line) + 1;
+            if (retainedBytes + lineBytes <= maximum)
+            {
+                retained.Append(line).Append('\n');
+                retainedBytes += lineBytes;
+            }
+            else
+            {
+                truncated = true;
+            }
+            await onLine(line, isStandardError).ConfigureAwait(false);
+        }
+        return new CapturedOutput(retained.ToString(), truncated);
     }
 
     private static readonly string[] RuntimeEnvironmentAllowList =

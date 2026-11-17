@@ -62,6 +62,10 @@ public sealed record PipelineSetupDetectionDto
     /// commands run.</summary>
     public bool? HasDotNetTestProject { get; init; }
 
+    /// <summary>R-30: a <c>global.json</c> at the repository root, which pins the .NET SDK the pipelines install. Asked only
+    /// when a .NET solution, test project or project was found; null otherwise or when the root could not be listed.</summary>
+    public bool? HasGlobalJson { get; init; }
+
     /// <summary>A <c>compose.yaml</c>, <c>compose.yml</c>, <c>docker-compose.yaml</c> or
     /// <c>docker-compose.yml</c> at the repository root, which the default production deployment starts.</summary>
     public bool? HasComposeFile { get; init; }
@@ -78,6 +82,34 @@ public sealed record PipelineSetupDetectionDto
 
     /// <summary>A <c>.java</c> file below the root (R-105), which the quality pipeline checks with PMD.</summary>
     public bool? HasJava { get; init; }
+
+    /// <summary>R-59: a Playwright or Cypress dependency in a <c>package.json</c> of the repository, or a .NET project that
+    /// references <c>Microsoft.Playwright</c>: the browser tests the QA pipeline can run against its deployed stack. False when
+    /// every directory was read and none was found; null when it was not asked (no selected pipeline reads
+    /// <c>APPLICATION_QA_E2E_COMMANDS</c>) or a file could not be read.</summary>
+    public bool? HasBrowserTests { get; init; }
+
+    /// <summary><c>playwright</c>, <c>cypress</c> or <c>playwright-dotnet</c>, when <see cref="HasBrowserTests"/> is true.</summary>
+    [StringLength(20)]
+    public string? BrowserTestTool { get; init; }
+
+    /// <summary>The directory of the <c>package.json</c> (or of the .NET project) that declares it, relative to the repository
+    /// root; empty for the root.</summary>
+    [StringLength(500)]
+    public string? BrowserTestDirectory { get; init; }
+
+    /// <summary>For <c>playwright-dotnet</c>: the project file, relative to the repository root.</summary>
+    [StringLength(500)]
+    public string? BrowserTestProject { get; init; }
+
+    /// <summary>For <c>playwright-dotnet</c>: the target framework moniker its build folder is named after (<c>net10.0</c>),
+    /// when the project or a <c>Directory.Build.props</c> above it states one.</summary>
+    [StringLength(50)]
+    public string? BrowserTestFramework { get; init; }
+
+    /// <summary>For <c>playwright-dotnet</c>: true when the repository runs <c>dotnet test</c> on Microsoft.Testing.Platform
+    /// (<c>global.json</c>), whose options are not the VSTest ones; null otherwise.</summary>
+    public bool? BrowserTestUsesTestingPlatform { get; init; }
 }
 
 /// <summary>
@@ -101,6 +133,57 @@ public sealed record PipelineSetupReadinessCheckDto
     /// library or vault holding the value, the key, and the pipeline. The table of the finding is these
     /// rows; <see cref="Items"/> stays the distinct keys.</summary>
     public List<PipelineSetupReadinessEmptyValueDto> EmptyValues { get; init; } = [];
+
+    /// <summary>R-56: for an undefined variable, one row per name saying where to create it: a library or a vault, by
+    /// name, and the page to reach it. <see cref="Items"/> stays the names.</summary>
+    public List<PipelineSetupReadinessUndefinedVariableDto> UndefinedVariables { get; init; } = [];
+}
+
+/// <summary>The kind of holder an undefined variable belongs in (R-56).</summary>
+public enum PipelineSetupReadinessContainerKind
+{
+    /// <summary>A plain value: a variable library entry.</summary>
+    Library = 0,
+
+    /// <summary>A secret (a name made of PASSWORD, KEY, TOKEN, SECRET...): a vault secret.</summary>
+    Vault = 1
+}
+
+/// <summary>R-56: one undefined variable and the library or vault it must be created in.</summary>
+public sealed record PipelineSetupReadinessUndefinedVariableDto
+{
+    /// <summary>The variable name.</summary>
+    [StringLength(200)]
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>The kind of holder it belongs in.</summary>
+    public PipelineSetupReadinessContainerKind Container { get; init; }
+
+    /// <summary>The library or vault of the pipeline that should hold it, when it exists; null when the pipeline names
+    /// none or the named one does not exist yet.</summary>
+    public int? OwnerId { get; init; }
+
+    /// <summary>Name of that library or vault as the pipeline lists it; empty when the pipeline lists none of that kind.</summary>
+    [StringLength(200)]
+    public string OwnerName { get; init; } = string.Empty;
+
+    /// <summary>R-25: set when the key already exists in a library or vault of the project that this pipeline does not
+    /// declare: the id of that holder. Null when the key exists nowhere the project can read. Only names are read, never values.</summary>
+    public int? ExistingHolderId { get; init; }
+
+    /// <summary>R-25: the name of that holder; empty when the key exists nowhere.</summary>
+    [StringLength(200)]
+    public string ExistingHolderName { get; init; } = string.Empty;
+
+    /// <summary>R-25: the kind of that holder (a vault, or a library).</summary>
+    public PipelineSetupReadinessContainerKind ExistingHolderKind { get; init; }
+
+    /// <summary>R-25: the pipeline that reads the variable, for the link that opens it to declare the holder; null when unknown.</summary>
+    public int? PipelineId { get; init; }
+
+    /// <summary>R-25: name of that pipeline; empty when unknown.</summary>
+    [StringLength(200)]
+    public string PipelineName { get; init; } = string.Empty;
 }
 
 /// <summary>One empty value a pipeline reads: where it is held, its key, and the pipeline that needs it (R-10).</summary>

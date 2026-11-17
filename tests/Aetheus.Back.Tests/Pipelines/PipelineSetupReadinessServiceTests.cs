@@ -55,7 +55,7 @@ public sealed class PipelineSetupReadinessServiceTests
 
     private PipelineSetupReadinessService BuildSut() => new(
         _templates, _repo, _git, _gitRepositories, _resolver, _requirements, Substitute.For<IProjectConfigRepositoryService>(),
-        Substitute.For<ILogger<PipelineSetupReadinessService>>());
+        ReadinessVariableResolver.Create(), Substitute.For<IPipelineSetupServerRepository>(), Substitute.For<ILogger<PipelineSetupReadinessService>>());
 
     /// <summary>A template the platform shares (the project's organization defines none of that name).</summary>
     private void Template(int id, string name, string yaml)
@@ -188,6 +188,25 @@ public sealed class PipelineSetupReadinessServiceTests
     public async Task NoServerAtAll_IsReportedOnceRatherThanAsBothAMissingRunnerAndAMissingTarget()
     {
         Template(2, "application-deploy-prod", DeployTemplate);
+        Runners();
+        Repository();
+        AdapterDirectory("deploy-prod.sh");
+
+        var readiness = await RunAsync("application-deploy-prod");
+
+        Assert.Equal(PipelineSetupReadinessKind.NoRunnerConfigured, Assert.Single(readiness.Checks).Kind);
+    }
+
+    /// <summary>R-11: a template that only extends the common core (<c>application-deploy-prod</c>, <c>-front-back</c>) holds
+    /// none of the stages the wizard is about to create: the check reads it as a run would, extended, or the setup would
+    /// answer that nothing is needed for a deployment that needs a server.</summary>
+    [Fact]
+    public async Task ATemplateThatExtendsACore_IsReadAsTheRunReadsIt_ExtendedWithItsStages()
+    {
+        const string extending = "name: application-deploy-prod-template\nextends: application-deploy-prod-core@1\nstages: []\n";
+        Template(2, "application-deploy-prod", extending);
+        _resolver.ResolveAsync(extending, 3, null, Arg.Any<CancellationToken>()).Returns(new PipelineTemplateResolution(
+            YamlParsingHelper.ParseAndValidate(DeployTemplate)!, DeployTemplate, "application-deploy-prod-core", 1, 1, false));
         Runners();
         Repository();
         AdapterDirectory("deploy-prod.sh");

@@ -80,6 +80,19 @@ public class TasksDeepTests : BunitContext
         Assert.Null(typeof(TaskListView).GetField("_statusFilter", Priv));
     }
 
+    // R-8: the export writes the number a person reads, never the technical key of the run.
+    [Fact]
+    public void TheSourceExport_WritesTheRunNumber_NotItsTechnicalKey()
+    {
+        var cut = RenderView();
+        cut.WaitForState(() => cut.Markup.Contains("Build"));
+        var export = (Func<ServerTaskDto, object?>)typeof(TaskListView).GetProperty("SourceExport", Priv)!.GetValue(cut.Instance)!;
+
+        var text = export(new ServerTaskDto { Id = 1, PipelineRunId = 4521, PipelineRunNumber = 12 });
+
+        Assert.Equal("PipelineRun #12", text);
+    }
+
     // === Detail navigation ===
 
     [Fact]

@@ -3,7 +3,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-public readonly record struct IngestKeyResolution(int AppId, DateTime? ValidUntilUtc);
+/// <summary>The app an ingest key resolved to, the grace deadline of a rotated key (null for the current key),
+/// and which of the candidate hashes matched (R-53: the per-purpose or the legacy one).</summary>
+public readonly record struct IngestKeyResolution(int AppId, DateTime? ValidUntilUtc, string MatchedHash);
 public readonly record struct AppUptimeWindowCounts(
     int Up24h,
     int Total24h,
@@ -100,17 +102,39 @@ public interface IAppMonitoringRepository
     Task SaveChangesAsync(CancellationToken ct = default);
 
     // --- OTLP ingestion (phase 2+) ---
-    /// <summary>Resolves an ingest key hash to its enabled app id (null if unknown/disabled).</summary>
+    /// <summary>Resolves the candidate hashes of one ingest key to its enabled app id (null if unknown/disabled).</summary>
     Task<IngestKeyResolution?> ResolveIngestKeyHashAsync(
-        string ingestKeyHash,
+        IReadOnlyCollection<string> ingestKeyHashes,
         DateTime nowUtc,
         CancellationToken ct = default);
     /// <summary>Records a successful ingest touch and increments the dropped counter (surfaced in UI).</summary>
     Task TouchIngestAsync(int appId, long droppedDelta, DateTime now, CancellationToken ct = default);
 
+    /// <summary>R-29: a metrics export arrived; it answers the immediate export request the telemetry package already took
+    /// and that no export answered yet. Nothing changes otherwise.</summary>
+    Task MarkTelemetryExportReceivedAsync(int appId, DateTime now, CancellationToken ct = default);
+
+    /// <summary>R-29: hands the pending immediate export request over to the telemetry package that polls for it, once:
+    /// marks it delivered and returns its request time, or null when none is pending (or another poll took it).</summary>
+    Task<DateTime?> TakeTelemetryExportRequestAsync(int appId, DateTime now, CancellationToken ct = default);
+
     /// <summary>Tracked enabled app to auto-instrument on deploy: prefers an environment match, then a
     /// project-level (null environment) app. Null when the project has no enabled monitored app.</summary>
     Task<MonitoredApp?> GetDeployTargetAppAsync(int projectId, int? environmentId, CancellationToken ct = default);
+
+    // --- R-47: telemetry set up by the pipeline wizard ---
+    /// <summary>The project's name; null when the project does not exist.</summary>
+    Task<string?> GetProjectNameAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>The first enabled application of the project, tracked, to set the telemetry request on; null when none.</summary>
+    Task<MonitoredApp?> GetFirstEnabledAppForUpdateAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>True when an enabled application of the project was configured for telemetry by the wizard.</summary>
+    Task<bool> HasTelemetrySetupRequestedAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>True when the project's stored repository inventory (the CVE watch one) lists the telemetry NuGet package.
+    /// No scanner of its own: it reads what the inventory read already stored.</summary>
+    Task<bool> HasTelemetryPackagesAsync(int projectId, CancellationToken ct = default);
 
     // --- retention ---
     /// <summary>Rolls up one completed hour, application by application; a no-op for the rolled-up

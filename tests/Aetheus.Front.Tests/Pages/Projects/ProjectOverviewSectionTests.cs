@@ -14,7 +14,7 @@ public class ProjectOverviewSectionTests : BunitContext
     public ProjectOverviewSectionTests() => _handler = BunitTestHelper.RegisterServices(this);
 
     [Fact]
-    public void Renders_NullProject_ShowsAetheusLoader()
+    public void Renders_NullProject_ShowsZoneVeil()
     {
         var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, (ProjectDetailDto?)null));
         // Null project → only the branded loading indicator renders.
@@ -29,6 +29,7 @@ public class ProjectOverviewSectionTests : BunitContext
             new()
             {
                 Id = 42,
+                BuildNumber = 42,
                 PipelineId = 7,
                 PipelineName = "Release",
                 ProjectId = 1,
@@ -39,6 +40,7 @@ public class ProjectOverviewSectionTests : BunitContext
             new()
             {
                 Id = 43,
+                BuildNumber = 43,
                 PipelineId = 8,
                 PipelineName = "Deploy",
                 ProjectId = 1,
@@ -115,11 +117,121 @@ public class ProjectOverviewSectionTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("Deploy", cut.Markup);
-            // The linked run is rendered by the hierarchy tree, which keeps the bare id (the "#"
-            // prefix belongs to the grid's merged id + actions cell).
-            Assert.Equal("43", cut.Find("a.pipeline-run-tree-id").TextContent.Trim());
+            // R-8: the hierarchy tree writes the number like the grid does.
+            Assert.Equal("#43", cut.Find("a.pipeline-run-tree-id").TextContent.Trim());
         });
     }
+
+    /// <summary>Recette R-69 (OE2): the "Create the Git repository" step showed "done" beside "no recent commit" for a project
+    /// whose source is an external repository (or should be) and holds no readable commit. It stays to do and leads to the
+    /// external repository; a project whose external mirror holds code is done.</summary>
+    [Theory]
+    [InlineData(true, false, false)] // the mirror is the project's source and was never synchronized
+    [InlineData(false, true, false)] // the mirror holds code but sits beside an internal repository that holds none
+    [InlineData(false, false, true)] // the mirror is the project's source and holds code
+    public void TheGitStep_OfAnExternalSource_IsDoneOnlyWhenTheMirrorHoldsACommit(bool mirrorEmpty, bool besideEmptyInternal, bool expectedDone)
+    {
+        var repositories = new List<GitLightRepoDto>
+        {
+            new()
+            {
+                Id = 5, ProjectId = 17, Name = "OmniEurope.Blazor", Slug = "omnieurope-blazor", DefaultBranch = "main",
+                IsEmpty = mirrorEmpty, IsExternalMirror = true, IsAdditionalSource = besideEmptyInternal
+            }
+        };
+        if (besideEmptyInternal)
+            repositories.Add(new() { Id = 4, ProjectId = 17, Name = "oe2", Slug = "oe2", DefaultBranch = "main", IsEmpty = true });
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=17", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=17&sortDescending=False", repositories);
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+
+        var cut = Render<ProjectOverviewSection>(p =>
+            p.Add(x => x.Project, new ProjectDetailDto { Id = 17, Name = "OE2", RepositoryUrl = "https://example/git/17/oe.git" }));
+
+        cut.WaitForAssertion(() =>
+        {
+            var step = cut.FindAll("tr[data-testid='onboarding-step']").First();
+            var done = step.QuerySelector(".omni-badge")!.TextContent.Contains("Done", StringComparison.Ordinal);
+            Assert.Equal(expectedDone, done);
+            if (expectedDone) return;
+            Assert.Equal("/projects/17/external-repo", step.QuerySelector("a")!.GetAttribute("href"));
+        });
+    }
+
+    [Fact]
+    public void HasAnExpandContractTab_BetweenOverviewAndReadme_ThatReadsTheEnvironmentsOnlyWhenOpened()
+    {
+        // Recette R-10: the project's database tracking sits in its own tab, grouped by environment (production first).
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=1", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse<GitLightRepoDto>(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=1&sortDescending=False", []);
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/environments?",
+            new[] { new EnvironmentDto { Id = 12, Name = "Prod", Type = EnvironmentType.Production, ProjectId = 1 } });
+        _handler.SetJsonResponse("api/environments/12/schema-tracking", new EnvironmentSchemaDto { EnvironmentId = 12 });
+
+        var cut = Render<ProjectOverviewSection>(p =>
+            p.Add(x => x.Project, new ProjectDetailDto { Id = 1, Name = "Web", MigrationGateEnabled = true }));
+
+        var tabs = cut.FindAll("[role='tab']").Select(tab => tab.TextContent.Trim()).ToList();
+        Assert.Collection(tabs,
+            tab => Assert.Contains("Overview", tab, StringComparison.Ordinal),
+            tab => Assert.Contains("SchemaTrackingTabProject", tab, StringComparison.Ordinal),
+            tab => Assert.Contains("Readme", tab, StringComparison.Ordinal),
+            tab => Assert.Contains("Changelog", tab, StringComparison.Ordinal));
+        Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("schema-tracking", StringComparison.Ordinal));
+
+        cut.FindAll("[role='tab']")[1].Click();
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='project-schema-environment']")));
+        Assert.Contains(_handler.Requests, r => r.Url.EndsWith("api/environments/12/schema-tracking", StringComparison.Ordinal));
+    }
+
+    /// <summary>Recette R-13 (user decision 2026-11-09): the expand/contract tab needs an environment AND a database, the two
+    /// together (so never a package), or the migration gate turned on; the project holds no other trace of a database than what
+    /// its pipelines declare.</summary>
+    [Theory]
+    [InlineData(0, true, false, false)]
+    [InlineData(2, false, false, false)]
+    [InlineData(0, false, true, true)]
+    [InlineData(2, true, false, true)]
+    [InlineData(0, true, true, true)]
+    [InlineData(2, false, true, true)]
+    public void ExpandContractTab_IsShownOnlyWithAnEnvironmentAndADatabase_OrTheMigrationGateOn(
+        int environmentCount, bool declaresDatabase, bool gateEnabled, bool shown)
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=1", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse<GitLightRepoDto>(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=1&sortDescending=False", []);
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/environments?", Array.Empty<EnvironmentDto>());
+        var yaml = declaresDatabase
+            ? "name: Ci\nextends: 'application-ci@3'\nvariables:\n  APPLICATION_HAS_DATABASE: \"true\"\n"
+            : "name: Ci\nextends: 'application-ci@3'\nvariables:\n  APPLICATION_HAS_DATABASE: \"false\"\n";
+
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, new ProjectDetailDto
+        {
+            Id = 1,
+            Name = "Web",
+            EnvironmentCount = environmentCount,
+            MigrationGateEnabled = gateEnabled,
+            Pipelines = [new PipelineDto { Id = 5, Name = "Ci", YamlDefinition = yaml }]
+        }));
+
+        var tabs = cut.FindAll("[role='tab']").Select(tab => tab.TextContent.Trim()).ToList();
+        Assert.Equal(shown, tabs.Any(tab => tab.Contains("SchemaTrackingTabProject", StringComparison.Ordinal)));
+        Assert.Equal(shown ? 4 : 3, tabs.Count);
+    }
+
+    /// <summary>R-13: a blue-green deployment written by hand names its migrations directory, which is a database as well.</summary>
+    [Theory]
+    [InlineData("  BG_MIGRATIONS_DIR: \"$(WORKSPACE)/src/Back/Data/Migrations\"", true)]
+    [InlineData("  BG_MIGRATIONS_DIR: \"\"", false)]
+    [InlineData("  APPLICATION_HAS_DATABASE: true", true)]
+    [InlineData("  OTHER_APPLICATION_HAS_DATABASE: \"true\"", false)]
+    public void DeclaresDatabase_ReadsTheVariablesOfAPipeline(string line, bool expected) =>
+        Assert.Equal(expected, PipelineTemplateReferenceHelper.DeclaresDatabase($"name: Deploy\nvariables:\n{line}\n"));
 
     [Fact]
     public void Renders_WithProjectNoRecentData_ShowsBothEmptyHints()
@@ -436,7 +548,7 @@ public class ProjectOverviewSectionTests : BunitContext
 
         _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=1", new List<PipelineRunDto>
         {
-            new() { Id = 43, PipelineId = 7, ProjectId = 1, PipelineName = "Release", Status = PipelineStatus.Running }
+            new() { Id = 43, BuildNumber = 43, PipelineId = 7, ProjectId = 1, PipelineName = "Release", Status = PipelineStatus.Running }
         });
         var method = typeof(ProjectOverviewSection).GetMethod("OnPipelineRunStarted", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [43, 7])!);
@@ -445,9 +557,9 @@ public class ProjectOverviewSectionTests : BunitContext
     }
 
     [Fact]
-    public void InformationCard_GroupsStatusWithGradeAndTheTwoDates()
+    public void R30_InformationCard_ShowsStatusGradeCreatedAndUpdatedAsFourSeparateItems()
     {
-        // Without description or tags, show status and grade on one row and dates on the next.
+        // R-30: one item per fact, each with its own term; nothing joined by a separator.
         _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
         _handler.SetPaginatedJsonResponse(HttpMethod.Get,
             "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
@@ -468,9 +580,55 @@ public class ProjectOverviewSectionTests : BunitContext
             }));
 
         var infoCard = cut.Find(".overview-info-card");
-        Assert.Equal(2, infoCard.QuerySelectorAll(".omni-description-list__item").Length);
-        // The grade still links to the quality page: grouping the row must not cost the link.
+        var items = infoCard.QuerySelectorAll(".omni-description-list__item");
+        Assert.Equal(4, items.Length);
+        Assert.Equal(["Status", "AnalysisGrade", "Created", "Updated"],
+            items.Select(item => item.QuerySelector("dt")!.TextContent.Trim()).ToArray());
+        Assert.DoesNotContain("·", infoCard.TextContent, StringComparison.Ordinal);
+        Assert.Contains("2026", items[2].QuerySelector("dd")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("2026", items[3].QuerySelector("dd")!.TextContent, StringComparison.Ordinal);
+        Assert.NotEqual(items[2].QuerySelector("dd")!.TextContent, items[3].QuerySelector("dd")!.TextContent);
+        // The grade still links to the quality page: splitting the row must not cost the link.
         Assert.Single(infoCard.QuerySelectorAll("a[href='/projects/2/quality']"));
+    }
+
+    [Theory]
+    [InlineData(true, true, new[] { "DefaultBranch", "LastGitUpdate" })]
+    [InlineData(true, false, new[] { "DefaultBranch" })]
+    [InlineData(false, true, new[] { "LastGitUpdate" })]
+    public void R30_RepositoryCard_ShowsOneItemPerFact_AnAbsentValueHidesOnlyItsItem(
+        bool withBranch, bool withGitUpdate, string[] expectedTerms)
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
+            new List<GitLightRepoDto>());
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+
+        var cut = Render<ProjectOverviewSection>(parameters => parameters.Add(component => component.Project,
+            new ProjectDetailDto
+            {
+                Id = 2,
+                Name = "API",
+                RepositoryUrl = "https://example/repo",
+                DefaultBranch = withBranch ? "trunk-x" : null,
+                LastGitUpdateAt = withGitUpdate ? DateTime.UtcNow.AddHours(-3) : null,
+                Pipelines = [new PipelineDto { Id = 9, Name = "CI" }]
+            }));
+
+        var repositoryCard = cut.FindAll(".overview-info-card")[1];
+        var terms = repositoryCard.QuerySelectorAll(".omni-description-list__item dt")
+            .Select(term => term.TextContent.Trim())
+            .Where(term => term is "DefaultBranch" or "LastGitUpdate")
+            .ToArray();
+        Assert.Equal(expectedTerms, terms);
+        Assert.DoesNotContain("·", repositoryCard.TextContent, StringComparison.Ordinal);
+        var branchItem = repositoryCard.QuerySelectorAll(".omni-description-list__item")
+            .FirstOrDefault(item => item.QuerySelector("dt")!.TextContent.Trim() == "DefaultBranch");
+        if (withBranch)
+            Assert.Equal("trunk-x", branchItem!.QuerySelector("dd")!.TextContent.Trim());
+        else
+            Assert.Null(branchItem);
     }
 
     [Fact]
@@ -489,14 +647,171 @@ public class ProjectOverviewSectionTests : BunitContext
                 Name = "API",
                 LatestGateGrade = AnalysisGrade.D,
                 LatestGateGradeRunId = 2478,
+                LatestGateGradeQualification = new AnalysisQualificationDto
+                {
+                    State = AnalysisQualificationState.DeployedSealed,
+                    ReleaseVersion = "1.5.30",
+                    PipelineRunId = 2478,
+                    PipelineRunNumber = 339
+                },
                 Pipelines = [new PipelineDto { Id = 9, Name = "CI" }]
             }));
 
         var link = cut.Find(".overview-info-card a.project-grade-run-link");
-        // The grade opens the run on its Gate tab, where an F gives its cause.
+        // The grade opens the run that sealed the deployed release on its Gate tab, where an F gives its cause.
         Assert.Equal("/pipelines/runs/2478?projectId=2&tab=gate", link.GetAttribute("href"));
-        Assert.Equal("ProjectGradeLatestCandidate", link.GetAttribute("title"));
+        // R-12, R-20: the tooltip names the deployed release and the run, not "the latest candidate".
+        Assert.Equal("ProjectGradeDeployedRelease", link.GetAttribute("title"));
         Assert.Empty(cut.FindAll(".overview-info-card a[href='/projects/2/quality']"));
+    }
+
+    private IRenderedComponent<ProjectOverviewSection> RenderOverviewWithGrade(
+        AnalysisGrade? grade, AnalysisGradeCause? cause, string? pipelineName = "Candidate")
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
+            new List<GitLightRepoDto>());
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+
+        return Render<ProjectOverviewSection>(parameters => parameters.Add(component => component.Project,
+            new ProjectDetailDto
+            {
+                Id = 2,
+                Name = "Aetheus",
+                LatestGateGrade = grade,
+                LatestGateGradeRunId = 2478,
+                LatestGateGradeRunNumber = 345,
+                LatestGateGradeCause = cause,
+                LatestGateGradePipelineId = 12,
+                LatestGateGradePipelineName = pipelineName,
+                LatestGateGradeQualification = new AnalysisQualificationDto
+                {
+                    State = AnalysisQualificationState.DeployedSealed,
+                    ReleaseVersion = "1.6.5",
+                    PipelineRunId = 2478,
+                    PipelineRunNumber = 345
+                },
+                Pipelines = [new PipelineDto { Id = 9, Name = "CI" }]
+            }));
+    }
+
+    // User decision 2026-11-10: below A, the grade says in parentheses what lowers it.
+    [Fact]
+    public void AGradeLoweredByAPipelineRun_NamesThePipelineAndItsRun_AsALinkToTheRun()
+    {
+        var cut = RenderOverviewWithGrade(AnalysisGrade.B, AnalysisGradeCause.Pipeline);
+
+        var cause = cut.Find(".overview-info-card [data-testid='project-grade-cause']");
+        Assert.Equal("pipeline", cause.GetAttribute("data-cause"));
+        // In parentheses: the opening one before the icon and the link, the closing one after (the icon's own name is its label).
+        var text = System.Text.RegularExpressions.Regex.Replace(cause.TextContent, @"\s+", string.Empty);
+        Assert.StartsWith("(", text, StringComparison.Ordinal);
+        Assert.EndsWith("Candidate#345)", text, StringComparison.Ordinal);
+        var link = cause.QuerySelector("a")!;
+        Assert.Equal("/pipelines/runs/2478?projectId=2&tab=gate", link.GetAttribute("href"));
+        Assert.Equal("Candidate #345", link.TextContent.Trim());
+        Assert.NotNull(cause.QuerySelector("svg"));
+    }
+
+    [Fact]
+    public void AGradeLoweredByTheProject_NamesTheProject_AsALinkToItsQualityPage()
+    {
+        var cut = RenderOverviewWithGrade(AnalysisGrade.D, AnalysisGradeCause.Project);
+
+        var cause = cut.Find(".overview-info-card [data-testid='project-grade-cause']");
+        Assert.Equal("project", cause.GetAttribute("data-cause"));
+        var link = cause.QuerySelector("a")!;
+        Assert.Equal("/projects/2/quality", link.GetAttribute("href"));
+        Assert.Equal("Aetheus", link.TextContent.Trim());
+        Assert.NotNull(cause.QuerySelector("svg"));
+    }
+
+    [Fact]
+    public void AGradeLoweredByAPipelineRunOfUnknownPipeline_NamesTheRunAlone()
+    {
+        var cut = RenderOverviewWithGrade(AnalysisGrade.B, AnalysisGradeCause.Pipeline, pipelineName: null);
+
+        Assert.Equal("#345", cut.Find("[data-testid='project-grade-cause'] a").TextContent.Trim());
+    }
+
+    [Theory]
+    [InlineData(AnalysisGrade.A, AnalysisGradeCause.Pipeline)]
+    [InlineData(AnalysisGrade.A, null)]
+    [InlineData(AnalysisGrade.B, null)]
+    [InlineData(null, AnalysisGradeCause.Project)]
+    public void AnAGrade_OrAGradeWithoutCause_ShowsNothingMore(AnalysisGrade? grade, AnalysisGradeCause? cause)
+    {
+        var cut = RenderOverviewWithGrade(grade, cause);
+
+        Assert.Empty(cut.FindAll("[data-testid='project-grade-cause']"));
+    }
+
+    [Theory]
+    [InlineData(AnalysisQualificationState.DeployedLastKnownGrade, true, "ProjectGradeLastKnown")]
+    [InlineData(AnalysisQualificationState.DeployedSealed, false, "ProjectGradeDeployedRelease")]
+    public void R12_R20_ALastKnownGrade_IsShownMarkedOld_AndOpensTheRunItComesFrom(
+        AnalysisQualificationState state, bool expectedOld, string expectedTitle)
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
+            new List<GitLightRepoDto>());
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+
+        var cut = Render<ProjectOverviewSection>(parameters => parameters.Add(component => component.Project,
+            new ProjectDetailDto
+            {
+                Id = 2,
+                Name = "API",
+                LatestGateGrade = AnalysisGrade.F,
+                LatestGateGradeRunId = 3092,
+                LatestGateGradeQualification = new AnalysisQualificationDto
+                {
+                    State = state,
+                    ReleaseVersion = "1.5.31",
+                    KnownReleaseVersion = "1.5.30",
+                    PipelineRunId = 3092,
+                    PipelineRunNumber = 339
+                },
+                Pipelines = [new PipelineDto { Id = 9, Name = "CI" }]
+            }));
+
+        var link = cut.Find(".overview-info-card a.project-grade-run-link");
+        Assert.Equal("/pipelines/runs/3092?projectId=2&tab=gate", link.GetAttribute("href"));
+        Assert.Equal(expectedTitle, link.GetAttribute("title"));
+        Assert.Equal("F", link.QuerySelector(".grade-badge--f")!.TextContent.Trim());
+        Assert.Equal(expectedOld ? 1 : 0, link.QuerySelectorAll("[data-testid='grade-badge-old']").Length);
+    }
+
+    [Theory]
+    [InlineData(AnalysisQualificationState.NothingDeployed, "ProjectGradeNothingDeployed")]
+    [InlineData(AnalysisQualificationState.DeployedWithoutVerdict, "ProjectGradeDeployedWithoutVerdict")]
+    public void R12_R20_WithoutADeployedVerdict_TheBadgeShowsNoLetter_AndItsTooltipSaysWhy(
+        AnalysisQualificationState state, string expectedTitle)
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
+            new List<GitLightRepoDto>());
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+
+        var cut = Render<ProjectOverviewSection>(parameters => parameters.Add(component => component.Project,
+            new ProjectDetailDto
+            {
+                Id = 2,
+                Name = "API",
+                LatestGateGrade = null,
+                // The analysis ran on a candidate of run 2478 whatever the release state: it must not become a link or a letter.
+                LatestGateGradeRunId = 2478,
+                LatestGateGradeQualification = new AnalysisQualificationDto { State = state, ReleaseVersion = "1.5.30" },
+                Pipelines = [new PipelineDto { Id = 9, Name = "CI" }]
+            }));
+
+        var link = cut.Find(".overview-info-card a[href='/projects/2/quality']");
+        Assert.Equal(expectedTitle, link.GetAttribute("title"));
+        Assert.Empty(link.QuerySelectorAll(".grade-badge--a"));
+        Assert.Single(link.QuerySelectorAll(".grade-badge--none"));
     }
 
     [Fact]
@@ -648,6 +963,79 @@ public class ProjectOverviewSectionTests : BunitContext
     }
 
     [Fact]
+    public void R32_TheStepsThatCreateSomething_ComeBackToThisPage()
+    {
+        StubInitializedProjectReads(7);
+        var nav = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        nav.NavigateTo("/projects/7/overview");
+        var project = Project(7, serverCount: 0) with { EnvironmentCount = 0, LibraryCount = 0 };
+
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, project));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+
+        var links = cut.FindAll("tr[data-testid='onboarding-step'] a.onboarding-step-link").Select(a => a.GetAttribute("href")).ToList();
+        Assert.Contains(links, href => href == "/environments/new?projectId=7&returnUrl=%2Fprojects%2F7%2Foverview");
+    }
+
+    [Fact]
+    public void R33_AnUnfinishedChecklist_CanBeFinished_AndNeverComesBack()
+    {
+        StubInitializedProjectReads(7);
+        var preferences = (InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>();
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 0)));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+
+        var finish = cut.Find("[data-testid='onboarding-finish']");
+        Assert.Equal("GettingStartedFinish", finish.TextContent.Trim());
+        finish.Click();
+
+        Assert.DoesNotContain("ProjectGettingStartedTitle", cut.Markup, StringComparison.Ordinal);
+        Assert.True(preferences.Read<bool>(PreferenceKeys.GettingStartedFinished(7)));
+        Assert.False(preferences.Read<bool>(PreferenceKeys.GettingStartedClosed(7)));
+
+        var next = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 0)));
+        next.WaitForAssertion(() => Assert.Contains("NoRecentCommits", next.Markup));
+        Assert.DoesNotContain("ProjectGettingStartedTitle", next.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R33_AProjectWhoseOnlyPipelineIsTheExternalSecurityAnalysis_AsksOnlyForTheRepositoryAndThePipeline()
+    {
+        StubInitializedProjectReads(7);
+        var project = new ProjectDetailDto
+        {
+            Id = 7,
+            Name = "External",
+            Pipelines = [new PipelineDto { Id = 9, Name = "Security", YamlDefinition = "name: Security\nextends: 'application-security-external@3'\n" }]
+        };
+
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, project));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+
+        // No environment, no server: the list is finished with the repository and the pipeline.
+        Assert.Equal(2, cut.FindAll("tr[data-testid='onboarding-step']").Count);
+        Assert.Contains("ProjectGettingStartedDoneDescription", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R33_AProjectWithAnOrdinaryPipeline_StillAsksForEnvironmentAndServer()
+    {
+        StubInitializedProjectReads(7);
+        var project = new ProjectDetailDto
+        {
+            Id = 7,
+            Name = "App",
+            Pipelines = [new PipelineDto { Id = 9, Name = "CI", YamlDefinition = "extends: application-ci\n" }]
+        };
+
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, project));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+
+        Assert.Equal(4, cut.FindAll("tr[data-testid='onboarding-step']").Count);
+        Assert.Contains("ProjectGettingStartedDescription", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void R3_67_AnUnfinishedChecklist_SaysItGoesOnceDone_AndIsNotClosed()
     {
         StubInitializedProjectReads(7);
@@ -660,5 +1048,25 @@ public class ProjectOverviewSectionTests : BunitContext
         Assert.Contains("ProjectGettingStartedDescription", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("ProjectGettingStartedDoneDescription", cut.Markup, StringComparison.Ordinal);
         Assert.False(preferences.Values.ContainsKey(PreferenceKeys.GettingStartedClosed(7)));
+    }
+
+    /// <summary>Recette R-4: a project that names an external address and has no repository in Aetheus does not show that
+    /// address as its repository URL: the card says it is an external address nothing reads, with the mirror notice.</summary>
+    [Fact]
+    public void R4_AnExternalAddressWithoutMirror_IsShownAsNotRead_WithTheMirrorNotice()
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=21", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse<GitLightRepoDto>(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=21&sortDescending=False", []);
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+
+        var cut = Render<ProjectOverviewSection>(p =>
+            p.Add(x => x.Project, new ProjectDetailDto { Id = 21, Name = "OE", RepositoryUrl = "https://github.com/team/app.git" }));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("ExternalRepositoryAddressNotRead", cut.Find("input#project-overview-clone-url").GetAttribute("aria-label"));
+            Assert.Contains("ExternalAddressNotMirroredHint", cut.Markup, StringComparison.Ordinal);
+        });
     }
 }

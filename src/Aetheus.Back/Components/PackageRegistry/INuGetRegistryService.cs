@@ -5,7 +5,11 @@ namespace Aetheus.Back.Components.PackageRegistry;
 
 public interface INuGetRegistryService
 {
-    Task PublishAsync(Func<Stream> openContent, string publishedBy, CancellationToken ct = default);
+    /// <param name="observabilityPackagesOnly">Set for a pipeline run's registry credential (<see cref="PackageRunTokens"/>):
+    /// any package other than the observability ones is refused before anything is stored.</param>
+    Task PublishAsync(
+        Func<Stream> openContent, string publishedBy, CancellationToken ct = default,
+        bool observabilityPackagesOnly = false);
     Task<IReadOnlyList<string>?> GetVersionsAsync(string packageId, CancellationToken ct = default);
     Task<RegistryPackageVersion?> GetVersionAsync(string packageId, string version, CancellationToken ct = default);
     Task<NuGetRegistration?> GetRegistrationAsync(string packageId, CancellationToken ct = default);

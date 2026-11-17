@@ -131,4 +131,34 @@
   <data name="FindingsResolvedCountOne" xml:space="preserve"><value>{0} résolu</value></data>
   <data name="MailQueueCountOne" xml:space="preserve"><value>{0} message</value></data>
   <data name="DiskFreeOne" xml:space="preserve"><value>{0} Go libre sur {1} Go ({2} % libre)</value></data>
+  <data name="CveTitle" xml:space="preserve"><value>Vulnérabilités connues (CVE)</value></data>
+  <data name="CveLink" xml:space="preserve"><value>Voir les constats</value></data>
+  <data name="CveSummary" xml:space="preserve"><value>{0}.</value></data>
+  <data name="CveOpen" xml:space="preserve"><value>{0} ouvertes</value></data>
+  <data name="CveOpenOne" xml:space="preserve"><value>{0} ouverte</value></data>
+  <data name="CveOpenWithBreakdown" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="CveProjectOpen" xml:space="preserve"><value>Sur ce projet il y a {0} CVE à traiter</value></data>
+  <data name="CveProjectOpenOne" xml:space="preserve"><value>Sur ce projet il y a {0} CVE à traiter</value></data>
+  <data name="CveServerOpen" xml:space="preserve"><value>Sur le système de ce serveur il y a {0} CVE à traiter</value></data>
+  <data name="CveServerOpenOne" xml:space="preserve"><value>Sur le système de ce serveur il y a {0} CVE à traiter</value></data>
+  <data name="CveCountExploited" xml:space="preserve"><value>{0} exploitées</value></data>
+  <data name="CveCountExploitedOne" xml:space="preserve"><value>{0} exploitée</value></data>
+  <data name="CveCountCritical" xml:space="preserve"><value>{0} critiques</value></data>
+  <data name="CveCountCriticalOne" xml:space="preserve"><value>{0} critique</value></data>
+  <data name="CveCountHigh" xml:space="preserve"><value>{0} élevées</value></data>
+  <data name="CveCountHighOne" xml:space="preserve"><value>{0} élevée</value></data>
+  <data name="CveCountMedium" xml:space="preserve"><value>{0} moyennes</value></data>
+  <data name="CveCountMediumOne" xml:space="preserve"><value>{0} moyenne</value></data>
+  <data name="CveCountLow" xml:space="preserve"><value>{0} faibles</value></data>
+  <data name="CveCountLowOne" xml:space="preserve"><value>{0} faible</value></data>
+  <data name="CveCountInfo" xml:space="preserve"><value>{0} info</value></data>
+  <data name="CveCountNone" xml:space="preserve"><value>{0} sans classement</value></data>
+  <data name="CveCountUnrated" xml:space="preserve"><value>{0} sans gravité publiée</value></data>
+  <data name="CveToVerify" xml:space="preserve"><value>{0} à vérifier</value></data>
+  <data name="CveNew" xml:space="preserve"><value>{0} nouvelles</value></data>
+  <data name="CveNewOne" xml:space="preserve"><value>{0} nouvelle</value></data>
+  <data name="CveClosed" xml:space="preserve"><value>{0} fermées</value></data>
+  <data name="CveClosedOne" xml:space="preserve"><value>{0} fermée</value></data>
+  <data name="CveSourceWithLicence" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="CveSources" xml:space="preserve"><value>Sources des données, chacune sous sa licence : {0}.</value></data>
 </root>

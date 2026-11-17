@@ -2,12 +2,12 @@
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using OmniEurope.Performance;
+using OmniEurope.Diagnostics;
 
 namespace Aetheus.Telemetry.Tests;
 
 /// <summary>Verifies per-route request gauges with a controlled clock and the
-/// OmniEurope.Performance collector. AddAetheusTelemetry registration is covered separately because
+/// OmniEurope.Diagnostics collector. AddAetheusTelemetry registration is covered separately because
 /// those tests share AETHEUS_TELEMETRY_ENABLED.</summary>
 public sealed class RequestPerformanceTests
 {

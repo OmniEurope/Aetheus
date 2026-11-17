@@ -40,21 +40,23 @@
         <OmniTemplateForm TModel="LoginModel" Model="@_model" OnValidSubmit="@OnSubmit" GuardUnsavedChanges="false">
             <OmniDataAnnotationsValidator Localizer="@L" />
             <OmniStack Gap="OmniSpacing.Large">
-                @* PLAN-003 P3-2: people sign in by e-mail address. *@
-                <OmniFormField Label="@L["LoginEmail"]" For="Email">
-                    <OmniTextBox @bind-Value="_model.Email" Type="OmniTextBoxType.Email" Autocomplete="username"
-                                 Id="Email" aria-label="@L["LoginEmail"]" />
-                    <OmniRequiredValidator TValue="string" For="@(() => _model.Email)" Message="@L["EmailRequired"]" />
-                </OmniFormField>
-                <OmniFormField Label="@L["Password"]" For="Password">
-                    <ChildContent>
-                        @* Use the password field built-in reveal control without a duplicate
-                           toggle. *@
-                        <OmniPassword @bind-Value="_model.Password" Id="Password" aria-label="@L["Password"]"
-                                      RevealLabel="@L["ShowPassword"]" HideLabel="@L["HidePassword"]" />
-                        <OmniRequiredValidator TValue="string" For="@(() => _model.Password)" Message="@L["PasswordRequired"]" />
-                    </ChildContent>
-                </OmniFormField>
+                <OmniStack Gap="OmniSpacing.Small">
+                    @* PLAN-003 P3-2: people sign in by e-mail address. *@
+                    <OmniFormField Label="@L["LoginEmail"]" For="Email">
+                        <OmniTextBox @bind-Value="_model.Email" Type="OmniTextBoxType.Email" Autocomplete="username"
+                                     Id="Email" aria-label="@L["LoginEmail"]" />
+                        <OmniRequiredValidator TValue="string" For="@(() => _model.Email)" Message="@L["EmailRequired"]" />
+                    </OmniFormField>
+                    <OmniFormField Label="@L["Password"]" For="Password">
+                        <ChildContent>
+                            @* Use the password field built-in reveal control without a duplicate
+                               toggle. *@
+                            <OmniPassword @bind-Value="_model.Password" Id="Password" aria-label="@L["Password"]"
+                                          RevealLabel="@L["ShowPassword"]" HideLabel="@L["HidePassword"]" />
+                            <OmniRequiredValidator TValue="string" For="@(() => _model.Password)" Message="@L["PasswordRequired"]" />
+                        </ChildContent>
+                    </OmniFormField>
+                </OmniStack>
 
                 @if (_totpRequired)
                 {
@@ -63,7 +65,7 @@
                         <OmniFormField For="oe-pages-auth-login-3"><LabelContent>@L["TotpRecoveryCode"]</LabelContent><ChildContent>
                             <OmniTextBox @bind-Value="_model.RecoveryCode"
                                            maxlength="20" aria-label="@L["TotpRecoveryCode"]"
-                                           Placeholder="@L["TotpRecoveryCodePlaceholder"]" Autocomplete="off" Id="oe-pages-auth-login-3" />
+                                           Placeholder="@L["TotpRecoveryCodePlaceholder"]" Autocomplete="one-time-code" Id="oe-pages-auth-login-3" />
                         </ChildContent></OmniFormField>
                     }
                     else
@@ -71,7 +73,7 @@
                         <OmniFormField For="oe-pages-auth-login-4"><LabelContent>@L["TotpCode"]</LabelContent><ChildContent>
                             <OmniTextBox @bind-Value="_model.TotpCode"
                                            maxlength="10" aria-label="@L["TotpCode"]"
-                                           Placeholder="@L["TotpCodePlaceholder"]" Autocomplete="off" Id="oe-pages-auth-login-4" />
+                                           Placeholder="@L["TotpCodePlaceholder"]" Autocomplete="one-time-code" Id="oe-pages-auth-login-4" />
                         </ChildContent></OmniFormField>
                     }
                     @* STD-BTN: switching the kind of code is a minor action of the form; Login stays its only blue. *@

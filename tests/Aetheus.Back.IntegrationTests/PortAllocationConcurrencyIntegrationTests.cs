@@ -9,7 +9,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Concurrent PostgreSQL port allocation must respect real unique constraints, which EF
 /// InMemory cannot verify.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PortAllocationConcurrencyIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

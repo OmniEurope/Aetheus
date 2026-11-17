@@ -1,0 +1,13 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-8, mockup planificateur-actions-serveur-maquette.html: the "Genre" bar (all, pipelines, server scans, AI tasks,
+   backups, CVE watch) and the "Serveur" list of the build planner. Both live in the URL (?kind=, ?server=) like the view, a
+   choice is one history entry, and the view and the day already in the URL are kept. *@
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true" data-testid="schedule-filters">
+    <OmniSelectBar TValue="string" Options="@GenreOptions" Label="@L["ScheduleFilterKind"]" Id="schedule-filter-kind"
+                   Value="@KindValue" ValueExpression="@(() => KindValue)" ValueChanged="@OnKindChanged">
+        <IconTemplate Context="genre"><OmniIcon Name="@GenreIcon(genre)" /></IconTemplate>
+    </OmniSelectBar>
+    <OmniDropDown TValue="int?" Options="@ServerOptions" Label="@L["Server"]" Id="schedule-filter-server"
+                  Value="@Server" ValueExpression="@(() => Server)" ValueChanged="@OnServerChanged"
+                  AllowEmpty="true" Placeholder="@L["ScheduleFilterAllServers"]" />
+</OmniStack>

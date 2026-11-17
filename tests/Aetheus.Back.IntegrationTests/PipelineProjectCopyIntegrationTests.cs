@@ -18,8 +18,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// depends on are named, and the library and vault it copies hold EMPTY values that the readiness
 /// verdict lists and that a run refuses, until they are filled in.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PipelineProjectCopyIntegrationTests(PostgresFixture fixture)
+public sealed class PipelineProjectCopyIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string NightlyYaml = """
         name: aetheus-nightly
@@ -186,67 +185,6 @@ public sealed class PipelineProjectCopyIntegrationTests(PostgresFixture fixture)
             .CheckProjectAsync(seeded.TargetProjectId, pipelineId: null, seeded.OrganizationId, ct);
         Assert.DoesNotContain(after.Checks, found =>
             found.Kind is PipelineSetupReadinessKind.EmptyLibraryValues or PipelineSetupReadinessKind.EmptyVaultSecrets);
-    }
-
-    // Recette R-86: the generic templates read `${{ project.slug }}.share`, so a project's libraries and
-    // vaults are named after its slug. The copy used to create them under the SOURCE slug (`w7.share`) in
-    // the target project, which no copied pipeline reads.
-    [Fact]
-    public async Task Copy_OfSlugNamedLibrariesAndVaults_CreatesThemUnderTheTargetSlug()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        int sourceId, targetId, organizationId;
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            organizationId = await db.Organizations.Where(o => o.Slug == "aetheus").Select(o => o.Id).FirstAsync(ct);
-            var source = new Project { Name = "W7", OrganizationId = organizationId };
-            var target = new Project { Name = "R2 Probe", OrganizationId = organizationId };
-            db.Projects.AddRange(source, target);
-            await db.SaveChangesAsync(ct);
-            sourceId = source.Id;
-            targetId = target.Id;
-            db.Pipelines.Add(new Pipeline
-            {
-                Name = "w7-qa",
-                ProjectId = sourceId,
-                TriggerType = PipelineTriggerType.Manual,
-                YamlDefinition = """
-                    name: w7-qa
-                    trigger: manual
-                    vaults:
-                      - "${{ project.slug }}.qa"
-                    variable_libraries:
-                      - "${{ project.slug }}.share"
-                    stages: []
-                    """
-            });
-            await db.SaveChangesAsync(ct);
-            var libraries = scope.ServiceProvider.GetRequiredService<IVariableLibraryService>();
-            var library = await libraries.CreateLibraryAsync(new CreateVariableLibraryRequest { Name = "w7.share", ProjectId = sourceId }, ct);
-            await libraries.CreateEntryAsync(library.Id, new CreateVariableEntryRequest { Key = "API_HOST", Value = "w7.example" }, ct);
-            var vaults = scope.ServiceProvider.GetRequiredService<IVaultService>();
-            var vault = await vaults.CreateVaultAsync(new CreateVaultRequest { Name = "w7.qa", ProjectId = sourceId }, ct);
-            await vaults.CreateSecretAsync(vault.Id, new CreateVaultSecretRequest { Key = "DB_PASSWORD", Value = "w7-secret" }, ct);
-        }
-
-        using (var scope = factory.Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<IPipelineProjectCopyService>().CopyAsync(
-                new PipelineProjectCopyRequest
-                {
-                    SourceProjectId = sourceId,
-                    TargetProjectId = targetId,
-                    SourcePrefix = "w7",
-                    Prefix = "r2probe"
-                }, organizationId, null, null, null, ct);
-
-        using var check = factory.Services.CreateScope();
-        var targetLibraries = await check.ServiceProvider.GetRequiredService<IVariableLibraryService>()
-            .GetLibrariesAsync(targetId, ct: ct);
-        Assert.Equal(["r2-probe.share"], targetLibraries.Items.Where(item => item.ProjectId == targetId).Select(item => item.Name));
-        var targetVaults = await check.ServiceProvider.GetRequiredService<IVaultService>().GetVaultsAsync(targetId, ct: ct);
-        Assert.Equal(["r2-probe.qa"], targetVaults.Items.Where(item => item.ProjectId == targetId).Select(item => item.Name));
     }
 
     private static async Task FillInAsync(

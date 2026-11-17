@@ -69,12 +69,30 @@ public class PipelineRunsSummaryTests
         Assert.Equal("n/a", PipelineRunsSummary.Create([]).AverageDurationLabel("n/a"));
     }
 
-    private static PipelineRunDto Run(int id, PipelineStatus status, int minutes, AnalysisGrade? grade, bool completed = true) => new()
+    [Fact]
+    public void AverageActiveDuration_LeavesTheApprovalWaitsOut_AndTheFullOneKeepsThem()
     {
-        Id = id,
-        Status = status,
-        StartedAt = Start.AddMinutes(minutes),
-        CompletedAt = completed ? Start.AddMinutes(minutes + 2) : null,
-        GateGrade = grade
-    };
+        var summary = PipelineRunsSummary.Create(
+        [
+            Run(1, PipelineStatus.Success, minutes: 0, grade: null, approvalWaitMinutes: 1),
+            Run(2, PipelineStatus.Success, minutes: 10, grade: null),
+            Run(3, PipelineStatus.Failed, minutes: 20, grade: null, approvalWaitMinutes: 2)
+        ]);
+
+        Assert.Equal(TimeSpan.FromMinutes(2), summary.AverageSuccessDuration);
+        Assert.Equal(TimeSpan.FromSeconds(90), summary.AverageActiveDuration);
+        Assert.Equal(PipelineRunsSummary.FormatDuration(TimeSpan.FromSeconds(90)), summary.AverageActiveDurationLabel("n/a"));
+        Assert.Equal("n/a", PipelineRunsSummary.Create([]).AverageActiveDurationLabel("n/a"));
+    }
+
+    private static PipelineRunDto Run(
+        int id, PipelineStatus status, int minutes, AnalysisGrade? grade, bool completed = true, int approvalWaitMinutes = 0) => new()
+        {
+            Id = id,
+            Status = status,
+            StartedAt = Start.AddMinutes(minutes),
+            CompletedAt = completed ? Start.AddMinutes(minutes + 2) : null,
+            GateGrade = grade,
+            ApprovalWaitSeconds = approvalWaitMinutes * 60
+        };
 }

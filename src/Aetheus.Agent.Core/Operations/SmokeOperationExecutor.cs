@@ -260,9 +260,15 @@ public sealed class SmokeOperationExecutor(
 
         var filter = ResolveBrowserFilter(envVars);
         var project = envVars.GetValueOrDefault("AETHEUS_SMOKE_PROJECT", "tests/Aetheus.E2E/Aetheus.E2E.csproj");
+        // A name the agent chose, so a container that outlives its docker client (timeout or
+        // cancellation kills the client, never the container) can still be found and removed.
+        var containerName = ResolveContainerName(envVars);
         var args = new List<string>
         {
-            "run", "--rm", "--network", "host", "--ipc", "host", "--pids-limit", "512",
+            // --init: Docker's own init is PID 1, so `dotnet test` of the .NET 11 SDK is never PID 1, which never
+            // exits once the suite is over (R-40, run 3289). This holds for every browser image, whatever its
+            // entrypoint (the Dockerfile-built ones have none).
+            "run", "--rm", "--init", "--name", containerName, "--network", "host", "--ipc", "host", "--pids-limit", "512",
             "--security-opt", "no-new-privileges",
             // Names this container as Aetheus's browser smoke in the Docker inventory, where its host
             // network is shown as expected instead of reported (PLAN-010 lot 1).
@@ -301,17 +307,37 @@ public sealed class SmokeOperationExecutor(
             "--logger", "console;verbosity=minimal"
         ]);
 
-        await onOutput($"Running the browser suite against {origin}…", TaskLogLevel.Info).ConfigureAwait(false);
-        // Bound the captured output: an unbounded suite log is emitted as one line, and the backend
-        // rejects the whole batch past its message length, which loses the surrounding logs exactly
-        // when the failure needs them.
-        var result = await shell.RunExecAsync(
-            "docker", [.. args], containerEnvironment, Environment.CurrentDirectory,
-            inheritEnvironment: true, MaxCapturedOutputBytes, ct, TimeSpan.FromSeconds(timeoutSeconds))
-            .ConfigureAwait(false);
-        await EmitBoundedAsync(result.StdOut, TaskLogLevel.Info, onOutput).ConfigureAwait(false);
-        if (result.ExitCode != 0)
-            await EmitBoundedAsync(result.StdErr, TaskLogLevel.Warning, onOutput).ConfigureAwait(false);
+        var suiteTimeout = ResolveSuiteTimeoutSeconds(envVars, timeoutSeconds);
+        await onOutput(
+            $"Running the browser suite against {origin} in container {containerName} (limit {suiteTimeout}s)…",
+            TaskLogLevel.Info).ConfigureAwait(false);
+
+        // The suite has its own bound, far below the step timeout: a hang must cost minutes, not the
+        // whole step budget (R-40: `dotnet test` as PID 1 never exited after a passing suite).
+        using var suiteLimit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        suiteLimit.CancelAfter(TimeSpan.FromSeconds(suiteTimeout));
+        ShellExecResult result;
+        try
+        {
+            // Lines are forwarded as they arrive; the bounded capture is kept for the verdict below.
+            result = await shell.RunExecStreamingAsync(
+                "docker", [.. args], containerEnvironment, Environment.CurrentDirectory,
+                inheritEnvironment: true, MaxCapturedOutputBytes,
+                (line, isStandardError) => EmitLineAsync(
+                    line, isStandardError ? TaskLogLevel.Warning : TaskLogLevel.Info, onOutput),
+                suiteLimit.Token, TimeSpan.FromSeconds(timeoutSeconds))
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Killing the docker client does not stop the container it started: remove it by name.
+            var removal = await RemoveContainerAsync(containerName, onOutput).ConfigureAwait(false);
+            if (ct.IsCancellationRequested) throw;
+            await onOutput(
+                $"Browser smoke exceeded its {suiteTimeout}s delay and was aborted; {removal}.",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return (false, false);
+        }
         if (DescribeSuiteThatDidNotRun(result) is { } notRun)
         {
             await onOutput(notRun, TaskLogLevel.Error).ConfigureAwait(false);
@@ -381,22 +407,74 @@ public sealed class SmokeOperationExecutor(
     internal const int MaxLogLineLength = 8000;
 
     /// <summary>
-    /// Emits captured output line by line, truncating any line past the backend's limit. Sending the
-    /// whole capture as one message would exceed that limit and cost the surrounding log lines too.
+    /// Emits one streamed output line, truncating it past the backend's limit: a longer line would
+    /// reject its whole batch and cost the surrounding log lines too. Blank lines are dropped.
     /// </summary>
-    private static async Task EmitBoundedAsync(
-        string output, TaskLogLevel level, Func<string, TaskLogLevel, Task> onOutput)
+    private static Task EmitLineAsync(
+        string line, TaskLogLevel level, Func<string, TaskLogLevel, Task> onOutput)
     {
-        if (output.Length == 0) return;
-        foreach (var line in output.Split('\n'))
-        {
-            var trimmed = line.TrimEnd('\r');
-            if (trimmed.Length == 0) continue;
-            await onOutput(
+        var trimmed = line.TrimEnd('\r');
+        return trimmed.Length == 0
+            ? Task.CompletedTask
+            : onOutput(
                 trimmed.Length <= MaxLogLineLength ? trimmed : trimmed[..MaxLogLineLength] + " …[truncated]",
-                level).ConfigureAwait(false);
-        }
+                level);
     }
+
+    /// <summary>Step variable that overrides the browser suite's own timeout (seconds).</summary>
+    internal const string SuiteTimeoutVariable = "AETHEUS_SMOKE_SUITE_TIMEOUT_SECONDS";
+
+    /// <summary>
+    /// The bound of the browser suite: the agent option (default
+    /// <see cref="AgentRuntimeDefaults.SmokeSuiteTimeoutSeconds"/>), overridable per step through
+    /// <see cref="SuiteTimeoutVariable"/>, and never longer than the step timeout itself.
+    /// </summary>
+    private int ResolveSuiteTimeoutSeconds(IReadOnlyDictionary<string, string> envVars, int stepTimeoutSeconds)
+    {
+        var configured = Math.Clamp(
+            _options.SmokeSuiteTimeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
+        var requested = ParseBounded(
+            envVars, SuiteTimeoutVariable, configured, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
+        return Math.Min(requested, stepTimeoutSeconds);
+    }
+
+    /// <summary>
+    /// A docker-valid, unique name for this suite's container: the task id (unique per execution, set
+    /// by the poller) after the run id, or a random suffix when the task id is unknown.
+    /// </summary>
+    internal static string ResolveContainerName(IReadOnlyDictionary<string, string> envVars)
+    {
+        var runId = SanitizeNamePart(envVars.GetValueOrDefault("AETHEUS_RUN_ID", string.Empty));
+        var taskId = SanitizeNamePart(envVars.GetValueOrDefault("AETHEUS_TASK_ID", string.Empty));
+        if (taskId.Length == 0) taskId = Guid.NewGuid().ToString("N")[..12];
+        return runId.Length == 0 ? $"aetheus-smoke-{taskId}" : $"aetheus-smoke-{runId}-{taskId}";
+    }
+
+    /// <summary>Keeps docker's container-name charset (<c>[a-zA-Z0-9_.-]</c>) and bounds the length.</summary>
+    private static string SanitizeNamePart(string raw)
+    {
+        var part = new string([.. raw.Trim().Select(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' or '-' ? c : '-')]);
+        return part.Length <= 40 ? part : part[..40];
+    }
+
+    /// <summary>Removes the smoke container by name, whatever state the cancelled run left it in.
+    /// Uses its own short timeout rather than the cancelled token, and says what became of it.</summary>
+    private async Task<string> RemoveContainerAsync(string containerName, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        var removal = await shell.RunExecAsync(
+            "docker", ["rm", "-f", containerName], CancellationToken.None, ContainerRemovalTimeout)
+            .ConfigureAwait(false);
+        if (removal.ExitCode == 0) return $"container {containerName} was removed";
+        if (removal.StdErr.Contains("No such container", StringComparison.OrdinalIgnoreCase))
+            return $"container {containerName} had already gone";
+        logger.LogWarning("docker rm -f {Container} exited {Exit}: {Error}", containerName, removal.ExitCode, removal.StdErr.Trim());
+        await onOutput(
+            $"Container {containerName} could not be removed (docker exit {removal.ExitCode}); remove it by hand.",
+            TaskLogLevel.Error).ConfigureAwait(false);
+        return $"container {containerName} could NOT be removed";
+    }
+
+    private static readonly TimeSpan ContainerRemovalTimeout = TimeSpan.FromSeconds(30);
 
     internal static int ParseBounded(
         IReadOnlyDictionary<string, string> envVars, string key, int fallback, int min, int max) =>

@@ -1,0 +1,11 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-47: the telemetry the pipeline wizard configured waits for the application's repository to hold the telemetry NuGet package. *@
+@if (_pending)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["TelemetrySetupPendingTitle"]" data-testid="telemetry-setup-pending">
+        <OmniStack Gap="OmniSpacing.XSmall">
+            <span>@L["TelemetrySetupPending"]</span>
+            <OmniLink Href="@($"/projects/{ProjectId}/monitoring")">@L["TelemetrySetupPendingLink"]</OmniLink>
+        </OmniStack>
+    </OmniAlert>
+}

@@ -1,11 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/releases/{ReleaseId:int}"
 
-<PageTitle>@(_release?.Version ?? L["Release"]) - Aetheus</PageTitle>
+<PageTitle>@PageTitleText - Aetheus</PageTitle>
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else if (_release is null)
 {

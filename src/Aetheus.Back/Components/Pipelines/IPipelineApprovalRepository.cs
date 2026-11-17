@@ -13,6 +13,9 @@ public interface IPipelineApprovalRepository
 {
     Task<List<PipelineApproval>> GetApprovalsAsync(int runId, CancellationToken ct = default);
 
+    /// <summary>R-8: the number a person reads for <paramref name="runId"/>; 0 for an unknown run.</summary>
+    Task<int> GetRunNumberAsync(int runId, CancellationToken ct = default);
+
     Task<PipelineApproval?> FindApprovalAsync(int approvalId, CancellationToken ct = default);
 
     Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(List<int>? accessiblePipelineIds, CancellationToken ct = default);

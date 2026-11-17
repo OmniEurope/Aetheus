@@ -99,6 +99,28 @@ public sealed partial class AiTaskService(
         return MapDefinition(definition);
     }
 
+    public async Task<AiTaskDefinitionDto?> SetScheduleAsync(int id, string schedule, CancellationToken ct)
+    {
+        var normalized = NormalizeSchedule(schedule)
+            ?? throw new BadRequestException("The schedule is required.");
+        try
+        {
+            _ = ParseSchedule(normalized);
+        }
+        catch (CronFormatException ex)
+        {
+            throw new BadRequestException($"Invalid cron expression: {ex.Message}");
+        }
+
+        var definition = await repo.FindDefinitionAsync(id, ct).ConfigureAwait(false);
+        if (definition is null) return null;
+        definition.Schedule = normalized;
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await audit.LogAsync("Updated", "AiTaskDefinition", definition.Id, definition.Name, ct)
+            .ConfigureAwait(false);
+        return MapDefinition(definition);
+    }
+
     public async Task<bool> DeleteDefinitionAsync(int id, CancellationToken ct)
     {
         var definition = await repo.FindDefinitionAsync(id, ct).ConfigureAwait(false);
@@ -221,7 +243,7 @@ public sealed partial class AiTaskService(
         var envJson = TaskEnvProtection.Unprotect(encryption, task.EnvironmentVariables);
         if (JsonSerializer.Deserialize<Dictionary<string, string>>(envJson) is { } environment)
         {
-            if (environment.TryGetValue("AETHEUS_AI_TASK_DEFINITION_ID", out var definitionText)
+            if (environment.TryGetValue(AiRunDefinitionLink.EnvironmentKey, out var definitionText)
                 && int.TryParse(definitionText, out var parsedDefinitionId))
                 definitionId = parsedDefinitionId;
             if (environment.TryGetValue("AETHEUS_AI_SOURCE_REPOSITORY_ID", out var repositoryText)
@@ -363,7 +385,7 @@ public sealed partial class AiTaskService(
         environment["AETHEUS_AI_GATE"] = gate ? "true" : "false";
         environment["AETHEUS_AI_WORKING_DIR"] = workingDirectory;
         if (definitionId.HasValue)
-            environment["AETHEUS_AI_TASK_DEFINITION_ID"] = definitionId.Value.ToString(
+            environment[AiRunDefinitionLink.EnvironmentKey] = definitionId.Value.ToString(
                 System.Globalization.CultureInfo.InvariantCulture);
         return new AiExecutionSpec("ai-run", profile.TimeoutSeconds, environment);
     }

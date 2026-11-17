@@ -35,11 +35,18 @@ public partial class PipelinesList : IAsyncDisposable
     private bool IsServerScope => ServerId.HasValue;
     private bool IsProjectScope => ProjectId.HasValue;
     private bool IsGlobal => !IsServerScope && !IsProjectScope;
+    // R-8: "Update all pipelines" for the project, or the hub's whole list; a server or template view is a narrower
+    // list than the scope the update would take.
+    private bool ShowsBulkTemplateUpdate => _canWrite && !IsServerScope && TemplateId is null
+        && _fleetItems.Values.Any(item => item.Freshness == PipelineFleetFreshness.Outdated);
 
     // Keep pipelines with and without children in one catalogue so filters and ordering apply to
     // the complete list.
     private List<PipelineDependencyDto> _pipelines = [];
     private List<PipelineRunDto> _recentRuns = [];
+    // R-24: the unfinished runs of the scope, read on their own so a run older than the 20 most recent
+    // still shows in the "running now" table.
+    private List<PipelineRunDto> _activeRuns = [];
     private Dictionary<int, PipelineFleetItemDto> _fleetItems = [];
     private List<PipelineTemplateSummaryDto> _templateOptions = [];
     private HashSet<int> _favoritePipelineIds = [];
@@ -189,9 +196,10 @@ public partial class PipelinesList : IAsyncDisposable
         {
             var graphTask = Api.Pipelines.GetPipelineDependencyGroupsAsync(ServerId, ProjectId);
             var recentTask = Api.Pipelines.GetRecentPipelineRunsAsync(ProjectId, ServerId);
+            var activeTask = Api.Pipelines.GetActivePipelineRunsAsync(ProjectId, ServerId);
             var favoritesTask = Api.Pipelines.GetPipelineFavoritesAsync();
             var fleetTask = LoadFleetItemsAsync();
-            await Task.WhenAll(graphTask, recentTask, favoritesTask, fleetTask);
+            await Task.WhenAll(graphTask, recentTask, activeTask, favoritesTask, fleetTask);
             var graph = await graphTask;
             _pipelines = graph.Parents.Concat(graph.Leaves).DistinctBy(item => item.Id).ToList();
             _favoritePipelineIds = (await favoritesTask).PipelineIds.ToHashSet();
@@ -199,6 +207,7 @@ public partial class PipelinesList : IAsyncDisposable
             _recentRuns = (await recentTask)
                 .Take(20)
                 .ToList();
+            _activeRuns = await activeTask;
             await SyncRunGroupsAsync();
             _overviewLoaded = true;
         }
@@ -308,6 +317,7 @@ public partial class PipelinesList : IAsyncDisposable
         if (!PageState.TryRestore<PipelinesListState>(StateAddress, out var state)) return false;
         _pipelines = state.Pipelines;
         _recentRuns = state.RecentRuns;
+        _activeRuns = state.ActiveRuns;
         _fleetItems = state.FleetItems;
         _templateOptions = state.TemplateOptions;
         _fleetAvailable = state.FleetAvailable;
@@ -329,7 +339,7 @@ public partial class PipelinesList : IAsyncDisposable
     private void RememberState()
     {
         if (!_overviewLoaded) return;
-        PageState.Remember(_stateTicket, StateAddress, new PipelinesListState(_pipelines, _recentRuns, _fleetItems, _templateOptions,
+        PageState.Remember(_stateTicket, StateAddress, new PipelinesListState(_pipelines, _recentRuns, _activeRuns, _fleetItems, _templateOptions,
             _fleetAvailable, _favoritePipelineIds, _totalCount, _search, _triggerFilters, _templateFilterIds,
             [.. _statusFilters], _favoritesOnly, _withChildrenOnly));
     }
@@ -538,7 +548,7 @@ public partial class PipelinesList : IAsyncDisposable
     {
         if (_hubConnection?.State != HubConnectionState.Connected) return;
 
-        foreach (var run in _recentRuns.Where(run => run.Status is PipelineStatus.Running
+        foreach (var run in _recentRuns.Concat(_activeRuns).Where(run => run.Status is PipelineStatus.Running
                      or PipelineStatus.Pending or PipelineStatus.WaitingForApproval))
         {
             if (!_joinedRunGroups.Add(run.Id)) continue;

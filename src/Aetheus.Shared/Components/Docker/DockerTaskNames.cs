@@ -7,6 +7,9 @@ namespace Aetheus.Shared.Components.Docker;
 /// </summary>
 public static class DockerTaskNames
 {
+    /// <summary>The start of the name of the task that reads the compose file of a stack.</summary>
+    public const string ComposeFilePrefix = "Docker compose file - ";
+
     /// <summary>The task that reads the compose file of one stack (<c>docker compose -p {stack} config</c>).</summary>
-    public static string ComposeFile(string stackName) => $"Docker compose file - {stackName}";
+    public static string ComposeFile(string stackName) => ComposeFilePrefix + stackName;
 }

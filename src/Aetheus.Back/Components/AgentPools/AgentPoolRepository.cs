@@ -52,6 +52,34 @@ public class AgentPoolRepository(AppDbContext db) : IAgentPoolRepository
             .FirstOrDefaultAsync(p => p.Name == name, ct).ConfigureAwait(false);
     }
 
+    public async Task<bool> NameTakenAsync(string name, int? exceptPoolId, CancellationToken ct = default)
+    {
+        return await db.AgentPools
+            .AsNoTracking()
+            .AnyAsync(p => p.Name == name && (exceptPoolId == null || p.Id != exceptPoolId), ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<bool> AllServersInOrganizationAsync(
+        int organizationId, IReadOnlyCollection<int> serverIds, CancellationToken ct = default)
+    {
+        var wanted = serverIds.Distinct().ToList();
+        if (wanted.Count == 0) return true;
+        var owned = await db.Servers
+            .AsNoTracking()
+            .CountAsync(s => wanted.Contains(s.Id) && s.OrganizationId == organizationId, ct)
+            .ConfigureAwait(false);
+        return owned == wanted.Count;
+    }
+
+    public async Task<int?> GetDefaultOrganizationIdAsync(CancellationToken ct = default) =>
+        await db.Organizations
+            .AsNoTracking()
+            .Where(o => o.Slug == "aetheus")
+            .Select(o => (int?)o.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
     public async Task AddPoolAsync(AgentPool pool, CancellationToken ct = default)
     {
         db.AgentPools.Add(pool);

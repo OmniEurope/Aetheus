@@ -77,5 +77,25 @@ public sealed class PipelineAutoTriggerRepositoryTests : IDisposable
         Assert.Equal(await port.GetPipelineIdsWithActiveRunsAsync(Ct), await facade.GetPipelineIdsWithActiveRunsAsync(Ct));
     }
 
+    [Fact]
+    public async Task TheScheduleCursor_MovesForwardOnce_AndIsGivenBackOnlyWhileItHoldsTheClaim()
+    {
+        await SeedAsync();
+        IPipelineAutoTriggerRepository facade = Facade();
+        var first = new DateTime(2026, 6, 16, 2, 5, 0, DateTimeKind.Utc);
+        var second = first.AddMinutes(10);
+
+        Assert.True(await facade.TryAdvanceScheduleCursorAsync(3, first, Ct));
+        Assert.False(await facade.TryAdvanceScheduleCursorAsync(3, first, Ct));
+        Assert.False(await facade.TryAdvanceScheduleCursorAsync(3, first.AddMinutes(-1), Ct));
+        Assert.False(await facade.TryAdvanceScheduleCursorAsync(404, first, Ct));
+        Assert.True(await facade.TryAdvanceScheduleCursorAsync(3, second, Ct));
+
+        await facade.RestoreScheduleCursorAsync(3, first, null, Ct);
+        Assert.Equal(second, (await _db.Pipelines.SingleAsync(pipeline => pipeline.Id == 3, Ct)).LastScheduledOccurrence);
+        await facade.RestoreScheduleCursorAsync(3, second, first, Ct);
+        Assert.Equal(first, (await _db.Pipelines.SingleAsync(pipeline => pipeline.Id == 3, Ct)).LastScheduledOccurrence);
+    }
+
     public void Dispose() => _db.Dispose();
 }

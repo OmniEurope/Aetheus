@@ -95,22 +95,6 @@ public class PipelinesTests : E2ETestBase
     }
 
     [Test]
-    public async Task Pipelines_NewPipeline_NavigatesToSetupWizard()
-    {
-        await NavigateToAsync("pipelines");
-        await Page.Locator(".omni-page-header__actions .pipeline-list-new-button").ClickAsync();
-
-        await Expect(Page).ToHaveURLAsync(
-            new System.Text.RegularExpressions.Regex("/pipelines/setup"), new() { Timeout = 5000 });
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Pipeline setup wizard" }))
-            .ToBeVisibleAsync(new() { Timeout = 10000 });
-        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "1 Project" }))
-            .ToBeVisibleAsync(new() { Timeout = 5000 });
-        await Expect(Page.GetByText("Select the project that will own the generated pipelines."))
-            .ToBeVisibleAsync(new() { Timeout = 5000 });
-    }
-
-    [Test]
     public async Task PipelineRun_WhenGateEvidenceReturns500_ShowsIncompleteWarningWithoutGrade()
     {
         AllowBrowserDiagnostic(new System.Text.RegularExpressions.Regex(

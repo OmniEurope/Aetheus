@@ -4,7 +4,7 @@
    exposes storage growth. *@
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Small" />
+    <ZoneVeil />
 }
 else if (_loadFailed)
 {
@@ -12,7 +12,8 @@ else if (_loadFailed)
 }
 else if (_report is null || _report.MeasuredAt is null)
 {
-    <EmptyState Icon="storage" Title="@L["AppDatabaseNoData"]" Description="@L["AppDatabaseNoDataHint"]" />
+    @* R-26: no icon and no generic hint; R-27: the precise cause, when the server knows it, is the only line under the title. *@
+    <EmptyState Icon="@null" Title="@L["AppDatabaseNoData"]" Description="@NoDataDescription" data-testid="app-database-no-data" />
 }
 else
 {
@@ -20,7 +21,7 @@ else
        from the large one, one per line on a phone. *@
     @* R-14: the tiles, the grid and its note are separated by this stack's gap, not by margins. *@
     <OmniStack>
-    <OmniTileGrid Columns="3">
+    <OmniTileGrid Columns="3" Class="tiles-above-grid">
         <OmniStatTile Class="app-performance-tile" Value="@TotalText" Title="@L["AppDatabaseTotal"]" Detail="@TotalTrendText" data-testid="app-database-total" />
         <OmniStatTile Class="app-performance-tile" Value="@LargestSizeText" Title="@L["AppDatabaseLargestTable"]" Detail="@LargestNameText" data-testid="app-database-largest" />
         <OmniStatTile Class="app-performance-tile" Value="@MeasuredAtText" Title="@L["AppDatabaseMeasuredAt"]" Detail="@DatabaseNameText" data-testid="app-database-measured" />

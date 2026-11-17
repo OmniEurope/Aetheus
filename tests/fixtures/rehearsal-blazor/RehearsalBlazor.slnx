@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/RehearsalBlazor/RehearsalBlazor.csproj" />
+  <Project Path="tests/RehearsalBlazor.E2E/RehearsalBlazor.E2E.csproj" />
+  <Project Path="tests/RehearsalBlazor.Tests/RehearsalBlazor.Tests.csproj" />
+</Solution>

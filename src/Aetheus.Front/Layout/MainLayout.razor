@@ -95,27 +95,12 @@
                                  Languages="@Languages" Language="@CurrentLanguage" LanguageChanged="@OnLanguageChanged"
                                  OnThemeOpen="@OnThemeMenuClick" OnSettingsOpen="@OnSettingsMenuClick"
                                  Version="@($"Aetheus v{_version}")" OnSignOut="@OnLogout">
-                        @if (Orgs.IsLoaded && Orgs.Available.Count > 0)
+                        @* R-33: a real selector for everyone who may choose. A site Admin also gets "all organizations"
+                           and the whole list, not a fixed badge. *@
+                        @if (Orgs.IsLoaded && (Orgs.Available.Count > 0 || Orgs.CanChooseAll))
                         {
-                            <OmniText Tone="OmniTextTone.Muted" Class="user-menu-caption">@L["ActiveOrganization"]</OmniText>
-                            <OmniDropDown TValue="int"
-                                          Options="@ActiveOrganizationOptions"
-                                          Value="@ActiveOrganizationId"
-                                          ValueChanged="@(id => OnActiveOrgChanged(id))"
-                                          ValueExpression="@(() => ActiveOrganizationId)"
-                                          Label="@L["ActiveOrganization"]"
-                                          Class="user-menu-org-picker" />
-                        }
-                        else if (Auth.IsAdmin && Orgs.IsLoaded)
-                        {
-                            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
-                                       Justify="OmniJustification.Between" Gap="OmniSpacing.Small" Class="user-menu-all-orgs">
-                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                                    <OmniIcon Name="OmniIconName.Buildings" />
-                                    <OmniText>@L["ActiveOrganization"]</OmniText>
-                                </OmniStack>
-                                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Buildings))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AllOrganizations"]</OmniBadge>
-                            </OmniStack>
+                            <OmniText Tone="OmniTextTone.Muted" Class="user-menu-caption">@L["Organization"]</OmniText>
+                            <ActiveOrganizationPicker OfferAll="true" OnSelected="@(id => OnActiveOrgChanged(id))" Class="user-menu-org-picker" />
                         }
                     </OmniAppMenu>
                 </OmniStack>
@@ -166,8 +151,14 @@
     @* The centred column the user can choose in the Theme window (R1-25); full width, the default, makes
        OmniMain ignore ContentWidth. *@
     <OmniMain Id="main-content" Scrollable="true" ContentWidth="OmniLayoutWidth.Wide">
-        @* R-99: OE's veil lies over the page body while an action started from a confirmation runs; the page stays mounted under it. *@
-        <div class="omni-u-py-md app-body-wrapper @BusyClass" aria-busy="@(Veil.IsBusy ? "true" : "false")" data-testid="app-body-wrapper">
+        @* R-1, R-36: loading level 2, the veil of the content area (level 1 is the boot splash, level 3 a ZoneVeil on one
+           component; docs/architecture/omnieurope-ui-customizations.md, "Niveaux de chargement"). OE's OmniPageVeil lies over
+           the content of the page (the header and the menu stay usable) while an action runs, a page reads its data or the
+           session starts (BusyVeil, VeilHold, SessionBootstrapping); the page stays mounted under it. Its colour is
+           constant; the site's plane, the splash's own drawing and size, is kept at the middle of the window (site-content-veil
+           in app.css) where the splash had it, so the hand-over from the splash moves nothing. *@
+        <OmniPageVeil Busy="ContentVeilBusy" Class="site-content-veil"><Logo><AetheusMark /></Logo></OmniPageVeil>
+        <div class="omni-u-py-md app-body-wrapper" aria-busy="@(ContentVeilBusy ? "true" : "false")" inert="@ContentVeilBusy" data-testid="app-body-wrapper">
             @if (_newVersionAvailable)
             {
                 <OmniAlert Severity="OmniSeverity.Success" Class="version-alert-bar">
@@ -182,9 +173,9 @@
             }
             @* R-38: a forced password change never starts the session (SITE-SEC-001), so it never waits for it:
                the change page shows at once, without the chrome. *@
-            @if (Auth.IsAuthenticated && !Auth.MustChangePassword && !AuthenticatedChromeReady && !OnSetPasswordPage)
+            @if (SessionBootstrapping)
             {
-                <AetheusLoader Size="OmniControlSize.Large" Class="session-bootstrap-loader" />
+                @* The session start is veiled at level 2 (ContentVeilBusy): nothing is mounted until it is known. *@
             }
             else if (_initialized)
             {

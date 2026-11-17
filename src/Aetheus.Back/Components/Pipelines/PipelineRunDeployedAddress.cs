@@ -16,11 +16,14 @@ internal static class PipelineRunDeployedAddress
     private static readonly string[] AppVariables = ["BG_PUBLIC_ORIGIN", "PUBLIC_APP_URL"];
     private static readonly string[] ApiVariables = ["BG_PUBLIC_API_ORIGIN", "PUBLIC_API_URL"];
 
+    /// <param name="environmentAccepted">R-29: tells whether a deploy step of the stage declaring this environment (null when it
+    /// declares none) counts. Omitted, every deploy step counts, as on the run detail.</param>
     public static PipelineRunDeployedAddressDto? Read(
-        PipelineRun run, PipelineYamlDefinition? definition, IReadOnlyDictionary<string, string> variables)
+        PipelineRun run, PipelineYamlDefinition? definition, IReadOnlyDictionary<string, string> variables,
+        Func<string?, bool>? environmentAccepted = null)
     {
         if (run.Status != PipelineStatus.Success || definition is null) return null;
-        if (!DeployedStepCompleted(run, definition)) return null;
+        if (!DeployedStepCompleted(run, definition, environmentAccepted)) return null;
 
         var appUrl = FirstAddress(variables, AppVariables);
         if (appUrl is null) return null;
@@ -32,9 +35,11 @@ internal static class PipelineRunDeployedAddress
 
     /// <summary>A step that puts a release in service finished successfully: the blue-green cutover, a
     /// deploy task, or the release record marked deployed.</summary>
-    private static bool DeployedStepCompleted(PipelineRun run, PipelineYamlDefinition definition)
+    private static bool DeployedStepCompleted(
+        PipelineRun run, PipelineYamlDefinition definition, Func<string?, bool>? environmentAccepted)
     {
         var deploySteps = YamlParsingHelper.FlattenJobs(definition)
+            .Where(stage => environmentAccepted?.Invoke(stage.Environment) ?? true)
             .SelectMany(stage => stage.Steps.Where(IsDeployStep).Select(step => (Stage: stage.Name, Step: step.Name)))
             .ToHashSet();
         return run.StepRuns.Any(step =>

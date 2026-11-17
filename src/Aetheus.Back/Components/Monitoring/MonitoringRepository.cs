@@ -86,7 +86,8 @@ public class MonitoringRepository(AppDbContext db) : IMonitoringRepository
         var hydrated = await PipelineAdvisorySteps.ApplyToListAsync(
             db, runs.Select(PipelineRunListRows.HydrateWarnings).ToList(), ct).ConfigureAwait(false);
         var graded = await PipelineRunGradeAggregation.ApplyAsync(db, hydrated, ct).ConfigureAwait(false);
-        return await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
+        var linked = await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
+        return await PipelineRunDeployedReleases.ApplyAsync(db, linked, ct).ConfigureAwait(false);
     }
 
     /// <summary>

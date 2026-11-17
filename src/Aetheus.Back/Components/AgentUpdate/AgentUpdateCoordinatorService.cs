@@ -10,7 +10,7 @@ internal sealed class AgentUpdateCoordinatorService(
     IHubContext<ServerHub> hub,
     TimeProvider timeProvider,
     ILogger<AgentUpdateCoordinatorService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:agent-update-coordinator")
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
@@ -18,22 +18,16 @@ internal sealed class AgentUpdateCoordinatorService(
     /// Long enough for a heartbeat to publish capabilities right after an update.</summary>
     internal static readonly TimeSpan UnexecutableTaskGrace = TimeSpan.FromMinutes(1);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync(
-                "aetheus:agent-update-coordinator",
-                RunLeaderLoopAsync,
-                stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(Interval, timeProvider);
+        var failureLevel = new BackgroundTickFailureLevel();
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             try
             {
                 await CoordinateAsync(stoppingToken).ConfigureAwait(false);
+                failureLevel.Succeeded();
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -41,7 +35,8 @@ internal sealed class AgentUpdateCoordinatorService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Agent update coordinator iteration failed");
+                // A database that restarts or cannot be reached is not a failure of the coordinator (R-2).
+                logger.Log(failureLevel.For(ex, stoppingToken), ex, "Agent update coordinator iteration failed");
             }
         }
     }

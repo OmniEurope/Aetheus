@@ -161,7 +161,7 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
 
         await audit.LogAsync("CreatedSecret", "VaultSecret", secret.Id, secret.Key, ct).ConfigureAwait(false);
 
-        return ToDto(secret);
+        return await ToCountedDtoAsync(secret, ct).ConfigureAwait(false);
     }
 
     public async Task<VaultSecretDto?> UpdateSecretAsync(int vaultId, int secretId, UpdateVaultSecretRequest request, CancellationToken ct = default)
@@ -176,7 +176,7 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
 
         await PersistSecretChangeAsync(secret, ChangeType.Updated, "UpdatedSecret", ct).ConfigureAwait(false);
 
-        return ToDto(secret);
+        return await ToCountedDtoAsync(secret, ct).ConfigureAwait(false);
     }
 
     public async Task<VaultSecretDto?> RotateSecretAsync(int vaultId, int secretId, RotateVaultSecretRequest request, CancellationToken ct = default)
@@ -197,7 +197,7 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
 
         await PersistSecretChangeAsync(secret, ChangeType.Rotated, "Rotated", ct).ConfigureAwait(false);
 
-        return ToDto(secret);
+        return await ToCountedDtoAsync(secret, ct).ConfigureAwait(false);
     }
 
     private async Task PersistSecretChangeAsync(
@@ -344,6 +344,10 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
         }, ct).ConfigureAwait(false);
     }
 
+    /// <summary>The answer of a change: the secrets page draws the row from it, so it counts the versions like the detail.</summary>
+    private async Task<VaultSecretDto> ToCountedDtoAsync(VaultSecret secret, CancellationToken ct) =>
+        ToDto(secret) with { VersionCount = await repo.CountSecretVersionsAsync(secret.Id, ct).ConfigureAwait(false) };
+
     private static VaultSecretDto ToDto(VaultSecret secret) => new()
     {
         Id = secret.Id,
@@ -365,6 +369,15 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
         return result;
     }
 
+    public async Task<Dictionary<string, int>> ResolveVaultIdsWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
+    {
+        var vaults = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
+        var ids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var vault in vaults.OrderBy(VaultPrecedence))
+            ids[vault.Name] = vault.Id;
+        return ids;
+    }
+
     public async Task<Dictionary<string, int>> ResolveSecretOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
     {
         var vaults = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
@@ -375,6 +388,12 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
                 owners[secret.Key] = vault.Id;
         return owners;
     }
+
+    public Task<List<(int Id, string Name, string Key)>> FindKeyHoldersWithCrossAccessAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default) =>
+        keys.Count == 0
+            ? Task.FromResult(new List<(int Id, string Name, string Key)>())
+            : repo.FindKeyHoldersWithCrossAccessAsync(keys, projectId, ct);
 
     private static int VaultPrecedence(Data.Entities.Vault vault)
     {

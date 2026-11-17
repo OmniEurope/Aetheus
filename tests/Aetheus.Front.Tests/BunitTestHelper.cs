@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using Aetheus.Front.Layout;
 using Aetheus.Front.Tests.TestDoubles;
+using Aetheus.Shared.Components.DependencyUpdates;
 using Bunit;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
@@ -56,6 +57,16 @@ internal static class BunitTestHelper
         handler.SetResponse(HttpMethod.Post, "api/auth/logout", HttpStatusCode.NoContent);
         // The user administers no organization through the switcher unless a test says otherwise.
         handler.SetJsonResponse("api/organizations/administered", new List<AdministeredOrganizationDto>());
+        // R-47: no project has asked for the telemetry (nothing is pending on its overview), and the wizard's configuration of it is
+        // accepted, unless a test says otherwise. Shortest key, so a test's own response for one project wins.
+        handler.SetJsonResponse(HttpMethod.Get, "/telemetry-setup", new AppTelemetrySetupDto());
+        // R-26: the wizard's preparation of the collection (telemetry and audience) is accepted and reports nothing unless a test says otherwise.
+        handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/collection", new PipelineSetupCollectionResultDto());
+        // R-31: the wizard writes the branch it chose to the project's default branch; the server accepts it unless a test says otherwise.
+        handler.SetJsonResponse(HttpMethod.Put, "/default-branch", new ProjectDto());
+        // PLAN-007: a project's automatic dependency updates are on and empty, and the setting is saved, unless a test says otherwise.
+        handler.SetJsonResponse(HttpMethod.Get, "/dependency-updates", new DependencyUpdatesOverviewDto { Enabled = true });
+        handler.SetResponse(HttpMethod.Put, "/dependency-updates/settings", HttpStatusCode.NoContent);
         // No pipeline requirement is unmet unless a test says otherwise.
         handler.SetJsonResponse("api/pipelines/setup/unmet", new List<UnmetRequirementDto>());
         // Nothing stops a project's or a pipeline's runs unless a test says otherwise.
@@ -63,10 +74,25 @@ internal static class BunitTestHelper
         handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness", new PipelineSetupReadinessDto());
         // The wizard's production setup reads nothing from the repository unless a test says it does (ADR-057).
         handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/production-analysis", new PipelineProductionAnalysisDto());
+        // R-38: the wizard reads the names of the project's pipelines before it creates any; none exists unless a test says so.
+        handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/pipelines?page=1&pageSize=200&projectId=", new List<PipelineDto>());
+        // R-33: the wizard's summary lists the project's pipelines a newer template version exists for; none unless a test says so.
+        handler.SetPaginatedJsonResponse("api/pipelines/fleet?page=1&pageSize=200&projectId=", new List<PipelineFleetItemDto>());
+        // The menus read the quality summary of the projects for their Quality badges (R-16, R-17); none unless a test says so.
+        handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto>());
+        // R-7: the Servers menu reads the quality of the servers the same way.
+        handler.SetJsonResponse("api/servers/host-quality", new List<ServerQualityDto>());
         // External repositories are always on; no project has one unless a test says so.
         handler.SetResponse("api/external-repos/project/", System.Net.HttpStatusCode.NotFound);
+        // R-14: the project overview tile and the finding page read what the CVE watch holds for a project / a finding; nothing unless a test says so.
+        handler.SetResponse("api/analysis/cve-watch/projects/", System.Net.HttpStatusCode.NotFound);
+        handler.SetResponse("api/analysis/cve-watch/by-finding/", System.Net.HttpStatusCode.NotFound);
+        // R-22: the Visitors tab also lists the daily visitors; none unless a test says so (a test's own, longer URL wins).
+        handler.SetJsonResponse("/web-analytics/visitors", new List<AppWebAnalyticsVisitorDto>());
         // A run with no successful predecessor has no usual durations.
         handler.SetJsonResponse("/stage-baselines", new RunStageBaselinesDto());
+        // R-24: no run is in progress unless a test says otherwise (the "running now" table of the pipeline lists).
+        handler.SetJsonResponse("api/pipelines/runs/active", new List<PipelineRunDto>());
         // No approval waits unless a test says otherwise (top bar, home page).
         handler.SetJsonResponse("api/pipelines/approvals/pending", new List<PendingApprovalDto>());
         // R-43: the run page also reads the pipeline's first page of runs for its average duration; shortest key, so a test's own runs response wins.
@@ -80,6 +106,9 @@ internal static class BunitTestHelper
         handler.SetPaginatedJsonResponse("api/notifications/me?", new List<NotificationDeliveryDto>());
         handler.SetJsonResponse("api/notifications/me/preferences", new List<NotificationPreferenceDto>());
         handler.SetJsonResponse("api/notifications/me/subscriptions", new List<ProjectSubscriptionDto>());
+        // No per-pipeline failure-mail choice is saved, and a pipeline's own failure mail is on, unless a test says otherwise.
+        handler.SetJsonResponse(HttpMethod.Get, "api/notifications/me/pipeline-failure-mails", new List<PipelineFailureMailChoiceDto>());
+        handler.SetJsonResponse(HttpMethod.Get, "/failure-mail", new PipelineFailureMailPreferenceDto { IsEnabled = true, DefaultEnabled = true });
         handler.SetJsonResponse("api/users/me/preferences", new List<UserPreferenceDto>());
         handler.SetResponse(HttpMethod.Get, "health/live", HttpStatusCode.ServiceUnavailable);
         // The deployed front is the one the test runs unless a test says otherwise.
@@ -146,6 +175,7 @@ internal static class BunitTestHelper
         ctx.Services.AddScoped<UserPreferenceSession>();
         ctx.Services.AddScoped<LegacyAppearanceMigration>();
         ctx.Services.AddScoped<ProjectNavContextService>();
+        ctx.Services.AddScoped<QualityChangeNotifier>();
         ctx.Services.AddScoped(sp => new ClientErrorReporter(
             http,
             sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()));
@@ -160,7 +190,7 @@ internal static class BunitTestHelper
             sp.GetRequiredService<HubConnectionFactory>(),
             sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<Aetheus.Front.Components.Shared.ServerDetailLoader>.Instance));
-        ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, preferences));
+        ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, preferences, authProvider));
         ctx.Services.AddSingleton(new AdministrationScopeService(apiClient, authProvider));
         ctx.Services.AddScoped<NotifyHelper>();
         ctx.Services.AddScoped<GridExportContext>();
@@ -171,7 +201,9 @@ internal static class BunitTestHelper
         ctx.Services.AddScoped<PipelineRunDialogCoordinator>();
         ctx.Services.AddScoped<PipelineImportState>();
         ctx.Services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupProvisionState>();
+        ctx.Services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupCollectionState>();
         ctx.Services.AddSingleton(new HelpService(http));
+        ctx.Services.AddSingleton(new Aetheus.Front.Components.VulnerabilityWatch.VulnerabilityDumpUploader(http));
 
         var httpFactoryMock = Substitute.For<IHttpClientFactory>();
         httpFactoryMock.CreateClient(Arg.Any<string>()).Returns(new HttpClient { BaseAddress = new Uri("http://test/") });

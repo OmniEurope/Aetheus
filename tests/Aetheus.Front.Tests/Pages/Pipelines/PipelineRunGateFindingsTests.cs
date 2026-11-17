@@ -64,6 +64,28 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
     }
 
     [Fact]
+    public void R18_ExportOnlyDetailColumns_AreNotDrawnOnScreen()
+    {
+        // R-18: the detail columns exist for the export only (OmniDataGridColumn.ExportOnly): no header cell, no body cell.
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2653,
+            FindingCount = 1,
+            Findings = [new AnalysisRunGateFindingDto { FindingId = 1, Title = "A finding", Status = AnalysisFindingStatus.Open }]
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var headers = string.Join('|', cut.FindAll("th").Select(header => header.TextContent));
+        Assert.Contains("AnalysisExactLocation", headers, StringComparison.Ordinal);
+        foreach (var exportOnly in new[] { "AnalysisCwe", "AnalysisHelpUrl", "AnalysisTool", "FirstSeen", "Branch" })
+        {
+            Assert.DoesNotContain(exportOnly, headers, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void R2_052_AGradeWithoutFindings_SaysWhichMeasureMadeIt()
     {
         // Run 2491: a B over "0 findings". The B came from a metric measure, now listed with its value.
@@ -515,6 +537,113 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         head.QuerySelector("button.omni-switch")!.Click();
 
         cut.WaitForAssertion(() => Assert.Equal("2", cut.Find("[data-testid='gate-findings-count']").TextContent.Trim()));
+    }
+
+    // Recettes R-16 and R-17 on the run's Gate tab: two columns (the grade rows, the count tiles), no accordion, the
+    // detail in the help mark of each row, the large letter, and tiles whose caption wraps instead of being cut.
+    [Fact]
+    public void R16_R17_TheGateTab_HasGradeRowsLeftAndCountTilesRight_WithoutAccordion()
+    {
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2815,
+            FindingCount = 3,
+            NewFindingCount = 1,
+            Grade = new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.A, Completeness = AnalysisGradeCompleteness.Complete }
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var layout = cut.Find(".analysis-run-gate-layout");
+        Assert.Equal(2, layout.Children.Length);
+        Assert.NotNull(layout.Children[0].QuerySelector("[data-testid='grade-row-gate']"));
+        Assert.True(layout.Children[1].ClassList.Contains("analysis-run-gate-metrics"));
+        Assert.Empty(layout.QuerySelectorAll(".omni-accordion, .omni-accordion__toggle, [aria-expanded]"));
+        var gateRow = layout.Children[0].QuerySelector("[data-testid='grade-row-gate']")!;
+        Assert.Contains("AnalysisCriterionGate", gateRow.QuerySelector(".analysis-grade-row-help .omni-tooltip__content")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("omni-badge--large", gateRow.QuerySelector(".grade-badge")!.ClassList);
+        Assert.All(layout.QuerySelectorAll(".analysis-run-gate-metrics > .omni-stat-tile"), tile => { Assert.Contains("omni-stat-tile--wrap", tile.ClassList); Assert.Contains("omni-stat-tile--large", tile.ClassList); });
+    }
+
+    /// <summary>PLAN-006: the flaky tests the seal graded are findings of the gate, named per suite, counted
+    /// in the list (a "+N more" tail as its N tests) with the grade their count gives.</summary>
+    [Fact]
+    public void PLAN006_TheFlakyTests_AreFindingsNamedPerSuiteWithTheirGrade()
+    {
+        var gate = new AnalysisRunGateDto { PipelineRunId = 3092 };
+        ServeFindings(gate);
+        var candidate = new PipelineRunDto
+        {
+            Id = 3092,
+            Steps =
+            [
+                new PipelineStepRunDto
+                {
+                    Id = 1,
+                    StepName = "Seal",
+                    OutputVariables = new Dictionary<string, string>
+                    {
+                        ["CANDIDATE_ASSURANCE_GRADE"] = "B",
+                        ["CANDIDATE_DEPLOYABLE"] = "true",
+                        ["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = "Leader.TwoInstances",
+                        ["QA_CURRENT_E2E_FLAKY_TESTS"] = "Responsive.AdministrationMobilePages, +2 more"
+                    }
+                }
+            ]
+        };
+        var verdict = PipelineRunAssuranceVerdict.Read(candidate)!;
+        Assert.Equal(["currentIntegration", "currentE2E"], verdict.FlakyTests.Select(suite => suite.Key));
+        Assert.Empty(verdict.BlockingTests);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters
+            .Add(component => component.Gate, gate)
+            .Add(component => component.FlakyTests, verdict.FlakyTests));
+
+        Assert.Equal("4", cut.Find("[data-testid='gate-findings-count']").TextContent.Trim());
+        Assert.Contains("GateFlakyTestsTitle", cut.Find("[data-testid='gate-flaky-tests']").TextContent, StringComparison.Ordinal);
+        var suites = cut.FindAll("[data-testid='gate-flaky-suite']");
+        Assert.Equal(2, suites.Count);
+        Assert.Contains("Responsive.AdministrationMobilePages, +2 more", suites[1].TextContent, StringComparison.Ordinal);
+        Assert.Equal("B", cut.Instance.FlakyGrade);
+    }
+
+    /// <summary>PLAN-006, owner decision 2026-11-05: 1 to 10 flaky tests is B, 11 to 20 is C, 21 or more is F,
+    /// the same bands as AssuranceFlakyGrade on the agent.</summary>
+    [Theory]
+    [InlineData("Unit.A", "B")]
+    [InlineData("Unit.A, +9 more", "B")]
+    [InlineData("Unit.A, +10 more", "C")]
+    [InlineData("Unit.A, +19 more", "C")]
+    [InlineData("Unit.A, +20 more", "F")]
+    public void PLAN006_TheFlakyGrade_FollowsTheOwnerBands(string flaky, string expected)
+    {
+        var gate = new AnalysisRunGateDto { PipelineRunId = 3093 };
+        ServeFindings(gate);
+        var candidate = new PipelineRunDto
+        {
+            Id = 3093,
+            Steps =
+            [
+                new PipelineStepRunDto
+                {
+                    Id = 1,
+                    StepName = "Seal",
+                    OutputVariables = new Dictionary<string, string>
+                    {
+                        ["CANDIDATE_ASSURANCE_GRADE"] = expected,
+                        ["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = flaky
+                    }
+                }
+            ]
+        };
+        var verdict = PipelineRunAssuranceVerdict.Read(candidate)!;
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters
+            .Add(component => component.Gate, gate)
+            .Add(component => component.FlakyTests, verdict.FlakyTests));
+
+        Assert.Equal(expected, cut.Instance.FlakyGrade);
     }
 
     [Fact]

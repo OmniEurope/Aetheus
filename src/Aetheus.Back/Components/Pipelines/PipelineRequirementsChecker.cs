@@ -19,8 +19,16 @@ public sealed record PipelineRequirementOutcome(string Kind, string Name, Pipeli
 /// <param name="OwnerName">The name of that library or vault, when it could be told.</param>
 public sealed record PipelineEmptyValue(string Kind, string Key, int? OwnerId = null, string? OwnerName = null);
 
+/// <summary>R-25: a library or vault of the project that holds a key, by name (the value is never read).</summary>
+public sealed record PipelineKeyHolder(string Key, PipelineSetupReadinessContainerKind Kind, int Id, string Name);
+
 public interface IPipelineRequirementsChecker
 {
+    /// <summary>R-25: for each of these keys, the libraries and vaults a run of the project can read that already hold it
+    /// (key names only, the project's own first), whether or not a pipeline declares them.</summary>
+    Task<IReadOnlyList<PipelineKeyHolder>> FindKeyHoldersAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default);
+
     Task<IReadOnlyList<PipelineRequirementOutcome>> CheckAsync(
         PipelineRequiresDefinition? requires,
         int? projectId,
@@ -37,6 +45,15 @@ public interface IPipelineRequirementsChecker
         IReadOnlyCollection<string> vaultNames,
         int projectId,
         CancellationToken ct = default);
+
+    /// <summary>R-56: the id of each of these libraries (by name) a run of the project can read; a name that does not
+    /// exist has no entry.</summary>
+    Task<IReadOnlyDictionary<string, int>> FindLibraryIdsAsync(
+        IReadOnlyCollection<string> libraryNames, int projectId, CancellationToken ct = default);
+
+    /// <summary>R-56: the id of each of these vaults (by name) a run of the project can read.</summary>
+    Task<IReadOnlyDictionary<string, int>> FindVaultIdsAsync(
+        IReadOnlyCollection<string> vaultNames, int projectId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -109,6 +126,38 @@ public sealed class PipelineRequirementsChecker(
             empty.AddRange(emptyKeys.Select(key => OwnedValue(VaultKind, key, OwnerOf(owners, key), names)));
         }
         return empty;
+    }
+
+    public async Task<IReadOnlyList<PipelineKeyHolder>> FindKeyHoldersAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        if (keys.Count == 0) return [];
+        var inVaults = await vaults.FindKeyHoldersWithCrossAccessAsync(keys, projectId, ct).ConfigureAwait(false);
+        var inLibraries = await libraries.FindKeyHoldersWithCrossAccessAsync(keys, projectId, ct).ConfigureAwait(false);
+        return
+        [
+            .. inVaults.Select(holder => new PipelineKeyHolder(holder.Key, PipelineSetupReadinessContainerKind.Vault, holder.Id, holder.Name)),
+            .. inLibraries.Select(holder => new PipelineKeyHolder(holder.Key, PipelineSetupReadinessContainerKind.Library, holder.Id, holder.Name))
+        ];
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> FindLibraryIdsAsync(
+        IReadOnlyCollection<string> libraryNames, int projectId, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(libraryNames);
+        return libraryNames.Count == 0
+            ? new Dictionary<string, int>()
+            : await libraries.ResolveLibraryIdsWithCrossAccessAsync([.. libraryNames], projectId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> FindVaultIdsAsync(
+        IReadOnlyCollection<string> vaultNames, int projectId, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(vaultNames);
+        return vaultNames.Count == 0
+            ? new Dictionary<string, int>()
+            : await vaults.ResolveVaultIdsWithCrossAccessAsync([.. vaultNames], projectId, ct).ConfigureAwait(false);
     }
 
     /// <summary>The name of each distinct owner, read once, so a table of empty values can say the library

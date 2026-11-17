@@ -12,18 +12,12 @@ public sealed class AlertEvaluatorService(
     IHubContext<AlertHub> alertHub,
     ILogger<AlertEvaluatorService> logger,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:alert-evaluator")
 {
     private static readonly TimeSpan MaximumMetricGap = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(30);
 
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:alert-evaluator", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(CheckInterval);
         // do..while: evaluate immediately on startup, then every interval

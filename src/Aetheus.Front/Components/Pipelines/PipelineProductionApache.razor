@@ -1,0 +1,28 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-38: the Apache templates the production deployment applies that the project holds nowhere. They are created in the project's
+   configuration repository managed by Aetheus, never in its source. Without a readable Compose file the user is asked
+   (a check box, and the strategy for a front and an API); with one, the list only says what the setup will create. *@
+@if (Setup.ApacheToCreate.Count > 0)
+{
+    <OmniAlert Severity="OmniSeverity.Info" Title="@L["PipelineSetupApacheTitle"]" data-testid="setup-production-apache">
+        <OmniStack Gap="OmniSpacing.Small">
+            <span>@L[Setup.ApacheAsk ? "PipelineSetupApacheAsk" : "PipelineSetupApacheWillCreate"]</span>
+            <OmniStack Gap="OmniSpacing.Small" data-testid="setup-production-apache-files">
+                @foreach (var path in Setup.ApacheToCreate)
+                {
+                    <span class="text-mono" data-testid="setup-production-apache-file">@path</span>
+                }
+            </OmniStack>
+            @if (Setup.ApacheAsk)
+            {
+                <OmniCheckBox TValue="bool" Value="@Setup.CreateApacheTemplates" ValueExpression="@(() => CreateValue)"
+                              ValueChanged="@Setup.ChooseCreateApacheTemplates" Id="setup-production-apache-create"
+                              data-testid="setup-production-apache-create">@L["PipelineSetupApacheCreate"]</OmniCheckBox>
+                @if (!Setup.Monolith && Setup.CreateApacheTemplates)
+                {
+                    <OmniText Id="setup-production-apache-strategy">@L["PipelineSetupProdStrategy"] : @StrategyLabel</OmniText>
+                }
+            }
+        </OmniStack>
+    </OmniAlert>
+}

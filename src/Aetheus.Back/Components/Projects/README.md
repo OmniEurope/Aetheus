@@ -24,6 +24,9 @@ Gère les projets et leurs relations avec dépôts, serveurs et pipelines.
   `POST /api/projects/{id}/deletion/discovery`, `GET .../deletion/tasks` et `POST .../deletion/cleanup`.
   `DELETE /api/projects/{id}?serverTaskIds=...&force=` refuse (409) tant que ces tâches ne prouvent pas tout
   supprimé, sauf choix explicite de forcer, que l'audit consigne.
+- Branche par défaut (recette R-31) : l'assistant de pipelines écrit la branche choisie dans `Project.DefaultBranch`, en plus du
+  `source_branch:` des pipelines, via `PUT /api/projects/{id}/default-branch` (`ProjectService.SetDefaultBranchAsync`, droit
+  Écriture sur le projet), appelé après la création des pipelines ; un refus annule les pipelines créés.
 - « Conservation des données » (PLAN-013 lot 4) : profil Léger, Standard ou Complet et valeurs propres
   (`ProjectDataRetentionService`, `GET/PUT /api/projects/{id}/data-retention`), lues par les purges de la
   télémétrie, des journaux et du détail d'analyse et par la configuration de la clé d'ingestion.

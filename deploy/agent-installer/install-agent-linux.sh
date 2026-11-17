@@ -54,6 +54,14 @@ AGENT_POSTURE_VERSION="4"
 AGENT_POSTURE_VERSION_FILE="/etc/aetheus-agent-posture-version"
 # Root-owned record that THIS installer added the agent account to the docker group (decision D12).
 DOCKER_GROUP_MARKER_FILE="/etc/aetheus-agent-docker-group-added"
+# Root-owned record of the TeamSpeak access state (R-19). Lines: "user=<agent>", "state=enabled|disabled",
+# "group-added" (this installer added the agent to the teamspeak group), "dir-created" (this installer
+# created INSTALL_DIR/teamspeak). --disable-teamspeak undoes only what is recorded and leaves state=disabled,
+# which is what stops derive_existing_posture from re-enabling TeamSpeak on the next --upgrade.
+TEAMSPEAK_MARKER_FILE="/etc/aetheus-agent-teamspeak"
+# Root-owned record of the Apache sites directories on which THIS installer set the sticky bit (one path per
+# line), so --disable-apache-manage clears only a bit Aetheus set and never one an administrator set before.
+APACHE_STICKY_MARKER_FILE="/etc/aetheus-agent-apache-sticky-set"
 AGENT_UPDATE_URL_FILE="/etc/aetheus-agent-update-url"
 AGENT_UPDATE_REQUEST_FILE="$WORK_DIR/.agent-posture-upgrade-request"
 AGENT_UPDATE_WORKER_PATH="/usr/local/lib/aetheus/agent-posture-upgrade"
@@ -82,6 +90,8 @@ SERVICE_ENABLE_SUDOERS_FILE="/etc/sudoers.d/aetheus-service-enable"
 PACKAGE_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-package"
 # ADR-024 4.1 - argv-exact apt-get upgrade grant (fleet OS patching / patch-manage capability).
 PATCH_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-patch"
+# Recette R-8 - argv-exact systemctl reboot grant (host-reboot capability): the reboots Aetheus schedules.
+REBOOT_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-reboot"
 # ADR-024 4.2 - path-only grant for the root-owned firewall (ufw) helper (firewall-manage capability).
 FIREWALL_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-firewall"
 FIREWALL_HELPER_PATH="/usr/local/lib/aetheus/aetheus-firewall"
@@ -374,7 +384,9 @@ Elevation options (ALL DISABLED BY DEFAULT - opt in with --enable-* or --module 
                             NoNewPrivileges=false (weaker systemd sandbox).
   --enable-apache-introspection
                             Grant the agent READ access (ACL, no sudo) to
-                            /etc/apache2 + /etc/httpd so it can enumerate vhosts.
+                            /etc/apache2 + /etc/httpd so it can enumerate vhosts,
+                            and to /var/log/apache2 + /var/log/httpd so it can
+                            show the Apache logs.
   --enable-certbot-introspection
                             Grant the agent READ access (ACL, no sudo) to
                             /etc/letsencrypt so it can read certificate expiry.
@@ -428,10 +440,15 @@ Elevation options (ALL DISABLED BY DEFAULT - opt in with --enable-* or --module 
                             (no wildcards). Required to install/uninstall managed server
                             components (docker/apache/mail/...) from Aetheus.
   --enable-patch-manage     ADR-024 4.1: tight NOPASSWD sudoers rule for
-                            'apt-get upgrade -y' (argv-exact, no wildcards). Lets the fleet
+                            'apt-get upgrade --with-new-pkgs -y' (argv-exact, no wildcards). Lets the fleet
                             APPLY pending OS updates; the agent runs a dry-run first and
                             aborts on any critical package. Pending-update visibility does
                             not need this grant (the dry-run probe is unprivileged).
+  --enable-host-reboot      Recette R-8: tight NOPASSWD sudoers rule for 'systemctl reboot'
+                            (argv-exact). Lets Aetheus run the daily reboot it schedules for
+                            this server; the agent reboots only for a confirmed order of an
+                            enabled schedule, never while a task runs. Not part of
+                            --module server-management: request it explicitly.
   --enable-firewall-manage  ADR-024 4.2: deploy the root-owned aetheus-firewall helper +
                             a path-only NOPASSWD sudoers grant for it. Lets the agent control
                             ufw (open/close ports, enable/disable); the helper re-validates
@@ -451,18 +468,42 @@ Elevation options (ALL DISABLED BY DEFAULT - opt in with --enable-* or --module 
   --enable-all              Enable everything (maximal capabilities).
 
 Disable options (use on --upgrade to revoke previously-enabled capabilities):
-  --disable-service-control       Remove sudoers rule for service start/stop/restart.
-  --disable-apache-introspection  Remove Apache read ACL.
-  --disable-apache-manage         Remove Apache write/reload privileges.
-  --disable-rkhunter-manage       Remove rkhunter scan/update/propupd privileges.
-  --disable-certbot-introspection Remove Certbot read ACL.
-  --disable-docker                Remove the agent account from the docker group.
-  --disable-teamspeak             Don't add agent to teamspeak group / provision TS.
-  --disable-cron-manage           Remove cron-apply helper + sudoers.
-  --disable-portsentry-manage     Remove unblock-ip helper + sudoers.
+  --disable-service-control       Remove the service start/stop/restart sudoers rule.
+  --disable-apache-introspection  Remove the agent ACL entries on /etc/apache2, /etc/httpd,
+                                  /var/log/apache2, /var/log/httpd (kept while Apache
+                                  management stays enabled).
+  --disable-apache-manage         Remove the Apache sudoers rule and its configtest, reload,
+                                  module and read-site helpers; lower the agent write ACL on
+                                  sites-available/sites-enabled to read (removed if the
+                                  introspection is disabled too); clear the sticky bit only
+                                  where Aetheus recorded setting it; give the agent-owned
+                                  "Managed by Aetheus" vhosts back to root:root. Vhosts and
+                                  enabled Apache modules stay.
+  --disable-rkhunter-manage       Remove the rkhunter sudoers rule and helper, and the agent
+                                  read ACL on /var/log/rkhunter.log.
+  --disable-certbot-introspection Remove the agent ACL entries on /etc/letsencrypt (kept
+                                  while Certbot management stays enabled).
+  --disable-certbot-manage        Remove the certbot sudoers rule, the issue/manage helpers
+                                  and the renewal-check timer; cli.ini and the Apache
+                                  deploy hook stay so manual renewals keep working.
+  --disable-docker                Remove the agent from the docker group when this installer
+                                  added it (recorded) or the account is the dedicated one.
+  --disable-teamspeak             Remove the agent from the 'teamspeak' group and delete the
+                                  INSTALL_DIR/teamspeak credentials directory, each only when
+                                  this installer added it (recorded in /etc/aetheus-agent-teamspeak).
+                                  A membership or directory found in place stays, with a warning.
+                                  The 'teamspeak' group, the TeamSpeak server and its data stay;
+                                  later upgrades no longer re-enable the access.
+  --disable-cron-manage           Remove the cron-apply helper + sudoers (cron jobs already
+                                  written in /etc/cron.d stay).
+  --disable-portsentry-manage     Remove the unblock-ip and portsentry-setup helpers + sudoers.
   --disable-service-enable        Remove the fixed-unit service-enable sudoers.
   --disable-package-manage        Remove the fixed-package apt-get sudoers.
-  --disable-mail-setup            Remove mail-setup helper + sudoers.
+  --disable-patch-manage          Remove the apt-get upgrade sudoers.
+  --disable-host-reboot           Remove the systemctl reboot sudoers.
+  --disable-firewall-manage       Remove the firewall helper + sudoers (ufw rules stay).
+  --disable-mail-setup            Remove the mail-setup and mail-manage helpers + sudoers.
+  --disable-teamspeak-setup       Remove the teamspeak-setup helper + sudoers.
   --disable-all                   Disable everything (fully sandboxed - the default).
 
   By default NO elevation is enabled (secure-by-default, per ADR-004).
@@ -508,7 +549,7 @@ ALLOW_INSECURE_CERTS=0     # dev only: TLS bypass for backend API + pipeline git
 # Elevation posture - all DISABLED by default (secure-by-default per ADR-004).
 # Use --enable-* flags to opt in. On --upgrade these are re-derived from the existing install.
 ENABLE_SERVICE_CONTROL=0   # opt-in: sudo for service start/stop/restart
-ENABLE_APACHE=0            # opt-in: read ACL on /etc/apache2
+ENABLE_APACHE=0            # opt-in: read ACL on /etc/apache2 and the Apache logs
 ENABLE_APACHE_MANAGE=0     # opt-in: write ACL on sites-available + tight Apache sudoers
 ENABLE_RKHUNTER_MANAGE=0   # opt-in: tight rkhunter sudoers (scan/update/propupd)
 ENABLE_CERTBOT=0           # opt-in: read ACL on /etc/letsencrypt
@@ -519,7 +560,8 @@ ENABLE_CRON_MANAGE=0       # opt-in: cron-apply sudo helper (writes /etc/cron.d/
 ENABLE_PORTSENTRY_MANAGE=0 # opt-in: unblock-ip sudo helper (iptables/ip6tables + hosts.deny)
 ENABLE_SERVICE_ENABLE=0    # opt-in: systemctl enable --now on a FIXED unit list (argv-exact)
 ENABLE_PACKAGE_MANAGE=0    # opt-in: apt-get install/purge -y on a FIXED package list (argv-exact)
-ENABLE_PATCH_MANAGE=0      # opt-in: apt-get upgrade -y (fleet OS patching, argv-exact) - ADR-024 4.1
+ENABLE_PATCH_MANAGE=0      # opt-in: apt-get upgrade --with-new-pkgs -y (fleet OS patching, argv-exact) - ADR-024 4.1
+ENABLE_HOST_REBOOT=0       # opt-in: systemctl reboot (scheduled reboots, argv-exact) - recette R-8
 ENABLE_FIREWALL_MANAGE=0   # opt-in: ufw control via root-owned helper (firewall) - ADR-024 4.2
 ENABLE_MAIL_SETUP=0        # opt-in: root-owned mail-setup helper (full postfix/dovecot/opendkim setup)
 ENABLE_TEAMSPEAK_SETUP=0   # opt-in: root-owned teamspeak-setup helper (full TS3 server install)
@@ -556,8 +598,8 @@ MODULE_SERVER_MANAGEMENT=0
 #                        (like service-control/package-manage/mail-setup).
 MODULE_DEPLOYMENT=0
 ENABLE_DEPLOYMENT=0        # derived from MODULE_DEPLOYMENT (and preserved on --upgrade)
-DOTNET_CHANNEL="10.0"
-DOTNET_RUNTIME_VERSION="10.0.14"
+DOTNET_CHANNEL="11.0"
+DOTNET_RUNTIME_VERSION="11.0.0"
 DOTNET_INSTALLER_URL="https://raw.githubusercontent.com/dotnet/install-scripts/da3ce11ba63f3dbb0fb835d41bda2665d5c48e84/src/dotnet-install.sh"
 DOTNET_INSTALLER_SHA256="082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e"
 
@@ -622,6 +664,7 @@ while [ "$#" -gt 0 ]; do
         --enable-service-enable)        ENABLE_SERVICE_ENABLE=1; mark_explicit SERVICE_ENABLE; shift ;;
         --enable-package-manage)        ENABLE_PACKAGE_MANAGE=1; mark_explicit PACKAGE_MANAGE; shift ;;
         --enable-patch-manage)          ENABLE_PATCH_MANAGE=1; mark_explicit PATCH_MANAGE; shift ;;
+        --enable-host-reboot)           ENABLE_HOST_REBOOT=1; mark_explicit HOST_REBOOT; shift ;;
         --enable-firewall-manage)       ENABLE_FIREWALL_MANAGE=1; mark_explicit FIREWALL_MANAGE; shift ;;
         --enable-mail-setup)            ENABLE_MAIL_SETUP=1; mark_explicit MAIL_SETUP; shift ;;
         --enable-teamspeak-setup)       ENABLE_TEAMSPEAK_SETUP=1; ENABLE_TEAMSPEAK=1; mark_explicit TEAMSPEAK_SETUP TEAMSPEAK; shift ;;
@@ -638,11 +681,12 @@ while [ "$#" -gt 0 ]; do
         --disable-service-enable)        ENABLE_SERVICE_ENABLE=0; mark_explicit SERVICE_ENABLE; shift ;;
         --disable-package-manage)        ENABLE_PACKAGE_MANAGE=0; mark_explicit PACKAGE_MANAGE; shift ;;
         --disable-patch-manage)          ENABLE_PATCH_MANAGE=0; mark_explicit PATCH_MANAGE; shift ;;
+        --disable-host-reboot)           ENABLE_HOST_REBOOT=0; mark_explicit HOST_REBOOT; shift ;;
         --disable-firewall-manage)       ENABLE_FIREWALL_MANAGE=0; mark_explicit FIREWALL_MANAGE; shift ;;
         --disable-mail-setup)            ENABLE_MAIL_SETUP=0; mark_explicit MAIL_SETUP; shift ;;
         --disable-teamspeak-setup)       ENABLE_TEAMSPEAK_SETUP=0; mark_explicit TEAMSPEAK_SETUP; shift ;;
-        --enable-all)                    ENABLE_SERVICE_CONTROL=1; ENABLE_APACHE=1; ENABLE_APACHE_MANAGE=1; ENABLE_RKHUNTER_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_CERTBOT_MANAGE=1; ENABLE_DOCKER=1; ENABLE_TEAMSPEAK=1; ENABLE_CRON_MANAGE=1; ENABLE_PORTSENTRY_MANAGE=1; ENABLE_SERVICE_ENABLE=1; ENABLE_PACKAGE_MANAGE=1; ENABLE_PATCH_MANAGE=1; ENABLE_FIREWALL_MANAGE=1; ENABLE_MAIL_SETUP=1; ENABLE_TEAMSPEAK_SETUP=1; mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT CERTBOT_MANAGE DOCKER TEAMSPEAK CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE PATCH_MANAGE FIREWALL_MANAGE MAIL_SETUP TEAMSPEAK_SETUP; shift ;;
-        --disable-all)                   ENABLE_SERVICE_CONTROL=0; ENABLE_APACHE=0; ENABLE_APACHE_MANAGE=0; ENABLE_RKHUNTER_MANAGE=0; ENABLE_CERTBOT=0; ENABLE_CERTBOT_MANAGE=0; ENABLE_DOCKER=0; ENABLE_TEAMSPEAK=0; ENABLE_CRON_MANAGE=0; ENABLE_PORTSENTRY_MANAGE=0; ENABLE_SERVICE_ENABLE=0; ENABLE_PACKAGE_MANAGE=0; ENABLE_PATCH_MANAGE=0; ENABLE_FIREWALL_MANAGE=0; ENABLE_MAIL_SETUP=0; ENABLE_TEAMSPEAK_SETUP=0; ENABLE_DEPLOYMENT=0; MODULE_DEPLOYMENT=0; mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT CERTBOT_MANAGE DOCKER TEAMSPEAK CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE PATCH_MANAGE FIREWALL_MANAGE MAIL_SETUP TEAMSPEAK_SETUP DEPLOYMENT; shift ;;
+        --enable-all)                    ENABLE_SERVICE_CONTROL=1; ENABLE_APACHE=1; ENABLE_APACHE_MANAGE=1; ENABLE_RKHUNTER_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_CERTBOT_MANAGE=1; ENABLE_DOCKER=1; ENABLE_TEAMSPEAK=1; ENABLE_CRON_MANAGE=1; ENABLE_PORTSENTRY_MANAGE=1; ENABLE_SERVICE_ENABLE=1; ENABLE_PACKAGE_MANAGE=1; ENABLE_PATCH_MANAGE=1; ENABLE_HOST_REBOOT=1; ENABLE_FIREWALL_MANAGE=1; ENABLE_MAIL_SETUP=1; ENABLE_TEAMSPEAK_SETUP=1; mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT CERTBOT_MANAGE DOCKER TEAMSPEAK CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE PATCH_MANAGE HOST_REBOOT FIREWALL_MANAGE MAIL_SETUP TEAMSPEAK_SETUP; shift ;;
+        --disable-all)                   ENABLE_SERVICE_CONTROL=0; ENABLE_APACHE=0; ENABLE_APACHE_MANAGE=0; ENABLE_RKHUNTER_MANAGE=0; ENABLE_CERTBOT=0; ENABLE_CERTBOT_MANAGE=0; ENABLE_DOCKER=0; ENABLE_TEAMSPEAK=0; ENABLE_CRON_MANAGE=0; ENABLE_PORTSENTRY_MANAGE=0; ENABLE_SERVICE_ENABLE=0; ENABLE_PACKAGE_MANAGE=0; ENABLE_PATCH_MANAGE=0; ENABLE_HOST_REBOOT=0; ENABLE_FIREWALL_MANAGE=0; ENABLE_MAIL_SETUP=0; ENABLE_TEAMSPEAK_SETUP=0; ENABLE_DEPLOYMENT=0; MODULE_DEPLOYMENT=0; mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT CERTBOT_MANAGE DOCKER TEAMSPEAK CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE PATCH_MANAGE HOST_REBOOT FIREWALL_MANAGE MAIL_SETUP TEAMSPEAK_SETUP DEPLOYMENT; shift ;;
         --allow-insecure-certs) ALLOW_INSECURE_CERTS=1; shift ;;
         --module)
             case "$2" in
@@ -827,6 +871,76 @@ ensure_docker_group() {
     fi
 }
 
+# The TeamSpeak marker is valid only for the agent account it was written for. teamspeak_marker_has
+# answers for one record line ("group-added", "dir-created", "state=enabled", "state=disabled").
+teamspeak_marker_has() {
+    [ -f "$TEAMSPEAK_MARKER_FILE" ] && grep -qx "user=$AGENT_USER" "$TEAMSPEAK_MARKER_FILE" 2>/dev/null \
+        && grep -qx "$1" "$TEAMSPEAK_MARKER_FILE" 2>/dev/null
+}
+
+# write_teamspeak_marker <state> <group-added 0|1> <dir-created 0|1>
+write_teamspeak_marker() {
+    {
+        printf 'user=%s\n' "$AGENT_USER"
+        printf 'state=%s\n' "$1"
+        [ "$2" -ne 1 ] || printf 'group-added\n'
+        [ "$3" -ne 1 ] || printf 'dir-created\n'
+    } > "$TEAMSPEAK_MARKER_FILE"
+    chown root:root "$TEAMSPEAK_MARKER_FILE"
+    chmod 644 "$TEAMSPEAK_MARKER_FILE"
+}
+
+# --disable-teamspeak (R-19): undo only what the marker says this installer did, then record
+# state=disabled so the next upgrade does not read the leftover group or directory as a request to
+# re-enable. What was found in place is kept and reported.
+revoke_teamspeak_access() {
+    is_explicit TEAMSPEAK || return 0
+    _ts_dir="$INSTALL_DIR/teamspeak"
+    _ts_member=0
+    if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx teamspeak; then
+        _ts_member=1
+    fi
+    if [ "$_ts_member" -eq 0 ] && [ ! -d "$_ts_dir" ] && [ ! -f "$TEAMSPEAK_MARKER_FILE" ]; then
+        return 0
+    fi
+    _ts_dir_kept=0
+    if [ "$_ts_member" -eq 1 ]; then
+        if teamspeak_marker_has group-added; then
+            log_info "  Removing $AGENT_USER from the teamspeak group (TeamSpeak access disabled; membership added by this installer)..."
+            if ! gpasswd -d "$AGENT_USER" teamspeak >/dev/null; then
+                log_error "  Could not remove $AGENT_USER from the teamspeak group: the agent keeps that membership."
+                return 1
+            fi
+        else
+            log_warn "  $AGENT_USER is in the teamspeak group, which this installer did not add: membership left as it is. Remove it by hand if that is intended."
+        fi
+    fi
+    if [ -d "$_ts_dir" ]; then
+        if teamspeak_marker_has dir-created && [ -n "$INSTALL_DIR" ] && [ ! -L "$_ts_dir" ]; then
+            log_info "  Removing the TeamSpeak credentials directory $_ts_dir (created by this installer)..."
+            for _ts_entry in "$_ts_dir"/* "$_ts_dir"/.[!.]*; do
+                [ -e "$_ts_entry" ] || [ -L "$_ts_entry" ] || continue
+                log_info "    deleting $_ts_entry"
+                rm -f -- "$_ts_entry" || log_warn "    could not delete $_ts_entry"
+            done
+            if ! rmdir "$_ts_dir"; then
+                _ts_dir_kept=1
+                log_warn "  $_ts_dir still holds entries this installer cannot delete (subdirectories): left in place."
+            fi
+        else
+            _ts_dir_kept=1
+            log_warn "  $_ts_dir was not created by this installer (no record): left in place."
+        fi
+    fi
+    # The marker keeps the record of what stays, so a later run can still tell it apart.
+    # (a membership kept here was never recorded, so only the directory can still be claimed).
+    _ts_dir_rec=0
+    if [ "$_ts_dir_kept" -eq 1 ] && teamspeak_marker_has dir-created; then
+        _ts_dir_rec=1
+    fi
+    write_teamspeak_marker disabled 0 "$_ts_dir_rec"
+}
+
 ensure_teamspeak_access() {
     # Opt-in only (--enable-teamspeak / --module server-management). Grants no sudo.
     # Detection of a running TeamSpeak works WITHOUT this (pidof + default query port 10011);
@@ -834,7 +948,15 @@ ensure_teamspeak_access() {
     # the 'teamspeak' group, and (b) scaffolds the agent-local credentials dir so the operator can
     # drop the serveradmin ServerQuery password the typed ServerQuery operation (S-TECH-87) needs.
     if [ "$ENABLE_TEAMSPEAK" -ne 1 ]; then
+        revoke_teamspeak_access || true
         return 0
+    fi
+
+    # What this installer added earlier stays recorded; a disabled record claims nothing.
+    _ts_group_rec=0; _ts_dir_rec=0
+    if teamspeak_marker_has state=enabled; then
+        teamspeak_marker_has group-added && _ts_group_rec=1
+        teamspeak_marker_has dir-created && _ts_dir_rec=1
     fi
 
     if getent group teamspeak >/dev/null 2>&1; then
@@ -842,7 +964,11 @@ ensure_teamspeak_access() {
             log_info "  $AGENT_USER already in teamspeak group"
         else
             log_info "  Adding $AGENT_USER to teamspeak group (read ts3server.ini for query port)..."
-            usermod -aG teamspeak "$AGENT_USER" || log_warn "  Failed to add to teamspeak group (non-fatal)"
+            if usermod -aG teamspeak "$AGENT_USER"; then
+                _ts_group_rec=1
+            else
+                log_warn "  Failed to add to teamspeak group (non-fatal)"
+            fi
         fi
     else
         log_info "  No 'teamspeak' group found - skipping group membership (default port 10011 still works)"
@@ -851,7 +977,11 @@ ensure_teamspeak_access() {
     # Scaffold the agent-local credentials dir (inside INSTALL_DIR, owned by the agent, 0700).
     _ts_dir="$INSTALL_DIR/teamspeak"
     _ts_cred="$_ts_dir/query-credentials"
+    if [ ! -d "$_ts_dir" ]; then
+        _ts_dir_rec=1
+    fi
     mkdir -p "$_ts_dir"
+    write_teamspeak_marker enabled "$_ts_group_rec" "$_ts_dir_rec"
     chown "$AGENT_USER:$AGENT_GROUP" "$_ts_dir" 2>/dev/null || true
     chmod 700 "$_ts_dir" 2>/dev/null || true
     if [ -s "$_ts_cred" ]; then
@@ -1021,7 +1151,7 @@ ensure_optional_packages() {
         || [ "$ENABLE_SERVICE_CONTROL" -eq 1 ] || [ "$ENABLE_RKHUNTER_MANAGE" -eq 1 ] \
         || [ "$ENABLE_CRON_MANAGE" -eq 1 ] || [ "$ENABLE_PORTSENTRY_MANAGE" -eq 1 ] \
         || [ "$ENABLE_SERVICE_ENABLE" -eq 1 ] || [ "$ENABLE_PACKAGE_MANAGE" -eq 1 ] \
-        || [ "$ENABLE_PATCH_MANAGE" -eq 1 ] || [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ] \
+        || [ "$ENABLE_PATCH_MANAGE" -eq 1 ] || [ "$ENABLE_HOST_REBOOT" -eq 1 ] || [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ] \
         || [ "$ENABLE_MAIL_SETUP" -eq 1 ] || [ "$ENABLE_TEAMSPEAK_SETUP" -eq 1 ] || [ "$ENABLE_DEPLOYMENT" -eq 1 ]; then
         _eop_need_acl=1
     fi
@@ -1094,12 +1224,125 @@ grant_read_acl() {
     done
 }
 
+# Take back what grant_read_acl (or another agent grant) gave: the agent user's access entries and, on
+# directories, its default entries, recursively. Only the "u:$AGENT_USER" entries are named, so the
+# entries of other users and groups, the owners and the base permission bits stay as they are (setfacl
+# recomputes the mask from the entries left). A path that does not exist, or whose top carries no entry
+# for the agent (the option was never enabled, or already revoked), is left untouched: idempotent.
+# Args: $1 = human label, $2.. = paths (directories or files).
+revoke_agent_acl() {
+    _raa_label="$1"; shift
+    if ! command -v setfacl >/dev/null 2>&1 || ! command -v getfacl >/dev/null 2>&1; then
+        return 0
+    fi
+    for _raa_path in "$@"; do
+        [ -e "$_raa_path" ] || continue
+        getfacl -p "$_raa_path" 2>/dev/null | grep -q "user:$AGENT_USER:" || continue
+        log_info "  Removing $AGENT_USER ACL entries from $_raa_path (${_raa_label})..."
+        setfacl -R -x "u:$AGENT_USER" "$_raa_path" 2>/dev/null \
+            || log_warn "  setfacl could not remove the $AGENT_USER entries on $_raa_path"
+        if [ -d "$_raa_path" ]; then
+            setfacl -R -d -x "u:$AGENT_USER" "$_raa_path" 2>/dev/null \
+                || log_warn "  setfacl could not remove the $AGENT_USER default entries on $_raa_path"
+        fi
+    done
+}
+
+# Every ACL the installer may have granted to the agent user, taken back before --purge deletes the
+# account (an entry left behind names a numeric uid that the next account created with it inherits).
+revoke_agent_acls() {
+    revoke_agent_acl "Apache introspection" /etc/apache2 /etc/httpd
+    revoke_agent_acl "Apache logs" /var/log/apache2 /var/log/httpd
+    revoke_agent_acl "Certbot introspection" /etc/letsencrypt
+    revoke_agent_acl "RKHunter log" /var/log/rkhunter.log
+    revoke_agent_acl "static web root" "$DEPLOY_WEB_ROOT"
+}
+
+# The sticky bit on the Apache sites directories (set by --enable-apache-manage) is recorded only when this
+# installer is the one setting it: a directory found already sticky (an administrator's choice, or an older
+# installer that kept no record) is never claimed, so the revocation below cannot strip a bit it did not set.
+dir_is_sticky() {
+    [ -k "$1" ]
+}
+
+record_apache_sticky() {
+    grep -qxF "$1" "$APACHE_STICKY_MARKER_FILE" 2>/dev/null && return 0
+    printf '%s\n' "$1" >> "$APACHE_STICKY_MARKER_FILE"
+    chown root:root "$APACHE_STICKY_MARKER_FILE"
+    chmod 644 "$APACHE_STICKY_MARKER_FILE"
+}
+
+# --disable-apache-manage (and --purge): undo what --enable-apache-manage set up on the Apache sites
+# directories beyond its sudoers drop-in and helpers, and nothing else.
+#   - the agent's write ACL entry on sites-available / sites-enabled: lowered to the read entry the Apache
+#     introspection grants when that introspection stays enabled, removed otherwise (entries of other users
+#     and groups are not named);
+#   - the sticky bit, only on a directory the marker records (set by this installer); an unrecorded sticky
+#     bit is kept and reported;
+#   - the vhosts carrying the "# Managed by Aetheus" marker that the agent owns (and their sites-enabled
+#     link), given back to root:root, the owner Debian gives every file of /etc/apache2. A vhost someone
+#     else owns is left as it is.
+# Missing directories and files are skipped; a second run finds nothing to undo: idempotent.
+revoke_apache_manage() {
+    for _ram_dir in /etc/apache2/sites-available /etc/apache2/sites-enabled; do
+        [ -d "$_ram_dir" ] || continue
+        if command -v setfacl >/dev/null 2>&1 && command -v getfacl >/dev/null 2>&1 \
+            && getfacl -p "$_ram_dir" 2>/dev/null | grep -q "^user:$AGENT_USER:.w"; then
+            if [ "${ENABLE_APACHE:-0}" -eq 1 ]; then
+                log_info "  Lowering the $AGENT_USER write ACL on $_ram_dir to read (Apache introspection stays)..."
+                setfacl -m "u:$AGENT_USER:rx" "$_ram_dir" 2>/dev/null \
+                    || log_warn "  setfacl could not lower the $AGENT_USER entry on $_ram_dir"
+            else
+                log_info "  Removing the $AGENT_USER write ACL on $_ram_dir..."
+                setfacl -x "u:$AGENT_USER" "$_ram_dir" 2>/dev/null \
+                    || log_warn "  setfacl could not remove the $AGENT_USER entry on $_ram_dir"
+            fi
+        fi
+        if grep -qxF "$_ram_dir" "$APACHE_STICKY_MARKER_FILE" 2>/dev/null; then
+            if dir_is_sticky "$_ram_dir"; then
+                log_info "  Clearing the sticky bit Aetheus set on $_ram_dir..."
+                chmod -t "$_ram_dir"
+            fi
+            grep -vxF "$_ram_dir" "$APACHE_STICKY_MARKER_FILE" > "$APACHE_STICKY_MARKER_FILE.new" || true
+            mv "$APACHE_STICKY_MARKER_FILE.new" "$APACHE_STICKY_MARKER_FILE"
+        elif dir_is_sticky "$_ram_dir"; then
+            log_warn "  Keeping the sticky bit on $_ram_dir: no record shows Aetheus set it (clear it with 'chmod -t $_ram_dir' if it did)."
+        fi
+    done
+    if [ -f "$APACHE_STICKY_MARKER_FILE" ] && [ ! -s "$APACHE_STICKY_MARKER_FILE" ]; then
+        rm -f "$APACHE_STICKY_MARKER_FILE"
+    fi
+    for _ram_vhost in /etc/apache2/sites-available/*.conf; do
+        [ -f "$_ram_vhost" ] || continue
+        head -n 1 "$_ram_vhost" | grep -Fq '# Managed by Aetheus' || continue
+        if [ "$(stat -c %U "$_ram_vhost" 2>/dev/null)" = "$AGENT_USER" ]; then
+            log_info "  Giving $_ram_vhost back to root:root..."
+            chown root:root "$_ram_vhost"
+        fi
+        _ram_link="/etc/apache2/sites-enabled/$(basename "$_ram_vhost")"
+        if [ -L "$_ram_link" ] && [ "$(stat -c %U "$_ram_link" 2>/dev/null)" = "$AGENT_USER" ]; then
+            chown -h root:root "$_ram_link"
+        fi
+    done
+}
+
 apply_read_acls() {
     if [ "$ENABLE_APACHE" -eq 1 ]; then
         grant_read_acl "Apache introspection" /etc/apache2 /etc/httpd
+        # R-19: the log tab tails error.log/access.log, which Debian keeps in a root:adm 0750 directory
+        # (0640 files) and RHEL in a root 0700 one. The same read-only ACL (r on the files, traverse+list
+        # on the directory, default entry so the files logrotate creates inherit it) on these two Apache
+        # directories only: never the adm group, which reads every log of the host.
+        grant_read_acl "Apache logs" /var/log/apache2 /var/log/httpd
+    else
+        # --disable-apache-introspection: the read ACL goes, so the next upgrade derives it as disabled.
+        revoke_agent_acl "Apache introspection" /etc/apache2 /etc/httpd
+        revoke_agent_acl "Apache logs" /var/log/apache2 /var/log/httpd
     fi
     if [ "$ENABLE_CERTBOT" -eq 1 ]; then
         grant_read_acl "Certbot introspection" /etc/letsencrypt
+    else
+        revoke_agent_acl "Certbot introspection" /etc/letsencrypt
     fi
     # The recursive read-only grant above (rX on all of /etc/apache2) would remove the directory
     # write ACL installed for Apache management. Re-assert directory rwx LAST, but never install a
@@ -1110,7 +1353,10 @@ apply_read_acls() {
             if [ -d "$d" ]; then
                 setfacl -m "u:$AGENT_USER:rwx" "$d" 2>/dev/null || true
                 setfacl -x "d:u:$AGENT_USER" "$d" 2>/dev/null || true
-                chmod +t "$d"
+                if ! dir_is_sticky "$d"; then
+                    chmod +t "$d"
+                    record_apache_sticky "$d"
+                fi
             fi
         done
     fi
@@ -1158,6 +1404,9 @@ derive_existing_posture() {
     if [ -f "$PATCH_MANAGE_SUDOERS_FILE" ]; then
         preserve PATCH_MANAGE "patch-manage sudoers rule"
     fi
+    if [ -f "$REBOOT_MANAGE_SUDOERS_FILE" ]; then
+        preserve HOST_REBOOT "host-reboot sudoers rule"
+    fi
     if [ -f "$FIREWALL_MANAGE_SUDOERS_FILE" ]; then
         preserve FIREWALL_MANAGE "firewall-manage sudoers rule"
     fi
@@ -1181,8 +1430,27 @@ derive_existing_posture() {
     if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
         preserve DOCKER "docker-group membership"
     fi
-    if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx teamspeak || [ -d "$INSTALL_DIR/teamspeak" ]; then
+    # TeamSpeak (R-19): the marker is the state. state=disabled (left by --disable-teamspeak) keeps the
+    # capability off even while a group membership or directory found in place remains; state=enabled
+    # keeps it on. Hosts installed before the marker existed have no marker and keep TEAMSPEAK=1 when the
+    # group membership (or the credentials directory) exists, as before; their first upgrade writes the marker.
+    if teamspeak_marker_has state=enabled; then
         preserve TEAMSPEAK "TeamSpeak access provisioning"
+    elif ! teamspeak_marker_has state=disabled; then
+        if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx teamspeak || [ -d "$INSTALL_DIR/teamspeak" ]; then
+            preserve TEAMSPEAK "TeamSpeak access provisioning"
+        fi
+    fi
+    # Managing Apache or Certbot reads the trees it manages, and the manage sudoers drop-in is itself the
+    # witness of the introspection on the next upgrade: a --disable-*-introspection that keeps the manage
+    # capability keeps the read ACL too, said out loud, instead of revoking a grant the next upgrade restores.
+    if [ "$ENABLE_APACHE_MANAGE" -eq 1 ] && [ "$ENABLE_APACHE" -eq 0 ]; then
+        log_warn "  Apache management stays enabled and needs the Apache read ACL: keeping the Apache introspection (add --disable-apache-manage to remove both)."
+        ENABLE_APACHE=1
+    fi
+    if [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ] && [ "$ENABLE_CERTBOT" -eq 0 ]; then
+        log_warn "  Certbot management stays enabled and needs the Certbot read ACL: keeping the Certbot introspection (add --disable-certbot-manage to remove both)."
+        ENABLE_CERTBOT=1
     fi
 }
 
@@ -1290,7 +1558,10 @@ write_apache_manage_sudoers() {
             if [ -d "$d" ]; then
                 setfacl -m "u:$AGENT_USER:rwx" "$d" || true
                 setfacl -x "d:u:$AGENT_USER" "$d" 2>/dev/null || true
-                chmod +t "$d"
+                if ! dir_is_sticky "$d"; then
+                    chmod +t "$d"
+                    record_apache_sticky "$d"
+                fi
                 log_info "  Sticky directory ACL on $d granted to $AGENT_USER."
             fi
         done
@@ -1400,31 +1671,9 @@ remove_certbot_conventions() {
     # cli.ini and the deploy hook stay: they keep manual renewals working without the agent.
 }
 
-# Remove legacy prometheus sudoers and helper artifacts best-effort so duplicate aliases and
-# orphaned root grants cannot conflict with the installed agent. See
-# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
-cleanup_legacy_prometheus_artifacts() {
-    # EXACT names only - never a blind `prometheus-*` glob: an unrelated third party (the Prometheus
-    # monitoring stack) ships its OWN sudoers drop-ins (prometheus-node-exporter, prometheus-alertmanager,
-    # ...) and must never be deleted here. This list mirrors the aetheus-* drop-ins this installer writes.
-    for _legacy in agent apache certbot cron deploy mail package portsentry rkhunter service-enable teamspeak; do
-        _f="/etc/sudoers.d/prometheus-${_legacy}"
-        if [ -f "$_f" ]; then
-            log_info "Removing legacy ${_f} (pre-rename migration)..."
-            rm -f "$_f" 2>/dev/null || true
-        fi
-    done
-    # Old root-owned helper dir of the pre-rename agent (its own path, not shared with any third party).
-    if [ -d /usr/local/lib/prometheus ]; then
-        log_info "Removing legacy /usr/local/lib/prometheus helper dir..."
-        rm -rf /usr/local/lib/prometheus 2>/dev/null || true
-    fi
-}
-
 # Apply the configured sudoers state. With service-control disabled there is NO
 # /etc/sudoers.d/aetheus-agent at all (the agent runs with zero sudo).
 apply_sudoers() {
-    cleanup_legacy_prometheus_artifacts
     if [ "$ENABLE_SERVICE_CONTROL" -eq 1 ]; then
         write_sudoers
     else
@@ -1438,6 +1687,8 @@ apply_sudoers() {
         rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
         rm -f "$APACHE_MODULE_HELPER_PATH"
         rm -f "$APACHE_READ_SITE_HELPER_PATH"
+        rm -f "$APACHE_RELOAD_HELPER_PATH"
+        revoke_apache_manage
     fi
     # Certbot management: root-owned webroot ACME helper + NOPASSWD sudoers.
     if [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ]; then
@@ -1450,6 +1701,8 @@ apply_sudoers() {
         write_rkhunter_manage_sudoers
     else
         rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE" "$RKHUNTER_HELPER_PATH"
+        # The read ACL write_rkhunter_manage_sudoers and the helper put on the log goes with them.
+        revoke_agent_acl "RKHunter log" /var/log/rkhunter.log
     fi
     # Phase 3 - cron management: root-owned helper + NOPASSWD sudoers for that one binary.
     if [ "$ENABLE_CRON_MANAGE" -eq 1 ]; then
@@ -1480,6 +1733,12 @@ apply_sudoers() {
         write_patch_manage_sudoers
     else
         rm -f "$PATCH_MANAGE_SUDOERS_FILE"
+    fi
+    # Recette R-8 - fixed systemctl reboot allow-list (argv-exact, no helper) for the reboots Aetheus schedules.
+    if [ "$ENABLE_HOST_REBOOT" -eq 1 ]; then
+        write_host_reboot_sudoers
+    else
+        rm -f "$REBOOT_MANAGE_SUDOERS_FILE"
     fi
     # ADR-024 4.2 - root-owned ufw helper + path-only sudoers for firewall control.
     if [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ]; then
@@ -1536,6 +1795,7 @@ grant_sudoers_read_acls() {
         _gsr_blocked=""
         [ "$ENABLE_PACKAGE_MANAGE" -eq 1 ] && _gsr_blocked="$_gsr_blocked package-manage"
         [ "$ENABLE_PATCH_MANAGE" -eq 1 ] && _gsr_blocked="$_gsr_blocked patch-manage"
+        [ "$ENABLE_HOST_REBOOT" -eq 1 ] && _gsr_blocked="$_gsr_blocked host-reboot"
         [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ] && _gsr_blocked="$_gsr_blocked firewall-manage"
         [ "$ENABLE_DEPLOYMENT" -eq 1 ]     && _gsr_blocked="$_gsr_blocked deployment"
         if [ -n "$_gsr_blocked" ]; then
@@ -1763,6 +2023,17 @@ write_patch_manage_sudoers() {
     }
 }
 
+write_host_reboot_sudoers() {
+    log_info "Configuring host-reboot sudoers (recette R-8, systemctl reboot, argv-exact)..."
+    render_host_config reboot/sudoers.d/aetheus-reboot "$REBOOT_MANAGE_SUDOERS_FILE"
+    chmod 440 "$REBOOT_MANAGE_SUDOERS_FILE"
+    visudo -cf "$REBOOT_MANAGE_SUDOERS_FILE" || {
+        log_error "Invalid host-reboot sudoers syntax"
+        rm -f "$REBOOT_MANAGE_SUDOERS_FILE"
+        exit 1
+    }
+}
+
 write_firewall_manage() {
     log_info "Configuring firewall-manage helper + sudoers (ADR-024 4.2, ufw)..."
     ensure_helper_dir
@@ -1921,6 +2192,11 @@ print_posture_summary() {
     else
         log_info "    patch manage    : off (can see pending updates; cannot apply them)"
     fi
+    if [ "$ENABLE_HOST_REBOOT" -eq 1 ]; then
+        log_info "    host reboot     : ON  (sudoers ${REBOOT_MANAGE_SUDOERS_FILE}; systemctl reboot, argv-exact)"
+    else
+        log_info "    host reboot     : off (Aetheus cannot run the reboots it schedules)"
+    fi
     if [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ]; then
         log_info "    firewall manage : ON  (helper ${FIREWALL_HELPER_PATH}; sudoers ${FIREWALL_MANAGE_SUDOERS_FILE})"
     else
@@ -1958,7 +2234,7 @@ print_posture_summary() {
        [ "$ENABLE_APACHE_MANAGE" -eq 0 ] && [ "$ENABLE_RKHUNTER_MANAGE" -eq 0 ] && \
        [ "$ENABLE_CERTBOT" -eq 0 ] && [ "$ENABLE_DOCKER" -eq 0 ] && [ "$ENABLE_TEAMSPEAK" -eq 0 ] && \
        [ "$ENABLE_CRON_MANAGE" -eq 0 ] && [ "$ENABLE_PORTSENTRY_MANAGE" -eq 0 ] && \
-       [ "$ENABLE_SERVICE_ENABLE" -eq 0 ] && [ "$ENABLE_PACKAGE_MANAGE" -eq 0 ] && [ "$ENABLE_PATCH_MANAGE" -eq 0 ] && [ "$ENABLE_FIREWALL_MANAGE" -eq 0 ] && \
+       [ "$ENABLE_SERVICE_ENABLE" -eq 0 ] && [ "$ENABLE_PACKAGE_MANAGE" -eq 0 ] && [ "$ENABLE_PATCH_MANAGE" -eq 0 ] && [ "$ENABLE_HOST_REBOOT" -eq 0 ] && [ "$ENABLE_FIREWALL_MANAGE" -eq 0 ] && \
        [ "$ENABLE_MAIL_SETUP" -eq 0 ] && [ "$ENABLE_TEAMSPEAK_SETUP" -eq 0 ] && [ "$ENABLE_DEPLOYMENT" -eq 0 ]; then
         log_info ""
         log_info "  Tip: re-run with --upgrade --enable-<flag> to grant more capabilities."
@@ -1971,7 +2247,7 @@ print_posture_summary() {
 sudo_grant_enabled() {
     for _grant in "$ENABLE_SERVICE_CONTROL" "$ENABLE_APACHE_MANAGE" "$ENABLE_CERTBOT_MANAGE" \
         "$ENABLE_RKHUNTER_MANAGE" "$ENABLE_CRON_MANAGE" "$ENABLE_PORTSENTRY_MANAGE" \
-        "$ENABLE_SERVICE_ENABLE" "$ENABLE_PACKAGE_MANAGE" "$ENABLE_PATCH_MANAGE" \
+        "$ENABLE_SERVICE_ENABLE" "$ENABLE_PACKAGE_MANAGE" "$ENABLE_PATCH_MANAGE" "$ENABLE_HOST_REBOOT" \
         "$ENABLE_FIREWALL_MANAGE" "$ENABLE_MAIL_SETUP" "$ENABLE_TEAMSPEAK_SETUP" "$ENABLE_DEPLOYMENT"; do
         [ "$_grant" -eq 1 ] && return 0
     done
@@ -2397,6 +2673,12 @@ if [ "$MODE" = "purge" ]; then
     fi
     rm -f "$AGENT_READ_GRANT_HELPER_PATH" "$AGENT_READ_GRANT_SERVICE_PATH"
     systemctl daemon-reload 2>/dev/null || true
+    # And the ACLs the installer granted itself (Apache, Certbot, logs, web root), while the account
+    # still exists: setfacl names the entries by user name, and userdel below would orphan them.
+    if id "$AGENT_USER" >/dev/null 2>&1; then
+        revoke_apache_manage
+        revoke_agent_acls
+    fi
 
     if [ -f "$SUDOERS_FILE" ]; then
         log_info "Removing sudoers file..."
@@ -2415,13 +2697,13 @@ if [ "$MODE" = "purge" ]; then
     fi
     if [ -f "$CRON_MANAGE_SUDOERS_FILE" ] || [ -f "$PORTSENTRY_MANAGE_SUDOERS_FILE" ] || \
        [ -f "$SERVICE_ENABLE_SUDOERS_FILE" ] || [ -f "$PACKAGE_MANAGE_SUDOERS_FILE" ] || \
-       [ -f "$PATCH_MANAGE_SUDOERS_FILE" ] || [ -f "$FIREWALL_MANAGE_SUDOERS_FILE" ] || \
+       [ -f "$PATCH_MANAGE_SUDOERS_FILE" ] || [ -f "$REBOOT_MANAGE_SUDOERS_FILE" ] || [ -f "$FIREWALL_MANAGE_SUDOERS_FILE" ] || \
        [ -f "$MAIL_MANAGE_SUDOERS_FILE" ] || [ -f "$DEPLOY_MANAGE_SUDOERS_FILE" ] || \
        [ -f "$CERTBOT_MANAGE_SUDOERS_FILE" ] || [ -f "$TEAMSPEAK_SETUP_SUDOERS_FILE" ] || \
        [ -d "$AETHEUS_HELPER_DIR" ]; then
         log_info "Removing privileged-capability sudoers files + helpers..."
         rm -f "$CRON_MANAGE_SUDOERS_FILE" "$PORTSENTRY_MANAGE_SUDOERS_FILE" "$SERVICE_ENABLE_SUDOERS_FILE"
-        rm -f "$PACKAGE_MANAGE_SUDOERS_FILE" "$PATCH_MANAGE_SUDOERS_FILE" "$FIREWALL_MANAGE_SUDOERS_FILE" "$MAIL_MANAGE_SUDOERS_FILE" "$DEPLOY_MANAGE_SUDOERS_FILE"
+        rm -f "$PACKAGE_MANAGE_SUDOERS_FILE" "$PATCH_MANAGE_SUDOERS_FILE" "$REBOOT_MANAGE_SUDOERS_FILE" "$FIREWALL_MANAGE_SUDOERS_FILE" "$MAIL_MANAGE_SUDOERS_FILE" "$DEPLOY_MANAGE_SUDOERS_FILE"
         rm -f "$CERTBOT_MANAGE_SUDOERS_FILE" "$TEAMSPEAK_SETUP_SUDOERS_FILE"
         rm -f "$CRON_HELPER_PATH" "$UNBLOCK_HELPER_PATH" "$PORTSENTRY_SETUP_HELPER_PATH" "$MAIL_SETUP_HELPER_PATH" "$MAIL_MANAGE_HELPER_PATH" "$DEPLOY_RESTART_HELPER_PATH" "$FIREWALL_HELPER_PATH"
         rm -f "$CERTBOT_ISSUE_HELPER_PATH" "$CERTBOT_MANAGE_HELPER_PATH" "$TEAMSPEAK_SETUP_HELPER_PATH"
@@ -2467,7 +2749,7 @@ if [ "$MODE" = "purge" ]; then
         fi
     fi
 
-    rm -f "$DOCKER_GROUP_MARKER_FILE"
+    rm -f "$DOCKER_GROUP_MARKER_FILE" "$APACHE_STICKY_MARKER_FILE" "$TEAMSPEAK_MARKER_FILE"
 
     log_info ""
     log_info "Purge complete. The agent is fully removed from this system."

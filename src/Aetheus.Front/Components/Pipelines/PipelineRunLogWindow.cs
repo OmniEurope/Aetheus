@@ -16,6 +16,7 @@ internal sealed class PipelineRunLogWindow
 
     private readonly HashSet<int> _snapshotRead = [];
     private readonly HashSet<int> _hasEarlier = [];
+    private readonly HashSet<int> _finalRead = [];
     private readonly Dictionary<int, int> _limits = [];
 
     public Dictionary<int, List<TaskLogDto>> Lines { get; } = [];
@@ -26,11 +27,18 @@ internal sealed class PipelineRunLogWindow
     /// <summary>True when lines before the first one held are on the server but not in memory.</summary>
     public bool HasEarlierLines(int taskId) => _hasEarlier.Contains(taskId);
 
+    /// <summary>R-21: true once the task's log was read after its step reached a final status. A read made while
+    /// the step ran stops at the lines written so far; without this the last lines (the real error) never arrived.</summary>
+    public bool IsFinalRead(int taskId) => _finalRead.Contains(taskId);
+
+    public void MarkFinalRead(int taskId) => _finalRead.Add(taskId);
+
     public void Clear()
     {
         Lines.Clear();
         _snapshotRead.Clear();
         _hasEarlier.Clear();
+        _finalRead.Clear();
         _limits.Clear();
     }
 
@@ -40,6 +48,7 @@ internal sealed class PipelineRunLogWindow
         Lines.Remove(taskId);
         _snapshotRead.Remove(taskId);
         _hasEarlier.Remove(taskId);
+        _finalRead.Remove(taskId);
         _limits.Remove(taskId);
     }
 

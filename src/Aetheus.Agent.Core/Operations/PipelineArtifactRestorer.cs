@@ -137,8 +137,11 @@ internal static class PipelineArtifactRestorer
                 + "no DELIVERY_BASELINE variable is exported from this artifact.",
                 TaskLogLevel.Info).ConfigureAwait(false);
 
+        // The steps of a job run concurrently and their archives share marker files: one extraction at a
+        // time per workspace. Everything above only reads this archive, so nothing is checked later.
         var extraction = Stopwatch.StartNew();
-        DeployLayout.ExtractSafely(archive, restoreDirectory);
+        using (await WorkspaceExtractionGate.EnterAsync(request.WorkingDirectory, ct).ConfigureAwait(false))
+            DeployLayout.ExtractSafely(archive, restoreDirectory);
         extraction.Stop();
 
         var downloadDuration = ArtifactDownloadTelemetry.TryGet(zip, out var measured)

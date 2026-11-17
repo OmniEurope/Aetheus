@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Back.IntegrationTests;
 
@@ -19,6 +23,13 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
     public const string AdminPassword = "Integr@tion-Test-Admin-Pwd-2026";
 
     private readonly string _connectionString;
+    private readonly QueryShapeWarningLog _queryShapeWarnings = new();
+
+    /// <summary>Every Warning-or-above line the host wrote since it was built (R-1, the zero guard).</summary>
+    public WarningLogRecorder Warnings { get; } = new();
+    /// <summary>The time of every database command the host ran (R-1, names the slowest queries of a journey).</summary>
+    public CommandTimingRecorder CommandTimings { get; } = new();
+    private bool _queryShapeWarningsAsserted;
     private readonly string _testDataRoot = Path.Combine(
         Path.GetTempPath(), "aetheus-integration", Guid.NewGuid().ToString("N"));
 
@@ -66,6 +77,8 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
         builder.UseSetting("RateLimiting:Disabled", "true");
         // Recette R3-7: no nightly AI model list read in a test host (seeded profiles hold fake keys).
         builder.UseSetting("AiTasks:ModelListRefresh:Enabled", "false");
+        // PLAN-004: no real advisory download, and no inventory read, from a test host.
+        builder.UseSetting("VulnerabilityWatch:Enabled", "false");
         // Every factory may seed the same demo repository concurrently. Never share the default
         // bin/.../data paths between hosts or test runs: a stale bare Git ref otherwise makes a
         // fresh database seed fail with "reference already exists".
@@ -76,6 +89,16 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
         // Toto bare repository races its refs/hooks and makes the suite nondeterministic. Demo seeding
         // has dedicated relational tests, so the generic factory must keep startup seeding disabled.
         builder.UseSetting("Seed:Demo", "false");
+
+        // R-2: a query shape warning (First without OrderBy, several collections in one query) fails the query that
+        // raises it, and one that a background loop swallows fails the host when it is disposed.
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<ILoggerProvider>(_queryShapeWarnings);
+            services.AddSingleton<ILoggerProvider>(Warnings);
+            services.ConfigureDbContext<AppDbContext>(QueryShapeWarningLog.ThrowOnQueryShapeWarnings);
+            services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(CommandTimings));
+        });
     }
 
     private static string FindRepoRoot()
@@ -97,7 +120,17 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (!disposing || !Directory.Exists(_testDataRoot)) return;
+        if (disposing) DeleteTestDataRoot();
+        if (disposing && !_queryShapeWarningsAsserted)
+        {
+            _queryShapeWarningsAsserted = true;
+            _queryShapeWarnings.AssertNone();
+        }
+    }
+
+    private void DeleteTestDataRoot()
+    {
+        if (!Directory.Exists(_testDataRoot)) return;
 
         try
         {

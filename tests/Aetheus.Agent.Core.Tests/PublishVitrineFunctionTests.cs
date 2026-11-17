@@ -281,6 +281,31 @@ public sealed class PublishVitrineFunctionTests : ProductionFunctionTestBase
         Assert.Equal("an old page\n", Read(Path.Combine(_webRoot, "old", "page.html")));
     }
 
+    // ACORE-002: the swap runs synchronously, so a cancellation that the executor merely stopped waiting
+    // for would let it finish publishing after the task was reported stopped. The swap itself honours the
+    // token and its compensation puts the live site back.
+    [Theory]
+    [InlineData("snapshot")]
+    [InlineData("clear")]
+    [InlineData("move")]
+    public async Task ACancellationDuringTheSwap_EndsTheSwap_PutsTheLiveSiteBack_AndLeavesNoStageOrBackup(string cancelAt)
+    {
+        LiveSite();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var function = Function(point =>
+        {
+            if (point == cancelAt)
+                cancellation.Cancel();
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RunAsync(function, cancellation.Token));
+
+        Assert.Equal([".htaccess", "index.html", "old"], WebRootEntries());
+        Assert.Equal("the live site\n", Read(Path.Combine(_webRoot, "index.html")));
+        Assert.Equal("live dotfile\n", Read(Path.Combine(_webRoot, ".htaccess")));
+        Assert.Equal("an old page\n", Read(Path.Combine(_webRoot, "old", "page.html")));
+    }
+
     [PlatformFact("linux")]
     [SupportedOSPlatform("linux")]
     public async Task ThePublishedFiles_AreReadableByEveryone()

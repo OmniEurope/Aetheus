@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* The signed-in user's own choice: are they e-mailed when this pipeline fails. It saves at once, like the
+   switches of /settings; the in-app notification of a failure does not depend on it. *@
+@if (_preference is not null)
+{
+    <OmniStack Gap="OmniSpacing.XSmall" Class="pipeline-failure-mail">
+        <OmniFormField For="@SwitchId" Help="@L["PipelineFailureMailHelp"]" Class="omni-u-w-100">
+            <LabelContent>@L["PipelineFailureMailLabel"]</LabelContent>
+            <ChildContent>
+                <OmniSwitch Id="@SwitchId" Value="@_preference.IsEnabled" ValueExpression="@(() => _preference.IsEnabled)"
+                            Disabled="@_saving" ValueChanged="@((bool value) => SaveAsync(value))">@L["PipelineFailureMailSwitch"]</OmniSwitch>
+            </ChildContent>
+        </OmniFormField>
+        @if (_preference.IsScheduled)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 pipeline-failure-mail-scheduled">@L["PipelineFailureMailScheduledHint"]</OmniText>
+        }
+    </OmniStack>
+}

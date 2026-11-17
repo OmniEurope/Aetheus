@@ -34,9 +34,8 @@
     <PackageReference Include="NuGet.Packaging" />
     <PackageReference Include="NuGet.Versioning" />
     <!-- Direct ref keeps the patched release ahead of the vulnerable transitive one (MailKit, NuGet.Packaging). -->
-    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <!-- Decision of 2026-10-07: the administration Performance page reads this collector (ApiPerformanceReport). -->
-    <PackageReference Include="OmniEurope.Performance" />
+    <PackageReference Include="OmniEurope.Diagnostics" />
     <PackageReference Include="Otp.NET" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>

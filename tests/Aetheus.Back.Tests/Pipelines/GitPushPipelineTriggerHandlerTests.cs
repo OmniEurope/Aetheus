@@ -22,16 +22,21 @@ public sealed class GitPushPipelineTriggerHandlerTests
     private readonly IPipelineRepository _pipelineRepo = Substitute.For<IPipelineRepository>();
     private readonly IGitLightCliService _cli = Substitute.For<IGitLightCliService>();
     private readonly IUserNotificationService _userNotifications = Substitute.For<IUserNotificationService>();
+    private readonly IGitLightService _repositories = Substitute.For<IGitLightService>();
     private readonly GitPushPipelineTriggerHandler _sut;
 
-    public GitPushPipelineTriggerHandlerTests() =>
+    public GitPushPipelineTriggerHandlerTests()
+    {
+        _repositories.GetAccessibleRepositoriesAsync(Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns([new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "repo", Name = "Repo" }]);
         _sut = new GitPushPipelineTriggerHandler(
             _pipelineService, _runService, _pipelineRepo, _cli,
             new PipelineDefinitionSynchronizer(
-                _pipelineService, _cli,
+                _pipelineService, _cli, _repositories,
                 new PipelineRunNotificationPublisher(_pipelineRepo, _userNotifications),
                 NullLogger<PipelineDefinitionSynchronizer>.Instance),
             NullLogger<GitPushPipelineTriggerHandler>.Instance);
+    }
 
     private static GitPushProcessedEvent Push(string reference, string commit, string defaultBranch = "main") =>
         new(7, 1, "repo", "Repo", defaultBranch, "/srv/git/repo.git", [new GitRefUpdate(reference, commit)]);
@@ -72,6 +77,27 @@ public sealed class GitPushPipelineTriggerHandlerTests
                 variables["WEBHOOK_REF"] == "refs/heads/main"
                 && variables["AETHEUS_SOURCE_COMMIT"] == commit),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Decision 2026-11-10: a push to the mirror of an external repository (accepted by the Git transport,
+    /// erased by the next forced fetch) never syncs its <c>.pipeline/</c> into a stored definition.</summary>
+    [Fact]
+    public async Task Handle_APushToAnExternalMirror_NeverSyncsItsDefinitions()
+    {
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        _repositories.GetAccessibleRepositoriesAsync(Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns([new GitLightRepoDto { Id = 1, ProjectId = 7, Slug = "repo", Name = "Repo", IsExternalMirror = true }]);
+        _cli.GetTreeAsync("/srv/git/repo.git", commit, ".pipeline", Arg.Any<CancellationToken>())
+            .Returns([new GitLightTreeEntryDto { Name = "release.yml", Type = GitTreeEntryType.Blob }]);
+        _cli.GetBlobAsync("/srv/git/repo.git", commit, ".pipeline/release.yml", Arg.Any<CancellationToken>())
+            .Returns(new GitLightBlobDto { Path = ".pipeline/release.yml", Content = "name: release\nstages: []" });
+        _pipelineService.GetWebhookTriggeredPipelinesForProjectAsync(7, Arg.Any<CancellationToken>()).Returns([]);
+
+        await _sut.HandleAsync(Push("refs/heads/main", commit), TestContext.Current.CancellationToken);
+
+        await _cli.DidNotReceive().GetTreeAsync("/srv/git/repo.git", commit, ".pipeline", Arg.Any<CancellationToken>());
+        await _pipelineService.DidNotReceiveWithAnyArgs().UpsertPipelineFromYamlAsync(
+            default!, default!, default, default!, TestContext.Current.CancellationToken, default, default, default, default);
     }
 
     /// <summary>

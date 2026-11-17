@@ -1,0 +1,57 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Pipelines
+@using Aetheus.Front.Components.Shared
+@* Recette R-24: what runs right now, between the status chips and the catalogue of a pipelines list (general,
+   project and server lists share it). Nothing is drawn when nothing runs. The runs are the list's own live ones,
+   refreshed by its hub subscription; each row opens its run. *@
+@if (Rows.Count > 0)
+{
+    <section class="pipelines-running-now" data-testid="pipelines-running-now" aria-label="@L["PipelinesRunningNow"]">
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelinesRunningNow"]</OmniHeading>
+                <CountBadge Value="@Rows.Count" Variant="OmniTone.Info" />
+            </OmniStack>
+            <OmniDataGrid TItem="PipelineRunTableItem" Items="@Rows" KeyOf="@(run => run.RunId)"
+                          ScrollMode="OmniDataGridScrollMode.All" MinHeight="0" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+                          ExportTitle="@ExportContext.Title(L["PipelinesRunningNow"])" ExportFields="@ExportContext.Fields()"
+                          Class="aetheus-clickable-rows" OnRowClick="@(args => Nav.NavigateTo(RunHref(args.Item)))">
+                <Columns>
+                    <OmniDataGridColumn TItem="PipelineRunTableItem" Property="PipelineName" Title="@L["Pipeline"]">
+                        <Template Context="run">
+                            <a href="@RunHref(run)" class="pipeline-name-link" data-testid="pipelines-running-now-link"
+                               @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">#@run.BuildNumber @run.PipelineName</a>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="PipelineRunTableItem" Property="ProjectName" Title="@L["Project"]" Visible="@GroupByProject">
+                        <Template Context="run">
+                            <EntityNameLink Kind="EntityNameKind.Project" Id="run.ProjectId" Name="@(run.ProjectName ?? L["Unassigned"])" />
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="PipelineRunTableItem" Property="Status" Title="@L["Status"]" FormatFilterValue="@StatusText">
+                        <Template Context="run">
+                            @* A run waiting for a person says so in its badge; a running one says where it is. *@
+                            @if (run.Status == PipelineStatus.Running && !string.IsNullOrWhiteSpace(run.CurrentStep))
+                            {
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="pipeline-run-current-step">
+                                    <div class="run-tl-dot run-timeline-dot-running"><span class="run-timeline-pulse"></span></div>
+                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@run.CurrentStep</OmniText>
+                                </OmniStack>
+                            }
+                            else
+                            {
+                                <PipelineRunStatusBadge Status="run.Status" />
+                            }
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="PipelineRunTableItem" Key="Duration" Title="@L["Duration"]" Sortable="false" Filterable="false"
+                                        ExportValue="@DurationText">
+                        <Template Context="run">
+                            <span class="pipeline-run-duration"><PipelineRunTableLiveDuration Run="@run" /></span>
+                        </Template>
+                    </OmniDataGridColumn>
+                </Columns>
+            </OmniDataGrid>
+        </OmniStack>
+    </section>
+}

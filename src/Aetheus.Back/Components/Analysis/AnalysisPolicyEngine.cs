@@ -25,7 +25,12 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         ICollection<AnalysisMetric>? flaggedMetrics,
         CancellationToken ct = default)
     {
-        var grade = AnalysisGradeEngine.Evaluate(report, context, now);
+        // The run counts a finding once, however many of its reports saw it (R-21): this report's contribution to the
+        // run leaves out what the reports published before it already hold.
+        var earlierFingerprints = report is { Id: > 0, PipelineRunId: { } runId }
+            ? await repository.GetFingerprintsOfEarlierReportsAsync(runId, report.Id, ct).ConfigureAwait(false)
+            : null;
+        var grade = AnalysisGradeEngine.Evaluate(report, context, now, earlierFingerprints);
         if (report.Status is AnalysisReportStatus.Error or AnalysisReportStatus.TimedOut
             or AnalysisReportStatus.Unavailable)
             return ErrorEvaluation(report, context, grade, now);

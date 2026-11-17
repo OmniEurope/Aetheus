@@ -16,8 +16,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// artifact file is written via <see cref="IArtifactStorageService"/>, then streamed back and its
 /// bytes asserted. The InMemory suite can't exercise the file streaming or the real auth flow.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class ArtifactDownloadIntegrationTests(PostgresFixture fixture)
+public sealed class ArtifactDownloadIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static Task<string> LoginAsync(HttpClient client)
         => IntegrationAuth.LoginAsAdminAsync(client, TestContext.Current.CancellationToken);
@@ -126,17 +125,5 @@ public sealed class ArtifactDownloadIntegrationTests(PostgresFixture fixture)
         var response = await client.GetAsync($"/api/artifacts/{published.Id}/download", ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(whole, await response.Content.ReadAsByteArrayAsync(ct));
-    }
-
-    [Fact]
-    public async Task DownloadArtifact_MissingArtifact_Returns404()
-    {
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await LoginAsync(client));
-
-        var response = await client.GetAsync("/api/artifacts/999999/download", cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

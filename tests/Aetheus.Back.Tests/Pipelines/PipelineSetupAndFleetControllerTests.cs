@@ -28,7 +28,7 @@ public sealed class PipelineSetupAndFleetControllerTests
         }
     };
 
-    private PipelineFleetController Fleet(bool admin) => new(_fleet, _authz, Substitute.For<IPipelineTemplateService>()) { ControllerContext = As(admin) };
+    private PipelineFleetController Fleet(bool admin) => new(_fleet, _authz, Substitute.For<IPipelineTemplateService>(), Substitute.For<IPipelineFleetBulkUpdateService>()) { ControllerContext = As(admin) };
 
     private PipelineSetupController Setup(bool admin = false) => new(
         _readiness, _provisioner, Substitute.For<IPipelineProductionSetupService>(), Substitute.For<IPipelineProjectCopyService>(),

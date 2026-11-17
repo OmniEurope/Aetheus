@@ -6,18 +6,61 @@
 # commit adds. So only the nightly triggers this pipeline. Like the current-tree scan, it reads
 # .gitleaks.toml at the repository root when there is one, and Gitleaks' built-in rules otherwise
 # (recette R3-63): nothing is required in the repository.
+# Its stages follow the platform's own history pipeline (ADR-054): checkout, proof that the checkout is the
+# requested immutable revision and holds the whole history, the CI manifest restored (the analysis gate uploads
+# its summary with the provenance of that artifact, and has none without it), the scan, the grade.
 name: application-security-history-template
 trigger: manual
 variables:
+  APPLICATION_CI_PIPELINE: application-ci
   # The checkout holds this many commits (the platform clones depth 1 otherwise): the history scan
-  # covers what the checkout holds, so the depth is what makes it a history scan.
+  # covers what the checkout holds, so the depth is what makes it a history scan. It is fetched by the
+  # authenticated checkout itself: once the checkout ends its credentials are gone, so the function cannot
+  # fetch what the checkout left out.
   AETHEUS_GIT_HISTORY_DEPTH: "100000"
 
 stages:
+  - name: Checkout
+    group: Security
+    execution_role: build
+    os: linux
+    steps:
+      - name: Check out the exact source
+        checkout: true
+
+  # After the checkout, in its own stage: the steps of one stage are concurrent. head defaults to
+  # BUILD_SOURCEVERSION. The whole history is what this pipeline is for: in mode full the function unshallows
+  # the checkout and refuses to scan a history it does not hold (the history scanner defaults to full too).
+  - name: Verify source
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Checkout]
+    steps:
+      - name: Verify immutable source
+        type: aetheus
+        function: verify-immutable-source
+        with:
+          mode: full
+        timeout_seconds: 600
+
+  - name: Restore CI manifest
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Verify source]
+    steps:
+      - name: Restore exact CI artifact manifest
+        type: restore-artifacts
+        artifact: ArtifactManifest-artifacts
+        artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
+        timeout_seconds: 300
+
   - name: Scan git history
     group: Security
     execution_role: build
     os: linux
+    depends_on: [Restore CI manifest]
     steps:
       - name: Produce Git-history secret evidence
         type: scanner
@@ -29,7 +72,8 @@ stages:
   # pipeline. Every rule is required and the scale is the one of application-security (owner decision of
   # 2026-10-25, recette R-73 and R-74): no open finding is an A, the first one costs the A, then the grade
   # falls with the severity, never to an E: info, low and medium (B up to 5, C from 6, never worse), high
-  # (a D from the first one, whatever the count), critical (F).
+  # (a D from the first one, whatever the count), critical (F). Every ladder is written to its fifth threshold, with
+  # 1000000 for the ones that stop (the grade they keep), as in application-security.
   - name: Grade security history
     group: Security
     execution_role: build
@@ -61,22 +105,33 @@ stages:
               a: 0
               b: 0
               c: 0
+              d: 1000000
+              e: 1000000
             - key: grade.security.medium
               domain: security
               severity: medium
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
             - key: grade.security.low
               domain: security
               severity: low
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
             - key: grade.security.info
               domain: security
               severity: info
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
         timeout_seconds: 300

@@ -208,6 +208,53 @@ public sealed class ServerAndIdentityGridColumnsTests : IDisposable
     }
 
     [Fact]
+    public void Users_RolesFilter_OfAListLimitedToOrganizations_MatchesTheRolesHeldThereOnly()
+    {
+        // R-2: two organizations may name a role alike; the filter of A's list never matches B's role.
+        var ofA = new Role { Id = 10, Name = "Dev", OrganizationId = 1 };
+        var ofB = new Role { Id = 11, Name = "Dev", OrganizationId = 2 };
+        var siteAdmin = new Role { Id = 1, Name = RoleNames.Admin };
+        var users = new[]
+        {
+            new User { Id = 1, Username = "in-a", OrganizationRoles = [new UserOrganizationRole { OrganizationId = 1, RoleId = 10, Role = ofA }] },
+            new User { Id = 2, Username = "in-b", OrganizationRoles = [new UserOrganizationRole { OrganizationId = 2, RoleId = 11, Role = ofB }] },
+            new User { Id = 3, Username = "admin", UserRoles = [new UserRole { UserId = 3, RoleId = 1, Role = siteAdmin }] }
+        }.AsQueryable();
+
+        Assert.Equal([1], UserListQuery.For([1], siteAdminView: false)
+            .ApplyFilters(users, [F("Roles", GridFilterOperator.In, List("dev"))]).Select(u => u.Id));
+        // The site-wide Admin role is not shown to an organization's administrator: never matched for it.
+        Assert.Empty(UserListQuery.For([1], siteAdminView: false)
+            .ApplyFilters(users, [F("Roles", GridFilterOperator.In, List("admin"))]));
+        Assert.Equal([3], UserListQuery.Columns
+            .ApplyFilters(users, [F("Roles", GridFilterOperator.In, List("admin"))]).Select(u => u.Id));
+    }
+
+    [Theory]
+    [InlineData("username", true, "username")]
+    [InlineData("Email", true, "Email")]
+    [InlineData("Email", false, null)]
+    [InlineData("lastActivityAt", false, "lastActivityAt")]
+    [InlineData("Id", false, "Id")]
+    [InlineData("PasswordHash", true, null)]
+    [InlineData("TotpSecret", true, null)]
+    [InlineData("SecurityStamp", false, null)]
+    [InlineData("Roles", true, null)]
+    [InlineData(null, true, null)]
+    public void Users_SortKey_IsAListColumn_NeverASecurityColumn_NorTheMaskedEmail(string? requested, bool siteAdminView, string? expected)
+    {
+        Assert.Equal(expected, UserListQuery.SortKey(requested, siteAdminView));
+    }
+
+    [Fact]
+    public void Users_EmailFilters_AreDroppedForACallerTheAddressIsMaskedFrom()
+    {
+        var kept = UserListQuery.WithoutEmail(
+            [F("EMAIL", GridFilterOperator.StartsWith, "a"), F("Username", GridFilterOperator.Contains, "b")]);
+        Assert.Equal(["Username"], kept!.Select(filter => filter.Field));
+    }
+
+    [Fact]
     public void Users_RolesFilter_RejectsAnOperatorThatIsNotAList()
     {
         Assert.Throws<BadRequestException>(() =>

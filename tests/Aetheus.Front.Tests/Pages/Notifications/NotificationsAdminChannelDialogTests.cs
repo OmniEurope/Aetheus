@@ -37,7 +37,7 @@ public sealed class NotificationsAdminChannelDialogTests : BunitContext
 
     private int Reads(string route) => _handler.Requests.Count(request => request.Url.Contains(route, StringComparison.Ordinal));
 
-    private async Task<(int Channels, int Rules, int FilterValues)> CreateChannelAsync(bool? saved)
+    private async Task<(int Channels, int Rules, int FilterValues)> CreateChannelAsync(NotificationChannelDto? saved)
     {
         var cut = Render<NotificationsAdmin>();
         cut.WaitForState(() => cut.Markup.Contains("alert.triggered"));
@@ -55,7 +55,7 @@ public sealed class NotificationsAdminChannelDialogTests : BunitContext
     [Fact]
     public async Task ASavedChannel_RereadsTheFilterValuesAndBothGrids()
     {
-        var (channels, rules, filterValues) = await CreateChannelAsync(saved: true);
+        var (channels, rules, filterValues) = await CreateChannelAsync(saved: new NotificationChannelDto { Id = 2, Name = "ops-mail", Type = NotificationChannelType.Slack });
 
         Assert.Equal(1, filterValues);
         Assert.True(channels >= 1, $"channels re-read {channels} time(s)");

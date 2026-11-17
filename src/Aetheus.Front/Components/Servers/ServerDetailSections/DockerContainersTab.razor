@@ -7,7 +7,7 @@
     <CountBadge Value="@FilteredContainers.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterContainers"]" @bind-Value="_containerSearch" Placeholder="@L["FilterContainers"]" Class="docker-search" />
 </OmniStack>
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" AdoptRunning="false" />
 @if (UnexpectedRiskCount > 0)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Title="@L["DockerRiskSummaryTitle"]" Class="docker-risk-summary">@L["DockerRiskSummary", UnexpectedRiskCount]</OmniAlert>
@@ -135,8 +135,8 @@ else
         </OmniStack>
         @if (_logsContent is null)
         {
-            @* Recette R-116: the logs are being read, OE's busy veil lies over the zone they will fill. *@
-            <div class="omni-busy action-veil-placeholder" aria-busy="true" title="@L["WaitingResult"]"></div>
+            @* Recette R-116, R-1: the logs are being read. No page veil: it would cover this card's close button for as long as the read takes. *@
+            <div class="action-veil-placeholder" title="@L["WaitingResult"]"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["Loading"]</OmniText></div>
         }
         else
         {

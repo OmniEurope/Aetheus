@@ -13,7 +13,7 @@ public sealed class MailDnsRefreshService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<MailDnsRefreshService> logger,
-    IPostgresLeaderLease? leaderLease = null) : PeriodicBackgroundService(TimeSpan.FromHours(6), leaderLease, "aetheus:mail-dns-refresh", timeProvider)
+    IPostgresLeaderLease leaderLease) : PeriodicBackgroundService(TimeSpan.FromHours(6), leaderLease, "aetheus:mail-dns-refresh", timeProvider)
 {
     internal const int DomainsPerPass = 50;
     internal static readonly TimeSpan RecheckAfter = TimeSpan.FromHours(6);

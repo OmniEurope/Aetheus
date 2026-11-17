@@ -154,7 +154,7 @@ public sealed class PipelineSetupCommandsTests : BunitContext
         .. new[]
         {
             "application-ci", "application-quality", "application-security", "application-qa",
-            "application-candidate", "application-nightly", "application-deploy-prod"
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
         }.Select(name => new PipelineTemplateSummaryDto
         {
             Id = name.GetHashCode(StringComparison.Ordinal),

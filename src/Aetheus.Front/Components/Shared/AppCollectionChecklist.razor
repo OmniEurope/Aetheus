@@ -1,0 +1,28 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* R-26: what the setup prepared and what is still missing to receive each signal. Shown only while a line is missing. *@
+@if (_loaded && HasMissing)
+{
+    <OmniCard data-testid="collection-checklist">
+        <OmniStack Gap="OmniSpacing.Medium">
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniHeading Level="OmniHeadingLevel.H5">@L["CollectionChecklistTitle"]</OmniHeading>
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CollectionChecklistIntro"]</OmniText>
+            </OmniStack>
+            @foreach (var group in Groups)
+            {
+                <OmniStack Gap="OmniSpacing.Small" data-testid="collection-group">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0"><strong>@group.Title</strong></OmniText>
+                    @foreach (var line in group.Lines)
+                    {
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
+                                   data-testid="collection-line" data-status="@line.Status">
+                            <OmniBadge Icon="@(BadgeIcon.ForState(Tone(line.Status)))" Fill="OmniFill.Solid" Tone="@Tone(line.Status)">@StatusText(line.Status)</OmniBadge>
+                            <OmniText>@line.Text</OmniText>
+                        </OmniStack>
+                    }
+                </OmniStack>
+            }
+        </OmniStack>
+    </OmniCard>
+}

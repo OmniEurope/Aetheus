@@ -34,6 +34,7 @@ internal sealed class RetiredServerScenario
     public const string PoolName = "web-pool";
     public const string OldTokenHash = "old-agent-token-hash";
     public const string SigningKey = "aetheus-dev-key-minimum-32-bytes!!";
+    public static TokenHashKeys Keys { get; } = new(new JwtOptions { SigningKey = SigningKey });
     public static readonly string MachineHash = new('a', 64);
 
     private readonly string _store = Guid.NewGuid().ToString("N");
@@ -66,7 +67,7 @@ internal sealed class RetiredServerScenario
         Audit,
         Hub,
         Substitute.For<IAdminChangeNotifier>(),
-        new JwtOptions { SigningKey = SigningKey },
+        Keys,
         Clock);
 
     public static string[] PipelineCapabilities => [AgentCapabilities.PipelineBuild, AgentCapabilities.Deployment];
@@ -132,14 +133,16 @@ internal sealed class RetiredServerScenario
     }
 
     /// <summary>Adds a live registration token for <paramref name="organizationId"/> and returns the
-    /// plaintext an agent would present.</summary>
-    public async Task<string> AddRegistrationTokenAsync(int organizationId = OrgId)
+    /// plaintext an agent would present; <paramref name="legacyHash"/> stores it as before R-53.</summary>
+    public async Task<string> AddRegistrationTokenAsync(int organizationId = OrgId, bool legacyHash = false)
     {
         var plaintext = "reg-" + Guid.NewGuid().ToString("N");
         await using var db = NewContext();
         db.RegistrationTokens.Add(new RegistrationToken
         {
-            Token = AuthTokenHelper.HashToken(SigningKey, plaintext),
+            Token = legacyHash
+                ? Keys.HashCandidates(TokenHashPurpose.RegistrationToken, plaintext)[1]
+                : Keys.Hash(TokenHashPurpose.RegistrationToken, plaintext),
             OrganizationId = organizationId,
             ExpiresAt = Now.AddDays(1)
         });

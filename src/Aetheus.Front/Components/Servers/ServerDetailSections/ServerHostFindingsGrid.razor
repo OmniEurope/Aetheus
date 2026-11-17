@@ -1,0 +1,100 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@using Aetheus.Shared.Components.VulnerabilityWatch
+@* R-41: the CVE of a host system, one row per advisory and installed source package: the server's own CVE tab and the
+   server part of the CVE watch tab both list them through this grid. *@
+<OmniDataGrid TItem="ServerHostFindingDto" Items="@Items" KeyOf="@(finding => finding.Id)" ExportTitle="@ExportTitle" ExportFields="@ExportContext.Fields()"
+              ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" Density="OmniDensity.Compact"
+              Class="server-host-findings-grid" data-testid="server-host-findings">
+    <EmptyContent>@EmptyContent</EmptyContent>
+    <Columns>
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Key="Severity" Title="@L["Severity"]" Width="12rem" Value="@(finding => finding.Severity)" SortValue="@(finding => (int)finding.Severity)"
+                            Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@SeverityValues" FormatFilterValue="@SeverityText"
+                            FilterPredicate="@SeverityMatches" ExportValue="@SeverityExport">
+            <Template Context="finding">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                    <OmniBadge Icon="@(BadgeIcon.ForSeverity(SeverityTone(finding.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityTone(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge>
+                    @if (finding.Status == VulnerabilityMatchStatus.ToVerify)
+                    {
+                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Question))" Fill="OmniFill.Outline" Tone="OmniTone.Neutral">@L.Localize(finding.Status)</OmniBadge>
+                    }
+                </OmniStack>
+            </Template>
+        </OmniDataGridColumn>
+        @if (ShowServer)
+        {
+            <OmniDataGridColumn TItem="ServerHostFindingDto" Property="ServerName" Title="@L["Server"]" Width="12rem" Filterable="true">
+                <Template Context="finding"><OmniLink Href="@ServerCvePath(finding.ServerId)">@finding.ServerName</OmniLink></Template>
+            </OmniDataGridColumn>
+        }
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Property="PackageName" Title="@L["Package"]" Width="14rem" Filterable="true">
+            <Template Context="finding">
+                <span title="@finding.BinaryPackages">@finding.PackageName</span>
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Property="InstalledVersion" Title="@L["ServerHostCveInstalled"]" Width="11rem" Filterable="true" />
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Key="Exploited" Title="@L["CveWatchExploited"]" Width="9rem" Value="@(finding => finding.ExploitedSince is not null)"
+                            SortValue="@(finding => finding.ExploitedSince is not null ? 1 : 0)" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect"
+                            FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" FilterPredicate="@ExploitedMatches" ExportValue="@ExploitedExport">
+            <Template Context="finding">
+                @if (finding.ExploitedSince is not null)
+                {
+                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lightning))" Fill="OmniFill.Solid" Tone="OmniTone.Danger" title="@L["CveWatchExploitedHint"]">@L["CveWatchExploited"]</OmniBadge>
+                }
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Key="FixedIn" Title="@L["CveWatchFixedIn"]" Width="11rem" Value="@(finding => finding.FixedVersion ?? string.Empty)"
+                            Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText"
+                            FilterPredicate="@FixMatches" ExportValue="@FixExport">
+            <Template Context="finding">
+                @if (finding.FixedVersion is { } fix)
+                {
+                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.ArrowUp))" Fill="OmniFill.Tonal" Tone="OmniTone.Success">@fix</OmniBadge>
+                }
+                else
+                {
+                    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["CveWatchNoFix"]</OmniBadge>
+                }
+            </Template>
+        </OmniDataGridColumn>
+        @* R-18: the text of the advisory follows the facts that identify and rank the finding. *@
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Property="Summary" Title="@L["Description"]" Grow="true" Truncate="true" MinWidth="18rem" Filterable="true" />
+        @* R-18 (owner, 2026-11-11): the advisory is short and last of the data, after the description; the cell holds one line
+           cut with an ellipsis, the whole id stays in the cell tooltip and the column stays resizable. *@
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Property="AdvisoryId" Title="@L["CveWatchAdvisory"]" Width="10rem" MinWidth="8rem" Truncate="true" Filterable="true">
+            <Template Context="finding">
+                <div class="cve-watch-advisory" title="@finding.Summary">
+                    @if (!string.IsNullOrWhiteSpace(finding.AdvisoryUrl))
+                    {
+                        <OmniLink Href="@finding.AdvisoryUrl" NewTab="true" Class="cve-watch-cve-id server-host-advisory-link" Label="@string.Format(L["ServerHostCveOpenAdvisory"], finding.CveId ?? finding.AdvisoryId)">@(finding.CveId ?? finding.AdvisoryId)</OmniLink>
+                    }
+                    else
+                    {
+                        <span class="cve-watch-cve-id">@(finding.CveId ?? finding.AdvisoryId)</span>
+                    }
+                    @if (finding.CveId is not null)
+                    {
+                        <span class="cve-watch-advisory-id">@finding.AdvisoryId</span>
+                    }
+                </div>
+            </Template>
+        </OmniDataGridColumn>
+        @* R-18: the row menu is narrow by default (the column stays resizable). *@
+        <OmniDataGridColumn TItem="ServerHostFindingDto" Sortable="false" Filterable="false" Title="" Width="2rem" MinWidth="2rem" Exportable="false">
+            <Template Context="finding">
+                <OmniOverflowMenu Label="@L["MoreActions"]" Size="OmniControlSize.Small">
+                    @if (OnDryRun.HasDelegate && finding.FixedVersion is not null)
+                    {
+                        <OmniMenuItem OnClick="@(() => OnDryRun.InvokeAsync(finding))" Disabled="@(!CanUpgrade)" Class="server-host-dry-run">
+                            <Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["ServerHostCveDryRun"]</ChildContent>
+                        </OmniMenuItem>
+                    }
+                    <OmniMenuItem Href="@ServerUpdatesPath(finding.ServerId)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["ServerHostCveOpenUpdates"]</ChildContent></OmniMenuItem>
+                    @if (ShowServer)
+                    {
+                        <OmniMenuItem Href="@ServerCvePath(finding.ServerId)"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon><ChildContent>@L["ServerHostCveOpenServer"]</ChildContent></OmniMenuItem>
+                    }
+                </OmniOverflowMenu>
+            </Template>
+        </OmniDataGridColumn>
+    </Columns>
+</OmniDataGrid>

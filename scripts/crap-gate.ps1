@@ -106,6 +106,12 @@ $excludedUsed = @{}
 $methods = @{}
 foreach ($report in $reports) {
     [xml]$coverage = Get-Content -LiteralPath $report.FullName -Raw
+    # A report without any class means the collection failed (coverlet instruments the test output in place: another
+    # process holding those assemblies leaves an empty file while the tests still pass). Scoring it would read every
+    # method it should have covered as 0 %, so the gate refuses it instead of reporting false CRAP scores.
+    if (@($coverage.coverage.packages.package.classes.class | Where-Object { $_ }).Count -eq 0) {
+        throw "Cobertura report without any class: $($report.FullName). Coverage was not collected (another process probably held the test assemblies): run the tests again."
+    }
     $sources = @($coverage.coverage.sources.source | Where-Object { $_ } | ForEach-Object { [string]$_ })
     foreach ($class in @($coverage.coverage.packages.package.classes.class)) {
         if ($null -eq $class) { continue }

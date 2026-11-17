@@ -19,6 +19,9 @@ public static class DailyRecapSettingKeys
     /// <summary>The local date (yyyy-MM-dd) the scheduler last claimed; a day is sent once, at most.</summary>
     public const string LastSentDate = Prefix + "LastSentDate";
 
+    /// <summary>The local date (yyyy-MM-dd) the nightly CVE mail last claimed (it uses the recap's hour and time zone).</summary>
+    public const string CveDigestLastSentDate = Prefix + "CveDigestLastSentDate";
+
     /// <summary>One line on what that scheduled send became.</summary>
     public const string LastResult = Prefix + "LastResult";
 }

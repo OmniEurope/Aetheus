@@ -39,17 +39,10 @@
                 OnFilesSelect="@OnFileSelectedAsync" />
 }
 
-@if (_loadFailed)
-{
-    <OmniAlert Severity="OmniSeverity.Danger">
-        @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadTemplatesAsync" title="@L["Retry"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
-    </OmniAlert>
-}
-else
-{
-    <AetheusDataGrid @ref="_grid" Data="@_templates" TItem="PipelineTemplateSummaryDto" IsLoading="@_loading"
-        RowClick="@EditTemplate" FullHeight="true" Virtualize="@(_templates.Count > 20)" PageSize="20">
+@* A failed read shows the grid's own load alert with its Retry (the grid asks the list again). *@
+    <AetheusDataGrid @ref="_grid" Data="@_rows" Count="@_rowCount" LoadData="@LoadTemplatesAsync" ExportRead="@ReadTemplatesExportAsync"
+        VirtualData="@(() => new OmniDataGridResult<PipelineTemplateSummaryDto>(_rows, _rowCount))" TItem="PipelineTemplateSummaryDto"
+        RowClick="@EditTemplate" FullHeight="true" Virtualize="@AetheusGrid.RemoteVirtualization" PageSize="20">
         <EmptyTemplate>
             <EmptyState Icon="description" Title="@L["NoRecords"]" Description="@L["EmptyTemplatesHint"]">
                 <ActionContent>
@@ -149,4 +142,3 @@ else
             </OmniDataGridColumn>
         </Columns>
     </AetheusDataGrid>
-}

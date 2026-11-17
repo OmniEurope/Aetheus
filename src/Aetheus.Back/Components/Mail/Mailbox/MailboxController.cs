@@ -13,7 +13,8 @@ namespace Aetheus.Back.Components.Mail.Mailbox;
 [Authorize]
 [ServiceFilter(typeof(ValidateServerExistsFilter))]
 public class MailboxController(
-    IMailboxService mailbox, IMailboxAdministratorAccess administratorAccess, IResourceAuthorizationService authz) : ControllerBase
+    IMailboxService mailbox, IMailboxAdministratorAccess administratorAccess, IResourceAuthorizationService authz,
+    IMailboxDocumentTickets documentTickets) : ControllerBase
 {
     private const string Base = "accounts/{accountId:int}/mailbox";
     private const string AdministratorRole = "Admin";
@@ -96,7 +97,12 @@ public class MailboxController(
         CancellationToken ct = default)
     {
         if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
-        return Ok(await mailbox.GetMessageAsync(key, folder, uid, loadImages, ct));
+        var message = await mailbox.GetMessageAsync(key, folder, uid, loadImages, ct);
+        // The frame loads the sanitized document by URL, under its own policy (MailboxDocumentController): the
+        // single-use ticket is bound to this reader's held mailbox key and issued only after the check above.
+        if (message.Html is { } html)
+            message = message with { DocumentPath = $"api/mail/documents/{documentTickets.Issue(key, MailboxDocumentPolicy.Wrap(html))}" };
+        return Ok(message);
     }
 
     /// <summary>The attachment's bytes, always as a download (octet-stream): never rendered by the browser.</summary>

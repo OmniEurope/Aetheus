@@ -10,7 +10,9 @@ namespace Aetheus.Agent.Core.Functions;
 /// production deployment gate: the candidate delivery contract must be a schema 2 contract whose sealed
 /// identity (<see cref="DeliveryContractIdentity"/>) and release version hold, whose artifacts match
 /// their digests byte for byte, and whose proven schema states include the live production schema
-/// (<see cref="DeliverySchemaGate"/>). It accepts and refuses what the script accepts and refuses, logs
+/// (<see cref="DeliverySchemaGate"/>): before or after its migrations, an intermediate state of its own
+/// interrupted forward migration (the live history strictly between <c>schemaBefore</c> and
+/// <c>schemaAfter</c> on that very path), or the state of the release it is the proven predecessor of. It accepts and refuses what the script accepts and refuses, logs
 /// the script's lines and fails with the script's messages; where the script crashed on a
 /// <c>TypeError</c>, the step fails with V8's message.
 ///

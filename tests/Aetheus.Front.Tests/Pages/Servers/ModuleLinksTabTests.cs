@@ -138,7 +138,7 @@ public class ModuleLinksTabTests : BunitContext
         });
         var cut = RenderTab();
         var method = typeof(ModuleLinksTab).GetMethod("DeleteLinkAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [5])!);
+        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [new LinkedResourceDto { LinkId = 5 }])!);
         // DeleteLink issues a DELETE for the given link id.
         Assert.Contains(_handler.Requests, r => r.Method == "DELETE" && r.Url.Contains("api/servers/1/module-links/5"));
     }

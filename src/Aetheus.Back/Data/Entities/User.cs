@@ -25,6 +25,14 @@ public class User
     public bool MustChangePassword { get; set; }
 
     /// <summary>
+    /// R-1 (owner decision 2026-10-29): set on the administrator a fresh install seeds with its default address
+    /// and the configured password. Until its holder chooses their own name, address and password
+    /// (<c>POST /api/users/me/account-setup</c>, the only call that clears it) the account reaches nothing else:
+    /// its tokens carry the forced-change claim the middleware enforces, and the plain password change is refused.
+    /// </summary>
+    public bool MustSetUpAccount { get; set; }
+
+    /// <summary>
     /// Bumped on password change, role change, or explicit logout. Embedded as a JWT claim so
     /// stale tokens can be rejected during validation (immediate revocation).
     /// </summary>

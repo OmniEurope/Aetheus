@@ -4,12 +4,14 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Front.Tests.Architecture;
 
 /// <summary>
-/// Recette R-119: an action of a server page that queues an agent task keeps the task follower on screen and veils
-/// the section (OE's <c>omni-busy</c>, content kept mounted) until the task ends, success or failure. The veil is
-/// held by <c>ServerTaskFollower</c> itself (it asks the server layout to veil the section body while its task
+/// Recette R-119, R-19: an action of a server page that queues an agent task keeps the task follower on screen (one
+/// progress block per zone). Only a global operation of the page (restarting Apache) holds the one page veil (OE's
+/// OmniPageVeil, content kept mounted) until the task ends, success or failure; a one-off action veils nothing. The veil is
+/// held by <c>ServerTaskFollower</c> itself (it asks the server layout to hold the veil while its task
 /// runs), so a section is covered when its source places the follower: <c>&lt;ServerTaskFollower</c> in the markup, or a
-/// <c>ServerTaskFollower</c> handed to it by its page (the Certbot dialog), or a zone of its own that carries the
-/// veil (<c>omni-busy</c>, the mail page's task banner).
+/// <c>ServerTaskFollower</c> handed to it by its page (the Certbot dialog), or a zone of its own that holds the
+/// veil (<c>VeilHold</c>), or, for a task that is not blocking (R-37), its own progress banner (the mail page's task
+/// banner, the reinstall and setup banners), which veils nothing.
 /// The guard reads every section file of the folder: one that calls an API method which queues an agent task
 /// (<see cref="QueuingCall"/>) must be covered, or the call is listed in <see cref="NotAQueuedTask"/> with its reason.
 /// It cannot prove that a given handler reaches the follower: the behaviour tests of the follower and of the
@@ -24,7 +26,7 @@ public sealed partial class ServerTaskVeilGuardTests
     private static partial Regex QueuingCall();
 
     /// <summary>The section's source carries the veil: the follower, or a zone of its own that is veiled.</summary>
-    [GeneratedRegex(@"<ServerTaskFollower\b|\bServerTaskFollower\?|\bomni-busy\b|<MailTaskBanner\b")]
+    [GeneratedRegex(@"<ServerTaskFollower\b|\bServerTaskFollower\?|<VeilHold\b|<MailTaskBanner\b|mail-reinstall-running|mail-setup-running")]
     private static partial Regex Veil();
 
     /// <summary>API methods that do not queue an agent task that changes the host (a read, or a change kept in
@@ -38,7 +40,7 @@ public sealed partial class ServerTaskVeilGuardTests
         ["AddPortsentryWhitelistIpAsync"] = "the whitelist is Aetheus's own database",
         ["RemovePortsentryWhitelistIpAsync"] = "the whitelist is Aetheus's own database",
         ["SetRkhunterScheduleAsync"] = "the schedule is Aetheus's own database",
-        ["RequestServiceLogsAsync"] = "a read of the service logs, shown in the page's own log zone (omni-busy)",
+        ["RequestServiceLogsAsync"] = "a read of the service logs, shown in the page's own log zone (VeilHold)",
         ["InspectContainerAsync"] = "a read, shown in a dialog of its own",
         ["ListContainerFilesAsync"] = "a read, shown in a dialog of its own",
         ["ExecuteShellCommandAsync"] = "a command typed in a dialog, whose output is shown there",
@@ -70,7 +72,7 @@ public sealed partial class ServerTaskVeilGuardTests
         Assert.True(stale.Count == 0, "These methods are no longer called by a section, remove them from the list:\n  " + string.Join("\n  ", stale));
         Assert.True(offenders.Count == 0,
             "R-119: a section that queues an agent task shows <ServerTaskFollower> (it veils the section until the task ends), "
-            + "or veils a zone of its own with omni-busy:\n  " + string.Join("\n  ", offenders));
+            + "or holds the veil from a zone of its own (VeilHold):\n  " + string.Join("\n  ", offenders));
     }
 
     /// <summary>Every follower tag of the markup (a section may place one per tab).</summary>
@@ -181,7 +183,7 @@ public sealed partial class ServerTaskVeilGuardTests
         Assert.Equal(["ExecuteApacheActionAsync"], QueuedCalls(codeBehind, []));
         Assert.DoesNotMatch(Veil(), "<OmniStack><OmniButton OnClick=\"@GoAsync\" /></OmniStack>");
         Assert.Matches(Veil(), "<ServerTaskFollower @ref=\"_follower\" ServerId=\"@ServerId\" />");
-        Assert.Matches(Veil(), "<OmniCard Class=\"@(Busy ? \"omni-busy\" : null)\">");
+        Assert.Matches(Veil(), "<VeilHold Busy=\"@Busy\" />");
     }
 
     [Fact]

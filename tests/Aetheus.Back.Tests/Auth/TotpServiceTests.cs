@@ -160,7 +160,7 @@ public class TotpServiceTests
         _repoMock.FindUserByIdTrackedAsync(99, Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
-        var result = await _sut.DisableTotpAsync(99, "password", ct: TestContext.Current.CancellationToken);
+        var result = await _sut.DisableTotpAsync(99, Disable("password", "123456"), ct: TestContext.Current.CancellationToken);
 
         Assert.False(result);
     }
@@ -171,7 +171,7 @@ public class TotpServiceTests
         _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
             .Returns(new User { Id = 1, TotpEnabled = false });
 
-        var result = await _sut.DisableTotpAsync(1, "password", ct: TestContext.Current.CancellationToken);
+        var result = await _sut.DisableTotpAsync(1, Disable("password", "123456"), ct: TestContext.Current.CancellationToken);
 
         Assert.False(result);
     }
@@ -179,37 +179,161 @@ public class TotpServiceTests
     [Fact]
     public async Task DisableTotpAsync_WrongPassword_ReturnsFalse()
     {
-        var hash = BCrypt.Net.BCrypt.HashPassword("correctpassword");
-        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new User { Id = 1, Username = "admin", TotpEnabled = true, PasswordHash = hash });
+        var (user, code) = TotpUser("correctpassword");
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.DisableTotpAsync(1, "wrongpassword", ct: TestContext.Current.CancellationToken);
+        var result = await _sut.DisableTotpAsync(1, Disable("wrongpassword", code), ct: TestContext.Current.CancellationToken);
 
         Assert.False(result);
+        Assert.True(user.TotpEnabled);
+        // R-50: a failure counts against the sign-in lockout.
+        await _repoMock.Received(1).IncrementFailedLoginAsync(1, Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task DisableTotpAsync_CorrectPassword_ClearsAndReturnsTrue()
     {
-        var hash = BCrypt.Net.BCrypt.HashPassword("mypassword");
-        var user = new User
-        {
-            Id = 1,
-            Username = "admin",
-            TotpEnabled = true,
-            TotpSecret = "enc:secret",
-            TotpRecoveryCodes = "[\"hash1\"]",
-            PasswordHash = hash
-        };
+        var (user, code) = TotpUser("mypassword");
         _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.DisableTotpAsync(1, "mypassword", ct: TestContext.Current.CancellationToken);
+        var result = await _sut.DisableTotpAsync(1, Disable("mypassword", code), ct: TestContext.Current.CancellationToken);
 
         Assert.True(result);
         Assert.Null(user.TotpSecret);
         Assert.False(user.TotpEnabled);
         Assert.Null(user.TotpRecoveryCodes);
+        await _repoMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _auditMock.Received(1).LogAsync("TotpDisabled", "User", 1, "admin", Arg.Any<CancellationToken>());
+    }
+
+    // --- DisableTotpAsync, R-50: password AND second factor, sign-in lockout, stamp rotation ---
+
+    [Fact]
+    public async Task DisableTotpAsync_PasswordWithoutCode_RefusedAndCounted()
+    {
+        var (user, _) = TotpUser("mypassword");
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.DisableTotpAsync(1, Disable("mypassword", ""), ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.True(user.TotpEnabled);
+        Assert.NotNull(user.TotpSecret);
+        await _repoMock.Received(1).IncrementFailedLoginAsync(1, Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DisableTotpAsync_WrongTotpCode_RefusedAndCounted()
+    {
+        var (user, code) = TotpUser("mypassword");
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        var wrong = code == "000000" ? "111111" : "000000";
+
+        var result = await _sut.DisableTotpAsync(1, Disable("mypassword", wrong), ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.True(user.TotpEnabled);
+        Assert.Equal("stamp-before", user.SecurityStamp);
+        await _repoMock.Received(1).IncrementFailedLoginAsync(1, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DisableTotpAsync_FifthFailure_LocksTheAccountLikeTheSignIn()
+    {
+        var (user, _) = TotpUser("mypassword");
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        var counts = 0;
+        _repoMock.IncrementFailedLoginAsync(1, Arg.Any<CancellationToken>()).Returns(_ => ++counts);
+
+        for (var attempt = 0; attempt < 5; attempt++)
+            Assert.False(await _sut.DisableTotpAsync(1, Disable("wrong", "123456"), ct: TestContext.Current.CancellationToken));
+
+        // The sign-in lockout: 15 minutes after the fifth failure, only once the threshold is reached.
+        await _repoMock.Received(1).LockoutUserAsync(1, FixedNow.UtcDateTime.AddMinutes(15), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DisableTotpAsync_LockedAccount_RefusedEvenWithTheRightPasswordAndCode()
+    {
+        var (user, code) = TotpUser("mypassword");
+        user.LockoutEndUtc = FixedNow.UtcDateTime.AddMinutes(5);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.DisableTotpAsync(1, Disable("mypassword", code), ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.True(user.TotpEnabled);
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DisableTotpAsync_ValidTotp_RotatesTheStampAndClearsTheFailures()
+    {
+        var (user, code) = TotpUser("mypassword");
+        user.FailedLoginCount = 3;
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.DisableTotpAsync(1, Disable("mypassword", code), ct: TestContext.Current.CancellationToken);
+
+        Assert.True(result);
+        Assert.False(user.TotpEnabled);
+        Assert.NotEqual("stamp-before", user.SecurityStamp);
+        Assert.False(string.IsNullOrEmpty(user.SecurityStamp));
+        Assert.Equal(0, user.FailedLoginCount);
+        Assert.Null(user.LockoutEndUtc);
+    }
+
+    [Fact]
+    public async Task DisableTotpAsync_RecoveryCode_ConsumedAndAccepted()
+    {
+        var (user, _) = TotpUser("mypassword");
+        var stored = JsonSerializer.Serialize(new List<string> { BCrypt.Net.BCrypt.HashPassword("ABCDE12345") });
+        user.TotpRecoveryCodes = stored;
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.ReplaceTotpRecoveryCodesAsync(1, stored, "[]", Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await _sut.DisableTotpAsync(1, Disable("mypassword", "ABCDE-12345", recovery: true), ct: TestContext.Current.CancellationToken);
+
+        Assert.True(result);
+        Assert.False(user.TotpEnabled);
+        Assert.NotEqual("stamp-before", user.SecurityStamp);
+        await _repoMock.Received(1).ReplaceTotpRecoveryCodesAsync(1, stored, "[]", Arg.Any<CancellationToken>());
+        await _auditMock.Received(1).LogAsync("RecoveryCodeUsed", "User", 1, "admin", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DisableTotpAsync_WrongPasswordWithRecoveryCode_DoesNotConsumeTheCode()
+    {
+        var (user, _) = TotpUser("mypassword");
+        user.TotpRecoveryCodes = JsonSerializer.Serialize(new List<string> { BCrypt.Net.BCrypt.HashPassword("ABCDE12345") });
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.DisableTotpAsync(1, Disable("wrong", "ABCDE-12345", recovery: true), ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        await _repoMock.DidNotReceive().ReplaceTotpRecoveryCodesAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static TotpDisableRequest Disable(string password, string code, bool recovery = false)
+        => new() { Password = password, Code = code, UseRecoveryCode = recovery };
+
+    // An account with 2FA on, its password, and the authenticator code valid at FixedNow.
+    private static (User User, string Code) TotpUser(string password)
+    {
+        var secret = KeyGeneration.GenerateRandomKey(20);
+        var user = new User
+        {
+            Id = 1,
+            Username = "admin",
+            TotpEnabled = true,
+            TotpSecret = $"enc:{Base32Encoding.ToString(secret)}",
+            TotpRecoveryCodes = "[\"hash1\"]",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            SecurityStamp = "stamp-before"
+        };
+        return (user, new Totp(secret, step: 30, totpSize: 6).ComputeTotp(FixedNow.UtcDateTime));
     }
 
     // --- ConsumeRecoveryCodeAsync ---

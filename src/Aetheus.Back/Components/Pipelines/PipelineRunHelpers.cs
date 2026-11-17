@@ -327,7 +327,7 @@ public static partial class PipelineRunHelpers
         if (string.Equals(stepDef.Type, "publish-observability", StringComparison.OrdinalIgnoreCase))
             referenceText += "\nAETHEUS_NUGET_SIGNING_PFX_BASE64\nAETHEUS_NUGET_SIGNING_PFX_PASSWORD"
                 + "\nAETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT"
-                + "\nAETHEUS_PACKAGE_BASE_URL\nAETHEUS_PACKAGE_TOKEN";
+                + "\nAETHEUS_PACKAGE_BASE_URL";
         // A `checkout: true` step runs the auto-injected git-clone preamble, which references the
         // git credential vars even though the user's shell text never mentions them.
         if (stepDef.Checkout)
@@ -394,6 +394,31 @@ public static partial class PipelineRunHelpers
         stepRun.FailureReason = failureReason.Length <= 2048
             ? failureReason
             : failureReason[..2048];
+    }
+
+    /// <summary>
+    /// A step that only declares <c>checkout: true</c> (no command, no type, no environment sample) has nothing to
+    /// run: the clone of the exact revision is the run preparation's, done before any stage (recette R-39).
+    /// </summary>
+    internal static bool IsCheckoutOnlyStep(PipelineStepDefinition stepDef) =>
+        stepDef.Checkout
+        && string.IsNullOrWhiteSpace(stepDef.Shell)
+        && string.IsNullOrWhiteSpace(stepDef.Type)
+        && string.IsNullOrWhiteSpace(stepDef.EnvTemplate);
+
+    /// <summary>
+    /// Finishes a checkout-only step without a task, honestly: it is a success that did no work of its own, with the
+    /// code that says the preparation already did it, so the front draws it as skipped and never as a green tick for
+    /// a checkout it did not make.
+    /// </summary>
+    internal static void MarkCheckoutDoneByPreparation(PipelineStepRun stepRun, int serverId, DateTime at)
+    {
+        stepRun.ServerId = serverId;
+        stepRun.Status = TaskExecutionStatus.Success;
+        stepRun.ExitCode = 0;
+        stepRun.StartedAt ??= at;
+        stepRun.CompletedAt = at;
+        stepRun.SkippedReason = PipelineStepSkipReasons.CheckoutDoneByPreparation;
     }
 
     /// <summary>True for a full SHA-1 or SHA-256 commit hash - the immutability check the deploy path

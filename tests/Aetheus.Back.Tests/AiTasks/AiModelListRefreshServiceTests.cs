@@ -46,7 +46,7 @@ public sealed class AiModelListRefreshServiceTests
 
     private AiModelListRefreshService Sut(IPostgresLeaderLease? lease = null) => new(
         BackgroundServiceTestKit.ScopeFactory((typeof(IAiTaskRepository), _repo), (typeof(IEncryptionService), _encryption)),
-        new AiModelListReader(_httpFactory, _readerLogger), _clock, _logger, lease);
+        new AiModelListReader(_httpFactory, _readerLogger), _clock, _logger, lease ?? LeaderLeaseDouble.Leader());
 
     private void Due(params AiRunnerProfile[] profiles) =>
         _repo.GetProfilesDueForModelListAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(profiles.ToList());

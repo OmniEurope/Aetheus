@@ -34,7 +34,8 @@ public sealed class NotificationChannelEditDialogBehaviorTests : BunitContext
 
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/notifications/channels", StringComparison.Ordinal));
         Assert.True(Spy.Closed);
-        Assert.Equal(true, Spy.LastResult);
+        // R-10: the dialog closes with the channel the server saved, so the list draws it at once.
+        Assert.Equal(4, Assert.IsType<NotificationChannelDto>(Spy.LastResult).Id);
     }
 
     [Fact]

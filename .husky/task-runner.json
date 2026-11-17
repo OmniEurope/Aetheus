@@ -57,6 +57,16 @@
          ]
       },
       {
+         "name": "main-merged-into-develop",
+         "group": "pre-push",
+         "command": "pwsh",
+         "args": [
+            "-NoProfile",
+            "-File",
+            "scripts/check-main-merged-into-develop.ps1"
+         ]
+      },
+      {
          "name": "quality-precheck",
          "group": "pre-push",
          "command": "pwsh",
@@ -67,47 +77,13 @@
          ]
       },
       {
-         "name": "test-backend",
+         "name": "test-all",
          "group": "pre-push",
-         "command": "dotnet",
+         "command": "pwsh",
          "args": [
-            "test",
-            "--project",
-            "tests/Aetheus.Back.Tests/Aetheus.Back.Tests.csproj",
-            "--no-progress"
-         ]
-      },
-      {
-         "name": "test-agent-core",
-         "group": "pre-push",
-         "command": "dotnet",
-         "args": [
-            "test",
-            "--project",
-            "tests/Aetheus.Agent.Core.Tests/Aetheus.Agent.Core.Tests.csproj",
-            "--no-progress"
-         ]
-      },
-      {
-         "name": "test-front",
-         "group": "pre-push",
-         "command": "dotnet",
-         "args": [
-            "test",
-            "--project",
-            "tests/Aetheus.Front.Tests/Aetheus.Front.Tests.csproj",
-            "--no-progress"
-         ]
-      },
-      {
-         "name": "test-analyzers",
-         "group": "pre-push",
-         "command": "dotnet",
-         "args": [
-            "test",
-            "--project",
-            "tests/Aetheus.Analyzers.Tests/Aetheus.Analyzers.Tests.csproj",
-            "--no-progress"
+            "-NoProfile",
+            "-Command",
+            "& { $env:UseLocalOmniEurope = 'false'; & ./launch-windows.ps1 -ta; exit $LASTEXITCODE }"
          ]
       }
    ]

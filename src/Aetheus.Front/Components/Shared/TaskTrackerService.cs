@@ -30,6 +30,16 @@ public sealed class TaskTrackerService : IAsyncDisposable
     private readonly object _gate = new();
     private readonly Dictionary<int, ServerTaskDto> _byId = [];
 
+    // Pushes received while a read of /api/tasks/active is in flight. That read is a snapshot of the moment
+    // the server answered it, so applying it as-is would erase a task pushed (TaskQueued) after the server
+    // read its rows but before the answer arrived, and nothing would ever bring that task back. They are
+    // kept only while at least one read runs, and replayed in order on top of the snapshot.
+    private readonly List<(long Sequence, int TaskId, PushedChange Kind, ServerTaskDto? Task, DateTime? StartedAt)> _pushedDuringSeed = [];
+    private int _seedsInFlight;
+    private long _pushSequence;
+
+    private enum PushedChange { Upsert, Running, Remove }
+
     // Drives the initial-connect retry loop (see ScheduleInitialRetry) - cancelled whenever the hub
     // is torn down (StopAsync) so a superseded retry attempt never races a fresh one.
     private CancellationTokenSource? _startRetryCts;
@@ -283,6 +293,12 @@ public sealed class TaskTrackerService : IAsyncDisposable
 
     private async Task SeedActiveAsync(CancellationToken ct)
     {
+        long startedAtSequence;
+        lock (_gate)
+        {
+            _seedsInFlight++;
+            startedAtSequence = _pushSequence;
+        }
         try
         {
             var active = await _api.Pipelines.GetActiveTasksAsync(ct).ConfigureAwait(false);
@@ -291,6 +307,28 @@ public sealed class TaskTrackerService : IAsyncDisposable
                 _byId.Clear();
                 foreach (var t in active)
                     _byId[t.Id] = t;
+                // What was pushed while the read ran is as new as, or newer than, what the read returned.
+                foreach (var (sequence, taskId, kind, task, startedAt) in _pushedDuringSeed)
+                {
+                    if (sequence <= startedAtSequence) continue;
+                    switch (kind)
+                    {
+                        case PushedChange.Upsert:
+                            _byId[taskId] = task!;
+                            break;
+                        case PushedChange.Running:
+                            if (_byId.TryGetValue(taskId, out var existing))
+                                _byId[taskId] = existing with
+                                {
+                                    Status = TaskExecutionStatus.Running,
+                                    StartedAt = startedAt ?? existing.StartedAt
+                                };
+                            break;
+                        default:
+                            _byId.Remove(taskId);
+                            break;
+                    }
+                }
             }
             OnChanged?.Invoke();
         }
@@ -298,12 +336,30 @@ public sealed class TaskTrackerService : IAsyncDisposable
         {
             _logger.LogWarning(ex, "[TaskTracker] SeedActiveAsync failed");
         }
+        finally
+        {
+            lock (_gate)
+            {
+                if (--_seedsInFlight == 0)
+                    _pushedDuringSeed.Clear();
+            }
+        }
+    }
+
+    // Called under _gate by every push handler: remembered only while a read of the active list runs.
+    private void RememberPush(int taskId, PushedChange kind, ServerTaskDto? task = null, DateTime? startedAt = null)
+    {
+        if (_seedsInFlight == 0) return;
+        _pushedDuringSeed.Add((++_pushSequence, taskId, kind, task, startedAt));
     }
 
     internal void Upsert(ServerTaskDto task)
     {
         lock (_gate)
+        {
             _byId[task.Id] = task;
+            RememberPush(task.Id, PushedChange.Upsert, task);
+        }
         OnChanged?.Invoke();
     }
 
@@ -311,6 +367,7 @@ public sealed class TaskTrackerService : IAsyncDisposable
     {
         lock (_gate)
         {
+            RememberPush(taskId, PushedChange.Running, startedAt: startedAt);
             if (!_byId.TryGetValue(taskId, out var existing)) return;
             _byId[taskId] = existing with
             {
@@ -325,7 +382,10 @@ public sealed class TaskTrackerService : IAsyncDisposable
     {
         bool removed;
         lock (_gate)
+        {
             removed = _byId.Remove(notification.TaskId);
+            RememberPush(notification.TaskId, PushedChange.Remove);
+        }
         if (removed) OnChanged?.Invoke();
         OnTaskCompleted?.Invoke(notification);
     }

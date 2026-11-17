@@ -29,7 +29,7 @@ variables:
   APPLICATION_QUALITY_COVERAGE_REPORT: "false"
   APPLICATION_QUALITY_LINT_REPORT: "false"
   # Published by the Find pinned SDK stage.
-  APPLICATION_DOTNET_PINNED: "false"
+  APPLICATION_DOTNET_SDK_NEEDED: "false"
   APPLICATION_QUALITY_COMMANDS: |
     # Default quality of a .NET repository: the tests of every solution it holds, run once more with line
     # coverage collected by Microsoft's dotnet-coverage (it needs nothing in the test projects), merged into the
@@ -62,6 +62,33 @@ variables:
     "$DOTNET" tool install dotnet-coverage --version 18.12.0 --tool-path "$TOOLS"
     TEST_RUNNER=vstest
     if grep -qs 'Microsoft.Testing.Platform' global.json; then TEST_RUNNER=mtp; fi
+    # Runs one test command. Its output streams to the log as usual (a copy is kept); when it fails, the tests
+    # that failed (name and message, as the runner printed them) are repeated at the end of the step, each line
+    # marked ERROR so the run page's failed-step card shows them: the runner prints a failure where it happens,
+    # far above the summary, and the card otherwise holds only the exit code (recette R-72). The exit code is
+    # the runner's own.
+    run_tests() {
+      TEST_LOG="$(mktemp)"
+      TEST_RC="$TEST_LOG.rc"
+      { if "$@"; then echo 0 > "$TEST_RC"; else echo "$?" > "$TEST_RC"; fi; } | tee "$TEST_LOG"
+      TEST_STATUS="$(cat "$TEST_RC")"
+      if test "$TEST_STATUS" -ne 0; then
+        echo "ERROR The tests that failed (repeated from the run above):" >&2
+        # show 1: a Microsoft.Testing.Platform block ("failed Name (3ms)", message indented, ends at the first
+        # stack frame or unindented line); show 2: a VSTest block ("  Failed Name [3 ms]", ends at its stack trace).
+        awk '
+          /^(failed|error|timeout|canceled) / { count++; show = (count <= 20) ? 1 : 0; if (show) print "ERROR " $0; next }
+          /^ +Failed [^ ]/ { count++; show = (count <= 20) ? 2 : 0; if (show) print "ERROR " $0; next }
+          show == 1 && /^ +from / { next }
+          show == 1 && (/^ +at / || /^[^ ]/) { show = 0; next }
+          show == 2 && /^ +Stack Trace:/ { show = 0; next }
+          show && NF { print "ERROR " $0 }
+          END { if (count > 20) print "ERROR " (count - 20) " more failed test(s) are not repeated here: see the run above." }
+        ' "$TEST_LOG" >&2
+      fi
+      rm -f "$TEST_LOG" "$TEST_RC"
+      return "$TEST_STATUS"
+    }
     printf '%s\n' "$SOLUTIONS" | while IFS= read -r SOLUTION; do
       echo ">>> $SOLUTION"
       "$DOTNET" restore "$SOLUTION" -p:Configuration=Release
@@ -112,10 +139,10 @@ variables:
         REPORT="$RAW/coverage-$(printf '%s' "$PROJECT" | tr -c 'A-Za-z0-9' '_').cobertura.xml"
         TEST_STATUS=0
         if test "$TEST_RUNNER" = mtp; then
-          "$TOOLS/dotnet-coverage" collect --nologo --output-format cobertura --settings "$SETTINGS" --output "$REPORT" \
+          run_tests "$TOOLS/dotnet-coverage" collect --nologo --output-format cobertura --settings "$SETTINGS" --output "$REPORT" \
             "$DOTNET" test --project "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
         else
-          "$TOOLS/dotnet-coverage" collect --nologo --output-format cobertura --settings "$SETTINGS" --output "$REPORT" \
+          run_tests "$TOOLS/dotnet-coverage" collect --nologo --output-format cobertura --settings "$SETTINGS" --output "$REPORT" \
             "$DOTNET" test "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
         fi
         # Exit code 8 of Microsoft.Testing.Platform: the project holds no test. Said, never reported as a pass.
@@ -161,7 +188,8 @@ stages:
           root: "."
 
   # The SDK global.json pins, resolved as the platform's own quality pipeline does (ensure-dotnet-sdk): a
-  # runner without .NET installs it under the agent's home. Without global.json, the dotnet of the PATH.
+  # runner without .NET installs it under the agent's home. Without global.json, a .NET repository gets the
+  # SDK channel of its TargetFramework (R-30); one with no .NET file keeps the dotnet of the PATH.
   - name: Find pinned SDK
     group: Quality
     execution_role: build
@@ -170,14 +198,17 @@ stages:
     steps:
       - name: Look for the SDK manifest
         working_directory: "$(WORKSPACE)"
-        outputs: [APPLICATION_DOTNET_PINNED]
+        outputs: [APPLICATION_DOTNET_SDK_NEEDED]
         shell: |
           set -eu
           if test -s global.json && grep -q '"version"' global.json; then
-            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]true"
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]true"
+          elif find . -maxdepth 4 \( -name node_modules -o -name .git -o -name bin -o -name obj \) -prune -o \( -name '*.csproj' -o -name '*.fsproj' -o -name '*.vbproj' -o -name '*.sln' -o -name '*.slnx' -o -name Directory.Build.props \) -print | grep -q .; then
+            echo "No global.json pins an SDK: the SDK channel of the repository's TargetFramework is provided."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]true"
           else
-            echo "No global.json pins an SDK: the dotnet of the runner's PATH is used."
-            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]false"
+            echo "No global.json and no .NET project: the dotnet of the runner's PATH is used."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_SDK_NEEDED]false"
           fi
         timeout_seconds: 60
 
@@ -186,11 +217,13 @@ stages:
     execution_role: build
     os: linux
     depends_on: [Find pinned SDK]
-    condition: "eq(variables['APPLICATION_DOTNET_PINNED'], 'true')"
+    condition: "eq(variables['APPLICATION_DOTNET_SDK_NEEDED'], 'true')"
     steps:
       - name: Resolve the pinned .NET SDK
         type: aetheus
         function: ensure-dotnet-sdk
+        with:
+          project_root: "."
         timeout_seconds: 900
 
   - name: Restore CI evidence
@@ -287,6 +320,67 @@ stages:
         scanner: pmd-java
         timeout_seconds: 1200
 
+  # Duplication (recette R-21): the platform measures it with jscpd, which it runs from node_modules/jscpd of the
+  # workspace (the scanner manifest names that path), a locked npm tool of the project. A repository of any
+  # language does not carry it, so it is installed here, at the exact version the platform's own quality pipeline
+  # locks (jscpd 5 is a native binary: one wrapper package and the binary package of the platform, no other
+  # dependency), without lifecycle scripts, beside the sources and never saved in them; a project that already
+  # installs jscpd keeps its own. Both stages run in the Docker-visible container workspace, as the platform's own
+  # quality pipeline does for its JavaScript analysis: the installation has the network, the scanner none. After
+  # every other container stage, never beside one (the container steps of one run share one workspace).
+  - name: Install duplication detector
+    group: Quality
+    execution_role: build
+    os: linux
+    isolation:
+      mode: container
+      image: "node:24.4.1-alpine@sha256:820e86612c21d0636580206d802a726f2595366e1b867e564cbc652024151e8a"
+      shell: sh
+      network: bridge
+      memory: 2g
+      cpus: "2.0"
+    depends_on: [Lint source]
+    steps:
+      - name: Install the pinned jscpd
+        shell: |
+          set -eu
+          INSTALL="$(mktemp -d)"
+          HOME="$INSTALL"
+          export HOME
+          npm install --prefix "$INSTALL" --cache "$INSTALL/cache" --ignore-scripts --no-audit --no-fund --no-package-lock \
+            --fetch-retries=2 --fetch-timeout=60000 jscpd@5.4.2
+          # Merged entry by entry without overwriting: a jscpd the project installs itself stays the project's.
+          # BusyBox `cp -an "$INSTALL/node_modules/." node_modules/` copies nothing and still exits 0 (recette R-27).
+          mkdir -p node_modules
+          for entry in "$INSTALL"/node_modules/* "$INSTALL"/node_modules/.[!.]*; do
+            [ -e "$entry" ] || continue
+            name="${entry##*/}"
+            [ -e "node_modules/$name" ] || cp -a "$entry" node_modules/
+          done
+          ls node_modules/jscpd/run-jscpd.js >/dev/null || { echo "jscpd was installed without its launcher." >&2; exit 1; }
+          echo "jscpd is in node_modules."
+        timeout_seconds: 600
+
+  - name: Check duplication
+    group: Quality
+    execution_role: build
+    os: linux
+    isolation:
+      mode: container
+      image: "node:24.4.1-alpine@sha256:820e86612c21d0636580206d802a726f2595366e1b867e564cbc652024151e8a"
+      shell: sh
+      network: none
+      memory: 2g
+      cpus: "2.0"
+    depends_on: [Install duplication detector]
+    steps:
+      # jscpd reads the C#, JavaScript, TypeScript, Python and Java sources; a repository with none of them gets the
+      # scanner's own "not applicable" report, and the grade lists the duplication as not measured.
+      - name: Measure duplication
+        type: scanner
+        scanner: jscpd
+        timeout_seconds: 1200
+
   # Every rule is required and every domain counts (owner decision of 2026-10-25, recette R-73 and R-74,
   # ADR-030 amendment of that date): coverage, duplication and complexity keep their own thresholds, being
   # measures and not findings, and the architecture is graded on its findings. A measure whose step was
@@ -297,13 +391,15 @@ stages:
   # application-security: no open finding is an A, the first one costs the A whatever its severity (one rule
   # per severity, so the lines add up to the findings of the run), then the grade falls with the severity,
   # never to an E: info, low and medium (B up to 5, C from 6, never worse), high (a D from the first one,
-  # whatever the count), critical (F). The duplication has no producer in this template (jscpd is the
-  # project's own npm tool): it shows as missing until the project adds one.
+  # whatever the count), critical (F). Every ladder is written to its fifth threshold, with 1000000 for the ones
+  # that stop (the grade they keep): the production backend of the platform refused a ladder that stops short, and
+  # with it the whole grading (2026-10-27). The duplication is measured by the two stages above: it
+  # shows as missing only for a repository with no C#, JavaScript, TypeScript, Python or Java source.
   - name: Grade quality
     group: Quality
     execution_role: build
     os: linux
-    depends_on: [Lint source]
+    depends_on: [Check duplication]
     steps:
       - name: Publish summaries and calculate the versioned quality grade
         type: analysis-gate
@@ -356,6 +452,18 @@ stages:
               c: 25
               d: 35
               e: 50
+            # The cycles between the project's assemblies, a measure of the same complexity step as the maximum above
+            # (a repository the step cannot read leaves it missing, listed by the Gate tab).
+            - key: grade.architecture.cycles
+              domain: architecture
+              metric: architecture.cycles
+              category: architecture
+              direction: lower-is-better
+              a: 0
+              b: 1
+              c: 2
+              d: 4
+              e: 8
             - key: grade.architecture.critical
               domain: architecture
               severity: critical
@@ -374,6 +482,8 @@ stages:
               a: 0
               b: 0
               c: 0
+              d: 1000000
+              e: 1000000
             - key: grade.architecture.medium
               domain: architecture
               severity: medium
@@ -381,6 +491,9 @@ stages:
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
             - key: grade.architecture.low
               domain: architecture
               severity: low
@@ -388,6 +501,9 @@ stages:
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
             - key: grade.architecture.info
               domain: architecture
               severity: info
@@ -395,4 +511,7 @@ stages:
               direction: lower-is-better
               a: 0
               b: 5
+              c: 1000000
+              d: 1000000
+              e: 1000000
         timeout_seconds: 300

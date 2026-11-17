@@ -7,7 +7,9 @@ namespace Aetheus.Back.Components.PackageFeeds;
 
 /// <summary>
 /// Resolves latest package versions against real registries (NuGet, npm, PyPI, Maven) over the SSRF-guarded
-/// "package-feeds" HttpClient. Docker / Generic have no resolver yet and return Unsupported.
+/// "package-feeds" HttpClient. Docker / Generic have no resolver yet and return Unsupported, and so does the
+/// latest version of a Packagist package: Composer's order of versions lives in VulnerabilityWatch, a layer this
+/// one sits below, and the registry's own order is not a documented guarantee. Packagist is listed (<see cref="ListVersionsAsync"/>).
 /// </summary>
 public sealed class PackageVersionResolver(
     IHttpClientFactory httpClientFactory,
@@ -15,6 +17,8 @@ public sealed class PackageVersionResolver(
     TimeProvider timeProvider)
     : IPackageVersionResolver
 {
+    private readonly PackageVersionLister lister = new(httpClientFactory, logger, timeProvider);
+
     public async Task<PackageResolveResult> ResolveLatestAsync(
         PackageFeedType feedType, string upstreamUrl, string packageName, CancellationToken ct = default)
     {
@@ -43,6 +47,10 @@ public sealed class PackageVersionResolver(
             return new PackageResolveResult(PackageResolveOutcome.Error, null, null);
         }
     }
+
+    public Task<PackageVersionListResult> ListVersionsAsync(
+        PackageFeedType feedType, string upstreamUrl, string packageName, CancellationToken ct = default)
+        => lister.ListAsync(feedType, upstreamUrl, packageName, ct);
 
     private HttpClient Client() => httpClientFactory.CreateClient("package-feeds");
 
@@ -180,38 +188,15 @@ public sealed class PackageVersionResolver(
         HttpResponseMessage response,
         out PackageResolveResult result)
     {
-        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        if (RegistryResponses.EarlyOutcome(response, timeProvider) is not { } settled)
         {
-            result = RateLimited(response);
-            return true;
+            result = default!;
+            return false;
         }
 
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            result = new PackageResolveResult(PackageResolveOutcome.NotFound, null, null);
-            return true;
-        }
-
-        response.EnsureSuccessStatusCode();
-        result = default!;
-        return false;
+        result = new PackageResolveResult(settled.Outcome, null, null, settled.RetryAfter);
+        return true;
     }
 
-    private PackageResolveResult RateLimited(HttpResponseMessage response)
-    {
-        var retry = response.Headers.RetryAfter?.Delta;
-        if (retry is null && response.Headers.RetryAfter?.Date is { } retryAt)
-            retry = retryAt - timeProvider.GetUtcNow();
-        if (retry <= TimeSpan.Zero)
-            retry = null;
-        return new PackageResolveResult(PackageResolveOutcome.RateLimited, null, null, retry);
-    }
-
-    private static string? ResolveOrigin(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url)) return null;
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != "https" && uri.Scheme != "http"))
-            return null;
-        return uri.IsDefaultPort ? $"{uri.Scheme}://{uri.Host}" : $"{uri.Scheme}://{uri.Host}:{uri.Port}";
-    }
+    private static string? ResolveOrigin(string? url) => RegistryResponses.ResolveOrigin(url);
 }

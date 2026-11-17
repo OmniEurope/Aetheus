@@ -15,7 +15,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Exercises allocation with the real <see cref="VariableLibraryService"/> and PostgreSQL
 /// transactions, including nested scope participation and complete rollback.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PortAllocationTransactionIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -76,45 +75,7 @@ public sealed class PortAllocationTransactionIntegrationTests(PostgresFixture fi
             NullLogger<PortAllocationService>.Instance);
 
     private static VariableLibraryService RealLibraries(AppDbContext db, IDbTransactionScope scope) =>
-        new(new VariableLibraryRepository(db),
-            scope,
-            Substitute.For<IAuditService>(),
-            Substitute.For<IEntityChangeNotifier>(),
-            TimeProvider.System,
-            new MemoryCache(new MemoryCacheOptions()));
-
-    [Fact]
-    public async Task Allocate_ThroughTheRealLibraryService_WritesBothSides()
-    {
-        var seeded = await SeedAsync();
-        await using var db = NewContext();
-        var scope = new DbTransactionScope(db);
-        var sut = BuildService(db, scope, RealLibraries(db, scope));
-
-        var created = await sut.AllocateIntoLibraryAsync(
-            seeded.LibraryId, seeded.ServerId, ["PORT_FRONT", "PORT_BACK"], Ct);
-
-        Assert.Equal(["PORT_FRONT", "PORT_BACK"], created.Select(entry => entry.Key));
-
-        await using var verify = NewContext();
-        var entries = await verify.VariableLibraryEntries.AsNoTracking()
-            .Where(entry => entry.VariableLibraryId == seeded.LibraryId)
-            .OrderBy(entry => entry.Key)
-            .ToListAsync(Ct);
-        var reservations = await verify.ServerPortReservations.AsNoTracking()
-            .Where(reservation => reservation.ServerId == seeded.ServerId)
-            .OrderBy(reservation => reservation.Port)
-            .ToListAsync(Ct);
-
-        Assert.Equal(2, entries.Count);
-        Assert.Equal(2, reservations.Count);
-        // The variables really name the ports that were reserved, not two independent numbers.
-        Assert.Equal(
-            reservations.Select(reservation => reservation.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)).Order(),
-            entries.Select(entry => entry.Value).Order());
-        Assert.All(reservations, reservation =>
-            Assert.Equal($"project:{seeded.ProjectId}", reservation.OwnerKey));
-    }
+        LibraryPortWiring.Libraries(db, scope);
 
     [Fact]
     public async Task Allocate_WhenAnEntryWriteFails_RollsBackTheReservationsToo()

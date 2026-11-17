@@ -9,7 +9,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// unit test runs on the InMemory provider; this runs the grouped query (nullable key, Max per group
 /// over two tables) on PostgreSQL, where a translation failure would only surface in production.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AppMetricGroupsIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

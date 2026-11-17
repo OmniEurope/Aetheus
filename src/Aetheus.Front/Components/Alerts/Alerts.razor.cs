@@ -15,11 +15,16 @@ public partial class Alerts : IAsyncDisposable
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private AlertNotificationService AlertNotify { get; set; } = default!;
 
+    // The rules API answers the whole list: the page holds it, and the grid's window (sort, column filters
+    // and page cut here, as the grid asks) is what is drawn. The list is read again only when it is stale
+    // (first load, after a change, after a failed read), never for a sort, a filter or a scroll.
     private List<AlertRuleDto> _alerts = [];
+    private List<AlertRuleDto> _rules = [];
+    private int _ruleCount;
+    private bool _rulesStale = true;
     private IReadOnlyList<AlertTriggeredDto> _recent = [];
     private AetheusDataGrid<AlertTriggeredDto>? _recentGrid;
     private AetheusDataGrid<AlertRuleDto>? _rulesGrid;
-    private bool _loading = true;
 
     // Header filter texts, built once so the columns see the same delegate on every render.
     private Func<string, string>? _severityText;
@@ -40,14 +45,26 @@ public partial class Alerts : IAsyncDisposable
         // Re-render when a new fired alert lands so the "Recent alerts" section stays live.
         _recent = AlertNotify.Recent;
         AlertNotify.OnChange += OnRecentAlertsChanged;
-        try { _alerts = await Api.Monitoring.GetAlertRulesAsync(); }
-        catch (HttpRequestException) { _alerts = []; }
-        _loading = false;
-        // The rules are drawn as soon as they are read: the hub below only refreshes them, and
-        // ComponentBase would otherwise hold this render until the hub has started or failed (a
-        // negotiate that never answers kept the grid loading).
-        StateHasChanged();
+        // The rules are the grid's own first request (LoadData); the hub below only refreshes them.
         await ConnectToHub();
+    }
+
+    private async Task LoadRulesAsync(GridLoadArgs args)
+    {
+        if (_rulesStale)
+        {
+            _alerts = await Api.Monitoring.GetAlertRulesAsync();
+            _rulesStale = false;
+        }
+        _rules = args.ToClientPage(_alerts);
+        _ruleCount = args.ClientFilteredCount(_alerts);
+    }
+
+    /// <summary>One page of the export, cut from a fresh read of the list with the grid's sort and column filters.</summary>
+    private async Task<PaginatedResult<AlertRuleDto>> ReadRulesExportAsync(GridLoadArgs args)
+    {
+        var all = await Api.Monitoring.GetAlertRulesAsync();
+        return new PaginatedResult<AlertRuleDto> { Items = args.ToClientPage(all), TotalCount = args.ClientFilteredCount(all) };
     }
 
     // The grid takes note of the rows it holds before the new list lands, so the alert that just
@@ -63,6 +80,10 @@ public partial class Alerts : IAsyncDisposable
     {
         if (alert.OccurrenceId is { } id) Nav.NavigateTo($"/alerts/{id}");
     }
+
+    // The triggered-alert DTO carries the severity as a string: localize it through the AlertSeverity enum, never show it raw.
+    private string RecentSeverityText(string severity) =>
+        Enum.TryParse<AlertSeverity>(severity, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? L.Localize(parsed) : severity;
 
     private static OmniTone RecentSeverityBadge(string severity) => severity?.ToLowerInvariant() switch
     {
@@ -98,10 +119,10 @@ public partial class Alerts : IAsyncDisposable
     {
         try
         {
-            var alerts = await Api.Monitoring.GetAlertRulesAsync();
-            // Before the rows change, so a rule created elsewhere reads bold.
+            _alerts = await Api.Monitoring.GetAlertRulesAsync();
+            _rulesStale = false;
+            // The grid cuts its window from the new list and notes the rule created elsewhere, which reads bold.
             if (_rulesGrid is not null) await _rulesGrid.Refresh();
-            _alerts = alerts;
         }
         catch (HttpRequestException) { /* hub-triggered reload - silent on auth failure */ }
         StateHasChanged();
@@ -119,24 +140,34 @@ public partial class Alerts : IAsyncDisposable
             new Dictionary<string, object?> { ["Alert"] = alert },
             new OmniDialogOptions { Width = "720px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
 
-        if (result is true)
+        // R-10: the rule shows as the server answered it, the read behind it confirms.
+        if (result is AlertRuleDto saved)
         {
-            try { _alerts = await Api.Monitoring.GetAlertRulesAsync(); }
-            catch (HttpRequestException) { /* expired JWT - redirect handled by AuthProvider */ }
-            StateHasChanged();
+            _rulesStale = true;
+            if (_rulesGrid is not null) await _rulesGrid.ShowRowAsync(saved);
+        }
+        else if (result is true)
+        {
+            _rulesStale = true;
+            if (_rulesGrid is not null) await _rulesGrid.RestoreRowsAsync();
         }
     }
 
-    private async Task DeleteAlert(int id)
+    private async Task DeleteAlert(AlertRuleDto alert)
     {
         var confirmed = await Dialog.Confirm(L["DeleteConfirm"].Value, L["Delete"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
         await Veil.RunAsync(() => Ui.RunAsync(
-            () => Api.Monitoring.DeleteAlertRuleAsync(id),
+            () => Api.Monitoring.DeleteAlertRuleAsync(alert.Id),
             "Deleted",
-            async () => _alerts = await Api.Monitoring.GetAlertRulesAsync(),
+            async () =>
+            {
+                // R-10: the rule leaves the grid at once, the quiet read behind it confirms.
+                _rulesStale = true;
+                if (_rulesGrid is not null) await _rulesGrid.HideRowAsync(alert);
+            },
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
     }

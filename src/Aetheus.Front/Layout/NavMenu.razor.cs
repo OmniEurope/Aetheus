@@ -12,10 +12,19 @@ public partial class NavMenu : IDisposable
     [Inject] private AlertNotificationService AlertNotify { get; set; } = default!;
     [Inject] private UserNotificationService UserNotify { get; set; } = default!;
     [Inject] private ProjectNavContextService ProjectNav { get; set; } = default!;
+    [Inject] private QualityChangeNotifier QualityChange { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private AppDialogs Dialog { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private ServerDetailLoader ServerLoader { get; set; } = default!;
+    [Inject] private ApiClient Api { get; set; } = default!;
+
+    // The per-project quality summary behind the Quality badges of the menus (R-16, R-17); empty until loaded.
+    private List<AnalysisPortfolioProjectDto> _qualityProjects = [];
+
+    // R-7: the per-server quality (host system vulnerabilities) behind the Quality badges of the Servers menu. Separate from
+    // the projects' summary: a server's grade never feeds a project's badge, nor the other way round.
+    private List<ServerQualityDto> _qualityServers = [];
 
 
     /// <summary>A page of the Administration section: every one for a site Admin, those its permissions open
@@ -35,8 +44,44 @@ public partial class NavMenu : IDisposable
         Permissions.OnPermissionsChanged += OnEffectivePermissionsChanged;
         ProjectNav.OnChanged += OnProjectCtxChanged;
         ServerLoader.OnChanged += OnServerLoaderChanged;
+        QualityChange.OnChanged += OnQualityChanged;
         await AlertNotify.StartAsync();
         await UserNotify.StartAsync();
+        await LoadQualityAsync();
+    }
+
+    /// <summary>Reads the portfolio summary of the projects the user can see. Best effort: a failed read leaves
+    /// the Quality entries without badge, it never blocks the menu.</summary>
+    private async Task LoadQualityAsync()
+    {
+        if (Permissions.CanReadAny(ResourceType.Project))
+        {
+            try
+            {
+                _qualityProjects = await Api.Analysis.GetAnalysisPortfolioProjectsAsync();
+            }
+            catch (HttpRequestException)
+            {
+                _qualityProjects = [];
+            }
+        }
+
+        await LoadServerQualityAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>R-7: reads the grade of the servers the user can see. Best effort, like the projects' summary.</summary>
+    private async Task LoadServerQualityAsync()
+    {
+        if (!Permissions.CanReadAny(ResourceType.Server)) return;
+        try
+        {
+            _qualityServers = await Api.Security.GetHostQualityAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _qualityServers = [];
+        }
     }
 
     // An admin changed this user's roles/orgs/role-permissions: block the UI with a non-dismissable
@@ -85,6 +130,10 @@ public partial class NavMenu : IDisposable
 
     private void OnProjectCtxChanged() => InvokeAsync(StateHasChanged);
 
+    // A finding was decided or reopened: the grade the badges show may have moved, re-read it now so the menu keeps
+    // agreeing with the project overview and the Quality page, which read the same grade.
+    private void OnQualityChanged() => _ = LoadQualityAsync();
+
     // The server loader refreshes on every heartbeat, which can install or remove the mail stack.
     private void OnServerLoaderChanged() => InvokeAsync(StateHasChanged);
 
@@ -105,10 +154,17 @@ public partial class NavMenu : IDisposable
         ["admin"] = ["admin", "users", "audit", "plugins", "dashboards", "api-reference"],
     };
 
+    private const string PlannerPath = "pipelines/schedule";
+
     private bool IsOnSection(string section)
     {
         if (!SectionPaths.TryGetValue(section, out var paths))
             return _currentPath.StartsWith(section, StringComparison.OrdinalIgnoreCase);
+
+        // R-36: the planner (pipelines/schedule) is an entry of its own, not part of Projects.
+        if (section.Equals("projects", StringComparison.OrdinalIgnoreCase)
+            && _currentPath.StartsWith(PlannerPath, StringComparison.OrdinalIgnoreCase))
+            return false;
 
         foreach (var p in paths)
         {
@@ -129,6 +185,7 @@ public partial class NavMenu : IDisposable
         || Permissions.CanReadAny(ResourceType.ServiceConnection);
 
     private static readonly System.Text.RegularExpressions.Regex ProjectIdRegex = new(@"^projects/(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex ProjectOverviewPathRegex = new(@"^projects/\d+/?(?:overview)?/?(?:[?#].*)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static readonly System.Text.RegularExpressions.Regex ServerIdRegex = new(@"^servers/(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     private static readonly System.Text.RegularExpressions.Regex GitRepoProjectIdRegex = new(@"^git-repositories(?:/\d+)?\?(?:[^&]*&)*projectId=(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
@@ -164,10 +221,45 @@ public partial class NavMenu : IDisposable
         _currentPath = GetRelativePath();
         if (_currentPath.StartsWith("alerts", StringComparison.OrdinalIgnoreCase))
             AlertNotify.ClearUnread();
-        _ = InvokeAsync(StateHasChanged);
+        // The badges follow the pages that show a grade: the quality pages and the project overview (its "Grade" row)
+        // re-read the summary, so the menu and the overview agree.
+        if (_currentPath.StartsWith("analysis", StringComparison.OrdinalIgnoreCase)
+            || _currentPath.StartsWith("servers/quality", StringComparison.OrdinalIgnoreCase)
+            || _currentPath.EndsWith("/quality", StringComparison.OrdinalIgnoreCase)
+            || ProjectOverviewPathRegex.IsMatch(_currentPath))
+            _ = LoadQualityAsync();
+        else
+            _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnAlertCountChanged() => InvokeAsync(StateHasChanged);
+
+    // R-6: the Quality entry of a project shows its grade letter, never a red badge in its place; an open critical
+    // finding is counted in the grade itself (R-7).
+    private RenderFragment? ProjectQualityBadge(int projectId) =>
+        GradeBadgeFor(_qualityProjects.FirstOrDefault(candidate => candidate.ProjectId == projectId)?.Grade?.OverallGrade);
+
+    // R-6: the main Quality entry shows the lowest grade among the projects.
+    private RenderFragment? MainQualityBadge() => GradeBadgeFor(QualityMenuStatus.LowestGrade(_qualityProjects));
+
+    // R-7: the Servers menu and its Quality entry show the lowest grade among the servers; a server's own Quality entry,
+    // its grade. Never a project's.
+    private RenderFragment? ServersQualityBadge() => GradeBadgeFor(QualityMenuStatus.LowestServerGrade(_qualityServers));
+
+    private RenderFragment? ServerQualityBadge(int serverId) =>
+        GradeBadgeFor(_qualityServers.FirstOrDefault(candidate => candidate.ServerId == serverId)?.Grade);
+
+    private RenderFragment? GradeBadgeFor(AnalysisGrade? grade)
+    {
+        if (grade is not { } value) return null;
+        return builder =>
+        {
+            builder.OpenComponent<GradeBadge>(0);
+            builder.AddComponentParameter(1, nameof(GradeBadge.Value), (AnalysisGrade?)value);
+            builder.AddComponentParameter(2, nameof(GradeBadge.Title), L["AnalysisGlobalGrade"].Value);
+            builder.CloseComponent();
+        };
+    }
 
     private static RenderFragment IconFor(string material) => builder =>
     {
@@ -185,5 +277,6 @@ public partial class NavMenu : IDisposable
         Permissions.OnPermissionsChanged -= OnEffectivePermissionsChanged;
         ProjectNav.OnChanged -= OnProjectCtxChanged;
         ServerLoader.OnChanged -= OnServerLoaderChanged;
+        QualityChange.OnChanged -= OnQualityChanged;
     }
 }

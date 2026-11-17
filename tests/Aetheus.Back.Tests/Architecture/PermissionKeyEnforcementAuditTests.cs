@@ -88,6 +88,11 @@ public sealed partial class PermissionKeyEnforcementAuditTests
         ("Notifications/MailTemplates/MailTemplatesController.cs:Save", nameof(PermissionKeys.OrganizationMailTemplatesManage), "MayEditAsync"),
         ("Notifications/MailTemplates/MailTemplatesController.cs:Reset", nameof(PermissionKeys.OrganizationMailTemplatesManage), "MayEditAsync"),
         ("Notifications/MailTemplates/MailTemplatesController.cs:SendTest", nameof(PermissionKeys.OrganizationMailTemplatesManage), "MayEditAsync"),
+        // R-28: the organization's exclusion rules of the system logs; a Reader reads, a Contributor edits.
+        ("SystemLogs/SystemLogExclusionRulesController.cs:List", nameof(PermissionKeys.OrganizationLogRulesView), null),
+        ("SystemLogs/SystemLogExclusionRulesController.cs:Create", nameof(PermissionKeys.OrganizationLogRulesEdit), null),
+        ("SystemLogs/SystemLogExclusionRulesController.cs:SetEnabled", nameof(PermissionKeys.OrganizationLogRulesEdit), null),
+        ("SystemLogs/SystemLogExclusionRulesController.cs:Delete", nameof(PermissionKeys.OrganizationLogRulesEdit), null),
     ];
 
     [GeneratedRegex(@"\bPermissionKeys\.(\w+)", RegexOptions.CultureInvariant)]
@@ -175,7 +180,8 @@ public sealed partial class PermissionKeyEnforcementAuditTests
                 seen++;
                 var type = Enum.Parse<ResourceType>(match.Groups[1].Value);
                 var level = Enum.Parse<Permission>(match.Groups[2].Value);
-                // Agent pools and the Docker platform belong to no organization: site Admin only, no key.
+                // The Docker platform belongs to no organization (site Admin only); agent pools are granted through
+                // the level model only (R-12): neither has a catalogue key.
                 if (type is ResourceType.AgentPool or ResourceType.Docker)
                     continue;
                 if (PermissionCatalog.LevelKey(type, level) is null)

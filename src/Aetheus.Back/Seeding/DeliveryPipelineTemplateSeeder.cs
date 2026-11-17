@@ -11,9 +11,9 @@ namespace Aetheus.Back.Seeding;
 public sealed class DeliveryPipelineTemplateSeeder(
     AppDbContext db,
     TimeProvider timeProvider,
+    IPostgresLeaderLease lease,
     ILogger<DeliveryPipelineTemplateSeeder>? logger = null,
     IAuditService? audit = null,
-    IPostgresLeaderLease? lease = null,
     IPipelineGitService? pipelineGit = null)
 {
     public async Task SeedAsync(CancellationToken ct = default)
@@ -25,7 +25,7 @@ public sealed class DeliveryPipelineTemplateSeeder(
         // Serialize the entire catalog read and write under one advisory lock so concurrent backend
         // starts cannot insert the same template version. Read the catalog only after acquiring the
         // lock.
-        if (lease is not null && db.Database.IsRelational())
+        if (db.Database.IsRelational())
             await lease.RunSerializedAsync(DeliveryTemplateVersionReset.LockName,
                 token => SeedCatalogAsync(organizationId, token), ct).ConfigureAwait(false);
         else
@@ -37,7 +37,6 @@ public sealed class DeliveryPipelineTemplateSeeder(
         // First, before anything is tracked: a colour that waited for the other one to renumber must
         // not hold the versions that colour removed (it would then see two v1 rows).
         await ResetVersionNumberingOnceAsync(organizationId, ct).ConfigureAwait(false);
-        await ArchiveLegacyCatalogAsync(organizationId, ct).ConfigureAwait(false);
         var names = DeliveryTemplateCatalog.Definitions.Keys.ToArray();
         var existing = await db.PipelineTemplates
             .Include(template => template.Versions)
@@ -45,14 +44,17 @@ public sealed class DeliveryPipelineTemplateSeeder(
             .ToDictionaryAsync(template => template.Name, StringComparer.Ordinal, ct)
             .ConfigureAwait(false);
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        // R-13: a generic template extending another one is pinned on the version that base holds here.
+        var basePins = new GenericTemplateBasePins(existing);
 
         foreach (var (name, definition) in DeliveryTemplateCatalog.Definitions)
         {
+            var generic = DeliveryTemplateCatalog.IsGeneric(definition.Resources);
             var versions = definition.Resources
                 .Select((resource, index) => new
                 {
                     Version = index + 1,
-                    Yaml = DeliveryTemplateCatalog.ReadResource(resource)
+                    Yaml = generic ? basePins.DesiredYaml(name) : DeliveryTemplateCatalog.ReadResource(resource)
                 })
                 .ToArray();
             if (!existing.TryGetValue(name, out var template))
@@ -81,8 +83,7 @@ public sealed class DeliveryPipelineTemplateSeeder(
                 continue;
             }
 
-            if (definition.Resources.All(resource =>
-                    resource.StartsWith("generic/", StringComparison.Ordinal)))
+            if (generic)
             {
                 var desired = versions.Single().Yaml;
                 var latest = template.Versions
@@ -97,7 +98,7 @@ public sealed class DeliveryPipelineTemplateSeeder(
                     {
                         Version = nextVersion,
                         YamlContent = desired,
-                        ChangelogEntry = "Synchronized from the current reference pipeline.",
+                        ChangelogEntry = "Synchronized from the current reference pipeline." + basePins.ChangelogNote(name),
                         CreatedAt = now,
                         CreatedByUsername = "system"
                     });
@@ -158,91 +159,6 @@ public sealed class DeliveryPipelineTemplateSeeder(
         await reset.RunAsync(organizationId, shipped, ct).ConfigureAwait(false);
     }
 
-    private async Task ArchiveLegacyCatalogAsync(int organizationId, CancellationToken ct)
-    {
-        var canonicalNames = DeliveryTemplateCatalog.Definitions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var templates = await db.PipelineTemplates
-            .Include(template => template.Versions)
-            .Where(template => template.OrganizationId == organizationId)
-            .ToListAsync(ct).ConfigureAwait(false);
-        var pipelines = await db.Pipelines.AsNoTracking()
-            .Where(pipeline => pipeline.Project != null
-                && pipeline.Project.OrganizationId == organizationId)
-            .Select(pipeline => new { pipeline.TemplateReferenceName })
-            .ToListAsync(ct).ConfigureAwait(false);
-        var allVersionYaml = templates.SelectMany(template => template.Versions)
-            .Select(version => version.YamlContent)
-            .ToArray();
-        var now = timeProvider.GetUtcNow().UtcDateTime;
-
-        foreach (var template in templates.Where(template =>
-                     !canonicalNames.Contains(template.Name)
-                     && !template.Name.StartsWith("legacy-", StringComparison.OrdinalIgnoreCase)))
-        {
-            var legacyName = LegacyName(template.Name);
-            if (!templates.Any(existing =>
-                    string.Equals(existing.Name, legacyName, StringComparison.OrdinalIgnoreCase)))
-            {
-                db.PipelineTemplates.Add(new PipelineTemplate
-                {
-                    Name = legacyName,
-                    Description = $"Archived snapshot of '{template.Name}'. {template.Description}".Trim(),
-                    Category = "Legacy",
-                    OrganizationId = organizationId,
-                    LatestVersion = template.LatestVersion,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                    Versions = template.Versions.Select(version => new PipelineTemplateVersion
-                    {
-                        Version = version.Version,
-                        YamlContent = version.YamlContent,
-                        ChangelogEntry = $"Legacy snapshot: {version.ChangelogEntry}",
-                        CreatedAt = now,
-                        CreatedByUsername = "system"
-                    }).ToList()
-                });
-            }
-
-            var referenced = pipelines.Any(pipeline => string.Equals(
-                    pipeline.TemplateReferenceName, template.Name, StringComparison.OrdinalIgnoreCase))
-                || allVersionYaml.Any(yaml => ReferencesTemplate(yaml, template.Name));
-            if (referenced)
-            {
-                if (!string.Equals(template.Category, "Legacy reference", StringComparison.Ordinal))
-                {
-                    template.Category = "Legacy reference";
-                    template.Description = $"Retained until references migrate to '{legacyName}'. {template.Description}";
-                    template.UpdatedAt = now;
-                }
-            }
-            else
-            {
-                db.PipelineTemplates.Remove(template);
-            }
-        }
-
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
-    private static bool ReferencesTemplate(string yaml, string templateName)
-    {
-        var marker = $"extends: {templateName}";
-        return yaml.Split('\n').Any(line =>
-            line.Trim().StartsWith(marker, StringComparison.OrdinalIgnoreCase)
-            && (line.Trim().Length == marker.Length
-                || line.Trim()[marker.Length] is '@' or ' ' or '\r'));
-    }
-
-    private static string LegacyName(string name)
-    {
-        var slug = new string(name.Trim().ToLowerInvariant()
-            .Select(character => char.IsLetterOrDigit(character) ? character : '-')
-            .ToArray());
-        while (slug.Contains("--", StringComparison.Ordinal))
-            slug = slug.Replace("--", "-", StringComparison.Ordinal);
-        return $"legacy-{slug.Trim('-')}";
-    }
-
     private static string Normalize(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
 
@@ -260,6 +176,10 @@ public sealed class DeliveryPipelineTemplateSeeder(
             "Grades the release from its Quality and Security gates (grade-candidate-from-gates): the release carries "
             + "the worst gate grade and whether it reaches the deployment threshold, so an accepted release graded A to E "
             + "deploys without the approval a refused, F or ungraded one still asks for (R-23, R-24).",
+        ("application-candidate", 5) =>
+            "Names the release with a real version instead of c-<commit> (R-33): <APPLICATION_VERSION_PREFIX>.<n> allocated by "
+            + "Aetheus (release_number: allocate, prefix 0.1 by default), or the version the run parameter applicationVersion "
+            + "gives; a version already published is refused at the launch. The CI it triggers receives it as APP_VERSION.",
         ("host-bluegreen-deploy", 2) =>
             "Drops the required `revision` run parameter: the journal revision defaults to the commit the run was "
             + "launched on and a consumer overrides BG_REVISION; an unresolved revision is refused before the "

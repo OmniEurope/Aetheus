@@ -34,19 +34,30 @@ public partial class SetPassword
     {
         _busy = true;
         _error = null;
-        var ok = await Api.Auth.CompletePasswordSetupAsync(new CompletePasswordSetupRequest
+        try
         {
-            Token = _token!,
-            NewPassword = _model.NewPassword
-        });
-        if (ok)
-        {
-            Toast.Success("Saved", "PasswordSetupDone");
-            Nav.NavigateTo(LoginRedirect.LoginPath);
-            return;
-        }
+            var ok = await Api.Auth.CompletePasswordSetupAsync(new CompletePasswordSetupRequest
+            {
+                Token = _token!,
+                NewPassword = _model.NewPassword
+            });
+            if (ok)
+            {
+                Toast.Success("Saved", "PasswordSetupDone");
+                Nav.NavigateTo(LoginRedirect.LoginPath);
+                return;
+            }
 
-        _error = L["PasswordSetupInvalidLink"].Value;
-        _busy = false;
+            _error = L["PasswordSetupInvalidLink"].Value;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or Polly.ExecutionRejectedException)
+        {
+            _error = L["SaveFailed"].Value;
+            Toast.Error("Error", "SaveFailed");
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 }

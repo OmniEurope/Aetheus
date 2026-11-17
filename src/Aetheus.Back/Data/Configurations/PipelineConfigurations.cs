@@ -49,6 +49,15 @@ internal sealed class PipelineRunConfiguration : IEntityTypeConfiguration<Pipeli
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.StartedAt); // F-041: retention service filter
         builder.HasIndex(e => new { e.PipelineId, e.Status });
+        // R-8: the number a person reads is unique within its pipeline. The counter already hands out each
+        // number once; this is the database holding that promise. 0 is the entity default, never issued.
+        builder.HasIndex(e => new { e.PipelineId, e.BuildNumber })
+               .IsUnique()
+               .HasFilter("\"BuildNumber\" > 0");
+        // ADR-060: null on the rows the backfill has not reached; the previous version keeps inserting those.
+        builder.HasIndex(e => e.Uid)
+               .IsUnique()
+               .HasFilter("\"Uid\" IS NOT NULL");
         builder.Property(e => e.BranchName).HasMaxLength(200);
         builder.Property(e => e.CommitHash).HasMaxLength(64);
         builder.Property(e => e.RepositoryUrl).HasMaxLength(2048);

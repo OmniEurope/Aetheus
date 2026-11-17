@@ -17,8 +17,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// encryption and real BCrypt-hashed recovery codes against PostgreSQL.
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class TotpIntegrationTests(PostgresFixture fixture)
+public sealed class TotpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string AdminPassword = "Integr@tion-Test-Admin-Pwd-2026";
 

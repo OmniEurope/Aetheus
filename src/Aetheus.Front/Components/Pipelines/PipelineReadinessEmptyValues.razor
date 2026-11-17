@@ -27,7 +27,7 @@
                     @* R-59: in the setup wizard the key opens a dialog to fill it, never the page of its library. *@
                     <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                         <code>@row.Key</code>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => FillAsync(row))"
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => FillAsync(row))"
                                     title="@FillLabel(row)" Label="@FillLabel(row)"
                                     data-testid="setup-readiness-empty-fill"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                     </OmniStack>

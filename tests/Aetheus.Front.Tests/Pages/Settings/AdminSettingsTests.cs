@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
@@ -60,19 +62,14 @@ public class AdminSettingsTests : BunitContext
             new() { Id = 1, Token = "abc-123", ExpiresAt = DateTime.UtcNow.AddHours(24) }
         });
 
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/settings?tab=secrets");
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50);
+        cut.WaitForAssertion(() => Assert.Contains("API_KEY", cut.Markup, StringComparison.Ordinal));
 
-        // OnInitializedAsync loads settings, secrets and tokens in parallel into instance state.
+        // OnInitializedAsync loads the settings into instance state; each grid reads its own list.
         var settings = (List<AppSettingDto>)typeof(AdminSettings)
             .GetField("_settings", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var secrets = (List<SecretDto>)typeof(AdminSettings)
-            .GetField("_secrets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var tokens = (List<RegistrationTokenDto>)typeof(AdminSettings)
-            .GetField("_tokens", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
         Assert.Equal(2, settings.Count);
-        Assert.Single(secrets);
-        Assert.Single(tokens);
     }
 
     private void SetupAllMocks()

@@ -26,4 +26,11 @@ internal static class PipelineSetupCreationGate
     /// <summary>True while the repository or a required library or vault is still to create.</summary>
     public static bool IsBlocked(PipelineSetupReadinessDto? readiness) =>
         RepositoryMissing(readiness) || MissingElements(readiness).Count > 0;
+
+    /// <summary>True while the creation is held back by something the wizard waits for or could not read: the push the user
+    /// accepted to wait for (R-20), or the environment sample and Apache templates of the production deployment (R-7), whose
+    /// absence from the setup would leave <c>PORT_FRONT</c> and <c>PORT_BACK</c> undefined. <paramref name="production"/> is
+    /// null when the production pipeline is not selected.</summary>
+    public static bool IsHeld(PipelineSetupFirstPush? firstPush, PipelineSetupProduction? production) =>
+        firstPush is { Waiting: true } || production is { TemplatesUnreadable: true } || production is { ServerMissing: true };
 }

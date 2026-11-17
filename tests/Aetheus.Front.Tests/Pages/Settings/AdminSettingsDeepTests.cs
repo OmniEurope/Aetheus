@@ -2,13 +2,14 @@
 using System.Reflection;
 using Aetheus.Front.Components.Settings;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Pages.Settings;
 
 /// <summary>
-/// Deep coverage for AdminSettings.razor.cs - OnInitializedAsync (admin + non-admin),
+/// Deep coverage for AdminSettings.razor.cs - OnInitializedAsync (admin + non-admin), the tabs' first reads,
 /// SaveSetting, AddSecret (validation + success), GenerateToken.
 /// DeleteSecret excluded (Dialog.Confirm hangs).
 /// </summary>
@@ -49,11 +50,7 @@ public class AdminSettingsDeepTests : BunitContext
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var settings = (List<AppSettingDto>)typeof(AdminSettings).GetField("_settings", Priv)!.GetValue(cut.Instance)!;
-        var secrets = (List<SecretDto>)typeof(AdminSettings).GetField("_secrets", Priv)!.GetValue(cut.Instance)!;
-        var tokens = (List<RegistrationTokenDto>)typeof(AdminSettings).GetField("_tokens", Priv)!.GetValue(cut.Instance)!;
         Assert.Equal(2, settings.Count);
-        Assert.Single(secrets);
-        Assert.Single(tokens);
     }
 
     // ── OnInitialized - non-admin redirects ───────────────────────────────────
@@ -169,14 +166,12 @@ public class AdminSettingsDeepTests : BunitContext
     // ── AddSecret - success ────────────────────────────────────────────────────
 
     [Fact]
-    public void AddSecret_Success_RefreshesSecrets_Loaded()
+    public void TheSecretsTab_ShowsTheSecrets()
     {
-        // Verify admin settings renders with secrets loaded
         SetupAdminData();
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/settings?tab=secrets");
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-        var secrets = (List<SecretDto>)typeof(AdminSettings).GetField("_secrets", Priv)!.GetValue(cut.Instance)!;
-        Assert.Single(secrets);
+        cut.WaitForAssertion(() => Assert.Contains("API_TOKEN", cut.Markup, StringComparison.Ordinal));
     }
 
     // ── AddSecret - api returns null ───────────────────────────────────────────
@@ -203,23 +198,17 @@ public class AdminSettingsDeepTests : BunitContext
         Assert.Equal("MY_KEY", key);
     }
 
-    // ── GenerateToken - tokens loaded at init ─────────────────────────────────
-    // The full success path (POST → refresh GET) can't be exercised cleanly: the stub
-    // TestHandler matches by URL substring and cannot distinguish POST from the refresh GET,
-    // so POST and GetRegistrationTokensAsync collide on api/auth/registration-tokens (one wants
-    // a single dto, the other a List<>). We assert the observable init state instead and cover
-    // the failure branch in GenerateToken_NullResult_ShowsError below.
+    // ── GenerateToken - tokens tab ────────────────────────────────────────────
+    // The full success path (POST → refresh GET) is in DataGridRowChangesTests; here the tab's
+    // first read, and the failure branch in GenerateToken_NullResult_ShowsError below.
 
     [Fact]
-    public void OnInit_LoadsRegistrationTokens()
+    public void TheTokensTab_ShowsTheRegistrationTokens()
     {
         SetupAdminData();
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/settings?tab=tokens");
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-
-        var tokens = (List<RegistrationTokenDto>)typeof(AdminSettings).GetField("_tokens", Priv)!.GetValue(cut.Instance)!;
-        Assert.Single(tokens);
-        Assert.Equal("tok-abc", tokens[0].Token);
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("code.token-code")));
     }
 
     // ── GenerateToken - null result ────────────────────────────────────────────

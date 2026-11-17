@@ -8,14 +8,14 @@
             <OmniTextBox Id="mailbox-compose-from" Value="@From" ValueExpression="@(() => From)" ReadOnly="true" />
         </OmniFormField>
         <OmniFormField Label="@L["MailboxTo"]" Help="@L["MailboxAddressesHint"]" For="mailbox-compose-to" Error="@_recipientError">
-            <OmniTextBox Id="mailbox-compose-to" @bind-Value="_model.To" Autocomplete="off" />
+            <OmniTextBox Id="mailbox-compose-to" @bind-Value="_model.To" />
         </OmniFormField>
         <ValidationMessage For="@(() => _model.To)" />
         <OmniFormField Label="@L["MailboxCc"]" For="mailbox-compose-cc">
-            <OmniTextBox Id="mailbox-compose-cc" @bind-Value="_model.Cc" Autocomplete="off" />
+            <OmniTextBox Id="mailbox-compose-cc" @bind-Value="_model.Cc" />
         </OmniFormField>
         <OmniFormField Label="@L["MailboxBcc"]" For="mailbox-compose-bcc">
-            <OmniTextBox Id="mailbox-compose-bcc" @bind-Value="_model.Bcc" Autocomplete="off" />
+            <OmniTextBox Id="mailbox-compose-bcc" @bind-Value="_model.Bcc" />
         </OmniFormField>
         <OmniFormField Label="@L["MailboxSubject"]" For="mailbox-compose-subject">
             <OmniTextBox Id="mailbox-compose-subject" @bind-Value="_model.Subject" />

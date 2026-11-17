@@ -43,6 +43,25 @@ internal sealed class ProjectSubscriptionConfiguration : IEntityTypeConfiguratio
     }
 }
 
+internal sealed class UserPipelineNotificationPreferenceConfiguration : IEntityTypeConfiguration<UserPipelineNotificationPreference>
+{
+    public void Configure(EntityTypeBuilder<UserPipelineNotificationPreference> builder)
+    {
+        builder.HasKey(p => new { p.UserId, p.PipelineId, p.EventType });
+        builder.Property(p => p.EventType).HasMaxLength(100).IsRequired();
+        // Dispatch reads the choices of one pipeline's recipients; deleting a pipeline finds its rows by it.
+        builder.HasIndex(p => new { p.PipelineId, p.EventType });
+        builder.HasOne(p => p.User)
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(p => p.Pipeline)
+            .WithMany()
+            .HasForeignKey(p => p.PipelineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class UserNotificationPreferenceConfiguration : IEntityTypeConfiguration<UserNotificationPreference>
 {
     public void Configure(EntityTypeBuilder<UserNotificationPreference> builder)

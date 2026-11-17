@@ -12,7 +12,7 @@
 # through the launcher rather than raw compose:
 #
 #   .\launch-windows.ps1 -vps           # blank box (this file) - build + start + exit
-#   .\launch-windows.ps1 -vps -net10    # blank box + .NET SDK 10.0 pre-installed
+#   .\launch-windows.ps1 -vps -net10    # blank box + .NET SDK 11.0 pre-installed
 #   .\launch-windows.ps1 -vps -full     # fully-provisioned box (vpssim.compose.yml)
 #   .\launch-windows.ps1 -vps -r        # reset the current flavor (drops its volumes)
 #
@@ -26,7 +26,7 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.vpssim-blank
       args:
-        # -net10: pre-bake the .NET SDK 10.0 into the image (1) or keep it bare (0, default).
+        # -net10: pre-bake the .NET SDK 11.0 into the image (1) or keep it bare (0, default).
         INSTALL_DOTNET: ${VPSSIM_DOTNET:-0}
     # systemd needs to manage cgroups under Docker Desktop (cgroup v2).
     privileged: true

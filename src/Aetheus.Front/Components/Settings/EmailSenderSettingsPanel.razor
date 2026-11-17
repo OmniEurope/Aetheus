@@ -5,7 +5,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Small" />
+    <ZoneVeil />
 }
 else if (_settings is null)
 {
@@ -49,7 +49,7 @@ else
                         <OmniRow Gap="OmniSpacing.Large">
                             <OmniColumn Span="12" MediumSpan="8">
                                 <OmniFormField Label="@L["EmailSenderHost"]" For="email-sender-host" Required="true" Class="omni-u-w-100">
-                                    <OmniTextBox Id="email-sender-host" @bind-Value="_model.Host" Autocomplete="off" Class="omni-u-w-100" />
+                                    <OmniTextBox Id="email-sender-host" @bind-Value="_model.Host" Class="omni-u-w-100" />
                                     <ValidationMessage For="@(() => _model.Host)" />
                                 </OmniFormField>
                             </OmniColumn>
@@ -65,13 +65,13 @@ else
                             </OmniColumn>
                             <OmniColumn Span="12" MediumSpan="6">
                                 <OmniFormField Label="@L["EmailSenderFromAddress"]" For="email-sender-from" Required="true" Class="omni-u-w-100">
-                                    <OmniTextBox Id="email-sender-from" Type="OmniTextBoxType.Email" @bind-Value="_model.FromAddress" Autocomplete="off" Class="omni-u-w-100" />
+                                    <OmniTextBox Id="email-sender-from" Type="OmniTextBoxType.Email" @bind-Value="_model.FromAddress" Autocomplete="email" Class="omni-u-w-100" />
                                     <ValidationMessage For="@(() => _model.FromAddress)" />
                                 </OmniFormField>
                             </OmniColumn>
                             <OmniColumn Span="12" MediumSpan="6">
                                 <OmniFormField Label="@L["EmailSenderUsername"]" For="email-sender-username" Help="@L["EmailSenderUsernameHint"]" Class="omni-u-w-100">
-                                    <OmniTextBox Id="email-sender-username" @bind-Value="_model.Username" Autocomplete="off" Class="omni-u-w-100" />
+                                    <OmniTextBox Id="email-sender-username" @bind-Value="_model.Username" Autocomplete="username" Class="omni-u-w-100" />
                                 </OmniFormField>
                             </OmniColumn>
                             <OmniColumn Span="12" MediumSpan="6">

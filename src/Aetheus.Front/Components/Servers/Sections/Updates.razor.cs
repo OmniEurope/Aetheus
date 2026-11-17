@@ -2,11 +2,11 @@
 
 namespace Aetheus.Front.Components.Servers.Sections;
 
+/// <summary>Redirects the former packages and updates page to its tab of the services page.</summary>
 public partial class Updates
 {
-    private Aetheus.Front.Components.Servers.ServerDetailSections.ServerPatchSection? _section;
+    [Parameter] public int Id { get; set; }
 
-    protected override Task HandleTaskCompletedNotificationAsync(
-        Aetheus.Shared.Components.Tasks.TaskCompletedNotification notification) =>
-        _section?.HandleTaskCompletedAsync(notification) ?? Task.CompletedTask;
+    protected override void OnParametersSet() =>
+        Nav.NavigateTo($"/servers/{Id}/services?tab=updates", replace: true);
 }

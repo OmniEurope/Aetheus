@@ -47,6 +47,34 @@ public sealed class ApiRbacNegativeSmokeTests(ApiSmokeFixture fixture)
     }
 
     [Fact]
+    public async Task Reader_SetProjectDefaultBranch_Returns403_AndTheBranchIsUnchanged()
+    {
+        using var admin = fixture.CreateAdminClient();
+        using var reader = await fixture.CreateReaderClientAsync();
+        using var created = await admin.PostAsJsonAsync("/api/projects", new CreateProjectRequest
+        {
+            Name = $"reader-branch-{Guid.NewGuid():N}",
+            DefaultBranch = "develop"
+        }, cancellationToken: TestContext.Current.CancellationToken);
+        var project = (await created.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default,
+            cancellationToken: TestContext.Current.CancellationToken))!;
+        try
+        {
+            using var resp = await reader.PutAsJsonAsync($"/api/projects/{project.Id}/default-branch",
+                new SetProjectDefaultBranchRequest { Branch = "main" }, cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+            var after = await admin.GetFromJsonAsync<ProjectDetailDto>($"/api/projects/{project.Id}",
+                IntegrationJsonOptions.Default, TestContext.Current.CancellationToken);
+            Assert.Equal("develop", after!.DefaultBranch);
+        }
+        finally
+        {
+            using var _ = await admin.DeleteAsync($"/api/projects/{project.Id}", TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
     public async Task Reader_CreateVault_Returns403()
     {
         using var reader = await fixture.CreateReaderClientAsync();

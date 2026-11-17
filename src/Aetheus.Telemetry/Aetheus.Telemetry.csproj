@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Consumers are on net10.0 (Atlas, Wordmorrow, Portfolio) and net11.0. Directory.Build.props sets a singular
+         TargetFramework for every project, which would win over TargetFrameworks and build net11.0 only: clear it. -->
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <PackageId>Aetheus.Telemetry</PackageId>
-    <Version>1.2.1</Version>
+    <Version>1.3.1</Version>
     <Authors>Aetheus</Authors>
     <Description>Safe optional OpenTelemetry configuration for applications monitored by Aetheus.</Description>
     <PackageTags>opentelemetry;otlp;observability;apm;aetheus</PackageTags>
@@ -19,8 +22,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Aetheus.Telemetry.Tests" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <!-- Decision of 2026-10-07: the request timings come from the OmniEurope.Performance collector. -->
-    <PackageReference Include="OmniEurope.Performance" />
+    <!-- Decision of 2026-10-07: the request timings come from the OmniEurope.Diagnostics collector. -->
+    <PackageReference Include="OmniEurope.Diagnostics" />
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />

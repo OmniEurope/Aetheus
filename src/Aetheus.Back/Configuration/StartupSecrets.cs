@@ -4,12 +4,18 @@ using System.Security.Cryptography;
 namespace Aetheus.Back.Configuration;
 
 /// <summary>Resolves the JWT signing key at startup and refuses to run outside Development with a
-/// missing secret or with one of the publicly known defaults committed in earlier appsettings.json
-/// revisions (F-01).</summary>
+/// missing secret, with one of the publicly known defaults committed in earlier appsettings.json
+/// revisions (F-01), with the committed development administrator password, or without the public API
+/// URL the agent archives and clone URLs are built from (M5).</summary>
 internal static class StartupSecrets
 {
     private static readonly string[] KnownDefaultJwtKeys = ["aetheus-dev-key-minimum-32-bytes!!"];
     private static readonly string[] KnownDefaultEncryptionKeys = ["aetheus-encryption-key-32ch!"];
+
+    /// <summary>The administrator password committed in appsettings.Development.json.</summary>
+    private const string DevelopmentAdminPassword = "aetheus-dev-admin-pwd";
+
+    internal const string PublicApiBaseUrlKey = "Aetheus:PublicApiBaseUrl";
 
     /// <summary>The configured Auth:JwtKey; in Development, a per-process random key when it is unset.
     /// Throws outside Development when a secret is missing or burned.</summary>
@@ -57,9 +63,31 @@ internal static class StartupSecrets
             throw new InvalidOperationException(
                 "Auth:EncryptionSalt must be configured in non-development environments (set via the Auth__EncryptionSalt environment variable, base64, >= 16 bytes).");
 
-        if (string.Equals(configuration["Auth:AdminPassword"], "admin", StringComparison.OrdinalIgnoreCase))
+        var adminPassword = configuration["Auth:AdminPassword"];
+        if (string.Equals(adminPassword, "admin", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Auth:AdminPassword must not be the default 'admin' value in non-development environments.");
+
+        // The development password is public (it is committed). A public demo advertises its password on
+        // purpose, so only that one may keep it.
+        if (string.Equals(adminPassword, DevelopmentAdminPassword, StringComparison.OrdinalIgnoreCase)
+            && !PublicDemoConfiguration.IsEnabled(configuration))
+            throw new InvalidOperationException(
+                "Auth:AdminPassword must not be the committed development password in non-development environments.");
+
+        // The agent archive and the clone URLs carry this URL; without it they would fall back to the
+        // Host header of an anonymous request (HostUrlExtensions), which the client controls.
+        var publicApiBaseUrl = configuration[PublicApiBaseUrlKey];
+        if (!Uri.TryCreate(publicApiBaseUrl, UriKind.Absolute, out var publicApiUri)
+            || (publicApiUri.Scheme != Uri.UriSchemeHttps && publicApiUri.Scheme != Uri.UriSchemeHttp))
+            throw new InvalidOperationException(
+                "Aetheus:PublicApiBaseUrl must be configured with an absolute http(s) URL in non-development environments (set via the Aetheus__PublicApiBaseUrl environment variable).");
+
+        // R-1: outside Development the seeded administrator always goes through its first-step account setup
+        // (the public demo opts out by its own, separate configuration).
+        if (!configuration.GetValue(SeededAdministratorSetup.ConfigurationKey, true))
+            throw new InvalidOperationException(
+                "Auth:AdministratorSetupRequired=false is a development setting: the seeded administrator must set up its own account in non-development environments.");
     }
 
     private static bool IsKnownDefault(string[] knownDefaults, string value) =>

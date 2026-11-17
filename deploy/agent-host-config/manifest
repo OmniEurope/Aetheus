@@ -40,6 +40,7 @@ portsentry/sudoers.d/aetheus-portsentry UNBLOCK_HELPER_PATH PORTSENTRY_SETUP_HEL
 service-enable/sudoers.d/aetheus-service-enable AGENT_USER
 package/sudoers.d/aetheus-package AGENT_USER
 patch/sudoers.d/aetheus-patch AGENT_USER
+reboot/sudoers.d/aetheus-reboot AGENT_USER
 firewall/aetheus-firewall
 firewall/sudoers.d/aetheus-firewall FIREWALL_HELPER_PATH AGENT_USER
 mail/mail-setup

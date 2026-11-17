@@ -34,7 +34,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
             projectIds, ct).ConfigureAwait(false) ?? [];
         var insights = await repo.GetProjectListInsightsAsync(
             projectIds,
-            timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-5),
+            timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-OnlineAudience.WindowMinutes),
             ct).ConfigureAwait(false) ?? [];
         for (var i = 0; i < dtos.Count; i++)
         {
@@ -51,14 +51,18 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
                     LastCommitMessage = insight.LastCommitMessage,
                     LastCommitAt = insight.LastCommitAt,
                     LastRunId = insight.LastRunId,
+                    LastRunNumber = insight.LastRunNumber,
                     LastRunName = insight.LastRunName,
                     LastRunStatus = insight.LastRunStatus,
                     LastRunAt = insight.LastRunAt,
                     LastRunIsActive = insight.LastRunIsActive,
                     LastRunCurrentStep = insight.LastRunCurrentStep,
                     LatestGateGrade = insight.LatestGateGrade,
+                    LatestGateGradeQualification = insight.GradeQualification,
                     ProductionStatus = insight.ProductionStatus,
-                    OnlineUserCount = insight.OnlineUserCount
+                    OnlineUserCount = insight.OnlineUserCount,
+                    OnlineUserState = insight.OnlineUserState,
+                    OnlineUserLastEventAt = insight.OnlineUserLastEventAt
                 };
             }
         }
@@ -84,12 +88,24 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
 
         var gitDates = await GetLastGitUpdatesCachedAsync([id], ct).ConfigureAwait(false);
         var latestGrade = await repo.GetLatestGateGradeAsync(id, ct).ConfigureAwait(false);
+        var gradeRunNumbers = await repo.GetRunNumbersAsync(latestGrade?.PipelineRunId is { } gradeRunId ? [gradeRunId] : [], ct).ConfigureAwait(false);
+
+        var productionAddress = await repo.GetProductionAddressAsync(id, ct).ConfigureAwait(false);
+        var causePipeline = latestGrade is { Cause: AnalysisGradeCause.Pipeline, PipelineRunId: { } causeRunId }
+            ? await repo.GetRunPipelineAsync(causeRunId, ct).ConfigureAwait(false)
+            : null;
 
         return new ProjectDetailDto
         {
+            LatestGateGradeCause = latestGrade?.Cause,
+            LatestGateGradePipelineId = causePipeline?.PipelineId,
+            LatestGateGradePipelineName = causePipeline?.PipelineName,
+            ProductionAddress = productionAddress,
             LastGitUpdateAt = gitDates.GetValueOrDefault(id),
             LatestGateGrade = latestGrade?.OverallGrade,
+            LatestGateGradeQualification = latestGrade?.Qualification,
             LatestGateGradeRunId = latestGrade?.PipelineRunId,
+            LatestGateGradeRunNumber = latestGrade?.PipelineRunId is { } runId && gradeRunNumbers.TryGetValue(runId, out var runNumber) ? runNumber : null,
             ServerCount = counts.Servers,
             EnvironmentServerCount = counts.EnvironmentServers,
             ReleaseCount = counts.Releases,
@@ -109,6 +125,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
             ArtifactRetentionDays = project.ArtifactRetentionDays,
             ArtifactLatestRetentionDays = project.ArtifactLatestRetentionDays,
             ReleaseNumberingPattern = project.ReleaseNumberingPattern,
+            MigrationGateEnabled = project.MigrationGateEnabled,
             Pipelines = project.Pipelines.Select(pl =>
             {
                 var lastRun = pl.Runs.FirstOrDefault();
@@ -129,6 +146,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
                         return new PipelineRunSummaryDto
                         {
                             Id = r.Id,
+                            BuildNumber = r.BuildNumber,
                             Status = r.Status,
                             StartedAt = r.StartedAt,
                             CompletedAt = r.CompletedAt,
@@ -191,6 +209,40 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         await audit.LogAsync("Updated", "Project", project.Id, project.Name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Project, project.Id, EntityChangeOps.Updated, ct, organizationId: project.OrganizationId).ConfigureAwait(false);
         return ProjectDtoMapper.ToDto(project, includePipelineSummary: true);
+    }
+
+    public async Task<ProjectDto?> SetDefaultBranchAsync(int id, string branch, CancellationToken ct = default)
+    {
+        var name = branch?.Trim();
+        if (string.IsNullOrEmpty(name))
+            throw new BadRequestException("A default branch name is required.");
+        var project = await repo.FindProjectWithPipelinesAsync(id, ct).ConfigureAwait(false);
+        if (project is null) return null;
+        RefuseWhileDeleting(project);
+
+        project.DefaultBranch = name;
+        project.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
+
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        cache.Remove(RepoUrlsCacheKey);
+        await audit.LogAsync("Updated", "Project", project.Id, project.Name, ct).ConfigureAwait(false);
+        await notifier.BroadcastAsync(ResourceType.Project, project.Id, EntityChangeOps.Updated, ct, organizationId: project.OrganizationId).ConfigureAwait(false);
+        return ProjectDtoMapper.ToDto(project, includePipelineSummary: true);
+    }
+
+    public async Task<bool> SetMigrationGateEnabledAsync(int id, bool enabled, CancellationToken ct = default)
+    {
+        var project = await repo.FindProjectWithPipelinesAsync(id, ct).ConfigureAwait(false);
+        if (project is null) return false;
+        RefuseWhileDeleting(project);
+
+        project.MigrationGateEnabled = enabled;
+        project.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
+
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await audit.LogAsync(enabled ? "EnabledMigrationGate" : "DisabledMigrationGate", "Project", project.Id, project.Name, ct).ConfigureAwait(false);
+        await notifier.BroadcastAsync(ResourceType.Project, project.Id, EntityChangeOps.Updated, ct, organizationId: project.OrganizationId).ConfigureAwait(false);
+        return true;
     }
 
     // S-TECH-G7LM: the per-project "last git update" is a relatively expensive batched lookup that
@@ -367,11 +419,14 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         var (items, totalCount) = await repo.GetTasksPagedAsync(
             projectId, request.Search, request.SortBy, request.SortDescending,
             page, pageSize, ct, request.Filters).ConfigureAwait(false);
+        var runNumbers = await repo.GetRunNumbersAsync(items.Where(t => t.PipelineRunId.HasValue).Select(t => t.PipelineRunId!.Value), ct).ConfigureAwait(false);
         return new PaginatedResult<ServerTaskDto>
         {
             Items = items.Select(t => new ServerTaskDto
             {
                 Id = t.Id,
+                Uid = t.Uid,
+                Number = t.Number,
                 ServerId = t.ServerId,
                 ServerName = t.Server?.Name ?? string.Empty,
                 Name = t.Name,
@@ -379,6 +434,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
                 Executor = t.Executor,
                 Status = t.Status,
                 PipelineRunId = t.PipelineRunId,
+                PipelineRunNumber = t.PipelineRunId is { } runId && runNumbers.TryGetValue(runId, out var number) ? number : null,
                 PipelineStepRunId = t.PipelineStepRunId,
                 CreatedAt = t.CreatedAt,
                 StartedAt = t.StartedAt,

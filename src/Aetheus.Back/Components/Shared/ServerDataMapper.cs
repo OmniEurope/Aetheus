@@ -219,6 +219,7 @@ internal static class ServerDataMapper
             Port = v.Port,
             DocumentRoot = v.DocumentRoot,
             ConfigFile = v.ConfigFile,
+            ConfigFileForeignOwner = v.ConfigFileForeignOwner,
             IsEnabled = v.IsEnabled
         }).ToList()
     };

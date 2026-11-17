@@ -11,6 +11,10 @@ public interface IPipelineFleetService
         CancellationToken ct = default);
     Task<PipelineFleetItemDto> GetItemAsync(int pipelineId, CancellationToken ct = default);
 
+    /// <summary>Whether the definition <paramref name="request"/> would write to the pipeline turns its schedule on,
+    /// which takes the right to run it (<see cref="PipelineScheduleOnlyEdit.TurnsScheduleOn"/>). Reads, writes nothing.</summary>
+    Task<bool> ExtractionTurnsScheduleOnAsync(int pipelineId, ExtractPipelineTemplateRequest request, CancellationToken ct = default);
+
     /// <summary>The values the fleet's checkable column filters offer.</summary>
     Task<PipelineFleetFilterValuesDto> GetFilterValuesAsync(
         IReadOnlyCollection<int>? organizationIds,

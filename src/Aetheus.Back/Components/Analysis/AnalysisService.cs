@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Inventory;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Options;
@@ -17,7 +18,8 @@ public sealed class AnalysisService(
     IDependencyTrackOutbox dependencyTrackOutbox,
     IOptions<AnalysisPlatformOptions> platformOptions,
     IOptions<DependencyTrackOptions> dependencyTrackOptions,
-    IAnalysisPublicationSignal? publicationSignal = null) : IAnalysisService
+    IAnalysisPublicationSignal? publicationSignal = null,
+    IProjectInventoryTrigger? inventoryTrigger = null) : IAnalysisService
 {
     private readonly DependencyTrackOptions _dependencyTrackOptions = dependencyTrackOptions.Value;
     private readonly AnalysisPolicyRevisionManager _policyRevisions =
@@ -31,7 +33,8 @@ public sealed class AnalysisService(
         notifier,
         notifications,
         dependencyTrackOutbox,
-        platformOptions);
+        platformOptions,
+        inventoryTrigger);
 
     public async Task<AnalysisReportDto> PublishReportAsync(
         int runId,

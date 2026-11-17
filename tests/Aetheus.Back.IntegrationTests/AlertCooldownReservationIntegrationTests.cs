@@ -4,6 +4,7 @@ using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
+using Aetheus.Back.Tests;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +18,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// the same cooldown at once. The reservation is a conditional UPDATE committed before emission, so
 /// exactly one of them notifies.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AlertCooldownReservationIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]
@@ -56,7 +56,8 @@ public sealed class AlertCooldownReservationIntegrationTests(PostgresFixture fix
             services.GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<IHubContext<AlertHub>>(),
             NullLogger<AlertEvaluatorService>.Instance,
-            TimeProvider.System);
+            TimeProvider.System,
+            leaderLease: LeaderLeaseDouble.Leader());
     }
 
     private async Task<int> SeedBreachedRuleAsync(CancellationToken ct)

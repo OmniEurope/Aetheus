@@ -16,7 +16,6 @@ public class ServersTests : E2ETestBase
     }
 
     [Test]
-    [RollbackRelevant]
     public async Task Servers_PageRendersExpectedControlsAndColumns()
     {
         await NavigateToAsync("servers");

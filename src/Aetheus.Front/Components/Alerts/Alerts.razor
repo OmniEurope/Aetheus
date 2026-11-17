@@ -32,7 +32,7 @@
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AlertTriggeredDto" Property="TriggeredAt" Title="@L["TriggeredAt"]" Width="170px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Severity" Title="@L["Severity"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" >
-                <Template Context="a"><OmniBadge Icon="@(BadgeIcon.ForState(RecentSeverityBadge(a.Severity)))" Fill="OmniFill.Solid" Tone="@RecentSeverityBadge(a.Severity)">@a.Severity</OmniBadge></Template>
+                <Template Context="a"><OmniBadge Icon="@(BadgeIcon.ForState(RecentSeverityBadge(a.Severity)))" Fill="OmniFill.Solid" Tone="@RecentSeverityBadge(a.Severity)">@RecentSeverityText(a.Severity)</OmniBadge></Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertTriggeredDto" Property="ServerName" Title="@L["Server"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" >
                 <Template Context="a"><EntityNameLink Kind="EntityNameKind.Server" Id="a.ServerId" Name="@a.ServerName" /></Template>
@@ -45,7 +45,8 @@
 
 <OmniHeading Level="OmniHeadingLevel.H5">@L["AlertRules"]</OmniHeading>
 @* Recette R-198 (rule R-049): the rules scroll in a virtualized full-height grid, no pager. *@
-<AetheusDataGrid @ref="_rulesGrid" RowClick="@(alert => OpenEditDialogAsync(alert))" ExportName="@L["AlertRules"]" FullHeight="true" Virtualize="true" Data="@_alerts" TItem="AlertRuleDto" IsLoading="@_loading" class="aetheus-grid-fullheight">
+<AetheusDataGrid @ref="_rulesGrid" RowClick="@(alert => OpenEditDialogAsync(alert))" ExportName="@L["AlertRules"]" FullHeight="true" Virtualize="@AetheusGrid.RemoteVirtualization" Data="@_rules" Count="@_ruleCount" LoadData="@LoadRulesAsync" ExportRead="@ReadRulesExportAsync"
+        VirtualData="@(() => new OmniDataGridResult<AlertRuleDto>(_rules, _ruleCount))" TItem="AlertRuleDto" class="aetheus-grid-fullheight">
         <EmptyTemplate>
             <EmptyState Icon="notifications_off" Title="@L["NoAlerts"]" Description="@L["NoAlertsDescription"]" />
         </EmptyTemplate>
@@ -96,7 +97,7 @@
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(alert))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAlert(alert.Id))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAlert(alert))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </OmniStack>
                     </span>
                 </Template>

@@ -14,6 +14,17 @@ public sealed class NotificationEmailPresentationTests
         "pipeline.failed in project Aetheus", NotificationEventTypes.PipelineFailed,
         """{"PipelineRunId":2698,"PipelineId":41,"PipelineName":"publish-observability-packages","BuildNumber":11,"ProjectId":1,"Status":"Failed"}""");
 
+    // R-8: the reader sees the run's number; the technical key only feeds the link.
+    [Fact]
+    public void FailedPipeline_NamesTheRunByItsNumber_NeverByItsTechnicalKey()
+    {
+        var message = NotificationMailKit.Build(FailedRun, "https://aetheus.example.org");
+
+        Assert.Contains("#11", message.TextBody);
+        Assert.DoesNotContain("Execution ID", message.TextBody);
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Count(message.TextBody!, "2698"));
+    }
+
     [Fact]
     public void FailedPipeline_ExplainsTheEvent_InsteadOfUsingItsTechnicalNameAsTheHeading()
     {
@@ -43,7 +54,8 @@ public sealed class NotificationEmailPresentationTests
         // it in each language, so a moved or renamed resource fails here and not in a recipient's inbox.
         var message = NotificationMailKit.Build(FailedRun, "https://aetheus.example.org", languageJson: languageJson);
 
-        Assert.Contains(title, message.Subject);
+        Assert.StartsWith("Aetheus - Aetheus - ", message.Subject, StringComparison.Ordinal);
+        Assert.Contains(title, message.TextBody);
         Assert.Contains(intro, message.TextBody);
         Assert.Contains($"lang=\"{htmlLanguage}\"", message.HtmlBody);
     }
@@ -64,7 +76,7 @@ public sealed class NotificationEmailPresentationTests
 
     [Theory]
     [InlineData("pipeline.approval-requested", "/pipelines/runs/2698")]
-    [InlineData("analysis.gate.blocked", "/projects/1/quality")]
+    [InlineData("analysis.gate.blocked", "/pipelines/runs/2698?tab=gate")]
     [InlineData("agent-update.failed", "/servers/7/overview")]
     [InlineData("alert.triggered", "/servers/7/overview")]
     [InlineData("certbot.renewal-check.failed", "/servers/7/certbot")]
@@ -93,7 +105,7 @@ public sealed class NotificationEmailPresentationTests
         var message = NotificationMailKit.Build(email, "https://app.example.org");
 
         Assert.Contains("href=\"https://app.example.org/projects/12/ai-tasks/5?result=300\"", message.HtmlBody);
-        Assert.Contains("AI report ready", message.Subject);
+        Assert.Equal("Aetheus - Report", message.Subject);
     }
 
     [Theory]
@@ -163,7 +175,7 @@ public sealed class NotificationEmailPresentationTests
     public void MimeRoundTrip_PreservesUtf8AndBothAlternatives()
     {
         var mail = NotificationMailKit.Build(FailedRun with
-        { PayloadJson = """{"PipelineName":"Échec à Bruxelles","PipelineRunId":2698}""" });
+        { PayloadJson = """{"PipelineName":"Échec à Bruxelles","ProjectName":"Bruxelles Échec","PipelineRunId":2698}""" });
         using var message = new MimeMessage
         { Subject = mail.Subject, Body = new BodyBuilder { TextBody = mail.TextBody, HtmlBody = mail.HtmlBody }.ToMessageBody() };
         message.From.Add(MailboxAddress.Parse("no-reply@example.org"));
@@ -175,7 +187,7 @@ public sealed class NotificationEmailPresentationTests
         Assert.NotNull(read.TextBody);
         Assert.NotNull(read.Body);
         Assert.Equal(mail.Subject, read.Subject);
-        Assert.Contains("Échec à Bruxelles", read.Subject);
+        Assert.Contains("Bruxelles Échec", read.Subject);
         Assert.Contains("Échec à Bruxelles", read.TextBody);
         Assert.Equal(mail.TextBody.ReplaceLineEndings("\n"), read.TextBody.ReplaceLineEndings("\n"));
         Assert.Equal(mail.HtmlBody!.ReplaceLineEndings("\n"), read.HtmlBody!.ReplaceLineEndings("\n"));

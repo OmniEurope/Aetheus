@@ -49,6 +49,7 @@ public sealed class PipelineApprovalLinkTests : BunitContext
     {
         Id = 34,
         PipelineRunId = 12,
+        PipelineRunNumber = 5,
         StageName = "Deploy",
         Scope = ApprovalScope.Environment,
         EnvironmentName = "prod",
@@ -65,6 +66,23 @@ public sealed class PipelineApprovalLinkTests : BunitContext
             .Add(page => page.ApprovalId, 34));
     }
 
+    // R-8: the crumb names the run by its number within the pipeline, its link by the technical key.
+    [Fact]
+    public void TheRunCrumb_ShowsTheRunNumber_AndLinksByTheTechnicalKey()
+    {
+        Backend(ApprovalStatus.Pending);
+
+        var cut = Open(action: null);
+
+        cut.WaitForAssertion(() =>
+        {
+            var crumb = Services.GetRequiredService<BreadcrumbService>().Items[1];
+            Assert.Contains("#5", crumb.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain("12", crumb.Text, StringComparison.Ordinal);
+            Assert.Equal("/pipelines/runs/12", crumb.Href);
+        });
+    }
+
     private List<string?> Posts() => [.. _handler.RequestDetails
         .Where(request => request.Method == "POST" && request.Url.Contains(Decide, StringComparison.Ordinal))
         .Select(request => request.Body)];
@@ -72,21 +90,19 @@ public sealed class PipelineApprovalLinkTests : BunitContext
     [Theory]
     [InlineData("approve", ApprovalStatus.Approved)]
     [InlineData("reject", ApprovalStatus.Rejected)]
-    public void SignedIn_TheLinkDecidesOnce_ThroughThePost(string action, ApprovalStatus decision)
+    public void SignedIn_TheLinkDecidesOnce_ThroughThePost_ThenLandsOnTheRunPage(string action, ApprovalStatus decision)
     {
         Backend(ApprovalStatus.Pending);
 
         var cut = Open(action);
 
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".approval-link-outcome")));
+        cut.WaitForAssertion(() => Assert.Equal("http://localhost/pipelines/runs/12", Nav.Uri));
         var body = Assert.Single(Posts());
         Assert.Matches($"\"decision\":(\"{decision}\"|{(int)decision})", body!);
-        Assert.Contains("ApprovalLinkStatus" + decision, cut.Find(".approval-link-status").TextContent, StringComparison.Ordinal);
-        // The action is spent: the address no longer carries it, and a new render decides nothing more.
-        Assert.Equal("http://localhost/pipelines/runs/12/approvals/34", Nav.Uri);
+        Assert.Equal(decision, _stored.Status);
+        // The action is spent: a new render decides nothing more.
         cut.Render();
         Assert.Single(Posts());
-        Assert.Empty(cut.FindAll(".approval-decision"));
     }
 
     [Theory]
@@ -117,40 +133,20 @@ public sealed class PipelineApprovalLinkTests : BunitContext
         Assert.Empty(Posts());
     }
 
+    /// <summary>R-13: Comment has no one-click action; it lands on the run page at once and sends nothing.</summary>
     [Fact]
-    public async Task Comment_OpensTheField_AndSendsOnlyWhenTheReaderDecides()
+    public void Comment_LandsOnTheRunPage_AndSendsNothing()
     {
         Backend(ApprovalStatus.Pending);
 
-        var cut = Open("comment");
+        Open("comment");
 
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("textarea")));
+        Assert.Equal("http://localhost/pipelines/runs/12", Nav.Uri);
         Assert.Empty(Posts());
-        cut.Find("textarea").Input("checked the changelog");
-        await cut.Find("button.approval-decision").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".approval-link-outcome")));
-        var body = Assert.Single(Posts());
-        Assert.Contains("checked the changelog", body, StringComparison.Ordinal);
-    }
-
-    /// <summary>R-24: the Comment link of the mail puts the focus on the comment field; the other links do not.</summary>
-    [Fact]
-    public void Comment_PutsTheFocusOnTheCommentField()
-    {
-        Backend(ApprovalStatus.Pending);
-
-        var cut = Open("comment");
-
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("textarea")));
-        var fieldId = cut.Find("textarea").Id;
-        Assert.False(string.IsNullOrEmpty(fieldId));
-        cut.WaitForAssertion(() => Assert.Contains(JSInterop.Invocations,
-            call => call.Identifier == "Aetheus.focusById" && Equals(call.Arguments[0], fieldId)));
     }
 
     [Fact]
-    public void WithoutComment_NothingIsFocused()
+    public void WithoutAction_NothingIsFocused_AndTheReaderStaysOnTheApprovalPage()
     {
         Backend(ApprovalStatus.Pending);
 
@@ -158,6 +154,40 @@ public sealed class PipelineApprovalLinkTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button.approval-decision")));
         Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "Aetheus.focusById");
+        Assert.Equal("http://localhost/pipelines/runs/12/approvals/34", Nav.Uri);
+    }
+
+    /// <summary>F-FRONT-007: the link of approval A (<c>?action=approve</c>) is still reading when the reader moves to
+    /// approval B of the same run. A's late read must not decide B, nor replace B's page state.</summary>
+    [Fact]
+    public async Task ALinkRead_AnsweredAfterTheReaderMovedToAnotherApproval_DecidesNothing()
+    {
+        Backend(ApprovalStatus.Pending);
+        var other = Approval(ApprovalStatus.Pending, null) with { Id = 35 };
+        var approvals = new List<PipelineApprovalDto> { Approval(ApprovalStatus.Pending, null), other };
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reads = 0;
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, Approvals, async _ =>
+        {
+            if (Interlocked.Increment(ref reads) == 1) await gate.Task;
+            return approvals;
+        });
+
+        var cut = Open("approve");
+        await _handler.WhenGetAsync(Approvals);
+        // The reader moves to approval B while A's read is still in flight.
+        Nav.NavigateTo("http://localhost/pipelines/runs/12/approvals/35");
+        cut.Render(parameters => parameters
+            .Add(page => page.RunId, 12)
+            .Add(page => page.ApprovalId, 35));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button.approval-decision")));
+        gate.SetResult();
+        await Task.Delay(200, Xunit.TestContext.Current.CancellationToken);
+        cut.Render();
+
+        Assert.DoesNotContain(_handler.RequestDetails, request => request.Method == "POST");
+        Assert.NotEmpty(cut.FindAll("button.approval-decision"));
+        Assert.Empty(cut.FindAll(".approval-link-outcome"));
     }
 
     [Fact]
@@ -169,6 +199,8 @@ public sealed class PipelineApprovalLinkTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Single(Posts()));
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".approval-decision")));
+        // R-13: a refused action keeps the reader on the approval page instead of redirecting.
+        Assert.Equal("http://localhost/pipelines/runs/12/approvals/34", Nav.Uri);
         Assert.Empty(cut.FindAll(".approval-link-outcome"));
         cut.Render();
         Assert.Single(Posts());

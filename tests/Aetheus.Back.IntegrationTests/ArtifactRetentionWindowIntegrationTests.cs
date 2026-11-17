@@ -6,7 +6,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Checks the correlated retention query on PostgreSQL: the last three deployed releases
 /// retain payloads beyond ordinary expiry.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ArtifactRetentionWindowIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

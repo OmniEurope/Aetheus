@@ -16,11 +16,12 @@ public sealed class MailboxControllerTests
     private readonly IMailboxService _service = Substitute.For<IMailboxService>();
     private readonly IMailboxAdministratorAccess _administratorAccess = Substitute.For<IMailboxAdministratorAccess>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
+    private readonly MailboxDocumentTickets _documents = new(TimeProvider.System);
     private readonly MailboxController _sut;
 
     public MailboxControllerTests()
     {
-        _sut = new MailboxController(_service, _administratorAccess, _authz);
+        _sut = new MailboxController(_service, _administratorAccess, _authz, _documents);
         SignIn("1");
     }
 
@@ -215,5 +216,36 @@ public sealed class MailboxControllerTests
 
         await _service.Received(1).ListDirectoryAsync(
             Arg.Is<IReadOnlyCollection<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 7 })), request, Arg.Any<CancellationToken>());
+    }
+
+    // Audit decision 2026-10-12 (option a): the read of an HTML message issues the single-use ticket of its
+    // document, bound to the caller's held mailbox key; the frame loads that document by URL.
+    [Fact]
+    public async Task Reading_an_html_message_issues_a_document_ticket_bound_to_the_caller_key()
+    {
+        Allow(Permission.Read);
+        _service.GetMessageAsync(Arg.Any<MailboxCredentialKey>(), "INBOX", 5u, false, Arg.Any<CancellationToken>())
+            .Returns(new MailboxMessageDto { Uid = 5, Html = "<p style=\"color:red\">x</p>" });
+
+        var message = Assert.IsType<MailboxMessageDto>(Assert.IsType<OkObjectResult>((await _sut.GetMessage(7, 3, 5, "INBOX", ct: Ct)).Result).Value);
+
+        Assert.StartsWith("api/mail/documents/", message.DocumentPath, StringComparison.Ordinal);
+        var ticket = Assert.IsType<MailboxDocumentTicket>(_documents.Redeem(message.DocumentPath!["api/mail/documents/".Length..]));
+        Assert.Equal(new MailboxCredentialKey("test:1", 7, 3), ticket.Key);
+        Assert.Equal(MailboxDocumentPolicy.Wrap("<p style=\"color:red\">x</p>"), ticket.Document);
+    }
+
+    [Fact]
+    public async Task A_text_message_or_a_forbidden_read_issues_no_document_ticket()
+    {
+        var forbidden = await _sut.GetMessage(7, 3, 5, "INBOX", ct: Ct);
+        Assert.IsType<ForbidResult>(forbidden.Result);
+
+        Allow(Permission.Read);
+        _service.GetMessageAsync(Arg.Any<MailboxCredentialKey>(), "INBOX", 5u, false, Arg.Any<CancellationToken>())
+            .Returns(new MailboxMessageDto { Uid = 5, Text = "plain" });
+        var message = Assert.IsType<MailboxMessageDto>(Assert.IsType<OkObjectResult>((await _sut.GetMessage(7, 3, 5, "INBOX", ct: Ct)).Result).Value);
+
+        Assert.Null(message.DocumentPath);
     }
 }

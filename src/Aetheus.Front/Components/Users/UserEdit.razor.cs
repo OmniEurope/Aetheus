@@ -40,7 +40,13 @@ public partial class UserEdit : IAsyncDisposable
     private List<EffectivePermissionDto>? _effectivePermissions;
 
     // Organizations tab (lazy-loaded on activation / deep-link).
+    // R-10: the user's whole list is held here; the grid draws its window (sort, filters, page cut as it asks).
+    // The list is read again only when stale (after a change), by the grid's own background read.
     private List<UserOrganizationDto> _userOrgs = [];
+    private List<UserOrganizationDto> _orgRows = [];
+    private int _orgRowCount;
+    private bool _orgsStale;
+    private AetheusDataGrid<UserOrganizationDto>? _orgsGrid;
     private List<OrganizationDto> _availableOrgs = [];
     private bool _orgsLoaded;
     private bool _loadingOrgs;
@@ -119,7 +125,11 @@ public partial class UserEdit : IAsyncDisposable
         if (_permissionChanges is null)
         {
             _permissionChanges = new AdminEntitySubscription(HubFactory);
-            await _permissionChanges.StartAsync(
+            // Not awaited: the page renders when this method completes, so awaiting the hub start tied the
+            // account (tabs, breadcrumb) to a realtime negotiation that can take up to SignalRStartTimeout
+            // under load. StartAsync swallows a failed start itself, and _hub is set before it first yields,
+            // so DisposeAsync always reaches the connection.
+            _ = _permissionChanges.StartAsync(
                 [AdminEntities.User, AdminEntities.Role, AdminEntities.Organization],
                 () => InvokeAsync(async () =>
                 {
@@ -188,6 +198,7 @@ public partial class UserEdit : IAsyncDisposable
             var userOrgs = await Api.Servers.GetUserOrganizationsAsync(Id.Value);
             if (generation != _loadGeneration) return;
             _userOrgs = userOrgs;
+            _orgsStale = false;
             var memberOf = _userOrgs.Select(o => o.OrganizationId).ToHashSet();
             var available = new List<OrganizationDto>();
             const int pageSize = 200;
@@ -209,12 +220,41 @@ public partial class UserEdit : IAsyncDisposable
         }
     }
 
+    private async Task LoadOrgRowsAsync(GridLoadArgs args)
+    {
+        if (_orgsStale && Id is { } userId)
+        {
+            var generation = _loadGeneration;
+            var fresh = await Api.Servers.GetUserOrganizationsAsync(userId);
+            if (generation != _loadGeneration) return;
+            _userOrgs = fresh;
+            _orgsStale = false;
+        }
+        _orgRows = args.ToClientPage(_userOrgs);
+        _orgRowCount = args.ClientFilteredCount(_userOrgs);
+    }
+
+    /// <summary>One page of the export, cut from a read of the list with the grid's sort and column filters.</summary>
+    private async Task<PaginatedResult<UserOrganizationDto>> ReadOrgsExportAsync(GridLoadArgs args)
+    {
+        var all = Id is { } userId ? await Api.Servers.GetUserOrganizationsAsync(userId) : [];
+        return new PaginatedResult<UserOrganizationDto> { Items = args.ToClientPage(all), TotalCount = args.ClientFilteredCount(all) };
+    }
+
+    private async Task ShowOrgAsync(UserOrganizationDto org)
+    {
+        _orgsStale = true;
+        if (_orgsGrid is not null) await _orgsGrid.ShowRowAsync(org);
+        else await LoadUserOrgsAsync();
+    }
+
     private async Task OnAddOrg()
     {
         if (_selectedOrgId is null || Id is null) return;
         _addingOrg = true;
         try
         {
+            var organization = _availableOrgs.FirstOrDefault(o => o.Id == _selectedOrgId.Value);
             var member = await Api.Servers.AddOrganizationMemberAsync(_selectedOrgId.Value,
                 new AddOrganizationMemberRequest { UserId = Id.Value, Role = _newOrgRole });
             if (member is not null)
@@ -222,7 +262,14 @@ public partial class UserEdit : IAsyncDisposable
                 Toast.Success("Saved", "Saved");
                 _selectedOrgId = null;
                 _newOrgRole = OrganizationRole.Member;
-                await LoadUserOrgsAsync();
+                if (organization is null)
+                {
+                    await LoadUserOrgsAsync();
+                    return;
+                }
+                _availableOrgs.Remove(organization);
+                // R-10: the membership shows at once as the server answered it; the read behind it confirms.
+                await ShowOrgAsync(new UserOrganizationDto(organization.Id, member.Id, organization.Name, organization.Slug, member.Role));
             }
             else
             {
@@ -241,9 +288,8 @@ public partial class UserEdit : IAsyncDisposable
             new UpdateOrganizationMemberRequest { Role = role });
         if (updated is not null)
         {
-            var idx = _userOrgs.FindIndex(o => o.MemberId == org.MemberId);
-            if (idx >= 0) _userOrgs[idx] = org with { Role = role };
             Toast.Success("Saved", "Saved");
+            await ShowOrgAsync(org with { Role = updated.Role });
         }
         else
         {
@@ -263,7 +309,12 @@ public partial class UserEdit : IAsyncDisposable
         {
             if (await Api.Servers.RemoveOrganizationMemberAsync(org.OrganizationId, org.MemberId))
             {
-                await LoadUserOrgsAsync();
+                // R-10: the membership leaves the grid at once; the organization is offered again; the read behind confirms.
+                _orgsStale = true;
+                _availableOrgs = [.. _availableOrgs.Append(new OrganizationDto(org.OrganizationId, org.Name, org.Slug, string.Empty, 0, 0, default, default))
+                    .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)];
+                if (_orgsGrid is not null) await _orgsGrid.HideRowAsync(org);
+                else await LoadUserOrgsAsync();
                 Toast.Success("Deleted", "Saved");
             }
             else

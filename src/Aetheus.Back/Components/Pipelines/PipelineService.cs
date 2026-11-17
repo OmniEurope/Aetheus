@@ -102,6 +102,11 @@ public class PipelineService(
 
     public async Task<PipelineDto> CreatePipelineAsync(CreatePipelineRequest request, CancellationToken ct = default)
     {
+        // R-38: a name is unique within its project. Said here, before anything is written (the git commit comes first),
+        // instead of letting the unique index answer with a generic write conflict.
+        if (request.ProjectId is { } projectId
+            && await repo.FindPipelineByNameAndProjectAsync(request.Name, projectId, ct).ConfigureAwait(false) is not null)
+            throw new ConflictException($"A pipeline named '{request.Name}' already exists in this project.");
         await EnsureAiProfileBelongsToPipelineOrganizationAsync(
             request.AiRunnerProfileId, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct)
             .ConfigureAwait(false);
@@ -138,6 +143,8 @@ public class PipelineService(
     {
         var pipeline = await repo.FindPipelineAsync(id, ct).ConfigureAwait(false);
         if (pipeline is null) return null;
+        // R-11: an imported pipeline is read-only, settings included (a settings-only save adopts the repository's file).
+        PipelineExternalImportPolicy.EnsureEditable(pipeline);
         await EnsureAiProfileBelongsToPipelineOrganizationAsync(
             request.AiRunnerProfileId, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct)
             .ConfigureAwait(false);
@@ -174,8 +181,31 @@ public class PipelineService(
             throw new ConflictException(
                 $"Pipeline definition could not be updated in the project's git repository: {gitError}");
 
+        var previousOwner = await repo.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false);
         ApplyUpdate(pipeline, request, plan.Yaml, nextBranch);
+        await MoveArtifactsWithPipelineAsync(pipeline, previousOwner, ct).ConfigureAwait(false);
 
+        await SaveOrRollBackGitAsync(pipeline, snapshot, gitOutcome == GitWriteOutcome.Committed,
+            nextLocation, previousLocation, plan.RollbackYaml ?? snapshot.YamlDefinition, actor, ct).ConfigureAwait(false);
+        await PipelineAuthoritativeGitCoordinator.CopyToLinkedEnvironmentProjectAsync(
+            pipeline, repo, pipelineGit, logger, _ownership.CurrentUsername ?? "system", ct).ConfigureAwait(false);
+        await audit.LogAsync("Updated", "Pipeline", pipeline.Id, pipeline.Name, ct).ConfigureAwait(false);
+        // R-38: a stored change whose integration branch could not take it back is a divergence the next
+        // "Advance main" will hit; the audit log is where it is answerable from, besides the server log.
+        if (gitOutcome == GitWriteOutcome.Committed && gitError is not null)
+            await audit.LogAsync("PipelineIntegrationBranchNotMerged", "Pipeline", pipeline.Id, gitError, ct)
+                .ConfigureAwait(false);
+        await BroadcastPipelineChangeAsync(pipeline, EntityChangeOps.Updated, ct).ConfigureAwait(false);
+        return PipelineDtoMapper.Map(pipeline);
+    }
+
+    /// <summary>Stores the update; when the store fails, the entity is restored and a Git change already committed is
+    /// written back (the repository stays authoritative), and a rollback that fails is a conflict, never hidden.</summary>
+    private async Task SaveOrRollBackGitAsync(
+        Pipeline pipeline, PipelineStateSnapshot snapshot, bool gitCommitted,
+        PipelineGitDefinitionLocation? committedLocation, PipelineGitDefinitionLocation? previousLocation,
+        string rollbackYaml, string actor, CancellationToken ct)
+    {
         try
         {
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -183,21 +213,43 @@ public class PipelineService(
         catch
         {
             snapshot.Restore(pipeline);
-            if (gitOutcome == GitWriteOutcome.Committed)
+            if (gitCommitted)
             {
                 var (rollbackOutcome, rollbackError) = await pipelineGit.ApplyProjectPipelineChangeAsync(
-                    nextLocation, previousLocation, plan.RollbackYaml ?? snapshot.YamlDefinition, actor, ct).ConfigureAwait(false);
+                    committedLocation, previousLocation, rollbackYaml, actor, ct).ConfigureAwait(false);
                 if (rollbackOutcome != GitWriteOutcome.Committed)
                     throw new ConflictException(
                         $"Database update failed and the authoritative Git change could not be rolled back: {rollbackError}");
             }
             throw;
         }
-        await PipelineAuthoritativeGitCoordinator.CopyToLinkedEnvironmentProjectAsync(
-            pipeline, repo, pipelineGit, logger, _ownership.CurrentUsername ?? "system", ct).ConfigureAwait(false);
-        await audit.LogAsync("Updated", "Pipeline", pipeline.Id, pipeline.Name, ct).ConfigureAwait(false);
-        await BroadcastPipelineChangeAsync(pipeline, EntityChangeOps.Updated, ct).ConfigureAwait(false);
-        return PipelineDtoMapper.Map(pipeline);
+    }
+
+    /// <summary>
+    /// BACK-002 (user decision): artifacts follow a pipeline that moves to another project, so the
+    /// project grid, quota and retention, which read the artifact's own ProjectId, agree with the
+    /// download authorization, which reads the pipeline's current owner. The old project stops listing
+    /// them. The releases the pipeline published follow it the same way (BACK-002 follow-up), so the release
+    /// list, retention and permissions of the new project see them. Written by the same save as the move.
+    /// </summary>
+    private async Task MoveArtifactsWithPipelineAsync(Pipeline pipeline, int? previousOwner, CancellationToken ct)
+    {
+        var nextOwner = await repo.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false);
+        if (nextOwner is not { } owner || nextOwner == previousOwner) return;
+        var moved = await repo.ReassignPipelineArtifactsAsync(pipeline.Id, owner, ct).ConfigureAwait(false);
+        if (moved > 0)
+            logger.LogInformation(
+                "Pipeline {PipelineId} moved from project {OldProjectId} to {NewProjectId}: {Count} artifact(s) follow it.",
+                pipeline.Id, previousOwner, owner, moved);
+        var (releasesMoved, releasesKept) = await repo.ReassignPipelineReleasesAsync(pipeline.Id, owner, ct).ConfigureAwait(false);
+        if (releasesMoved > 0)
+            logger.LogInformation(
+                "Pipeline {PipelineId} moved from project {OldProjectId} to {NewProjectId}: {Count} release(s) follow it.",
+                pipeline.Id, previousOwner, owner, releasesMoved);
+        if (releasesKept > 0)
+            logger.LogWarning(
+                "Pipeline {PipelineId} moved to project {NewProjectId}: {Count} release(s) stay in their project because the destination already holds that version or a live release.",
+                pipeline.Id, owner, releasesKept);
     }
 
     /// <summary>Mirrors the accepted update on the pipeline row, with the definition Git now holds.</summary>
@@ -205,8 +257,10 @@ public class PipelineService(
     {
         // RBAC audit, finding 3: automated runs (schedule, webhook) act as the owner. A caller who changes
         // the definition (steps or triggers) becomes the owner, as a git push does, so writing a pipeline
-        // never borrows its owner's rights. A save that keeps the definition leaves the owner in place.
-        var definitionEdited = !string.Equals(request.YamlDefinition, pipeline.YamlDefinition, StringComparison.Ordinal);
+        // never borrows its owner's rights. A save that keeps the definition leaves the owner in place, and
+        // so does moving a schedule (PLAN-005, question 1): the steps stay the ones the owner answers for.
+        var definitionEdited = !string.Equals(request.YamlDefinition, pipeline.YamlDefinition, StringComparison.Ordinal)
+            && !PipelineScheduleOnlyEdit.IsScheduleOnly(pipeline.YamlDefinition, yaml);
         if (definitionEdited && !string.IsNullOrEmpty(_ownership.CurrentUsername))
             pipeline.CreatedByUsername = _ownership.CurrentUsername;
         pipeline.Name = request.Name;
@@ -491,6 +545,7 @@ public class PipelineService(
         string? actorUsername,
         CancellationToken ct)
     {
+        PipelineExternalImportPolicy.EnsureEditable(existing);
         EnsureRepositoryBinding(existing, name, sourceRepositoryId);
         if (!MatchesRequestedSourceBranch(existing, configuredSourceBranch, sourceBranch, defaultBranch))
             return PipelineDtoMapper.Map(existing);

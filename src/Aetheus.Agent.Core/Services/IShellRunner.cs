@@ -57,4 +57,33 @@ public interface IShellRunner
         int maxCapturedOutputBytes,
         CancellationToken ct,
         TimeSpan? timeout = null);
+
+    /// <summary>
+    /// Same as the environment-aware <c>RunExecAsync</c>, but hands every stdout and stderr line to
+    /// <paramref name="onLine"/> (second argument: true for stderr) as soon as the process writes it,
+    /// instead of only returning the whole output at the end. The result still carries a bounded
+    /// capture of both channels. A runner that cannot stream falls back to replaying the captured
+    /// lines after the process exited; <see cref="DefaultShellRunner"/> streams live.
+    /// </summary>
+    async Task<ShellExecResult> RunExecStreamingAsync(
+        string fileName,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string> environmentVariables,
+        string workingDirectory,
+        bool inheritEnvironment,
+        int maxCapturedOutputBytes,
+        Func<string, bool, Task> onLine,
+        CancellationToken ct,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(onLine);
+        var result = await RunExecAsync(
+            fileName, args, environmentVariables, workingDirectory, inheritEnvironment,
+            maxCapturedOutputBytes, ct, timeout).ConfigureAwait(false);
+        foreach (var line in result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            await onLine(line.TrimEnd('\r'), false).ConfigureAwait(false);
+        foreach (var line in result.StdErr.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            await onLine(line.TrimEnd('\r'), true).ConfigureAwait(false);
+        return result;
+    }
 }

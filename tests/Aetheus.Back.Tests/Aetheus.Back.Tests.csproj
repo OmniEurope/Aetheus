@@ -7,6 +7,8 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="NetArchTest.Rules" />
     <PackageReference Include="NSubstitute" />
+    <!-- Direct ref keeps the patched release ahead of the vulnerable transitive one (MimeKit, via Aetheus.Back, which no longer pins it: the web framework prunes it). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
   </ItemGroup>
@@ -30,8 +32,41 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Real OSV records as the API publishes them (recorded 2026-11-01). -->
+    <Content Include="..\fixtures\osv\*"
+             Link="fixtures\osv\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lock files in the shape their own tool writes, read by the inventory reader tests. -->
+    <Content Include="..\fixtures\inventory\*"
+             Link="fixtures\inventory\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Manifests and lock files copied from this repository (and one Composer pair written by hand), read by the dependency bump tests.
+         The .fixture suffix keeps scanners and the inventory reader from taking them for the repository's own dependencies. -->
+    <Content Include="..\fixtures\dependency-bump\*.fixture"
+             Link="fixtures\dependency-bump\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Real files recorded from the public runtime sources of the vulnerability watch. -->
+    <Content Include="..\fixtures\runtime-advisories\*"
+             Link="fixtures\runtime-advisories\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+    <!-- Answers recorded from the real package registries, read by PackageVersionListTests. -->
+    <None Update="PackageFeeds\Recorded\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Tests that only exist on one OS: see tests/Shared/PlatformSpecificTests.cs. -->
     <Compile Include="..\Shared\PlatformSpecificTests.cs" Link="Shared\PlatformSpecificTests.cs" />
+    <!-- A leader or non-leader PostgreSQL lease double, shared with Aetheus.Back.IntegrationTests. -->
+    <Compile Include="..\Shared\LeaderLeaseDouble.cs" Link="Shared\LeaderLeaseDouble.cs" />
     <!-- Exercises the real SARIF parser with output written by the accessibility suite. -->
     <Compile Include="..\Aetheus.E2E\AccessibilitySarif.cs" Link="Shared\AccessibilitySarif.cs" />
   </ItemGroup>

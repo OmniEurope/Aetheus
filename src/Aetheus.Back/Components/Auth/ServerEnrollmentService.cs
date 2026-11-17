@@ -17,14 +17,15 @@ public class ServerEnrollmentService(
     IAuditService audit,
     IHubContext<ServerHub> serverHub,
     IAdminChangeNotifier adminNotifier,
-    JwtOptions jwtOptions,
+    TokenHashKeys tokenHashKeys,
     TimeProvider timeProvider) : IServerEnrollmentService
 {
     public async Task<ServerRegistrationResponse?> RegisterServerAsync(ServerRegistrationRequest request, CancellationToken ct = default)
     {
         // Hardening (High #6): repo lookup now compares the SHA-256 hash, not plaintext, so
         // a DB read does not yield usable registration tokens.
-        var regToken = await repo.FindValidRegistrationTokenAsync(AuthTokenHelper.HashToken(jwtOptions.SigningKey, request.RegistrationToken), ct).ConfigureAwait(false);
+        var regToken = await repo.FindValidRegistrationTokenAsync(
+            tokenHashKeys.HashCandidates(TokenHashPurpose.RegistrationToken, request.RegistrationToken), ct).ConfigureAwait(false);
         if (regToken is null) return null;
 
         var (server, matchedBy) = await FindEnrollmentMatchAsync(request, regToken.OrganizationId, ct).ConfigureAwait(false);
@@ -38,7 +39,7 @@ public class ServerEnrollmentService(
         else
             server = NewServer(request, regToken.OrganizationId, now);
         var bearerToken = AuthTokenHelper.GenerateSecureToken();
-        var tokenHash = AuthTokenHelper.HashToken(jwtOptions.SigningKey, bearerToken);
+        var tokenHash = tokenHashKeys.Hash(TokenHashPurpose.ServerToken, bearerToken);
         var ttlDays = config.GetValue("AgentToken:TtlDays", 365);
         var serverToken = new ServerToken
         {

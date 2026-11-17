@@ -164,7 +164,7 @@ public partial class Users : IAsyncDisposable
             catch (HttpRequestException)
             {
                 Toast.Error(L["Error"], L["SaveFailed"]);
-                await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+                await RestoreRowsAsync();
                 return;
             }
             if (owned.Count > 0)
@@ -172,7 +172,7 @@ public partial class Users : IAsyncDisposable
                 handover = await AskPipelineHandoverAsync(user.Username);
                 if (handover is null)
                 {
-                    await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+                    await RestoreRowsAsync();
                     return;
                 }
             }
@@ -189,10 +189,29 @@ public partial class Users : IAsyncDisposable
         };
         var updated = await Api.Auth.UpdateUserAsync(user.Id, request);
         if (updated is not null)
+        {
             Toast.Success(L["Saved"], isActive ? L["UserActivated"] : L["UserDeactivated"]);
+            await ShowSavedAsync(updated);
+        }
         else
+        {
             Toast.Error(L["Error"], L["SaveFailed"]);
-        await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+            await RestoreRowsAsync();
+        }
+    }
+
+    // R-10: the row shows what the save answered at once; the read behind it confirms.
+    private Task ShowSavedAsync(UserDto saved)
+    {
+        Cache.InvalidatePrefix("users:");
+        return _grid?.ShowRowAsync(saved) ?? Task.CompletedTask;
+    }
+
+    // A refused or abandoned change: the row (a switch the user already moved) goes back to the server's state.
+    private Task RestoreRowsAsync()
+    {
+        Cache.InvalidatePrefix("users:");
+        return _grid?.RestoreRowsAsync() ?? Task.CompletedTask;
     }
 
     private async Task<UserPipelineHandover?> AskPipelineHandoverAsync(string username) =>
@@ -221,11 +240,12 @@ public partial class Users : IAsyncDisposable
         if (updated is not null)
         {
             Toast.Success(L["Saved"], L["RolesUpdated"]);
+            await ShowSavedAsync(updated);
         }
         else
         {
             Toast.Error(L["Error"], L["SaveFailed"]);
-            await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+            await RestoreRowsAsync();
         }
     }
 

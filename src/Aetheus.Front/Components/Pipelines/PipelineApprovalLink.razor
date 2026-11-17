@@ -16,7 +16,7 @@
 
     @if (_loading)
     {
-        <AetheusLoader Size="OmniControlSize.Large" />
+        <VeilHold Busy="true" />
     }
     else if (_approval is null)
     {
@@ -35,7 +35,7 @@
             <OmniAlert Severity="OmniSeverity.Info" Title="@L["ApprovalLinkAlreadyDecided"]" Class="approval-link-already-decided">@DecidedLine</OmniAlert>
         }
 
-        <PipelineRunApprovalPanel Approval="_controller" StartWithComment="_commentAsked" />
+        <PipelineRunApprovalPanel Approval="_controller" />
 
         <OmniCard>
             <OmniStack Gap="OmniSpacing.Small">

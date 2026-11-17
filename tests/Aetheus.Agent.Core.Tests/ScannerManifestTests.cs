@@ -5,6 +5,26 @@ namespace Aetheus.Agent.Core.Tests;
 public sealed class ScannerManifestTests
 {
     [Fact]
+    public void DefaultManifest_DependencyScanReadsNpmDevelopmentDependencies()
+    {
+        var dependencies = Assert.Single(ScannerManifestCatalog.Default.Scanners, scanner => scanner.Key == "trivy-dependencies");
+
+        Assert.Contains("--include-dev-deps", dependencies.Arguments);
+    }
+
+    [Fact]
+    public void DefaultManifest_JavaScriptScannerReadsEveryLockfileAndQueriesOnlyOsv()
+    {
+        var osv = Assert.Single(ScannerManifestCatalog.Default.Scanners, scanner => scanner.Key == "osv-javascript");
+
+        Assert.Equal("Dependencies", osv.Category);
+        Assert.Contains("--recursive", osv.Arguments);
+        Assert.Contains("javascript/packagelockjson,javascript/yarnlock,javascript/pnpmlock,javascript/bunlock", osv.Arguments);
+        Assert.Equal(["api.osv.dev"], osv.AllowedDestinations);
+        Assert.Equal([1], osv.FindingExitCodes);
+    }
+
+    [Fact]
     public void DefaultManifest_HasUniqueImmutableScannerDefinitions()
     {
         var manifest = ScannerManifestCatalog.Default;
@@ -82,9 +102,11 @@ public sealed class ScannerManifestTests
         Assert.Equal("/home/aetheus-runtime", jscpd.HomeDirectory);
         Assert.Equal(134_217_728, jscpd.MaxTemporaryHomeBytes);
         // Jscpd 5 replaces the repository's configured lists with any list given on the command
-        // line, so the manifest passes none and the repository's.jscpd.json applies.
+        // line, so the manifest passes none and the repository's.jscpd.json applies; the agent adds the
+        // default ignore and source-language format lists only where the repository defines none
+        // (JscpdRepositoryConfiguration).
         Assert.DoesNotContain(jscpd.Arguments, argument =>
-            argument is "--ignore-pattern" or "--ignore" or "-i" or "--config" or "-c");
+            argument is "--ignore-pattern" or "--ignore" or "-i" or "--config" or "-c" or "--format" or "-f");
         var gitleaksHistory = Assert.Single(manifest.Scanners, scanner => scanner.Key == "gitleaks-history");
         Assert.All(manifest.Scanners.Where(scanner => scanner.Key is "gitleaks" or "gitleaks-history"), scanner =>
             Assert.Equal("/src/.gitleaks.toml", OptionValue(scanner, "--config")));

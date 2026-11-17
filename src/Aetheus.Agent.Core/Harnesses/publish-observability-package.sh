@@ -11,16 +11,26 @@ CURL_AUTH="$(mktemp)"
 NPMRC=""
 NUGET_CONFIG=""
 CURL="${CURL:-curl}"
+# R-20: no failure is anonymous. Every refusal names its reason; a command that fails under set -e
+# without one is still reported on exit with the stage it interrupted.
+STAGE="checking the $KIND candidate"
+SIGNALLED=""
+fail() { echo "$*" >&2; exit 1; }
 cleanup()
 {
+  EXIT_STATUS=$?
   rm -rf "$READBACK"
   rm -f "$CURL_AUTH"
   if [ -n "$NPMRC" ]; then rm -f "$NPMRC"; fi
   if [ -n "$NUGET_CONFIG" ]; then rm -f "$NUGET_CONFIG"; fi
+  if [ "$EXIT_STATUS" -ne 0 ] && [ -z "$SIGNALLED" ]; then
+    echo "The $KIND publication stopped with exit code $EXIT_STATUS while $STAGE." >&2
+  fi
 }
 terminate_on_signal()
 {
   SIGNAL="$1"
+  SIGNALLED="$1"
   trap - EXIT HUP INT TERM
   cleanup
   case "$SIGNAL" in
@@ -33,8 +43,9 @@ trap cleanup EXIT
 trap 'terminate_on_signal HUP' HUP
 trap 'terminate_on_signal INT' INT
 trap 'terminate_on_signal TERM' TERM
-test -d "$OUT"
-(cd "$OUT" && sha256sum --check SHA256SUMS)
+test -d "$OUT" || fail "The $KIND candidate directory is missing."
+(cd "$OUT" && sha256sum --check SHA256SUMS) \
+  || fail "The $KIND candidate does not match its SHA256SUMS; it was altered after the promotion signed it."
 case "$KIND" in telemetry|web-analytics-dotnet|web-analytics-browser) ;; *)
   echo "Unknown package kind." >&2
   exit 2
@@ -82,15 +93,21 @@ accept_existing_or_missing()
   EXPECTED="$1"
   URL="$2"
   DESTINATION="$3"
-  STATUS="$(download_status "$URL" "$DESTINATION")"
+  STATUS="$(download_status "$URL" "$DESTINATION")" \
+    || fail "The package registry could not be reached for $URL."
   case "$STATUS" in
     200)
-      if ! cmp "$EXPECTED" "$DESTINATION"; then
-        echo "Published package version already exists with different bytes; refusing overwrite." >&2
-        exit 1
+      if cmp -s "$EXPECTED" "$DESTINATION"; then
+        echo "Identical package version is already published; promotion is complete."
+        return 0
       fi
-      echo "Identical package version is already published; promotion is complete."
-      return 0
+      if [ "$KIND" != web-analytics-browser ] && accept_resigned_nuget "$EXPECTED" "$DESTINATION"; then
+        echo "The published $ID $VERSION carries the same content under another pinned-author signature;" \
+          "promotion is complete."
+        return 0
+      fi
+      echo "Published package version already exists with different bytes; refusing overwrite." >&2
+      exit 1
       ;;
     404)
       rm -f "$DESTINATION"
@@ -147,8 +164,10 @@ case "$KIND" in
           echo "Refusing to publish $VERSION: no usable npm dist-tag derives from it." >&2
           exit 1 ;;
       esac
+      STAGE="publishing @aetheus/web-analytics $VERSION"
       NPM_CONFIG_USERCONFIG="$NPMRC" npm publish "$TARBALL" \
-        --registry "$NPM_SOURCE" --tag "$NPM_TAG"
+        --registry "$NPM_SOURCE" --tag "$NPM_TAG" \
+        || fail "npm publish of @aetheus/web-analytics@$VERSION failed."
       # Report registry read-back status and allow a bounded propagation delay so a failed
       # verification remains distinguishable from successful publication. See
       # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
@@ -165,8 +184,10 @@ case "$KIND" in
           ATTEMPT=$((ATTEMPT + 1))
           sleep 3
       done
-      cmp "$TARBALL" "$READBACK/aetheus-web-analytics-$VERSION.tgz"
+      cmp "$TARBALL" "$READBACK/aetheus-web-analytics-$VERSION.tgz" \
+        || fail "The npm registry serves @aetheus/web-analytics@$VERSION with other bytes than were published."
     fi
+    STAGE="installing @aetheus/web-analytics $VERSION in a consumer"
     CONSUMER="$READBACK/npm-consumer"
     mkdir -p "$CONSUMER"
     (
@@ -186,6 +207,18 @@ case "$KIND" in
   telemetry) ID="Aetheus.Telemetry" ;;
   web-analytics-dotnet) ID="Aetheus.WebAnalytics" ;;
 esac
+# R-20: the consumer restore below proves every framework the packages ship, net11.0 included. Run
+# 3373 pushed Aetheus.Telemetry and only then failed on a host SDK 10.0.202 (NETSDK1045). The SDK is
+# checked here, during the preflight, before anything is pushed.
+STAGE="checking the .NET SDK"
+CONSUMER_FRAMEWORKS="net10.0;net11.0"
+command -v "$DOTNET" >/dev/null 2>&1 || fail "The .NET SDK executable '$DOTNET' is not available."
+SDK_VERSION="$(cd "$READBACK" && "$DOTNET" --version)" \
+  || fail "The .NET SDK at $DOTNET does not report its version."
+SDK_MAJOR="${SDK_VERSION%%.*}"
+case "$SDK_MAJOR" in ''|*[!0-9]*) fail "The .NET SDK at $DOTNET reports an unreadable version '$SDK_VERSION'." ;; esac
+test "$SDK_MAJOR" -ge 11 || fail "The .NET SDK $SDK_VERSION at $DOTNET cannot target net11.0;" \
+  "the consumer verification of $ID ($CONSUMER_FRAMEWORKS) needs .NET SDK 11 or later."
 EXPECTED_FINGERPRINT="$(printf '%s' "${AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT:-}" \
   | tr '[:lower:]' '[:upper:]')"
 case "$EXPECTED_FINGERPRINT" in ''|*[!0-9A-F]*)
@@ -258,23 +291,128 @@ verify_internal_nuget_signature()
   return 1
 }
 
+# R-20: `dotnet nuget sign` adds a timestamped signature, so a rerun re-signs the same candidate into
+# other bytes and the byte-for-byte comparison alone can never converge on an interrupted release.
+# An already-published version with other bytes is accepted only when BOTH hold:
+#   1. its signature verifies against the pinned author (verify_internal_nuget_signature, fail-closed
+#      on any other diagnostic);
+#   2. every entry but the signature entry .signature.p7s is identical to the candidate's: the same
+#      entry names, each one once, and the same uncompressed bytes (SHA-256 per entry).
+# Anything else stays a refusal. The comparison prints exactly "same-content" when it holds, so a
+# node that does nothing cannot pass for one that compared.
+same_content_but_signature()
+{
+  node - "$1" "$2" <<'NODE'
+const fs = require("node:fs");
+const zlib = require("node:zlib");
+const crypto = require("node:crypto");
+const SIGNATURE = ".signature.p7s";
+function entries(path) {
+  const zip = fs.readFileSync(path);
+  let end = -1;
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 65535); i--) {
+    if (zip.readUInt32LE(i) === 0x06054b50) { end = i; break; }
+  }
+  if (end < 0) throw new Error(`${path} is not a zip archive`);
+  const count = zip.readUInt16LE(end + 10);
+  let offset = zip.readUInt32LE(end + 16);
+  if (count === 0xffff || offset === 0xffffffff) throw new Error(`${path} is a zip64 archive`);
+  const result = new Map();
+  for (let n = 0; n < count; n++) {
+    if (zip.readUInt32LE(offset) !== 0x02014b50) throw new Error(`${path} has a corrupt central directory`);
+    const flags = zip.readUInt16LE(offset + 8);
+    const method = zip.readUInt16LE(offset + 10);
+    const compressed = zip.readUInt32LE(offset + 20);
+    const size = zip.readUInt32LE(offset + 24);
+    const nameLength = zip.readUInt16LE(offset + 28);
+    const extraLength = zip.readUInt16LE(offset + 30);
+    const commentLength = zip.readUInt16LE(offset + 32);
+    const local = zip.readUInt32LE(offset + 42);
+    const name = zip.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    offset += 46 + nameLength + extraLength + commentLength;
+    if (result.has(name)) throw new Error(`${path} holds the entry ${name} twice`);
+    if (flags & 1) throw new Error(`${path} holds the encrypted entry ${name}`);
+    if (zip.readUInt32LE(local) !== 0x04034b50) throw new Error(`${path} has a corrupt entry ${name}`);
+    const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+    const raw = zip.subarray(start, start + compressed);
+    let data;
+    if (method === 0) data = raw;
+    else if (method === 8) data = zlib.inflateRawSync(raw);
+    else throw new Error(`${path} compresses ${name} with the unsupported method ${method}`);
+    if (data.length !== size) throw new Error(`${path} entry ${name} does not have its declared size`);
+    result.set(name, crypto.createHash("sha256").update(data).digest("hex"));
+  }
+  return result;
+}
+const [candidatePath, publishedPath] = process.argv.slice(2);
+const candidate = entries(candidatePath);
+const published = entries(publishedPath);
+if (!published.has(SIGNATURE)) {
+  console.error(`The published package has no ${SIGNATURE} entry.`);
+  process.exit(3);
+}
+candidate.delete(SIGNATURE);
+published.delete(SIGNATURE);
+const differences = [...new Set([...candidate.keys(), ...published.keys()])]
+  .filter(name => candidate.get(name) !== published.get(name))
+  .sort();
+if (differences.length > 0) {
+  console.error(`Entries that differ besides the signature: ${differences.join(", ")}`);
+  process.exit(3);
+}
+console.log("same-content");
+NODE
+}
+
+accept_resigned_nuget()
+{
+  CANDIDATE_PACKAGE="$1"
+  PUBLISHED_PACKAGE="$2"
+  echo "The published $ID $VERSION differs byte for byte from this candidate; checking whether only its" \
+    "signature differs."
+  if ! verify_internal_nuget_signature "$PUBLISHED_PACKAGE"; then
+    echo "The published $ID $VERSION is not signed by the pinned author certificate." >&2
+    return 1
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "node is required to compare the published $ID $VERSION with this candidate." >&2
+    return 1
+  fi
+  COMPARISON="$(same_content_but_signature "$CANDIDATE_PACKAGE" "$PUBLISHED_PACKAGE")" || COMPARISON=""
+  if [ "$COMPARISON" != same-content ]; then
+    echo "The published $ID $VERSION does not carry the same content as this candidate" \
+      "(every entry but .signature.p7s must be identical)." >&2
+    return 1
+  fi
+  return 0
+}
+
+STAGE="checking whether $ID $VERSION is already published"
 if accept_existing_or_missing "$PACKAGE" "$DOWNLOAD_URL" "$READBACK_PACKAGE"
 then
-  verify_internal_nuget_signature "$READBACK_PACKAGE"
+  verify_internal_nuget_signature "$READBACK_PACKAGE" \
+    || fail "The published $ID $VERSION does not verify against the pinned author certificate."
 else
   if [ "${AETHEUS_PUBLISH_PREFLIGHT_ONLY:-false}" = true ]; then exit 0; fi
+  STAGE="pushing $ID $VERSION"
   "$DOTNET" nuget push "$PACKAGE" \
-    --source "$NUGET_SOURCE" -k Aetheus --configfile "$NUGET_CONFIG"
-  STATUS="$(download_status "$DOWNLOAD_URL" "$READBACK_PACKAGE")"
-  test "$STATUS" = 200
-  cmp "$PACKAGE" "$READBACK/$LOWER_ID.$LOWER_VERSION.nupkg"
-  verify_internal_nuget_signature "$READBACK/$LOWER_ID.$LOWER_VERSION.nupkg"
+    --source "$NUGET_SOURCE" -k Aetheus --configfile "$NUGET_CONFIG" \
+    || fail "dotnet nuget push of $ID $VERSION failed."
+  STATUS="$(download_status "$DOWNLOAD_URL" "$READBACK_PACKAGE")" \
+    || fail "The package registry could not be reached to read $ID $VERSION back."
+  test "$STATUS" = 200 \
+    || fail "The registry accepted $ID $VERSION but reading it back from $DOWNLOAD_URL returned HTTP $STATUS."
+  cmp "$PACKAGE" "$READBACK/$LOWER_ID.$LOWER_VERSION.nupkg" \
+    || fail "The registry serves $ID $VERSION with other bytes than were pushed."
+  verify_internal_nuget_signature "$READBACK/$LOWER_ID.$LOWER_VERSION.nupkg" \
+    || fail "The published $ID $VERSION does not verify against the pinned author certificate."
 fi
+STAGE="restoring $ID $VERSION in a $CONSUMER_FRAMEWORKS consumer"
 CONSUMER="$READBACK/consumer"
 mkdir -p "$CONSUMER"
 cat > "$CONSUMER/consumer.csproj" <<EOF
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <PropertyGroup><TargetFrameworks>$CONSUMER_FRAMEWORKS</TargetFrameworks></PropertyGroup>
   <ItemGroup><PackageReference Include="$ID" Version="$VERSION" /></ItemGroup>
 </Project>
 EOF
@@ -362,7 +500,9 @@ while :; do
 done
 
 # --no-http-cache: this runner restored an earlier version of the same package minutes ago, and a
-# cached index response would hide the version that was just published.
-"$DOTNET" restore "$CONSUMER/consumer.csproj" \
-  --configfile "$CONSUMER_CONFIG" --packages "$READBACK/packages" --no-http-cache
+# cached index response would hide the version that was just published. Run from the consumer
+# directory so no global.json of the agent's working directory selects another SDK.
+(cd "$CONSUMER" && "$DOTNET" restore "$CONSUMER/consumer.csproj" \
+  --configfile "$CONSUMER_CONFIG" --packages "$READBACK/packages" --no-http-cache) \
+  || fail "The published $ID $VERSION could not be restored by a $CONSUMER_FRAMEWORKS consumer."
 echo "Published NuGet bytes were read back and are byte-identical."

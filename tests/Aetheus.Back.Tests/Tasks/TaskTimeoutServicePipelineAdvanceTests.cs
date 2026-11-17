@@ -51,7 +51,8 @@ public sealed class TaskTimeoutServicePipelineAdvanceTests
             Substitute.For<ILogger<TaskTimeoutService>>(),
             Options.Create(new BackgroundServicesOptions()),
             hub,
-            clock);
+            clock,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         return (sut, repo, runs);
     }

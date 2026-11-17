@@ -23,10 +23,11 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
         var (items, totalCount) = await repo.GetTasksPagedAsync(
             request.Search, page, pageSize, request.Status, accessibleServerIds, request.ServerId, ct,
             request.SortBy, request.SortDescending, request.Filters).ConfigureAwait(false);
+        var runNumbers = await repo.GetRunNumbersAsync(items.Where(task => task.PipelineRunId.HasValue).Select(task => task.PipelineRunId!.Value), ct).ConfigureAwait(false);
 
         return new PaginatedResult<ServerTaskDto>
         {
-            Items = items.Select(MapToDto).ToList(),
+            Items = items.Select(task => MapToDto(task, runNumbers)).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize
@@ -36,10 +37,18 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
     public Task<TaskFilterValuesDto> GetTaskFilterValuesAsync(List<int>? accessibleServerIds, int? serverId, CancellationToken ct = default)
         => repo.GetTaskFilterValuesAsync(accessibleServerIds, serverId, ct);
 
+    public Task<int?> GetTaskIdByUidAsync(Guid uid, CancellationToken ct = default) =>
+        repo.GetTaskIdByUidAsync(uid, ct);
+
+    public Task<TaskIdentityBackfillDto> GetIdentityBackfillProgressAsync(CancellationToken ct = default) =>
+        repo.GetIdentityBackfillProgressAsync(ct);
+
     public async Task<ServerTaskDto?> GetTaskAsync(int id, CancellationToken ct = default)
     {
         var task = await repo.GetTaskWithServerAsync(id, ct).ConfigureAwait(false);
-        return task is null ? null : MapToDto(task);
+        if (task is null) return null;
+        var runNumbers = await repo.GetRunNumbersAsync(task.PipelineRunId is { } runId ? [runId] : [], ct).ConfigureAwait(false);
+        return MapToDto(task, runNumbers);
     }
 
     public async Task<List<ServerTaskDto>> GetActiveTasksAsync(List<int>? accessibleServerIds, CancellationToken ct = default)
@@ -59,7 +68,8 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
         return items
             .OrderByDescending(t => t.CreatedAt)
             .Take(200)
-            .Select(MapToDto)
+            // R-12: an AI run says which definition it belongs to, so the AI task list finds its row after a rename.
+            .Select(task => TaskDtoMapper.ToMaskedDto(task, AiRunDefinitionLink.Read(encryption, task)))
             .ToList();
     }
 
@@ -214,50 +224,86 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
         CancellationToken ct)
     {
         var task = await repo.FindTaskAsync(id, ct).ConfigureAwait(false);
-        if (task is null || task.Status is not (TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned))
+        if (task is null)
             return false;
 
         var startedAt = timeProvider.GetUtcNow().UtcDateTime;
-        if (lease is not null)
+        var started = task.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned
+            && await TryTransitionToRunningAsync(task, lease, startedAt, ct).ConfigureAwait(false);
+        if (started)
         {
-            if (!await repo.TryStartTaskWithLeaseAsync(
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            await NotifyTaskStartedAsync(task, task.StartedAt, ct).ConfigureAwait(false);
+            return true;
+        }
+
+        // The agent repeats a start whose response it lost (the per-attempt timeout of its resilience
+        // pipeline fires while the first start commits): the task already runs under this very lease, so the
+        // answer is success. Any other claimant, a cancelled task or a lapsed lease still gets a refusal.
+        if (lease is null
+            || await repo.GetStartedAtUnderLeaseAsync(
+                    task.Id, lease.AgentSessionId, lease.AgentSessionFencingToken, ct).ConfigureAwait(false)
+                is not { } alreadyStartedAt)
+            return false;
+
+        logger.LogInformation(
+            "Task {TaskId} on server {ServerId} was already started by this agent session; its repeated start is acknowledged",
+            task.Id,
+            task.ServerId);
+        // The first start may have been aborted before its notifications left: send them again, they are idempotent.
+        await NotifyTaskStartedAsync(task, alreadyStartedAt, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> TryTransitionToRunningAsync(
+        ServerTask task,
+        AgentTaskLeaseRequest? lease,
+        DateTime startedAt,
+        CancellationToken ct)
+    {
+        if (lease is not null)
+            return await repo.TryStartTaskWithLeaseAsync(
                     task,
                     lease.AgentSessionId,
                     lease.AgentSessionFencingToken,
                     startedAt,
                     ct)
-                .ConfigureAwait(false))
-                return false;
-        }
-        else
-        {
-            if (!await repo.TryStartTaskAsync(task, startedAt, ct).ConfigureAwait(false))
-                return false;
-            logger.LogWarning(
-                "Task {TaskId} on server {ServerId} started through the temporary N-1 unfenced protocol",
-                task.Id,
-                task.ServerId);
-        }
+                .ConfigureAwait(false);
 
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        if (!await repo.TryStartTaskAsync(task, startedAt, ct).ConfigureAwait(false))
+            return false;
+        logger.LogWarning(
+            "Task {TaskId} on server {ServerId} started through the temporary N-1 unfenced protocol",
+            task.Id,
+            task.ServerId);
+        return true;
+    }
+
+    private async Task NotifyTaskStartedAsync(ServerTask task, DateTime? startedAt, CancellationToken ct)
+    {
         await Task.WhenAll(
             serverHub.Clients.Group(HubGroups.Server(task.ServerId))
-                .SendAsync("TaskStarted", new { TaskId = task.Id, ServerId = task.ServerId, StartedAt = task.StartedAt }, ct),
+                .SendAsync("TaskStarted", new { TaskId = task.Id, ServerId = task.ServerId, StartedAt = startedAt }, ct),
             serverHub.Clients.Group(HubGroups.AllServers)
-                .SendAsync("TaskStarted", new { TaskId = task.Id, ServerId = task.ServerId, StartedAt = task.StartedAt }, ct)
+                .SendAsync("TaskStarted", new { TaskId = task.Id, ServerId = task.ServerId, StartedAt = startedAt }, ct)
         ).ConfigureAwait(false);
 
         if (task.PipelineRunId.HasValue)
             await pipelineHub.Clients.Group($"pipeline-run-{task.PipelineRunId}")
                 .SendAsync("StepStarted", task.PipelineStepRunId, ct).ConfigureAwait(false);
-
-        return true;
     }
 
     public async Task<bool> CompleteTaskAsync(int id, TaskResultDto result, CancellationToken ct = default)
     {
         var task = await repo.FindTaskAsync(id, ct).ConfigureAwait(false);
         if (task is null || !TerminalTaskStatuses.Contains(result.Status)) return false;
+
+        // R-12: a completion report for a task the control plane already cancelled means its agent is done
+        // with it: Cancelled when the agent stopped it on seeing the cancellation, any other status when the
+        // command ended on its own at the same moment. Either way no process of it remains, and the task
+        // keeps the Cancelled status it already has.
+        if (task.Status == TaskExecutionStatus.Cancelled)
+            return await AcknowledgeCancelledTaskStopAsync(task, result, ct).ConfigureAwait(false);
 
         // Compatibility guard for agents that predate the current lifecycle contract: an old agent
         // can discover that a newly introduced operation is unsupported and report a terminal failure
@@ -275,6 +321,11 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
         // closes the loop (retention + ReleaseStatus.Deployed) once the task is persisted.
         var deployClosure = TryReadDeployClosure(task, result.Status);
         var completedAt = timeProvider.GetUtcNow().UtcDateTime;
+        var completionFinalizer = new TaskCompletionFinalizer(
+            repo, logService, audit, timeProvider, artifactService, logger, domainEvents);
+        // R-18: what the step publishes is read before the step may turn Success, and travels in the same
+        // statement as that status (see TryCompleteTaskWithLeaseAsync).
+        var reportedOutput = await completionFinalizer.ReadReportedOutputAsync(result, id, ct).ConfigureAwait(false);
         if (result.AgentSessionId is not null && result.AgentSessionFencingToken is { } fencingToken)
         {
             if (!await repo.TryCompleteTaskWithLeaseAsync(
@@ -285,6 +336,7 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
                     result.ExitCode,
                     completedAt,
                     TaskEnvProtection.EmptyEnv,
+                    TaskCompletionFinalizer.SerializeOutputVariables(reportedOutput),
                     ct)
                 .ConfigureAwait(false))
                 return false;
@@ -303,9 +355,7 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
 
         PipelineTaskFailureClassifier.ApplyReported(task, result, completedAt);
 
-        var completionFinalizer = new TaskCompletionFinalizer(
-            repo, logService, audit, timeProvider, artifactService, logger, domainEvents);
-        var stepRun = await completionFinalizer.UpdateStepRunAsync(task, result, id, ct).ConfigureAwait(false);
+        var stepRun = await completionFinalizer.UpdateStepRunAsync(task, result, reportedOutput, ct).ConfigureAwait(false);
 
         PipelineTaskFailureClassifier.ApplyIfMissing(task, stepRun, result, completedAt);
 
@@ -327,6 +377,30 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
         // outage must not strand a terminal task between stages.
         await AdvancePipelineAfterCompletionAsync(task, stepRun, completionCt).ConfigureAwait(false);
         await BroadcastTaskCompletionAsync(task, completionCt).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Records that the agent that ran a server-cancelled task has stopped it (its process tree is gone), then
+    /// tells the orchestrator, which held the run's cleanup back until now. Idempotent: a repeated report
+    /// answers true without announcing again. Refused when the reporting agent does not hold the task's lease.
+    /// </summary>
+    private async Task<bool> AcknowledgeCancelledTaskStopAsync(
+        ServerTask task, TaskResultDto result, CancellationToken ct)
+    {
+        if (result.AgentSessionId is not null && result.AgentSessionFencingToken is { } fencingToken
+            && !await repo.HasCurrentAgentLeaseAsync(
+                task.Id, task.ServerId, result.AgentSessionId, fencingToken, ct).ConfigureAwait(false))
+            return false;
+        if (task.StopAcknowledgedAt is not null) return true;
+
+        task.StopAcknowledgedAt = timeProvider.GetUtcNow().UtcDateTime;
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        logger.LogInformation(
+            "Task {TaskId} (run {RunId}) was reported stopped by its agent after its cancellation",
+            task.Id, task.PipelineRunId);
+        if (task.PipelineRunId is { } runId)
+            await domainEvents.DispatchStrictAsync(new PipelineCancelledTaskStoppedEvent(runId), ct).ConfigureAwait(false);
         return true;
     }
 
@@ -404,6 +478,10 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
             TaskId = id,
             Status = TaskExecutionStatus.Failed,
             ExitCode = -1,
+            // BACK-004: the lease goes through, so CompleteTaskAsync applies the same ownership check
+            // (TryCompleteTaskWithLeaseAsync) as an ordinary completion.
+            AgentSessionId = report.AgentSessionId,
+            AgentSessionFencingToken = report.AgentSessionFencingToken,
             FailureCode = "BuildOnDeploymentTarget",
             FailureReason = report.Reason
         }, ct).ConfigureAwait(false);
@@ -556,6 +634,12 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
         if (taskIds.Count == 0) return new();
         return await repo.GetTaskStatusesAsync(taskIds, serverId, ct).ConfigureAwait(false);
     }
+
+    private static ServerTaskDto MapToDto(ServerTask task, IReadOnlyDictionary<int, int> runNumbers) =>
+        MapToDto(task) with
+        {
+            PipelineRunNumber = task.PipelineRunId is { } runId && runNumbers.TryGetValue(runId, out var number) ? number : null
+        };
 
     private static ServerTaskDto MapToDto(ServerTask task) =>
         TaskDtoMapper.ToMaskedDto(task);

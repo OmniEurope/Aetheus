@@ -1,12 +1,13 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Recette R3-59: the complete list of the packages installed on the host, services or not, read by the
    agent without privilege. Read-only by design: no row carries an action, uninstalling an arbitrary package
-   stays refused (no sudo rule without a fixed list). While the agent reads, OE's veil lies over the card. *@
+   stays refused (no sudo rule without a fixed list). While the agent reads, the page veil is held (R-1). *@
 @inject GridExportContext ExportContext
 
 @if (!IsWindows)
 {
-    <OmniCard Class="@(Busy ? "server-package-inventory omni-busy" : "server-package-inventory")" aria-busy="@(Busy ? "true" : "false")">
+    <VeilHold Busy="@Busy" />
+    <OmniCard Class="server-package-inventory">
         <OmniStack Gap="OmniSpacing.Medium">
             <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["InstalledPackagesTitle"]

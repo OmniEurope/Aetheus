@@ -12,6 +12,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
     private string _logType = "error";
     private int _logLines = 100;
     private string? _logContent;
+    private string? _logDiagnostic;
     private bool _logLoading;
     private bool _logFollowing;
     private System.Threading.Timer? _followTimer;
@@ -41,6 +42,22 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
     private readonly LiveGridRows _enabledRows = new();
     private readonly LiveGridRows _disabledRows = new();
     private readonly LiveGridRows _moduleRows = new();
+
+    [Inject] private TimeProvider Clock { get; set; } = default!;
+
+    /// <summary>The server pages' loader: the auto-refresh asks it to read the server's state again.</summary>
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
+    // Recette R-17: while the page is open its state and data are read again every 15 s, with no manual reload, so
+    // an Apache restarted on the host shows. Skipped while a task of this page is in progress (its follower waits for the
+    // server's next state), never overlapping, stopped with the page.
+    private ServerPageAutoRefresh? _autoRefresh;
+
+    protected override void OnInitialized() =>
+        _autoRefresh = new ServerPageAutoRefresh(Clock, () => ActionBusy || (_follower?.Progressing ?? false), RefreshStateAsync);
+
+    private Task RefreshStateAsync() =>
+        Loader is null ? Task.CompletedTask : InvokeAsync(() => Loader.RefreshAsync(ServerId));
 
     protected override async Task OnParametersSetAsync()
     {
@@ -90,7 +107,11 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     private List<string> ApacheResourceNames => Apache.VirtualHosts.Select(v => v.ServerName).ToList();
 
-    private async Task ExecuteActionAsync(ApacheAction action, string? targetName = null)
+    // R-37: no Apache action veils the page (restarting Apache is not a blocking task, see ServerBlockingTasks): the
+    // follower shows its progress block. A confirmed action (stop Apache, delete a site) is followed by the follower.
+    protected override bool VeilsConfirmedActionOnPage => false;
+
+    internal async Task ExecuteActionAsync(ApacheAction action, string? targetName = null)
     {
         await ExecuteServerActionAsync(() => Api.ServerTools.ExecuteApacheActionAsync(
             ServerId, new ApacheActionRequest
@@ -109,6 +130,15 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         _ => L[action.ToString()]
     };
 
+    /// <summary>Recette R-12: what a task adopted on arrival ("Apache EnableSite - a.conf") is called, as the page names
+    /// the task it launches itself. A name this page does not know is left to the follower.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.Key(L, "Apache logs - ", "ViewLogs"),
+        ServerAdoptedTaskTitles.Key(L, "Apache save ", "Save"),
+        new("Apache ", rest => ServerAdoptedTaskTitles.Action<ApacheAction>(rest, FollowTitle))
+    ]);
+
     /// <summary>The distinct site files of a row (its :80 and :443 blocks often share one).</summary>
     internal static IReadOnlyList<string> SiteFiles(ApacheVirtualHostGroup group) =>
         group.Members.Select(member => Path.GetFileName(member.ConfigFile))
@@ -116,18 +146,35 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+    /// <summary>Recette R-15: one site file of a row with the ports its blocks serve ("80, 443").</summary>
+    /// <param name="ForeignOwner">Recette R-14: the account that owns the file when it is not the agent's own, so Aetheus cannot
+    /// delete it; null when the agent owns it or when the agent does not say (an older agent): no badge then.</param>
+    internal sealed record SiteFileLine(string File, string Ports, string? ForeignOwner = null);
+
+    /// <summary>The files behind a row, each with its ports, in the order of the row's blocks (lowest port first).</summary>
+    internal static IReadOnlyList<SiteFileLine> SiteFileLines(ApacheVirtualHostGroup group) =>
+        group.Members
+            .Where(member => !string.IsNullOrEmpty(Path.GetFileName(member.ConfigFile)))
+            .GroupBy(member => Path.GetFileName(member.ConfigFile), StringComparer.Ordinal)
+            .Select(file => new SiteFileLine(file.Key,
+                string.Join(", ", file.Select(member => member.Port.ToString(CultureInfo.InvariantCulture)).Distinct()),
+                file.Select(member => member.ConfigFileForeignOwner).FirstOrDefault(owner => !string.IsNullOrWhiteSpace(owner))))
+            .ToList();
+
     // Recette R-12: deleting a disabled site's file is destructive, so it is confirmed (red verb, "Revenir").
     private Task ConfirmDeleteSite(string file) =>
         ShowDestructiveConfirm(L["ApacheDeleteSiteTitle"], string.Format(L["ApacheDeleteSiteConfirm"], file),
             () => ExecuteActionAsync(ApacheAction.DeleteSite, file), L["Delete"].Value, OmniIconName.Delete);
 
-    private async Task FetchLogsAsync()
+    internal async Task FetchLogsAsync()
     {
         // SITE-OFFLINE-001: reading the logs queues an agent task too.
         if (BlockedByOfflineAgent()) return;
         _logLoading = true;
         _logContent = null;
-        _follower?.Expect(L["ViewLogs"], veil: !_logFollowing, settle: false);
+        _logDiagnostic = null;
+        // R-19: reading the logs is a one-off action, not a global operation: the progress block, no veil.
+        _follower?.Expect(L["ViewLogs"], settle: false);
         try
         {
             var success = await Api.ServerTools.GetApacheLogsAsync(ServerId, new ApacheLogRequest
@@ -201,6 +248,10 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             await SaveConfigAsync(request);
     }
 
+    /// <summary>How long the editor waits for the agent's answer (30 s); a test under a loaded runner sets it longer so the
+    /// timeout cannot overtake the answer it is waiting for.</summary>
+    internal TimeSpan ConfigReadTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
     // S-UX-40: the config text is pushed back over SignalR; if the agent never answers, clear the
     // spinner after 30s and surface an error instead of leaving the editor spinning forever.
     private void StartConfigTimeout(ApacheConfigEditorModel model)
@@ -214,7 +265,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
                 model.NotifyChanged();
                 Toast.Error(L["ActionFailed"]);
             }),
-            null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+            null, ConfigReadTimeout, Timeout.InfiniteTimeSpan);
     }
 
     private void CancelConfigTimeout()
@@ -245,6 +296,10 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         }
     }
 
+    /// <summary>The name the backend gives the task that reads a site's configuration (ApacheService.GetVHostConfigAsync);
+    /// the queue request returns no task id, so this name is what ties an answer to the site that was asked.</summary>
+    private static string ConfigReadTaskName(string siteName) => $"Apache config - {siteName}";
+
     public void HandleTaskCompleted(TaskCompletedNotification notification) =>
         _ = InvokeAsync(() => ShowTaskOutputAsync(notification));
 
@@ -253,9 +308,12 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
     private async Task ShowTaskOutputAsync(TaskCompletedNotification notification)
     {
         var isLogs = notification.TaskName.Contains("Apache logs", StringComparison.OrdinalIgnoreCase);
-        var isConfig = notification.TaskName.Contains("Apache config", StringComparison.OrdinalIgnoreCase)
-            && !notification.TaskName.Contains("save", StringComparison.OrdinalIgnoreCase);
-        if (!isLogs && !(isConfig && _configEditor is not null)) return;
+        // F-FRONT-025: the read answers the editor that is open now, for the site it asked for, and only while that
+        // editor still waits: a late answer for another site, an editor already closed, answered or timed out is dropped.
+        var editor = _configEditor;
+        var isConfig = editor is { Loading: true }
+            && string.Equals(notification.TaskName, ConfigReadTaskName(editor.SiteName), StringComparison.OrdinalIgnoreCase);
+        if (!isLogs && !isConfig) return;
 
         string output;
         try { output = await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId); }
@@ -265,11 +323,13 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
         if (isLogs)
         {
-            _logContent = failed ? L["TaskFailed"] + "\n" + output : output;
+            // R-19: a log the agent could not show is a localized sentence, never the agent's diagnostic line.
+            _logDiagnostic = ApacheLogDiagnosticText.Describe(L, output);
+            _logContent = _logDiagnostic is not null ? null : failed ? L["TaskFailed"] + "\n" + output : output;
             _logLoading = false;
             StateHasChanged();
         }
-        else if (_configEditor is { } model)
+        else if (editor is { } model && ReferenceEquals(_configEditor, model) && model.Loading)
         {
             model.Content = failed ? string.Empty : output;
             model.Error = failed ? output : null;
@@ -320,6 +380,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     public void Dispose()
     {
+        _autoRefresh?.Dispose();
         _followTimer?.Dispose();
         _configTimeoutTimer?.Dispose();
     }

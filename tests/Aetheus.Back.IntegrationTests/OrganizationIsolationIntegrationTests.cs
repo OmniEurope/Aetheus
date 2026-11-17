@@ -18,8 +18,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// lists, by-id reads, writes, notifications and SignalR. The site Admin still sees both organizations,
 /// and a membership given from either side (organization or user) carries the mapped role.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class OrganizationIsolationIntegrationTests(PostgresFixture fixture)
+public sealed class OrganizationIsolationIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     public static TheoryData<string> Families => ["projects", "servers", "pipelines", "pipeline-runs", "monitored-apps"];
 

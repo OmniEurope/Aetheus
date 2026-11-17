@@ -75,7 +75,10 @@ public sealed class ProjectDataRetentionSectionTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Envoi de la télémétrie (minutes) - actuel : Envoi toutes les 5 min (profil Standard) : un point toutes les 5 minutes",
             cut.Find("label[for=project-data-retention-export]").TextContent));
         Assert.Empty(cut.FindAll("#project-data-retention-export-field-description"));
-        Assert.Contains("Aetheus.Telemetry 1.1.0", cut.Find("#project-data-retention-export-field-help-content").TextContent);
+        var help = cut.Find("#project-data-retention-export-field-help-content").TextContent;
+        Assert.Contains("relit ce réglage toutes les 15 minutes", help);
+        // R-27: the compatibility sentence about older Aetheus.Telemetry versions is gone.
+        Assert.DoesNotContain("version antérieure", help);
     }
 
     [Fact]

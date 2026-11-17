@@ -86,6 +86,23 @@ public class ApacheServiceTests
     }
 
     [Fact]
+    public async Task R14_TheOwnerOfAFileTheAgentCannotDelete_ReachesTheDto_ByTheServiceAndByTheServerDetailMapper()
+    {
+        var hosts = new List<ApacheVirtualHost>
+        {
+            new() { ServerName = "old.com", Port = 80, ConfigFile = "old.conf", IsEnabled = false, ConfigFileForeignOwner = "root" },
+            new() { ServerName = "mine.com", Port = 80, ConfigFile = "mine.conf", IsEnabled = true }
+        };
+        _repoMock.GetVirtualHostsAsync(1, Arg.Any<CancellationToken>()).Returns(hosts);
+
+        var fromService = await _sut.GetVirtualHostsAsync(1, ct: TestContext.Current.CancellationToken);
+        var fromMapper = Aetheus.Back.Components.Shared.ServerDataMapper.MapApacheDataDto(new Server { ApacheVirtualHosts = hosts }).VirtualHosts;
+
+        Assert.Equal(["root", ""], fromService.Select(host => host.ConfigFileForeignOwner));
+        Assert.Equal(["root", ""], fromMapper.Select(host => host.ConfigFileForeignOwner));
+    }
+
+    [Fact]
     public async Task ExecuteActionAsync_Start_CreatesTask()
     {
         var request = new ApacheActionRequest { Action = ApacheAction.Start };

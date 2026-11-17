@@ -13,17 +13,11 @@ public sealed class StorageAlertProvisioningService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
     ILogger<StorageAlertProvisioningService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:storage-alert-provisioning")
 {
     private static readonly TimeSpan ReconcileInterval = TimeSpan.FromHours(1);
 
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:storage-alert-provisioning", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         do
         {

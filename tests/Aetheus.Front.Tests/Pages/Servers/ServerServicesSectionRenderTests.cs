@@ -98,7 +98,7 @@ public class ServerServicesSectionRenderTests : BunitContext
 
         var notice = cut.Find(".services-packages-not-listed");
         Assert.Contains("ServicesPackagesNotListed", notice.TextContent, StringComparison.Ordinal);
-        Assert.Equal("/servers/21/updates", notice.QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal("/servers/21/services?tab=updates", notice.QuerySelector("a")!.GetAttribute("href"));
         // Second part of R3-59: the complete read-only package list sits in the same tab.
         var inventory = cut.Find(".server-package-inventory");
         Assert.NotNull(inventory.QuerySelector(".package-inventory-readonly"));
@@ -460,10 +460,10 @@ public class ServerServicesSectionRenderTests : BunitContext
         cut.WaitForAssertion(() => Assert.False(Loading()));
     }
 
-    /// <summary>Recette R-116: opening the log viewer while the read is pending veils the log zone (a block of sensible
-    /// height, nothing in it yet); no loader is added.</summary>
+    /// <summary>Recette R-116, R-1: while the read is pending the log zone keeps a block of sensible height and says it is
+    /// loading. The page veil stays off: it would cover the viewer's own switch and close button for as long as the agent takes.</summary>
     [Fact]
-    public async Task PendingLogRead_VeilsTheEmptyLogZone_AndAddsNoLoader()
+    public async Task PendingLogRead_KeepsTheViewerUsable_AndAddsNoLoader()
     {
         var queued = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/servers/21/services/logs", _ => queued.Task);
@@ -471,13 +471,14 @@ public class ServerServicesSectionRenderTests : BunitContext
 
         var opening = cut.InvokeAsync(() => cut.Instance.ViewServiceLogsAsync("nginx"));
 
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=service-logs-zone]").GetAttribute("aria-busy")));
-        Assert.Contains("omni-busy", cut.Find("[data-testid=service-logs-zone]").ClassName, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.Contains("Loading", cut.Find("[data-testid=service-logs-zone]").TextContent, StringComparison.Ordinal));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
+        Assert.Contains("action-veil-placeholder", cut.Find("[data-testid=service-logs-zone]").ClassName, StringComparison.Ordinal);
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
         Assert.Empty(cut.FindAll("[data-testid=service-logs-zone] .docker-logs"));
 
         queued.SetResult(new { taskId = 42 });
-        // The test hub cannot start, so the end of the read is not the subject here, only the veil while it is pending.
+        // The test hub cannot start, so the end of the read is not the subject here, only the viewer while it is pending.
         await Record.ExceptionAsync(() => opening);
     }
 

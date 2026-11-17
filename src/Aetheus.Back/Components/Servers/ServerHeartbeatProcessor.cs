@@ -5,6 +5,7 @@ using Aetheus.Back.Components.AgentUpdate;
 using Aetheus.Back.Components.Certbot;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
+using Aetheus.Back.Services;
 using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.SignalR;
 
@@ -26,7 +27,8 @@ internal sealed class ServerHeartbeatProcessor(
     IAgentUpdateConfirmationService? updateConfirmation,
     PortRegistry.IPortRegistryService? portRegistry,
     IDomainEventDispatcher? domainEvents,
-    ILogger<ServerHeartbeatProcessor> logger)
+    ILogger<ServerHeartbeatProcessor> logger,
+    AgentRestartRegistry? restartRegistry = null)
 {
     private static readonly ConcurrentDictionary<int, DateTime> DeploymentBuildAlerts = new();
     private static readonly TimeSpan DeploymentBuildAlertCooldown = TimeSpan.FromMinutes(15);
@@ -40,6 +42,9 @@ internal sealed class ServerHeartbeatProcessor(
         var timer = new HeartbeatStageTimer(timeProvider); // A slow heartbeat says where its time went
         var server = await repo.FindServerAsync(serverId, ct).ConfigureAwait(false);
         if (server is null) return;
+
+        // Before the new session id is saved: the sweep that fails the replaced session's tasks must find the cause.
+        RecordPreviousExit(server, heartbeat);
 
         // The authenticated heartbeat itself proves that the agent is alive. Persist presence before
         // optional inventory sections so one malformed/duplicated collector payload cannot roll back
@@ -81,11 +86,31 @@ internal sealed class ServerHeartbeatProcessor(
         if (await _sshConfig.CheckAsync(server, heartbeat, ct).ConfigureAwait(false))
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         timer.Mark("ssh");
-        await BroadcastHeartbeatAsync(serverId, heartbeat, ct).ConfigureAwait(false);
+        var machineChanged = MachineRebootRecorder.Record(server, heartbeat);
+        machineChanged |= MachineJobsRecorder.Record(server, heartbeat);
+        if (machineChanged)
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        BroadcastHeartbeat(serverId, heartbeat);
         timer.Mark("broadcast");
         await CheckSecurityAlertsAsync(server.Name, serverId, heartbeat, previousBlockedCount, previousWarningCount, ct).ConfigureAwait(false);
         timer.Mark("alerts");
         timer.LogIfSlow(logger, serverId);
+    }
+
+    /// <summary>
+    /// The agent says once how its previous process ended: it is logged as a Warning and kept for the sweep
+    /// that fails the replaced session's tasks. An agent that sends nothing (older, or no restart) leaves
+    /// everything as before; silence is never read as a clean exit.
+    /// </summary>
+    private void RecordPreviousExit(Server server, ServerHeartbeatDto heartbeat)
+    {
+        if (heartbeat.PreviousExit is not { } exit)
+            return;
+        var info = AgentRestartInfo.From(exit, timeProvider.GetUtcNow().UtcDateTime);
+        restartRegistry?.Record(server.Id, info);
+        logger.LogWarning(
+            "Agent of server {ServerId} restarted: {Kind} {Reason} (host rebooted: {HostRebooted})",
+            server.Id, info.Kind, info.Reason, info.HostRebootedText);
     }
 
     private async Task PersistHeartbeatAsync(
@@ -196,7 +221,8 @@ internal sealed class ServerHeartbeatProcessor(
     {
         if (portRegistry is null || heartbeat.ObservedPortsAvailable is not true) return;
         await portRegistry
-            .ReplaceObservedAsync(serverId, heartbeat.ObservedPorts, timeProvider.GetUtcNow().UtcDateTime, ct)
+            .ReplaceObservedAsync(
+                serverId, heartbeat.ObservedPorts, timeProvider.GetUtcNow().UtcDateTime, ct, heartbeat.ObservedProtocols)
             .ConfigureAwait(false);
     }
 
@@ -225,11 +251,39 @@ internal sealed class ServerHeartbeatProcessor(
         }).ToList(), ct).ConfigureAwait(false);
     }
 
-    private async Task BroadcastHeartbeatAsync(int serverId, ServerHeartbeatDto heartbeat, CancellationToken ct)
+    /// <summary>How long a live update may stay pending before it is given up: a client whose connection is dead keeps
+    /// a SignalR send pending until its keep-alive notices (13 to 15.6 s in the recette R-2 export).</summary>
+    private static readonly TimeSpan BroadcastTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Starts the live update and returns at once. The beat is already saved, the agent's call must not wait on the
+    /// browsers watching the server, and the send must outlive the request, so it takes no request token: it is
+    /// bounded by <see cref="BroadcastTimeout"/> and a failure is told, never lost.
+    /// </summary>
+    private void BroadcastHeartbeat(int serverId, ServerHeartbeatDto heartbeat)
     {
         var supplemented = heartbeat with { Services = ServerDataMapper.SupplementWithWellKnown(heartbeat.Services) };
-        await serverHub.Clients.Groups([HubGroups.AllServers, HubGroups.Server(serverId)]).SendAsync("ServerHeartbeat", serverId, supplemented, ct).ConfigureAwait(false);
-        await serverHub.Clients.Group($"server-{serverId}").SendAsync("Heartbeat", supplemented, ct).ConfigureAwait(false);
+        var deadline = new CancellationTokenSource(BroadcastTimeout);
+        var sends = Task.WhenAll(
+            serverHub.Clients.Groups([HubGroups.AllServers, HubGroups.Server(serverId)]).SendAsync("ServerHeartbeat", serverId, supplemented, deadline.Token),
+            serverHub.Clients.Group($"server-{serverId}").SendAsync("Heartbeat", supplemented, deadline.Token));
+        _ = TellBroadcastOutcomeAsync(sends, serverId, deadline);
+    }
+
+    private async Task TellBroadcastOutcomeAsync(Task sends, int serverId, CancellationTokenSource deadline)
+    {
+        try
+        {
+            await sends.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogWarning(ex, "The live heartbeat broadcast of server {ServerId} failed or timed out", serverId);
+        }
+        finally
+        {
+            deadline.Dispose();
+        }
     }
 
     private async Task CheckSecurityAlertsAsync(string serverName, int serverId, ServerHeartbeatDto heartbeat, int previousBlockedCount, int previousWarningCount, CancellationToken ct)
@@ -312,6 +366,17 @@ internal sealed class ServerHeartbeatProcessor(
                 Risks = c.Risks,
                 DangerousCapabilities = c.DangerousCapabilities,
                 AetheusRole = c.AetheusRole
+            }).ToList(), ct).ConfigureAwait(false);
+        }
+        else if (fingerprints.HasChanged(HeartbeatInventoryFingerprints.DockerContainerLiveFields))
+        {
+            // The same containers with a new uptime, CPU or memory: refresh those fields in place.
+            await heartbeatRepo.UpdateDockerContainerLiveFieldsAsync(serverId, docker.Containers.Select(c => new DockerContainer
+            {
+                ContainerId = c.ContainerId,
+                Status = c.Status,
+                CpuPercent = c.CpuPercent,
+                MemoryUsageMb = c.MemoryUsageMb
             }).ToList(), ct).ConfigureAwait(false);
         }
 
@@ -402,6 +467,7 @@ internal sealed class ServerHeartbeatProcessor(
             Port = v.Port,
             DocumentRoot = v.DocumentRoot,
             ConfigFile = v.ConfigFile,
+            ConfigFileForeignOwner = v.ConfigFileForeignOwner,
             IsEnabled = v.IsEnabled
         }).ToList();
 

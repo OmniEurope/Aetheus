@@ -6,6 +6,7 @@ using Aetheus.Front.Components.Users;
 using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 
@@ -60,12 +61,13 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
 
         var cut = RenderTransfer();
 
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=owner-transfer-preview-pending]").GetAttribute("aria-busy")));
-        Assert.Contains("omni-busy", cut.Find("[data-testid=owner-transfer-preview-pending]").ClassName, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=owner-transfer-preview-pending]")));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
 
         preview.SetResult(Result(preview: true, holdsAdmin: true));
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=owner-transfer-preview-pending]")));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     [Fact]
@@ -123,7 +125,7 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
             names.Select((name, index) => new PipelineOwnershipDto { PipelineId = index + 1, PipelineName = name, OwnerUsername = "admin" }).ToList());
 
     [Fact]
-    public void HandoverDialog_ListsTheOwnedPipelines_AndProposesTheActingAdministrator()
+    public async Task HandoverDialog_ListsTheOwnedPipelines_AndProposesTheActingAdministrator()
     {
         OwnedByAdmin("aetheus-candidate", "aetheus-deploy-prod");
         _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/ownership/preview", Result(preview: true, holdsAdmin: true));
@@ -136,14 +138,14 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
 
         // The confirmation is enabled once the reads, and the default owner's preview when one runs, complete.
         cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).HasAttribute("disabled")));
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).Click();
+        await cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).ClickAsync(new MouseEventArgs());
 
         Assert.True(Spy().Closed);
         Assert.Equal(new UserPipelineHandover("root", false), Spy().LastResult);
     }
 
     [Fact]
-    public void HandoverDialog_Forced_ClosesWithoutATarget()
+    public async Task HandoverDialog_Forced_ClosesWithoutATarget()
     {
         OwnedByAdmin("aetheus-candidate");
         _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/ownership/preview", Result(preview: true, holdsAdmin: true));
@@ -152,14 +154,15 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
 
         cut.Find("input[type=checkbox]").Change(true);
         // The confirmation is enabled once the reads, and the default owner's preview when one runs, complete.
+        // The click is awaited: the synchronous Click() returned before the handler ran when the renderer was busy (a loaded run read LastResult null).
         cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("Delete")).HasAttribute("disabled")));
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Delete")).Click();
+        await cut.FindAll("button").Single(b => b.TextContent.Contains("Delete")).ClickAsync(new MouseEventArgs());
 
         Assert.Equal(new UserPipelineHandover(null, true), Spy().LastResult);
     }
 
     [Fact]
-    public void HandoverDialog_UserOwningNothing_ConfirmsDirectly()
+    public async Task HandoverDialog_UserOwningNothing_ConfirmsDirectly()
     {
         OwnedByAdmin();
 
@@ -167,7 +170,7 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
         cut.WaitForAssertion(() => Assert.DoesNotContain("UserOwnsPipelinesWarning", cut.Markup));
         // The confirmation is enabled once the reads, and the default owner's preview when one runs, complete.
         cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).HasAttribute("disabled")));
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).Click();
+        await cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).ClickAsync(new MouseEventArgs());
 
         Assert.Equal(new UserPipelineHandover(null, false), Spy().LastResult);
         Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("ownership/preview"));

@@ -26,7 +26,7 @@ public class AuthRepositoryTests : IDisposable
         _db.RegistrationTokens.Add(new RegistrationToken { Token = "abc", IsUsed = false, ExpiresAt = DateTime.UtcNow.AddHours(1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await _repo.FindValidRegistrationTokenAsync("abc", ct: TestContext.Current.CancellationToken);
+        var result = await _repo.FindValidRegistrationTokenAsync(["abc"], ct: TestContext.Current.CancellationToken);
         Assert.NotNull(result);
     }
 
@@ -36,7 +36,7 @@ public class AuthRepositoryTests : IDisposable
         _db.RegistrationTokens.Add(new RegistrationToken { Token = "abc", IsUsed = true, ExpiresAt = DateTime.UtcNow.AddHours(1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Null(await _repo.FindValidRegistrationTokenAsync("abc", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.FindValidRegistrationTokenAsync(["abc"], ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class AuthRepositoryTests : IDisposable
         _db.RegistrationTokens.Add(new RegistrationToken { Token = "abc", IsUsed = false, ExpiresAt = DateTime.UtcNow.AddHours(-1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Null(await _repo.FindValidRegistrationTokenAsync("abc", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.FindValidRegistrationTokenAsync(["abc"], ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public class AuthRepositoryTests : IDisposable
         _db.ServerTokens.Add(new ServerToken { ServerId = server.Id, TokenHash = "hash", IsRevoked = false, ExpiresAt = DateTime.UtcNow.AddDays(1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await _repo.ValidateServerTokenHashAsync("hash", ct: TestContext.Current.CancellationToken);
+        var result = await _repo.ValidateServerTokenHashAsync(["hash"], ct: TestContext.Current.CancellationToken);
         Assert.Equal(server.Id, result);
     }
 
@@ -239,7 +239,7 @@ public class AuthRepositoryTests : IDisposable
         _db.ServerTokens.Add(new ServerToken { ServerId = server.Id, TokenHash = "hash", IsRevoked = true, ExpiresAt = DateTime.UtcNow.AddDays(1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Null(await _repo.ValidateServerTokenHashAsync("hash", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.ValidateServerTokenHashAsync(["hash"], ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -251,7 +251,7 @@ public class AuthRepositoryTests : IDisposable
         _db.ServerTokens.Add(new ServerToken { ServerId = server.Id, TokenHash = "hash", IsRevoked = false, ExpiresAt = DateTime.UtcNow.AddHours(-1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Null(await _repo.ValidateServerTokenHashAsync("hash", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.ValidateServerTokenHashAsync(["hash"], ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]

@@ -1,0 +1,95 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-005 lot 3: "Schedule a pipeline" and "Change frequency" share this form. The reader says a frequency in words
+   and a LOCAL time; the dialog writes it in UTC, which is what the engine reads, and shows the next runs and the
+   overlap verdict from the preview endpoint without writing anything. The verdict warns and never blocks. *@
+@if (_loading)
+{
+    <OmniText Tone="OmniTextTone.Muted">@L["Loading"]</OmniText>
+}
+else
+{
+    <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="@SaveAsync">
+        <OmniDataAnnotationsValidator Localizer="@L" />
+        <OmniStack Gap="OmniSpacing.Large">
+            @if (_refusal is { } refusal)
+            {
+                <PipelineScheduleRefusal Status="@refusal.Status" Message="@refusal.Message" OnReload="@CloseForReload" />
+            }
+            @if (_loadFailed)
+            {
+                <OmniAlert Severity="OmniSeverity.Danger">@L["ScheduleLoadFailed"]</OmniAlert>
+            }
+            @if (_isCustom)
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" data-testid="schedule-custom-warning">@L["ScheduleCustomReplaceWarning"]</OmniAlert>
+            }
+            <OmniFormField Label="@L["Pipeline"]" For="schedule-pipeline" Required="true" Help="@L[Creating ? "SchedulePipelineHelpCreate" : "SchedulePipelineHelpEdit"]" Class="omni-u-w-100">
+                <OmniDropDown Id="schedule-pipeline" TValue="int?" @bind-Value="_model.PipelineId" @bind-Value:after="RefreshPreviewAsync"
+                              Options="@_pipelineOptions" Filterable="true" Disabled="@(!Creating)" Class="omni-u-w-100" />
+            </OmniFormField>
+            @if (Creating && _pipelineOptions.Count == 0)
+            {
+                <OmniAlert Severity="OmniSeverity.Info" data-testid="schedule-no-candidates">@L["ScheduleNoCandidates"]</OmniAlert>
+            }
+            <OmniFormField Label="@L["ScheduleFrequency"]" For="schedule-frequency" Required="true" Help="@L["ScheduleFrequencyHelp"]" Class="omni-u-w-100">
+                <OmniDropDown Id="schedule-frequency" TValue="ScheduleFrequency" @bind-Value="_model.Frequency" @bind-Value:after="RefreshPreviewAsync"
+                              Options="@_frequencyOptions" Class="omni-u-w-100" />
+            </OmniFormField>
+            @if (_model.Frequency == ScheduleFrequency.Weekly)
+            {
+                <OmniFormField Label="@L["ScheduleWeekday"]" For="schedule-weekday" Required="true" Class="omni-u-w-100">
+                    <OmniDropDown Id="schedule-weekday" TValue="int" @bind-Value="_model.Weekday" @bind-Value:after="RefreshPreviewAsync"
+                                  Options="@_weekdayOptions" Class="omni-u-w-100" />
+                </OmniFormField>
+            }
+            @if (_model.Frequency == ScheduleFrequency.Monthly)
+            {
+                <OmniFormField Label="@L["ScheduleMonthDay"]" For="schedule-monthday" Required="true" Help="@L["ScheduleMonthDayHelp"]" Class="omni-u-w-100">
+                    <OmniDropDown Id="schedule-monthday" TValue="int" @bind-Value="_model.MonthDay" @bind-Value:after="RefreshPreviewAsync"
+                                  Options="@_monthDayOptions" Class="omni-u-w-100" />
+                </OmniFormField>
+            }
+            <OmniFormField Label="@L["ScheduleStartTime"]" For="schedule-time" Required="true" Help="@TimeHelp" Class="omni-u-w-100">
+                <OmniTimePicker Id="schedule-time" @bind-Value="_model.Time" @bind-Value:after="RefreshPreviewAsync"
+                                Step="TimeSpan.FromMinutes(5)" Class="omni-u-w-100" />
+                <ValidationMessage For="@(() => _model.Time)" />
+            </OmniFormField>
+            @if (_dayImpossible)
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" data-testid="schedule-day-impossible">@L[_model.Frequency == ScheduleFrequency.Weekdays ? "ScheduleWeekdaysImpossible" : "ScheduleMonthDayImpossible"]</OmniAlert>
+            }
+            @if (_previewError is not null)
+            {
+                <OmniAlert Severity="OmniSeverity.Danger" data-testid="schedule-preview-error">@_previewError</OmniAlert>
+            }
+            @if (_preview is { } preview)
+            {
+                @if (preview.YamlError is { } yamlError)
+                {
+                    <OmniAlert Severity="OmniSeverity.Danger" data-testid="schedule-yaml-error">@string.Format(L["ScheduleYamlError"].Value, yamlError)</OmniAlert>
+                }
+                <OmniStack Gap="OmniSpacing.Small" data-testid="schedule-next-runs">
+                    <OmniText Element="OmniTextElement.Strong">@L["ScheduleNextRuns"]</OmniText>
+                    @foreach (var run in NextRuns(preview))
+                    {
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                            <OmniIcon Name="OmniIconName.CalendarBlank" />
+                            <span>@run</span>
+                        </OmniStack>
+                    }
+                </OmniStack>
+                @if (preview.Overlaps.Count > 0)
+                {
+                    <OmniAlert Severity="OmniSeverity.Warning" data-testid="schedule-verdict-overlap"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>@OverlapVerdict(preview)</ChildContent></OmniAlert>
+                }
+                else
+                {
+                    <OmniAlert Severity="OmniSeverity.Success" data-testid="schedule-verdict-none">@string.Format(L["ScheduleVerdictNone"].Value, WindowDays)</OmniAlert>
+                }
+            }
+        </OmniStack>
+        <DialogFooter OnCancel="@Cancel">
+            <OmniButton Busy="@_busy" Disabled="@(!CanSave)" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary" data-testid="schedule-save"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+        </DialogFooter>
+    </OmniTemplateForm>
+}

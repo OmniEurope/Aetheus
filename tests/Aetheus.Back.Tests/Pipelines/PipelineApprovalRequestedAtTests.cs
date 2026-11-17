@@ -38,8 +38,8 @@ public class PipelineApprovalRequestedAtTests
         var servers = Substitute.For<IPipelineDispatchServerResolver>();
 
         repo.HasActiveArtifactCollectionAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
-        repo.GetCompletedStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
-        repo.GetTerminalStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        repo.GetStageProgressAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineStageProgress([], []));
         repo.HasAnyFailedStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
         repo.HasAnyRunningStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
         repo.GetActiveStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);

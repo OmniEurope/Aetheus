@@ -127,7 +127,7 @@ public sealed class ServerRetirementLifecycleTests
         }
 
         await using var db = _scenario.NewContext();
-        Assert.Null(await new AuthRepository(db, _scenario.Clock).ValidateServerTokenHashAsync(OldTokenHash, Ct));
+        Assert.Null(await new AuthRepository(db, _scenario.Clock).ValidateServerTokenHashAsync([OldTokenHash], Ct));
     }
 
     [Fact]

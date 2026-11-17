@@ -48,6 +48,8 @@ public sealed record PipelineRunMigrationGateDto
 {
     public int Id { get; init; }
     public int RunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int RunNumber { get; init; }
     public string? StageName { get; init; }
     public string? StepName { get; init; }
     public MigrationGateOutcome Outcome { get; init; }

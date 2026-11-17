@@ -5,7 +5,10 @@ namespace Aetheus.Back.Components.Tasks;
 public interface IPipelineTaskLifecycle
 {
     Task CancelActiveTasksAsync(int pipelineRunId, CancellationToken ct = default);
-    Task CancelPendingTasksExceptStagesAsync(
+    /// <summary>Cancels the Pending, Assigned and Running tasks of the run outside
+    /// <paramref name="preservedStages"/>; a Running task is stopped by its agent once it sees the
+    /// Cancelled status.</summary>
+    Task CancelActiveTasksExceptStagesAsync(
         int pipelineRunId,
         IReadOnlyCollection<string> preservedStages,
         CancellationToken ct = default);

@@ -1,0 +1,98 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-8: the small info of the block of a scheduled action (a server's scan, an AI task, a backup) in the planner's
+   calendar, opened by a click on it. It says where the action runs (the links to its server and its project, and to the
+   page where its schedule is kept), how long it takes, where the schedule comes from and whether the planner may move it.
+   Nothing more. *@
+<OmniStack Gap="OmniSpacing.Small" data-testid="schedule-server-action-info">
+    @if (ServerHref is { } serverHref)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.HardDrive" />
+            <span>@L["Server"]</span>
+            <OmniLink Href="@(Action.Kind == ServerActionKind.RkhunterScan ? ServerActionPlannerTask.Link(Action) : serverHref)" OnClick="@(_ => Dialog.Close())" data-testid="schedule-info-server">@Action.ServerName</OmniLink>
+        </OmniStack>
+    }
+    @if (ProjectHref is { } projectHref && Action.ProjectName is { } projectName)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Folder" />
+            <span>@L["Project"]</span>
+            <OmniLink Href="@projectHref" OnClick="@(_ => Dialog.Close())" data-testid="schedule-info-project">@projectName</OmniLink>
+        </OmniStack>
+    }
+    @if (Action.Kind != ServerActionKind.RkhunterScan)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="@ServerActionPlannerTask.Icon(Action.Kind)" />
+            <OmniLink Href="@ServerActionPlannerTask.Link(Action)" OnClick="@(_ => Dialog.Close())" data-testid="schedule-info-open">@L[ServerActionPlannerTask.OpenKey(Action.Kind)]</OmniLink>
+        </OmniStack>
+    }
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniIcon Name="OmniIconName.Timer" />
+        <span data-testid="schedule-info-duration">@DurationText</span>
+    </OmniStack>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniIcon Name="OmniIconName.CalendarBlank" />
+        <span data-testid="schedule-info-source">@L[ServerActionPlannerTask.SourceKey(Action.Kind)]</span>
+    </OmniStack>
+    @if (Action.Reboot is { } reboot)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Sync" />
+            <span data-testid="schedule-info-reboot-when">@Aetheus.Front.Components.Servers.ServerRebootStatusText.When(L, reboot)</span>
+        </OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Info" />
+            <span data-testid="schedule-info-reboot-outcome">@Aetheus.Front.Components.Servers.ServerRebootStatusText.Outcome(L, reboot)</span>
+        </OmniStack>
+    }
+    @if (Action.MachineJob is { } machineJob)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.TerminalWindow" />
+            <span data-testid="schedule-info-machine-job-name">@machineJob.Name</span>
+        </OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Sync" />
+            <span data-testid="schedule-info-machine-job-when">@MachineJobText.When(L, Action)</span>
+        </OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Info" />
+            <span data-testid="schedule-info-machine-job-source">@MachineJobText.Source(L, machineJob)</span>
+        </OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Document" />
+            <code data-testid="schedule-info-machine-job-detail">@machineJob.Detail</code>
+        </OmniStack>
+    }
+    @if (Action.MachineReboot is { } machineReboot)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Sync" />
+            <span data-testid="schedule-info-machine-reboot-when">@MachineRebootText.When(L, Action)</span>
+        </OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Info" />
+            <span data-testid="schedule-info-machine-reboot-source">@MachineRebootText.Source(L, machineReboot)</span>
+        </OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniIcon Name="OmniIconName.Document" />
+            <code data-testid="schedule-info-machine-reboot-detail">@machineReboot.Detail</code>
+        </OmniStack>
+    }
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+        @if (ServerActionBlocks.IsMovable(Action))
+        {
+            <OmniBadge Tone="OmniTone.Success" Fill="OmniFill.Tonal" data-testid="schedule-info-movable"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["ScheduleServerActionMovable"]</ChildContent></OmniBadge>
+            <OmniText Tone="OmniTextTone.Muted">@L[ServerActionPlannerTask.MoveTextKey(Action.Kind)]</OmniText>
+        }
+        else
+        {
+            <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" data-testid="schedule-info-read-only"><Icon><OmniIcon Name="OmniIconName.Lock" /></Icon><ChildContent>@L["ScheduleReadOnly"]</ChildContent></OmniBadge>
+            <OmniText Tone="OmniTextTone.Muted">@L[Action.Movable ? ServerActionPlannerTask.MoveCustomKey(Action.Kind) : ServerActionPlannerTask.ReadOnlyKey(Action.Kind)]</OmniText>
+        }
+    </OmniStack>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
+        <Aetheus.Front.Components.Servers.DialogCloseButton />
+    </OmniStack>
+</OmniStack>

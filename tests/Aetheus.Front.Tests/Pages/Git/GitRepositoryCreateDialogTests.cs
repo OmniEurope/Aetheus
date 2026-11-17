@@ -72,6 +72,21 @@ public class GitRepositoryCreateDialogTests : BunitContext
     }
 
     [Fact]
+    public void R31_TheDialogHandsBackTheCreatedRepository_ToItsPageWithTheReturnAddress()
+    {
+        var nav = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+
+        Assert.Equal(
+            "/git-repositories/9?returnUrl=%2Fprojects%2F3%2Foverview",
+            GitRepositoryCreateDialog.RepositoryPageHref(9, "/projects/3/overview", nav));
+        // A cancelled dialog (false) or an address of another site never opens or follows anything.
+        Assert.Null(GitRepositoryCreateDialog.RepositoryPageHref(false, "/projects/3/overview", nav));
+        Assert.StartsWith("/git-repositories/9?returnUrl=",
+            GitRepositoryCreateDialog.RepositoryPageHref(9, "https://evil.example/", nav), StringComparison.Ordinal);
+        Assert.DoesNotContain("evil", GitRepositoryCreateDialog.RepositoryPageHref(9, "https://evil.example/", nav)!, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheNameStartsAsTheProjectName()
     {
         // Recette R3-60: a project's repository is proposed under the project's name.

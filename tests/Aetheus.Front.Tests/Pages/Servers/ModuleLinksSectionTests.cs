@@ -187,9 +187,10 @@ public class ModuleLinksSectionTests : BunitContext
 
         var method = typeof(ModuleLinksTab).GetMethod("DeleteLinkAsync", Priv)!;
         var resourceGetsBefore = _handler.Requests.Count(r => r.Url.Contains("module-links/resource-page"));
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [1])!);
+        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [new LinkedResourceDto { LinkId = 1 }])!);
 
-        // The DELETE is issued, and on success LoadLinksAsync re-fetches the resource links.
+        // The DELETE is issued, and on success the grid reads the resource links again behind the rows (R-10).
+        await cut.InvokeAsync(() => cut.FindComponent<AetheusDataGrid<LinkedResourceDto>>().Instance.BackgroundRefresh);
         Assert.Contains(_handler.Requests, r => r.Method == "DELETE" && r.Url.Contains("api/servers/1/module-links/1"));
         var resourceGetsAfter = _handler.Requests.Count(r => r.Url.Contains("module-links/resource-page"));
         Assert.True(resourceGetsAfter > resourceGetsBefore, "successful delete must trigger a page reload");
@@ -207,7 +208,7 @@ public class ModuleLinksSectionTests : BunitContext
         _handler.SetResponse("module-links/1", System.Net.HttpStatusCode.InternalServerError);
         var method = typeof(ModuleLinksTab).GetMethod("DeleteLinkAsync", Priv)!;
         var resourceGetsBefore = _handler.Requests.Count(r => r.Url.Contains("module-links/resource-page"));
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [1])!);
+        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [new LinkedResourceDto { LinkId = 1 }])!);
 
         // A failed DELETE shows an error toast and does NOT re-fetch the resource links.
         Assert.Contains(_handler.Requests, r => r.Method == "DELETE" && r.Url.Contains("api/servers/1/module-links/1"));

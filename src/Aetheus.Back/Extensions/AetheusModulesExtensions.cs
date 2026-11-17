@@ -5,6 +5,7 @@ using Aetheus.Back.Components.AgentUpdate;
 using Aetheus.Back.Components.AiTasks;
 using Aetheus.Back.Components.Alerts;
 using Aetheus.Back.Components.Analysis;
+using Aetheus.Back.Components.Analysis.DependencyUpdates;
 using Aetheus.Back.Components.Apache;
 using Aetheus.Back.Components.AppBackups;
 using Aetheus.Back.Components.AppMonitoring;
@@ -19,6 +20,7 @@ using Aetheus.Back.Components.Environments;
 using Aetheus.Back.Components.ExternalRepos;
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.GitGraph;
+using Aetheus.Back.Components.Inventory;
 using Aetheus.Back.Components.Logs;
 using Aetheus.Back.Components.Mail;
 using Aetheus.Back.Components.ModuleLinks;
@@ -49,6 +51,7 @@ using Aetheus.Back.Components.TestManagement;
 using Aetheus.Back.Components.Users;
 using Aetheus.Back.Components.VariableLibraries;
 using Aetheus.Back.Components.Vaults;
+using Aetheus.Back.Components.VulnerabilityWatch;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Components.WorkItems;
 using Aetheus.Back.Seeding;
@@ -101,6 +104,9 @@ internal static class AetheusModulesExtensions
             .AddWebhooksModule()
             .AddAlertsModule()
             .AddAnalysisModule(configuration)
+            .AddDependencyUpdatesModule()
+            .AddVulnerabilityWatchModule(configuration)
+            .AddInventoryModule()
             .AddGitModule(configuration)
             .AddExternalReposModule(configuration)
             .AddWorkItemsModule()

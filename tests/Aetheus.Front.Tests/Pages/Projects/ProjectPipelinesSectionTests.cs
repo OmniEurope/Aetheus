@@ -14,6 +14,8 @@ public class ProjectPipelinesSectionTests : BunitContext
     public ProjectPipelinesSectionTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
+        // R-11: the external repository panel above the list; these projects have none.
+        _handler.SetJsonResponse(HttpMethod.Get, "/external-pipelines", new ExternalPipelineCandidatesDto());
         _handler.SetJsonResponse("api/pipelines/dependencies", new PipelineDependencyGroupsDto());
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         _handler.SetJsonResponse("api/pipelines/favorites", new PipelineFavoritesDto());

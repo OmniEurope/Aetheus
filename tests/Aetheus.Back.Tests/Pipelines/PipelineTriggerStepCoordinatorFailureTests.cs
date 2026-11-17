@@ -31,6 +31,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
     private readonly IPipelineCheckpointReuseService _checkpoints = Substitute.For<IPipelineCheckpointReuseService>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IAuditService _audit = Substitute.For<IAuditService>();
+    private readonly IPipelineSetupServerRepository _projectServers = Substitute.For<IPipelineSetupServerRepository>();
     private readonly IPipelineChildRunLauncher _launcher = Substitute.For<IPipelineChildRunLauncher>();
     private readonly PipelineTriggerStepCoordinator _sut;
     private readonly Pipeline _childPipeline;
@@ -46,6 +47,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
     {
         _sut = new PipelineTriggerStepCoordinator(
             _repo, _git, _preparations, _parameters, _checkpoints, _authz, _audit,
+            _projectServers,
             new FakeTimeProvider(),
             NullLogger<PipelineTriggerStepCoordinator>.Instance);
 
@@ -476,6 +478,32 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         await AssertFailed(step, "pipeline 'does-not-exist' not found in the project or at the immutable run revision.");
     }
 
+    /// <summary>Decision 2026-11-10 (point 5): a target that is not registered, whose definition source is the
+    /// mirror of an external repository, is refused by name, even at an immutable revision: the mirror is never read
+    /// to create a pipeline, the user imports it explicitly.</summary>
+    [Fact]
+    public async Task AnUnregisteredTargetWhoseSourceIsAnExternalMirror_IsRefusedWithoutReadingTheMirror()
+    {
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        var parent = await _repo.GetPipelineRunWithPipelineAsync(ParentRunId, TestContext.Current.CancellationToken);
+        parent!.CommitHash = commit;
+        parent.Pipeline!.SourceRepositoryId = 70;
+        _git.IsExternalMirrorDefinitionSourceAsync(ProjectId, 70, Arg.Any<CancellationToken>()).Returns(true);
+        _git.ReadProjectPipelineYamlAtRevisionAsync(
+                ProjectId, "mirror-only", commit, Arg.Any<CancellationToken>(), Arg.Any<int?>())
+            .Returns("name: mirror-only\nstages:\n  - name: build\n    steps:\n      - name: run\n        shell: echo pwned");
+        var step = Step();
+
+        await _sut.CreateTriggerStepAsync(ParentRunId, step, Definition("mirror-only"), [], NoSecrets, _launcher, CancellationToken.None);
+
+        await AssertFailed(step, "pipeline 'mirror-only' is not registered in Aetheus, and the definitions of this pipeline's "
+            + "source repository come from the mirror of an external repository, which is never read to create a "
+            + "pipeline: import it explicitly from the external repository first.");
+        await _git.DidNotReceiveWithAnyArgs().ReadProjectPipelineYamlAtRevisionAsync(
+            default, default!, default!, TestContext.Current.CancellationToken, default);
+        await _repo.DidNotReceiveWithAnyArgs().AddPipelineAsync(default!, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task ATargetAlreadyInTheChain_IsRefusedAsACycle()
     {
@@ -513,6 +541,50 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         await _sut.CreateTriggerStepAsync(ParentRunId, step, Definition(), [], NoSecrets, _launcher, CancellationToken.None);
 
         await AssertFailed(step, "owner '(none)' of pipeline 'package-aetheus-telemetry' lacks Server.Admin on its target servers.");
+    }
+
+    // ---- Decision 2026-11-15 (recette R-8): a run on a dependency update branch never launches a trigger target ----
+
+    [Fact]
+    public async Task ARunOnADependencyUpdateBranch_FailsTheTriggerStepWithItsReason_AndLaunchesNothing()
+    {
+        var parent = await _repo.GetPipelineRunWithPipelineAsync(ParentRunId, TestContext.Current.CancellationToken);
+        parent!.BranchName = "aetheus/deps/Newtonsoft.Json-13.0.3";
+        var step = Step();
+
+        await _sut.CreateTriggerStepAsync(ParentRunId, step, Definition(), [], NoSecrets, _launcher, CancellationToken.None);
+
+        Assert.Null(step.TriggeredRunId);
+        Assert.Null(step.SkippedReason);
+        await AssertFailed(step,
+            "this run tests the dependency update branch 'aetheus/deps/Newtonsoft.Json-13.0.3': the trigger step does not launch "
+            + "pipeline 'package-aetheus-telemetry', production-bound follow-ups are blocked on this branch and left to the user.");
+        // Nothing is resolved, prepared or materialized for a target that is never launched.
+        await _repo.DidNotReceiveWithAnyArgs().FindPipelineByNameAndProjectAsync(default!, default, TestContext.Current.CancellationToken);
+        await _preparations.DidNotReceiveWithAnyArgs().PrepareRunAsync(default, default, default, default, TestContext.Current.CancellationToken);
+        await _checkpoints.DidNotReceiveWithAnyArgs().TryReuseCheckpointAsync(default!, default!, default!, default!, default!, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData("main")]
+    [InlineData("develop")]
+    [InlineData("feature/aetheus/deps/x-1.0.0")]
+    [InlineData("aetheus/deps/")]
+    public async Task ARunOnAnyOtherBranch_StillLaunchesTheTriggerTarget(string branch)
+    {
+        var parent = await _repo.GetPipelineRunWithPipelineAsync(ParentRunId, TestContext.Current.CancellationToken);
+        parent!.BranchName = branch;
+        _launcher.TriggerPreparedRunAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>>(),
+                Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string>())
+            .Returns(new PipelineRunDto { Id = 1121 });
+        var step = Step();
+
+        await _sut.CreateTriggerStepAsync(ParentRunId, step, Definition(), [], NoSecrets, _launcher, CancellationToken.None);
+
+        Assert.Equal(TaskExecutionStatus.Running, step.Status);
+        Assert.Equal(1121, step.TriggeredRunId);
+        Assert.Null(step.SkippedReason);
     }
 
     private async Task AssertFailed(PipelineStepRun step, string reason)

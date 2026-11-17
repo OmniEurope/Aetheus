@@ -53,6 +53,12 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private IDisposable? _onFailed;
     private ITimer? _staleTimer;
 
+    /// <summary>True from the moment the update is queued until it is confirmed or has failed (Done and Failed lift it).</summary>
+    internal bool InProgress => _phase is { } phase && phase is not (AgentUpdatePhase.Done or AgentUpdatePhase.Failed);
+
+    // R-37: updating the agent never veils the page (the page stays usable); the card keeps showing the progress.
+    // Only the tasks listed in ServerBlockingTasks veil.
+
     protected override void OnParametersSet()
     {
         ApplyPersistedRequest();
@@ -238,7 +244,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
         _phase = null;
         _percent = 0;
         _message = null;
-        StateHasChanged();
         await OnRetry.InvokeAsync();
     }
 

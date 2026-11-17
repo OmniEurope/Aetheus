@@ -3,12 +3,23 @@
 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.End" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyAllAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
 </OmniStack>
+@* R-31: the clone address is the back's, the agent swaps its host and port for its own before cloning: two addresses, said. *@
+@if (HasBackCloneAddress)
+{
+    <OmniStack Gap="OmniSpacing.Medium" Class="omni-u-mb-sm">
+        <OmniAlert Severity="OmniSeverity.Info" data-testid="run-variables-clone-address-note">@L["VarCloneAddressNote"]</OmniAlert>
+    </OmniStack>
+}
 <OmniDataGrid Items="@VariableList" ExportTitle="@ExportContext.Title(L["ResolvedVariables"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Key"]" Filterable="true" />
-        <OmniDataGridColumn TItem="KeyValuePair<string, string>" Title="@L["Source"]" Width="7rem" Sortable="false">
+        <OmniDataGridColumn TItem="KeyValuePair<string, string>" Title="@L["Source"]" Width="10rem" Sortable="false">
             <Template Context="kv">
-                @if (IsSystemVariable(kv.Key))
+                @if (IsBackCloneAddress(kv.Key))
+                {
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Info))" Fill="OmniFill.Solid" Tone="OmniTone.Info" data-testid="run-variable-back-address">@L["VarSourceBackAddress"]</OmniBadge>
+                }
+                else if (IsSystemVariable(kv.Key))
                 {
                     <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["VarSourceSystem"]</OmniBadge>
                 }

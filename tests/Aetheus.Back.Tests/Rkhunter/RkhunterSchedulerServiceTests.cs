@@ -26,7 +26,7 @@ public sealed class RkhunterSchedulerServiceTests
 
     private RkhunterSchedulerService Sut(IPostgresLeaderLease? lease = null, TimeProvider? clock = null) => new(
         BackgroundServiceTestKit.ScopeFactory((typeof(IRkhunterRepository), _repo), (typeof(ITaskService), _tasks)),
-        _logger, clock ?? _clock, lease);
+        _logger, clock ?? _clock, lease ?? LeaderLeaseDouble.Leader());
 
     private void Scheduled(params RkhunterState[] states) =>
         _repo.GetScheduledStatesAsync(Arg.Any<CancellationToken>()).Returns(states.ToList());

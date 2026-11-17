@@ -37,7 +37,7 @@ public class PipelineVariableResolverTests
     [Fact]
     public async Task ResolveFullVariablesForRunAsync_InjectsSystemAndProjectVariables()
     {
-        var run = NewRun(new Project { Name = "App", RepositoryUrl = "https://repo", DefaultBranch = "develop", OrganizationId = 1 });
+        var run = NewRun(new Project { Name = "App", RepositoryUrl = "https://repo.example/git/1/app.git", DefaultBranch = "develop", OrganizationId = 1 });
         var def = new PipelineYamlDefinition { Name = "build", Trigger = "manual" };
 
         var vars = await _sut.ResolveFullVariablesForRunAsync(run, def, TestContext.Current.CancellationToken);
@@ -47,7 +47,8 @@ public class PipelineVariableResolverTests
         Assert.Equal("7", vars["BUILD_PIPELINEID"]);
         Assert.Equal("1", vars["BUILD_PROJECTID"]);
         Assert.Equal("App", vars["BUILD_PROJECTNAME"]);
-        Assert.Equal("https://repo", vars["REPOSITORY_URL"]);
+        // R-4: the project clone URL a step gets is Aetheus's own (its mirror), never an external address.
+        Assert.Equal("https://repo.example/git/1/app.git", vars["REPOSITORY_URL"]);
         Assert.Equal("develop", vars["DEFAULT_BRANCH"]);
         Assert.Equal("true", vars["CI"]);
     }
@@ -416,5 +417,52 @@ public class PipelineVariableResolverTests
             ["Variable library 'shared' not found."], null, TestContext.Current.CancellationToken);
 
         Assert.Empty(current);
+    }
+
+    [Theory]
+    [InlineData(true, "true")]
+    [InlineData(false, "false")]
+    public async Task ResolveFullVariablesForRunAsync_WritesTheProjectsMigrationGateSettingOverTheTemplateDefault(
+        bool gateEnabled, string expected)
+    {
+        var project = new Project
+        {
+            Name = "App",
+            RepositoryUrl = "https://repo",
+            OrganizationId = 1,
+            MigrationGateEnabled = gateEnabled
+        };
+        // The deployment templates declare the gate off by default; the project's setting, read at every run, is the truth.
+        var def = new PipelineYamlDefinition
+        {
+            Name = "deploy",
+            Trigger = "manual",
+            Variables = new Dictionary<string, string>
+            {
+                [PipelineProjectVariables.MigrationGateVariable] = gateEnabled ? "false" : "true",
+                ["DEPLOY_STRATEGY"] = "bluegreen",
+                // What the stage condition of the templates compares: derived from the setting after it is written.
+                ["APPLICATION_MIGRATION_GATE_STRATEGY"] = "$(APPLICATION_MIGRATION_GATE_ENABLED)-$(DEPLOY_STRATEGY)"
+            }
+        };
+
+        var vars = await _sut.ResolveFullVariablesForRunAsync(NewRun(project), def, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, vars[PipelineProjectVariables.MigrationGateVariable]);
+        Assert.Equal($"{expected}-bluegreen", vars["APPLICATION_MIGRATION_GATE_STRATEGY"]);
+    }
+
+    [Fact]
+    public async Task ResolveFullVariablesForRunAsync_FollowsTheSettingWhenItChangesBetweenTwoRuns()
+    {
+        var project = new Project { Name = "App", RepositoryUrl = "https://repo", OrganizationId = 1 };
+        var def = new PipelineYamlDefinition { Name = "deploy", Trigger = "manual" };
+
+        var before = await _sut.ResolveFullVariablesForRunAsync(NewRun(project), def, TestContext.Current.CancellationToken);
+        project.MigrationGateEnabled = true;
+        var after = await _sut.ResolveFullVariablesForRunAsync(NewRun(project), def, TestContext.Current.CancellationToken);
+
+        Assert.Equal("false", before[PipelineProjectVariables.MigrationGateVariable]);
+        Assert.Equal("true", after[PipelineProjectVariables.MigrationGateVariable]);
     }
 }

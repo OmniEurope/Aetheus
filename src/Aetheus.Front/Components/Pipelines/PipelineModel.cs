@@ -14,11 +14,28 @@ internal sealed class PipelineModel
     public string YamlDefinition { get; set; } = string.Empty;
     public int? ProjectId { get; set; }
     public string? SourceBranch { get; set; }
+
+    /// <summary>The repository the definition is read from; carried unchanged so a save never forgets it (R-12).</summary>
+    public int? SourceRepositoryId { get; set; }
     public int? EnvironmentId { get; set; }
     public int? ProjectServerId { get; set; }
 
     /// <summary>The AI runner profile the pipeline's AI steps fall back on; null is automatic.</summary>
     public int? AiRunnerProfileId { get; set; }
+
+    /// <summary>The form of a saved pipeline; <paramref name="fallbackBranch"/> names the branch of one that has none.</summary>
+    public static PipelineModel From(PipelineDto pipeline, string? fallbackBranch) => new()
+    {
+        Name = pipeline.Name,
+        Description = pipeline.Description,
+        YamlDefinition = pipeline.YamlDefinition,
+        ProjectId = pipeline.ProjectId,
+        SourceBranch = pipeline.SourceBranch ?? fallbackBranch,
+        SourceRepositoryId = pipeline.SourceRepositoryId,
+        EnvironmentId = pipeline.EnvironmentId,
+        ProjectServerId = pipeline.ProjectServerId,
+        AiRunnerProfileId = pipeline.AiRunnerProfileId
+    };
 
     /// <summary>The form's data-annotation rules, for the save entry points outside the form (FRONT-008).</summary>
     public bool IsValid() =>
@@ -43,6 +60,7 @@ internal sealed class PipelineModel
         YamlDefinition = YamlDefinition,
         ProjectId = ProjectId,
         SourceBranch = SourceBranch,
+        SourceRepositoryId = SourceRepositoryId,
         EnvironmentId = EnvironmentId,
         ProjectServerId = ProjectServerId,
         AiRunnerProfileId = AiRunnerProfileId

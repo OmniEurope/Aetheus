@@ -1,0 +1,74 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-007 (recette R-9): the automatic dependency updates of the project, newest first: the package, the versions, where it
+   stands, the branch and the runs of the CI and the QA on it, or why nothing was written. *@
+<OmniCard Class="dependency-updates-panel omni-u-p-md" data-testid="dependency-updates-panel">
+    <OmniStack Gap="OmniSpacing.Medium">
+        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["DependencyUpdatesTitle"]</OmniHeading>
+        @if (_loading)
+        {
+            <ZoneVeil />
+        }
+        else if (_failed)
+        {
+            <OmniText Tone="OmniTextTone.Muted">@L["DependencyUpdatesUnavailable"]</OmniText>
+        }
+        else
+        {
+            <OmniText Tone="OmniTextTone.Muted">@(_overview.Enabled ? L["DependencyUpdatesEnabledHint"] : L["DependencyUpdatesDisabledHint"])</OmniText>
+            @if (_overview.Items.Count == 0)
+            {
+                <OmniText Element="OmniTextElement.Span" data-testid="dependency-updates-empty">@L["DependencyUpdatesEmpty"]</OmniText>
+            }
+            else
+            {
+                <OmniStack Gap="OmniSpacing.Medium">
+                    @foreach (var update in _overview.Items)
+                    {
+                        <OmniCard Class="dependency-update-item omni-u-p-sm" data-testid="dependency-update-item">
+                            <OmniStack Gap="OmniSpacing.Small">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="dependency-update-heading">
+                                    <OmniText Element="OmniTextElement.Strong">@update.PackageName</OmniText>
+                                    <OmniText Element="OmniTextElement.Span">@string.Format(L["DependencyUpdateVersions"], update.FromVersion, update.TargetVersion)</OmniText>
+                                    <OmniBadge Tone="@StatusTone(update.Status)" Fill="OmniFill.Tonal" Icon="@(BadgeIcon.ForState(StatusTone(update.Status)))">@StatusText(update.Status)</OmniBadge>
+                                    @if (update.IsMajorUpgrade)
+                                    {
+                                        <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Solid" Icon="@(BadgeIcon.ForState(OmniTone.Warning))" data-testid="dependency-update-major">@(update.ReviewRequired ? L["DependencyUpdateMajorReview"] : L["DependencyUpdateMajor"])</OmniBadge>
+                                    }
+                                </OmniStack>
+                                <OmniText Element="OmniTextElement.Span" Tone="OmniTextTone.Muted">@string.Format(L["DependencyUpdateAdvisory"], update.Advisory)</OmniText>
+                                @if (update.Branch is { } branch)
+                                {
+                                    <OmniText Element="OmniTextElement.Span">@string.Format(L["DependencyUpdateBranch"], branch)</OmniText>
+                                }
+                                @if (update.License is { } license)
+                                {
+                                    <OmniText Element="OmniTextElement.Span" Tone="OmniTextTone.Muted">
+                                        @string.Format(update.LicenseOfTargetVersion ? L["DependencyUpdateLicenseTarget"] : L["DependencyUpdateLicenseCurrent"], license)
+                                    </OmniText>
+                                }
+                                @foreach (var run in update.Runs)
+                                {
+                                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                                        @if (run.RunId is { } runId)
+                                        {
+                                            <OmniLink Href="@($"/pipelines/runs/{runId}")">@run.PipelineName</OmniLink>
+                                        }
+                                        else
+                                        {
+                                            <OmniText Element="OmniTextElement.Span">@run.PipelineName</OmniText>
+                                        }
+                                        <OmniBadge Tone="@RunTone(run.Status)" Fill="OmniFill.Tonal" Icon="@(BadgeIcon.ForState(RunTone(run.Status)))">@RunText(run)</OmniBadge>
+                                    </OmniStack>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(update.Reason))
+                                {
+                                    <OmniText Element="OmniTextElement.Span" Tone="OmniTextTone.Muted" data-testid="dependency-update-reason">@update.Reason</OmniText>
+                                }
+                            </OmniStack>
+                        </OmniCard>
+                    }
+                </OmniStack>
+            }
+        }
+    </OmniStack>
+</OmniCard>

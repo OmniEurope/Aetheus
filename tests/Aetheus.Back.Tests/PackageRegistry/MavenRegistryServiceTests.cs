@@ -111,6 +111,20 @@ public sealed class MavenRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task PublishingANewVersion_MovesThePackageUpdatedDate_EvenWhenNothingElseOfThePackageChanged()
+    {
+        await PutAsync("org/example/demo/1.0/demo-1.0.pom", Pom("1.0"));
+        var created = _clock.GetUtcNow().UtcDateTime;
+        _clock.Advance(TimeSpan.FromDays(78));
+
+        await PutAsync("org/example/demo/1.1/demo-1.1.pom", Pom("1.1"));
+
+        var package = await _db.RegistryPackages.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(created, package.CreatedAt);
+        Assert.Equal(_clock.GetUtcNow().UtcDateTime, package.UpdatedAt);
+    }
+
+    [Fact]
     public async Task Redeploy_SameBytesIsAccepted_DifferentBytesIsAConflict()
     {
         await PutAsync("org/example/demo/1.0/demo-1.0.jar", "original");

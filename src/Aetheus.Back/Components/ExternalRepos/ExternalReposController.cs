@@ -32,6 +32,16 @@ public class ExternalReposController(IExternalRepoService service, IResourceAuth
         return Ok(result);
     }
 
+    /// <summary>Recette R-4: creates the project mirror of the repository address the project names.</summary>
+    [HttpPost("project/{projectId:int}/mirror-address")]
+    public async Task<ActionResult<ExternalRepoDto>> MirrorRepositoryAddress(int projectId, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Write, ct))
+            return Forbid();
+
+        return Ok(await service.MirrorRepositoryAddressAsync(projectId, ct));
+    }
+
     [HttpPost("project/{projectId:int}/sync")]
     public async Task<ActionResult<ExternalRepoDto>> SyncNow(int projectId, CancellationToken ct)
     {

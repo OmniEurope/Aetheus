@@ -28,6 +28,12 @@ public sealed class CertbotOperationExecutor(
 
     internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
+    /// <summary>Recette R-26: the enabled Apache sites a lineage is checked against before it is revoked or deleted;
+    /// replaceable so the decision is asserted without a real <c>sites-enabled</c>.</summary>
+    internal ApacheEnabledSites EnabledSites { get; init; } = ApacheEnabledSites.OnHost(logger);
+
+    internal string LetsEncryptPath { get; init; } = ApacheEnabledSites.DefaultLetsEncryptPath;
+
     // The process runner, replaceable so the helper argv and environment are asserted without sudo.
     internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
         RunProcessAsync
@@ -174,25 +180,57 @@ public sealed class CertbotOperationExecutor(
             return new ExecutorResult(-1, false);
         }
 
+        // Recette R-26: a lineage an enabled Apache site still names is never revoked or deleted: Apache would then
+        // fail its configuration test for the whole server. Checked before certbot runs, with the reason and the way out.
+        if (kind is OperationKind.CertbotDelete or OperationKind.CertbotRevoke
+            && await UseRefusalAsync(certName, ct).ConfigureAwait(false) is { } refusal)
+        {
+            await onOutput(refusal, TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
+
         timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
 
         var psi = SudoProcessStartInfo.Create();
         foreach (var arg in BuildManageArgv(kind, verb, certName)) psi.ArgumentList.Add(arg);
 
-        await onOutput($"certbot {verb}{(IsLineageless(kind) ? " (all)" : $" {certName}")}…", TaskLogLevel.Info).ConfigureAwait(false);
+        await onOutput($"certbot {verb}{(IsLineageless(kind, certName) ? " (all)" : $" {certName.Replace(',', ' ')}")}…", TaskLogLevel.Info).ConfigureAwait(false);
         return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Why the lineage must stay, in words that say what to do, or null when no enabled Apache site uses it.
+    /// A site that cannot be read, or an unreadable sites-enabled, counts as a use: the deletion is refused rather than
+    /// guessed safe.</summary>
+    private async Task<string?> UseRefusalAsync(string certName, CancellationToken ct)
+    {
+        var enabled = EnabledSites.Names();
+        if (enabled is null)
+            return $"Certificate {certName} was not deleted: {EnabledSites.SitesEnabledPath} cannot be read, so it is not known whether an enabled Apache site uses it. "
+                + "Check that no enabled site uses it (an enabled site whose certificate is gone makes apache2ctl configtest fail for the whole server), then delete it again.";
+        var use = await EnabledSites.UsingCertificateAsync(certName, enabled, LetsEncryptPath, ct).ConfigureAwait(false);
+        if (use.Sites.Count > 0)
+            return $"Certificate {certName} was not deleted: the enabled Apache site(s) {string.Join(", ", use.Sites)} still use it, and Apache's configuration test (apache2ctl configtest) would fail for the whole server. "
+                + "Disable the site(s) first (Apache section of this server), or delete the project that owns them, then delete the certificate again.";
+        if (use.Unreadable is not null)
+            return $"Certificate {certName} was not deleted: {use.Unreadable}. "
+                + "Check that no enabled site uses it (an enabled site whose certificate is gone makes apache2ctl configtest fail for the whole server), then delete it again.";
+        return null;
     }
 
     // `sudo -n <issue-helper> <domain>` - argv-exact; the helper re-validates the domain.
     internal static string[] BuildObtainArgv(string primaryDomain) =>
         ["-n", HelperPath, primaryDomain];
 
-    // `sudo -n <manage-helper> <verb> [certName]` - argv-exact; the all-lineage verbs take no name.
+    // `sudo -n <manage-helper> <verb> [certName...]` - argv-exact; the all-lineage verbs take no name. The rehearsal
+    // takes either none (every lineage) or each name of its target (recette R-19), one argument each.
     internal static string[] BuildManageArgv(OperationKind kind, string verb, string certName) =>
-        IsLineageless(kind)
-            ? ["-n", ManageHelperPath, verb]
-            : ["-n", ManageHelperPath, verb, certName];
+        kind == OperationKind.CertbotRenewalCheck
+            ? ["-n", ManageHelperPath, verb, .. OperationTargetValidator.CertbotRenewalCheckNames(certName) ?? []]
+            : IsLineageless(kind, certName)
+                ? ["-n", ManageHelperPath, verb]
+                : ["-n", ManageHelperPath, verb, certName];
 
-    private static bool IsLineageless(OperationKind kind) =>
-        kind is OperationKind.CertbotRenewAll or OperationKind.CertbotNormalize or OperationKind.CertbotRenewalCheck;
+    private static bool IsLineageless(OperationKind kind, string target) =>
+        kind is OperationKind.CertbotRenewAll or OperationKind.CertbotNormalize
+        || (kind == OperationKind.CertbotRenewalCheck && target == CertbotRenewalCheckTarget.All);
 }

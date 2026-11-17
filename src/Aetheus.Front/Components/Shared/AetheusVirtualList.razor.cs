@@ -17,6 +17,9 @@ public partial class AetheusVirtualList<TItem> : IAsyncDisposable
     /// <summary>Rows kept rendered on each side of the viewport so a fast scroll does not show a gap.</summary>
     [Parameter] public int OverscanCount { get; set; } = 20;
 
+    /// <summary>Raised once the spacers were resized to the full height of the list.</summary>
+    [Parameter] public EventCallback OnSpacersApplied { get; set; }
+
     [Parameter, EditorRequired] public RenderFragment<TItem> ChildContent { get; set; } = default!;
 
     private ElementReference _root;
@@ -104,6 +107,9 @@ public partial class AetheusVirtualList<TItem> : IAsyncDisposable
             await JS.InvokeVoidAsync("Aetheus.sizeVirtualSpacer", _bottomSpacer, bottom);
             _appliedTop = top;
             _appliedBottom = bottom;
+            // R-21: the list is now as tall as its items; a caller that pinned to the bottom before this
+            // (the spacer was still short) can pin again.
+            if (OnSpacersApplied.HasDelegate) await OnSpacersApplied.InvokeAsync();
         }
         catch (JSException)
         {

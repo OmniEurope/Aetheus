@@ -33,9 +33,10 @@ internal sealed class PipelineStepRunWarningsHandler(IPipelineRepository repo)
                 var triggeringSteps = await repo.FindStepRunsByTriggeredRunIdAsync(childRunId, ct).ConfigureAwait(false);
                 foreach (var step in triggeringSteps.Where(step => seen.Add(step.PipelineRunId)))
                 {
+                    var childNumber = (await repo.GetRunNumbersAsync([childRunId], ct).ConfigureAwait(false)).GetValueOrDefault(childRunId);
                     await repo.AppendRunWarningsAsync(
                         step.PipelineRunId,
-                        [.. domainEvent.Warnings.Select(warning => ForParent(step.StageName, childRunId, warning))],
+                        [.. domainEvent.Warnings.Select(warning => ForParent(step.StageName, childNumber, warning))],
                         ct).ConfigureAwait(false);
                     parents.Add(step.PipelineRunId);
                 }
@@ -47,14 +48,14 @@ internal sealed class PipelineStepRunWarningsHandler(IPipelineRepository repo)
     /// <summary>The warning of a child as its parent stores it. A warning the child stored as a problem (a step that named
     /// it, recette R-23) is carried as the inner problem, so the parent says it in the user's language too and its
     /// English sentence holds the child's English, never the stored form.</summary>
-    private static string ForParent(string stageName, int childRunId, string warning)
+    private static string ForParent(string stageName, int childRunNumber, string warning)
     {
         var inner = StoredProblem.TryRead(warning, out var content) ? content : null;
         var detail = inner?.English ?? warning;
         return PipelineProblem.Of(
                 PipelineProblemCodes.ChildRunWarning,
-                $"Stage '{stageName}' (run #{childRunId}): {detail}",
-                ("stage", stageName), ("run", childRunId), ("detail", detail))
+                $"Stage '{stageName}' (run #{childRunNumber}): {detail}",
+                ("stage", stageName), ("run", childRunNumber), ("detail", detail))
             .ToStored(inner is null ? null : [inner.Problem]);
     }
 }

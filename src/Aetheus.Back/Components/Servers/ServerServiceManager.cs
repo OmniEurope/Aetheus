@@ -45,12 +45,12 @@ internal sealed class ServerServiceManager(
                 ServiceAction.Restart => OperationKind.ServiceRestart,
                 _ => throw new BadRequestException($"Unsupported service action: {request.Action}")
             };
-            task = ServerTaskFactory.Operation(serverId, $"Service {request.Action} - {request.ServiceName}", operation, request.ServiceName, 30);
+            task = ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.ServiceActionPrefix}{request.Action} - {request.ServiceName}", operation, request.ServiceName, 30);
         }
         else
         {
             var (command, executor) = BuildServiceCommand(request.Action, request.ServiceName, serviceType);
-            task = ServerTaskFactory.Create(serverId, $"Service {request.Action} - {request.ServiceName}", command, executor, 30);
+            task = ServerTaskFactory.Create(serverId, $"{ServerTaskNames.ServiceActionPrefix}{request.Action} - {request.ServiceName}", command, executor, 30);
         }
         await repo.AddTaskAsync(task, ct).ConfigureAwait(false);
         await taskService.NotifyTaskQueuedAsync(task, ct: ct).ConfigureAwait(false);
@@ -97,11 +97,11 @@ internal sealed class ServerServiceManager(
 
     public async Task<int> InstallServiceAsync(int serverId, string serviceName, CancellationToken ct = default)
         => await DispatchPackageOperationAsync(
-            serverId, serviceName, OperationKind.ServiceInstall, "Install", "ServiceInstall", ct).ConfigureAwait(false);
+            serverId, serviceName, OperationKind.ServiceInstall, ServerTaskNames.InstallVerb, "ServiceInstall", ct).ConfigureAwait(false);
 
     public async Task<int> UninstallServiceAsync(int serverId, string serviceName, CancellationToken ct = default)
         => await DispatchPackageOperationAsync(
-            serverId, serviceName, OperationKind.ServiceUninstall, "Uninstall", "ServiceUninstall", ct).ConfigureAwait(false);
+            serverId, serviceName, OperationKind.ServiceUninstall, ServerTaskNames.UninstallVerb, "ServiceUninstall", ct).ConfigureAwait(false);
 
     internal static bool IsMailStackPackage(string service) =>
         string.Equals(service, "postfix", StringComparison.OrdinalIgnoreCase)
@@ -186,7 +186,7 @@ internal sealed class ServerServiceManager(
                 + "--enable-patch-manage to grant the controlled-sudo apt-get upgrade capability.");
 
         var env = new Dictionary<string, string> { [PatchingConstants.DryRunEnvVar] = dryRun ? "1" : "0" };
-        var name = dryRun ? "System update check (dry-run)" : "System package upgrade";
+        var name = dryRun ? ServerTaskNames.PatchCheck : ServerTaskNames.PatchUpgrade;
         var task = ServerTaskFactory.Operation(serverId, name, OperationKind.SystemPackageUpgrade, "-", env, 900);
         await repo.AddTaskAsync(task, ct).ConfigureAwait(false);
         await taskService.NotifyTaskQueuedAsync(task, ct: ct).ConfigureAwait(false);
@@ -252,7 +252,7 @@ internal sealed class ServerServiceManager(
             OperationKind.FirewallDeny => "deny",
             _ => "delete"
         };
-        var task = ServerTaskFactory.Operation(serverId, $"Firewall {verb} {request.Port}/{request.Protocol}",
+        var task = ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.FirewallPrefix}{verb} {request.Port}/{request.Protocol}",
             operation, request.Port.ToString(CultureInfo.InvariantCulture), env, 60);
         await repo.AddTaskAsync(task, ct).ConfigureAwait(false);
         await taskService.NotifyTaskQueuedAsync(task, ct: ct).ConfigureAwait(false);
@@ -266,7 +266,7 @@ internal sealed class ServerServiceManager(
         var server = await GetFirewallManagedServerAsync(serverId, ct).ConfigureAwait(false);
 
         var target = enabled ? "enable" : "disable";
-        var task = ServerTaskFactory.Operation(serverId, $"Firewall {target}", OperationKind.FirewallSetEnabled, target, 60);
+        var task = ServerTaskFactory.Operation(serverId, $"{ServerTaskNames.FirewallPrefix}{target}", OperationKind.FirewallSetEnabled, target, 60);
         await repo.AddTaskAsync(task, ct).ConfigureAwait(false);
         await taskService.NotifyTaskQueuedAsync(task, ct: ct).ConfigureAwait(false);
         await audit.LogAsync(enabled ? "FirewallEnable" : "FirewallDisable", "Firewall", serverId, null, ct).ConfigureAwait(false);

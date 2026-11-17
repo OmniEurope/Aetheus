@@ -132,6 +132,7 @@ public sealed class PipelineRunWarningDirectiveTests : IDisposable
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TaskService>.Instance,
             events);
 
+        var output = $"##aetheus[setvariable name=QA_STACK_DEPLOYED]false\n##aetheus[setvariable name=RUN_WARNING]{QaWarning}";
         var updated = await finalizer.UpdateStepRunAsync(
             new ServerTask { Id = 21, PipelineRunId = 7, PipelineStepRunId = 11 },
             new TaskResultDto
@@ -139,9 +140,9 @@ public sealed class PipelineRunWarningDirectiveTests : IDisposable
                 TaskId = 21,
                 Status = TaskExecutionStatus.Success,
                 ExitCode = 0,
-                Output = $"##aetheus[setvariable name=QA_STACK_DEPLOYED]false\n##aetheus[setvariable name=RUN_WARNING]{QaWarning}"
+                Output = output
             },
-            21,
+            output,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(TaskExecutionStatus.Success, updated!.Status);
@@ -166,7 +167,7 @@ public sealed class PipelineRunWarningDirectiveTests : IDisposable
         var propagated = Assert.Single(candidateWarnings);
         Assert.Contains(QaWarning, propagated, StringComparison.Ordinal);
         Assert.Contains("'QA'", propagated, StringComparison.Ordinal);
-        Assert.Contains($"#{qaRun.Id}", propagated, StringComparison.Ordinal);
+        Assert.Contains($"#{qaRun.BuildNumber}", propagated, StringComparison.Ordinal);
         Assert.Empty(await WarningsOfAsync(otherRun.Id, ct));
         Assert.Equal(PipelineStatus.Success, (await _db.PipelineRuns.FindAsync([qaRun.Id], ct))!.Status);
         Assert.Equal(PipelineStatus.Running, (await _db.PipelineRuns.FindAsync([candidateRun.Id], ct))!.Status);
@@ -178,7 +179,7 @@ public sealed class PipelineRunWarningDirectiveTests : IDisposable
         _db.Pipelines.Add(pipeline);
         await _db.SaveChangesAsync(ct);
         var candidate = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running, StartedAt = DateTime.UtcNow };
-        var qa = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Success, StartedAt = DateTime.UtcNow };
+        var qa = new PipelineRun { PipelineId = pipeline.Id, BuildNumber = 34, Status = PipelineStatus.Success, StartedAt = DateTime.UtcNow };
         var other = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running, StartedAt = DateTime.UtcNow };
         _db.PipelineRuns.AddRange(candidate, qa, other);
         await _db.SaveChangesAsync(ct);

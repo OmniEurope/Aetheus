@@ -15,8 +15,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// <c>POST /api/appmonitoring/agent/probe-results</c>. An agent may only report results for apps hosted
 /// on its own server; reporting for another server's app must be rejected (mirrors the LogsController guard).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class AppMonitoringProbeGuardIntegrationTests(PostgresFixture fixture)
+public sealed class AppMonitoringProbeGuardIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task ReportProbeResults_ForeignServerApp_IsForbidden_OwnServerApp_Accepted()
@@ -33,7 +32,7 @@ public sealed class AppMonitoringProbeGuardIntegrationTests(PostgresFixture fixt
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
 
-            var orgId = await db.Organizations.Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var orgId = await db.Organizations.OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
             var project = new Project { Name = "mon-proj", OrganizationId = orgId };
             db.Projects.Add(project);
 

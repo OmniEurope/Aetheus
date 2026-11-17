@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
-using OmniEurope.Performance;
+using OmniEurope.Diagnostics;
 
 namespace Aetheus.Telemetry;
 

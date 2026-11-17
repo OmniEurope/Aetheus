@@ -26,16 +26,20 @@ internal sealed class PipelineRunLauncher(
         int pipelineId, string? sourceBranch, IReadOnlyDictionary<string, string>? prefill = null)
     {
         // R-35: reading the parameters, the preflight and the trigger each read the repository and take seconds;
-        // the click is acknowledged before any of them.
-        toast.Info("Running", "PipelineLaunching");
-        // The parameters come first: the preview resolves the targets they name (the production server)
-        // from them, and a required one nobody answered yet is not a warning to show beforehand.
-        var (proceed, parameters) = await dialogs.ResolveDefaultParametersAsync(pipelineId, sourceBranch, prefill);
-        if (!proceed) return null;
-        var consent = await runGate.ConfirmLaunchAsync(pipelineId, sourceBranch, parameters, OfferGateOverride);
-        if (consent == PipelineLaunchConsent.Refused) return null;
-        return await TriggerAsync(pipelineId, sourceBranch, parameters,
-            gateOverride: consent == PipelineLaunchConsent.ProceedDespiteGate);
+        // the click is acknowledged before any of them, and the notice stays until the launch answers.
+        var pending = toast.Pending("Running", "PipelineLaunching");
+        try
+        {
+            // The parameters come first: the preview resolves the targets they name (the production server)
+            // from them, and a required one nobody answered yet is not a warning to show beforehand.
+            var (proceed, parameters) = await dialogs.ResolveDefaultParametersAsync(pipelineId, sourceBranch, prefill);
+            if (!proceed) return null;
+            var consent = await runGate.ConfirmLaunchAsync(pipelineId, sourceBranch, parameters, OfferGateOverride);
+            if (consent == PipelineLaunchConsent.Refused) return null;
+            return await TriggerAsync(pipelineId, sourceBranch, parameters,
+                gateOverride: consent == PipelineLaunchConsent.ProceedDespiteGate);
+        }
+        finally { toast.Dismiss(pending); }
     }
 
     /// <summary>
@@ -44,9 +48,13 @@ internal sealed class PipelineRunLauncher(
     /// </summary>
     public async Task<PipelineRunLaunchResult?> LaunchAsync(int pipelineId, PipelineLaunchChoice choice)
     {
-        toast.Info("Running", "PipelineLaunching");
-        if (!await runGate.ConfirmPreflightAsync(pipelineId, choice.SourceBranch, choice.Parameters)) return null;
-        return await TriggerAsync(pipelineId, choice.SourceBranch, choice.Parameters, choice.RunToEnd);
+        var pending = toast.Pending("Running", "PipelineLaunching");
+        try
+        {
+            if (!await runGate.ConfirmPreflightAsync(pipelineId, choice.SourceBranch, choice.Parameters)) return null;
+            return await TriggerAsync(pipelineId, choice.SourceBranch, choice.Parameters, choice.RunToEnd);
+        }
+        finally { toast.Dismiss(pending); }
     }
 
     /// <summary>
@@ -62,8 +70,13 @@ internal sealed class PipelineRunLauncher(
         if (outcome.Value is not null)
         {
             // Straight to the new run, in the SPA, unless the caller shows it where the user already is.
-            toast.Info("Running", "PipelineTriggered");
-            if (OpenLaunchedRun) navigation.NavigateTo($"/pipelines/runs/{outcome.Value.Id}");
+            // The notice names the run and offers its page, so a click that changes nothing on screen
+            // (a long list, a slow read) is never mistaken for a click that did nothing.
+            var runHref = $"/pipelines/runs/{outcome.Value.Id}";
+            toast.Notify(OmniSeverity.Success, "Running",
+                string.Format(localizer["PipelineTriggered"].Value, outcome.Value.BuildNumber),
+                "OpenRun", () => { navigation.NavigateTo(runHref); return Task.CompletedTask; });
+            if (OpenLaunchedRun) navigation.NavigateTo(runHref);
             return new PipelineRunLaunchResult(outcome.Value);
         }
 

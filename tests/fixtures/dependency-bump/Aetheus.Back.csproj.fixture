@@ -1,0 +1,103 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Aetheus.Back.Tests" />
+    <InternalsVisibleTo Include="Aetheus.Back.IntegrationTests" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(DotNetWatchBuild)' == 'true'">
+    <!-- Agent archives change during startup and must not trigger a watch restart. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);wwwroot/downloads/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Http" />
+    <PackageReference Include="Asp.Versioning.Mvc" />
+    <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="DnsClient" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="HtmlSanitizer" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <!-- Direct ref keeps the patched compatible Microsoft.OpenApi 2.x release ahead of the older
+         transitive dependency. The 3.x line breaks the .NET 10 OpenAPI source generator. -->
+    <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="NuGet.Packaging" />
+    <PackageReference Include="NuGet.Versioning" />
+    <!-- Direct ref keeps the patched release ahead of the vulnerable transitive one (MailKit, NuGet.Packaging). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <!-- Decision of 2026-10-07: the administration Performance page reads this collector (ApiPerformanceReport). -->
+    <PackageReference Include="OmniEurope.Performance" />
+    <PackageReference Include="Otp.NET" />
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <!-- Mail templates (recette R1-75): OmniMailRenderer and OmniMailTheme render every platform mail on the
+       server. Same source switch as the front (UseLocalOmniEurope, Directory.Build.props). -->
+  <ItemGroup Condition="'$(UseLocalOmniEurope)' != 'true'">
+    <PackageReference Include="OmniEurope.Blazor" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalOmniEurope)' == 'true'">
+    <ProjectReference Include="$(OmniEuropeBlazorLocalProject)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aetheus.Shared\Aetheus.Shared.csproj" />
+    <ProjectReference Include="..\Aetheus.Telemetry\Aetheus.Telemetry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\opentelemetry\proto\**\*.proto"
+              ProtoRoot="Protos"
+              GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aetheus.Analyzers\Aetheus.Analyzers.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-conformance-fixture\common\**\*.template">
+      <LogicalName>TotoConformance/Templates/common/%(RecursiveDir)%(Filename)</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-conformance-fixture\v1\**\*.template">
+      <LogicalName>TotoConformance/Templates/v1/%(RecursiveDir)%(Filename)</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-conformance-fixture\v2\**\*.template">
+      <LogicalName>TotoConformance/Templates/v2/%(RecursiveDir)%(Filename)</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-vulnerable-fixture\**\*.template">
+      <LogicalName>TotoConformance/Templates/vulnerable/%(RecursiveDir)%(Filename)</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-*.yaml">
+      <LogicalName>TotoConformance/Pipelines/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-conformance-fixture\common\deploy\scripts\*.mjs">
+      <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipeline-templates\*.yaml">
+      <LogicalName>DeliveryPipelineTemplates/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\config-templates\apache\*.conf">
+      <LogicalName>ProjectConfigTemplates/apache/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\pipeline-templates\generic\*.yaml">
+      <LogicalName>DeliveryPipelineTemplates/generic/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

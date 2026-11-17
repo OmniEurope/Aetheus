@@ -25,7 +25,7 @@ public sealed class BackupSchedulerServiceTests
 
     private BackupSchedulerService Sut(IPostgresLeaderLease? lease = null) => new(
         BackgroundServiceTestKit.ScopeFactory((typeof(IBackupRepository), _repo), (typeof(IBackupPolicyService), _service)),
-        _clock, _logger, lease);
+        _clock, _logger, lease ?? LeaderLeaseDouble.Leader());
 
     private void Policies(params BackupPolicy[] policies) =>
         _repo.GetEnabledPoliciesAsync(Arg.Any<CancellationToken>()).Returns(policies.ToList());

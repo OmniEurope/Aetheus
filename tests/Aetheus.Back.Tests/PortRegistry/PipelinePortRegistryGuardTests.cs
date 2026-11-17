@@ -42,7 +42,7 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
                 Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(server);
         _sut = new PipelinePortRegistryGuard(
-            _dispatch, _registry, NullLogger<PipelinePortRegistryGuard>.Instance);
+            _dispatch, _registry, Substitute.For<ILibraryHeldPortSource>(), NullLogger<PipelinePortRegistryGuard>.Instance);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

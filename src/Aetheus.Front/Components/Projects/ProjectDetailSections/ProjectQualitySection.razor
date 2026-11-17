@@ -2,12 +2,12 @@
 
 @if (_loading)
 {
-    <AetheusLoader />
+    <ZoneVeil />
 }
 else
 {
     @* R-110: the tabs and their panel are separated by this stack's gap. *@
-    <OmniStack Class="@($"analysis-quality-workspace {(_qualitySectionIndex == 1 ? "analysis-quality-findings" : string.Empty)}")">
+    <OmniStack Class="@($"analysis-quality-workspace {(ShowsFindingsGrid ? "analysis-quality-findings" : string.Empty)}")">
         <UrlSyncedTabs Slugs="@QualitySectionSlugs" RenderAllPanels="true"
                        @bind-SelectedIndex="_qualitySectionIndex"
                        Change="OnQualitySectionChangedAsync"
@@ -15,97 +15,117 @@ else
             <Tabs>
                 <OmniTabsItem Key="overview" Title="@L["AnalysisOverview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("insights"))" /></Icon></OmniTabsItem>
                 <OmniTabsItem Key="findings" Title="@SectionText(L["AnalysisFindings"], _summary.OpenCount)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("policy"))" /></Icon></OmniTabsItem>
+                @* R-26: every fixed finding of the project, counted in the title. *@
+                <OmniTabsItem Key="fixed" Title="@SectionText(L["AnalysisFixedFindings"], _summary.FixedCount)"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon></OmniTabsItem>
+                @* R-14: the open CVE of the project, what feeds the watch and how fresh it is. *@
+                <OmniTabsItem Key="cve" Title="@L["CveWatchTab"]"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon></OmniTabsItem>
             </Tabs>
         </UrlSyncedTabs>
 
         <OmniStack Class="analysis-workspace-panel" role="tabpanel">
         @if (_qualitySectionIndex == 0)
         {
-                @* The quality hero uses the shared grade colours with its own larger letter
-                   sizing. *@
-                <OmniCard Class="analysis-grade-overview">
-                    <div class="analysis-grade-primary">
-                        <GradeBadge Value="@_summary.Grade?.OverallGrade" Title="@L["AnalysisGlobalGrade"]"
-                                    Class="analysis-grade-letter" />
-                        <div class="analysis-grade-headline">
-                            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisGlobalGrade"]</OmniHeading>
-                            @if (_summary.Grade is null)
-                            {
-                                <OmniText Element="OmniTextElement.Span">@L["AnalysisGradeNotConfigured"]</OmniText>
-                            }
-                            else if (_summary.Grade.OverallGrade is null)
-                            {
-                                @* Recettes R-73, R-74: a grade is never "incomplete"; without any measure there is no letter yet. *@
-                                <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-no-measure">@L["AnalysisGradeNoMeasure"]</OmniText>
-                            }
-                            else if (AnalysisGradeBreakdown.MissingMeasureCount(_summary.Grade) is > 0 and var missingMeasures)
-                            {
-                                <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-partial">@string.Format(L["AnalysisGradePartial"], missingMeasures)</OmniText>
-                            }
+                @* R-25: the grade block of a run's Gate tab (AnalysisGradeBreakdown: plain rows, each with a
+                   "?" tooltip holding its whole detail) with the finding counts as tiles beside it, then the facts of the
+                   analysis as small tiles, each one a link or a button. *@
+                <OmniCard Class="analysis-run-gate-overview analysis-grade-overview omni-u-p-md">
+                    <OmniStack>
+                        <div class="analysis-run-gate-heading">
+                            <OmniIcon Name="OmniIconName.ShieldCheck" />
+                            <div>
+                                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Quality"]</OmniHeading>
+                            </div>
                         </div>
+                        @if (_summary.Grade is null)
+                        {
+                            <OmniText Element="OmniTextElement.Span">@L["AnalysisGradeNotConfigured"]</OmniText>
+                        }
+                        else if (_summary.Grade.Qualification is { } qualification)
+                        {
+                            @* R-12, R-20: the overall grade is the deployed release's sealed verdict; the domain rows below
+                               stay the analysis grades. The sentence names the release and run, or why there is no letter. *@
+                            <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-qualification">@ProjectGradeLabel.For(L, qualification)</OmniText>
+                        }
+                        else if (_summary.Grade.OverallGrade is null)
+                        {
+                            @* Recettes R-73, R-74: a grade is never "incomplete"; without any measure there is no letter yet. *@
+                            <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-no-measure">@L["AnalysisGradeNoMeasure"]</OmniText>
+                        }
+                        else if (AnalysisGradeBreakdown.MissingMeasureCount(_summary.Grade) is > 0 and var missingMeasures)
+                        {
+                            <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-partial">@string.Format(L["AnalysisGradePartial"], missingMeasures)</OmniText>
+                        }
+                    </OmniStack>
+                    <div class="@(_summary.Grade is not null && HasCountTiles ? "analysis-run-gate-layout" : "analysis-run-gate-layout analysis-run-gate-layout--figures-only")">
+                        <AnalysisGradeBreakdown Grade="@_summary.Grade" GateGrade="@_summary.Grade?.OverallGrade" GateGradeOld="@ProjectGradeLabel.IsOld(_summary.Grade?.Qualification)"
+                                                SealBlockedByTests="@(_summary.Grade?.Qualification is { State: AnalysisQualificationState.DeployedNotDeployable, BlockingTestCount: > 0 })"
+                                                GateLabel="@L["AnalysisGlobalGrade"].Value" GateCriterion="@L["AnalysisProjectGradeCriterion"].Value"
+                                                CrapScore="@_complexity.LastOrDefault()?.Crap" />
+                        @* A count tile shows only when its count is at least one. *@
+                        @if (HasCountTiles)
+                        {
+                            <OmniTileGrid Columns="1" Gap="OmniSpacing.Small" Class="analysis-run-gate-metrics analysis-summary-row">
+                                @if (_summary.OpenCount > 0)
+                                {
+                                    <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Value="@($"{_summary.OpenCount}")" Title="@L["AnalysisOpenFindings"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open))" data-quality-shortcut="open">
+                                        <Icon><OmniIcon Name="OmniIconName.Bug" /></Icon>
+                                    </OmniStatTile>
+                                }
+                                @if (_summary.NewCount > 0)
+                                {
+                                    <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Value="@($"{_summary.NewCount}")" Title="@L["AnalysisNewFindings"]" OnClick="@(() => OpenFindingsAsync(isNew: true))" data-quality-shortcut="new">
+                                        <Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon>
+                                    </OmniStatTile>
+                                }
+                                @if (_summary.CriticalCount > 0)
+                                {
+                                    <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Class="analysis-critical" Value="@($"{_summary.CriticalCount}")" Title="@L["Critical"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.Critical))" data-quality-shortcut="critical">
+                                        <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+                                    </OmniStatTile>
+                                }
+                                @if (_summary.HighCount > 0)
+                                {
+                                    <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Class="analysis-high" Value="@($"{_summary.HighCount}")" Title="@L["High"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.High))" data-quality-shortcut="high">
+                                        <Icon><OmniIcon Name="OmniIconName.Warning" /></Icon>
+                                    </OmniStatTile>
+                                }
+                            </OmniTileGrid>
+                        }
                     </div>
-                        @* Linked commit, date, analysis-run and release tiles align beside the
-                           grade; the breakdown highlights limiting domains. *@
-                        <OmniTileGrid Columns="4" MinColumnWidth="@Aetheus.Front.Components.Pipelines.PipelineRun.RunTileMinColumnWidth" Gap="OmniSpacing.Small" Class="analysis-grade-meta-tiles">
-                            @if (GradeCommitHref is { } commitHref)
-                            {
-                                <OmniStatTile Value="@ShortHash(_summary.Grade?.CommitHash)" Title="@L["Commit"]" Href="@commitHref" />
-                            }
-                            else
-                            {
-                                <OmniStatTile Value="@(ShortHash(_summary.Grade?.CommitHash) ?? L["NotAvailable"])" Title="@L["Commit"]" />
-                            }
-                            <OmniStatTile Value="@(_summary.Grade?.EvaluatedAt?.ToString("g") ?? L["NotAvailable"])" Title="@L["Date"]" />
-                            @if (_summary.LastAnalysisRunId is { } lastRunId)
-                            {
-                                <OmniStatTile Value="@($"#{lastRunId}")" Title="@L["LastRun"]" Href="@($"/pipelines/runs/{lastRunId}")" />
-                            }
-                            @if (_summary.LatestReleaseId is { } latestReleaseId)
-                            {
-                                <OmniStatTile Value="@_summary.LatestReleaseVersion" Title="@L["LatestRelease"]" Href="@($"/releases/{latestReleaseId}")" />
-                            }
-                        </OmniTileGrid>
 
-                    @* The breakdown is shared with a run's Quality tab. *@
-                    <AnalysisGradeBreakdown Grade="@_summary.Grade" CrapScore="@_complexity.LastOrDefault()?.Crap" />
+                    @* The facts of the analysis, in the tile size of a run's overview but smaller. A tile that leads
+                       somewhere is itself the link or the button; one without a known target stays a plain tile. *@
+                    <OmniTileGrid Columns="6" MinColumnWidth="@QualityTileMinColumnWidth" Gap="OmniSpacing.Small" Class="analysis-grade-meta-tiles">
+                        <OmniStatTile Value="@(ShortHash(_summary.Grade?.CommitHash) ?? L["NotAvailable"])" Title="@L["Commit"]" Href="@CommitTileHref">
+                            <Icon><OmniIcon Name="OmniIconName.GitCommit" /></Icon>
+                        </OmniStatTile>
+                        <OmniStatTile Value="@(_summary.Grade?.EvaluatedAt?.ToString("g") ?? L["NotAvailable"])" Title="@L["Date"]" Href="@CommitTileHref">
+                            <Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon>
+                        </OmniStatTile>
+                        @if (_summary.LastAnalysisRunId is { } lastRunId)
+                        {
+                            <OmniStatTile Value="@($"#{_summary.LastAnalysisRunNumber}")" Title="@L["LastRun"]" Href="@($"/pipelines/runs/{lastRunId}")">
+                                <Icon><OmniIcon Name="OmniIconName.Play" /></Icon>
+                            </OmniStatTile>
+                        }
+                        @if (_summary.LatestReleaseId is { } latestReleaseId)
+                        {
+                            <OmniStatTile Value="@LatestReleaseText" Title="@L["LatestRelease"]" Href="@($"/releases/{latestReleaseId}")">
+                                <Icon><OmniIcon Name="OmniIconName.Package" /></Icon>
+                            </OmniStatTile>
+                        }
+                        @* R-26: the fixed findings have their own tab. *@
+                        @if (_summary.FixedCount > 0)
+                        {
+                            <OmniStatTile Value="@($"{_summary.FixedCount}")" Title="@L["Fixed"]" OnClick="@(() => SelectQualitySection(FixedSectionIndex))" data-quality-shortcut="fixed">
+                                <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
+                            </OmniStatTile>
+                        }
+                        <OmniStatTile Class="analysis-summary-static" Value="@LastAnalysisText" Title="@L["AnalysisLastRun"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open))">
+                            <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
+                        </OmniStatTile>
+                    </OmniTileGrid>
                 </OmniCard>
-
-                @* A count card shows only when its count is at least one. *@
-                <OmniTileGrid Columns="6" MinColumnWidth="@Aetheus.Front.Components.Pipelines.PipelineRun.RunTileMinColumnWidth" Gap="OmniSpacing.Small" Class="analysis-summary-row">
-                    @if (_summary.OpenCount > 0)
-                    {
-                        <OmniStatTile Value="@($"{_summary.OpenCount}")" Title="@L["AnalysisOpenFindings"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open))" data-quality-shortcut="open">
-                            <Icon><OmniIcon Name="OmniIconName.Bug" /></Icon>
-                        </OmniStatTile>
-                    }
-                    @if (_summary.NewCount > 0)
-                    {
-                        <OmniStatTile Value="@($"{_summary.NewCount}")" Title="@L["AnalysisNewFindings"]" OnClick="@(() => OpenFindingsAsync(isNew: true))" data-quality-shortcut="new">
-                            <Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon>
-                        </OmniStatTile>
-                    }
-                    @if (_summary.CriticalCount > 0)
-                    {
-                        <OmniStatTile Class="analysis-critical" Value="@($"{_summary.CriticalCount}")" Title="@L["Critical"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.Critical))" data-quality-shortcut="critical">
-                            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
-                        </OmniStatTile>
-                    }
-                    @if (_summary.HighCount > 0)
-                    {
-                        <OmniStatTile Class="analysis-high" Value="@($"{_summary.HighCount}")" Title="@L["High"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.High))" data-quality-shortcut="high">
-                            <Icon><OmniIcon Name="OmniIconName.Warning" /></Icon>
-                        </OmniStatTile>
-                    }
-                    @if (_summary.FixedCount > 0)
-                    {
-                        <OmniStatTile Value="@($"{_summary.FixedCount}")" Title="@L["Fixed"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Fixed))" data-quality-shortcut="fixed">
-                            <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
-                        </OmniStatTile>
-                    }
-                    <OmniStatTile Class="analysis-summary-static" Value="@LastAnalysisText" Title="@L["AnalysisLastRun"]">
-                        <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
-                    </OmniStatTile>
-                </OmniTileGrid>
 
                 @if (!HasAny)
                 {
@@ -131,15 +151,22 @@ else
                         }
                     </OmniTileGrid>
                 }
+                @* PLAN-007 (R-9): the automatic dependency updates of the project, with the runs on their branches. *@
+                <ProjectDependencyUpdatesPanel ProjectId="@ProjectId" />
+        }
+        else if (_qualitySectionIndex == CveSectionIndex)
+        {
+                <ProjectCveWatchPanel ProjectId="@ProjectId" />
         }
         else
         {
-                @* Column headers own filtering; the grid's own MD button is the only export. *@
-                 <AetheusDataGrid ShowFooterBar="true" @ref="_findingsGrid" Data="@_findings" Count="@_findingCount" TItem="AnalysisFindingDto" LoadData="LoadFindingsAsync" ExportRead="@ReadFindingsAsync" ExportName="@L["AnalysisFindings"]" RowClick="OpenFinding" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_findings, _findingCount))" FullHeight="true" VirtualizationOverscanCount="3">
+                @* Column headers own filtering; the grid's own MD button is the only export. The Findings and Fixed
+                   tabs are this one grid (R-26), keyed by the tab so each starts from its own rows. *@
+                 <AetheusDataGrid ShowFooterBar="true" @key="_qualitySectionIndex" @ref="_findingsGrid" Data="@_findings" Count="@_findingCount" TItem="AnalysisFindingDto" LoadData="LoadFindingsAsync" ExportRead="@ReadFindingsAsync" ExportName="@L["AnalysisFindings"]" RowClick="OpenFinding" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_findings, _findingCount))" FullHeight="true" VirtualizationOverscanCount="3">
                     <Columns>
                         @* The one definition of a findings list, shared with the Gate tab of a
                            run. *@
-                        <AnalysisFindingColumns Defaults="@_findingDefaults" />
+                        <AnalysisFindingColumns Defaults="@_findingDefaults" ShowStatus="@(!OnFixedTab)" />
                     </Columns>
                 </AetheusDataGrid>
         }

@@ -114,6 +114,25 @@ public sealed class SupervisionProjectsTests : BunitContext
         Assert.NotEmpty(cut.FindAll("[data-testid=supervision-storage-failed]"));
     }
 
+    /// <summary>The page reloads on a push and on a timer: the storage detail the reader opened under a row
+    /// stays open when the reload hands the grid freshly read applications.</summary>
+    [Fact]
+    public void AnOpenStorageDetail_StaysOpen_WhenAReloadHandsTheGridFreshlyReadRows()
+    {
+        MonitoredAppStatusDto[] Read() => [App(3, "Aetheus prod", 1, "Aetheus", AppHealthStatus.Up)];
+        var storage = StorageOf(Usage(1, "Aetheus", 170, 85));
+        var cut = Render<SupervisionProjectsGrid>(parameters => parameters
+            .Add(grid => grid.Applications, Read())
+            .Add(grid => grid.Storage, storage));
+
+        cut.Find("td[data-omni-control='expand'] button[aria-expanded]").Click();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=supervision-project-tables]")));
+
+        cut.Render(parameters => parameters.Add(grid => grid.Applications, Read()));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=supervision-project-tables]")));
+    }
+
     [Theory]
     [InlineData(5, OmniTone.Neutral)]
     [InlineData(80, OmniTone.Warning)]

@@ -49,20 +49,19 @@ public interface IOrganizationRoleAssignmentService
 
     /// <summary>Refuses (409) a set that would take the Owner level from the last Owner of an
     /// organization, before the caller changes anything. <see cref="ReplaceForUserAsync"/> checks it
-    /// again under <see cref="LockOwnersAsync"/>.</summary>
+    /// again under the <see cref="OrganizationRoleAssignmentService.OwnersLockName"/> lock.</summary>
     Task RefuseLastOwnerLossAsync(int userId, IReadOnlyCollection<OrganizationRoleAssignmentDto> requested, CancellationToken ct);
-
-    /// <summary>Serializes the changes that can remove an organization's Owner; hold it until saved.</summary>
-    Task<IAsyncDisposable> LockOwnersAsync(CancellationToken ct);
 }
 
-public sealed class OrganizationRoleAssignmentService(IOrganizationRoleAssignmentRepository repo) : IOrganizationRoleAssignmentService
+public sealed class OrganizationRoleAssignmentService(IOrganizationRoleAssignmentRepository repo, IPostgresLeaderLease lease) : IOrganizationRoleAssignmentService
 {
     /// <summary>The 409 reason when the last Owner would be removed or demoted (M6); the front checks
     /// the same rule first and shows its localized message.</summary>
     public const string LastOwnerMessage = "An organization keeps at least one Owner (Organization Admin): promote another member first.";
 
-    public Task<IAsyncDisposable> LockOwnersAsync(CancellationToken ct) => repo.LockOwnersAsync(ct);
+    /// <summary>The ADR-029 serialized-operation name every change that can remove an organization's Owner runs
+    /// under, its save included: two such changes never both pass the last-Owner count (RBAC audit, finding 10).</summary>
+    public const string OwnersLockName = "aetheus:organization-owners";
 
     public async Task RefuseLastOwnerLossAsync(
         int userId, IReadOnlyCollection<OrganizationRoleAssignmentDto> requested, CancellationToken ct)
@@ -157,9 +156,17 @@ public sealed class OrganizationRoleAssignmentService(IOrganizationRoleAssignmen
         List<(int OrganizationId, string Role)> wanted = [.. requested.Select(item => (item.OrganizationId, item.Role))];
         var memberships = await repo.GetMembershipsAsync(userId, ct).ConfigureAwait(false);
         // An Owner level lost is counted under the owners lock, held until saved (finding 10).
-        await using var owners = OwnerLevelsLost(memberships, LevelsOf(wanted)).Count > 0
-            ? await repo.LockOwnersAsync(ct).ConfigureAwait(false)
-            : null;
+        return await lease.RunSerializedWhenAsync(
+            OwnerLevelsLost(memberships, LevelsOf(wanted)).Count > 0,
+            OwnersLockName,
+            token => ReplaceCountedAsync(userId, requested, wanted, memberships, token),
+            ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ReplaceCountedAsync(
+        int userId, List<WantedRole> requested, List<(int OrganizationId, string Role)> wanted,
+        List<OrganizationMember> memberships, CancellationToken ct)
+    {
         await RefuseLastOwnerLossAsync(memberships, LevelsOf(wanted), ct).ConfigureAwait(false);
         var held = await repo.GetForUserAsync(userId, ct).ConfigureAwait(false);
         var wantedKeys = requested.Select(item => (item.OrganizationId, item.RoleId)).ToHashSet();

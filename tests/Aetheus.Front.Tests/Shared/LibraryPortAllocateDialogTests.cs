@@ -142,17 +142,17 @@ public class LibraryPortAllocateDialogTests : BunitContext
     }
 
     [Fact]
-    public void Allocate_ShowsTheCreatedEntriesWithTheirPorts()
+    public async Task Allocate_ShowsTheCreatedEntriesWithTheirPorts()
     {
         var cut = RenderWith(Targets());
 
-        cut.FindAll("button").First(button => button.TextContent.Contains("PortAllocate", StringComparison.Ordinal)).Click();
+        await cut.FindAll("button").First(button => button.TextContent.Contains("PortAllocate", StringComparison.Ordinal)).ClickAsync(new());
 
         Assert.Contains("PORT_FRONT = 10000", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Allocate_Refused_KeepsTheApiReason()
+    public async Task Allocate_Refused_KeepsTheApiReason()
     {
         _handler = BunitTestHelper.RegisterServices(this);
         _handler.SetJsonResponse(HttpMethod.Get, "/ports/servers", Targets());
@@ -164,7 +164,7 @@ public class LibraryPortAllocateDialogTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Get, "/entries", new PaginatedResult<VariableEntryDto>());
 
         var cut = Render<LibraryPortAllocateDialog>(parameters => parameters.Add(c => c.LibraryId, 100));
-        cut.FindAll("button").First(button => button.TextContent.Contains("PortAllocate", StringComparison.Ordinal)).Click();
+        await cut.FindAll("button").First(button => button.TextContent.Contains("PortAllocate", StringComparison.Ordinal)).ClickAsync(new());
 
         Assert.Contains("only 2 free port(s)", cut.Markup, StringComparison.Ordinal);
     }

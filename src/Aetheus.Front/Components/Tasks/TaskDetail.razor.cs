@@ -19,18 +19,32 @@ public partial class TaskDetail : IAsyncDisposable
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
 
+    /// <summary>The address: a number or a UUID. One route takes both, Blazor's router calls two routes that differ
+    /// only by their constraint ambiguous and refuses to start.</summary>
+    [Parameter] public string? TaskKey { get; set; }
+
     [Parameter] public int TaskId { get; set; }
+
+    /// <summary>ADR-060: the canonical address. <see cref="TaskId"/> is then 0 until the task is read.</summary>
+    [Parameter] public Guid? TaskUid { get; set; }
 
     private ServerTaskDto? _task;
     private List<TaskLogDto> _logs = [];
     private bool _loading;
-    private int? _loadedTaskId;
+    private object? _loadedKey;
 
     // Subscribe to the task log group while the agent runs and obtain status from the shared live
     // task list.
     private HubConnection? _logHub;
     private int? _liveTaskId;
     private bool _followingLiveTasks;
+
+    /// <summary>The task's internal key, whichever address opened the page: logs and hubs work on it.</summary>
+    private int CurrentTaskId => _task?.Id ?? TaskId;
+
+    private string TaskLabel => _task is not null || TaskId > 0
+        ? $"{L["Task"]} #{_task?.DisplayNumber ?? TaskId}"
+        : L["Task"].Value;
 
     /// <summary>True until the agent has reported the task's end: more lines may come.</summary>
     internal bool InFlight => _task?.Status
@@ -45,22 +59,36 @@ public partial class TaskDetail : IAsyncDisposable
         Permissions.OnPermissionsChanged += OnPermissionsChanged;
     }
 
+    /// <summary>A key that is neither reads as task 0, which the server does not know: the page says not found.</summary>
+    private void ReadTaskKey()
+    {
+        if (TaskKey is null) return;
+        TaskUid = Guid.TryParse(TaskKey, out var uid) ? uid : null;
+        TaskId = int.TryParse(TaskKey, out var id) ? id : 0;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
-        Breadcrumb.Set(
-            new BreadcrumbItem(L["Tasks"], "/tasks"),
-            new BreadcrumbItem($"{L["Task"]} #{TaskId}"));
-        if (_loadedTaskId == TaskId) return;
+        ReadTaskKey();
+        object key = TaskUid is { } uid ? uid : TaskId;
+        if (Equals(_loadedKey, key))
+        {
+            SetBreadcrumb();
+            return;
+        }
 
-        _loadedTaskId = TaskId;
+        _loadedKey = key;
         _loading = true;
         _task = null;
         _logs = [];
+        SetBreadcrumb();
         try
         {
-            _task = await Api.Pipelines.GetTaskAsync(TaskId);
+            _task = TaskUid is { } taskUid
+                ? await Api.Pipelines.GetTaskAsync(taskUid)
+                : await Api.Pipelines.GetTaskAsync(TaskId);
             if (_task is not null)
-                _logs = await Api.Monitoring.GetTaskLogsAsync(TaskId);
+                _logs = await Api.Monitoring.GetTaskLogsAsync(_task.Id);
         }
         catch (HttpRequestException)
         {
@@ -72,8 +100,11 @@ public partial class TaskDetail : IAsyncDisposable
             _loading = false;
         }
 
+        SetBreadcrumb();
         await FollowAsync();
     }
+
+    private void SetBreadcrumb() => Breadcrumb.Set(new BreadcrumbItem(L["Tasks"], "/tasks"), new BreadcrumbItem(TaskLabel));
 
     /// <summary>Joins the log stream of a task that is not finished; leaves the one of the task left.</summary>
     private async Task FollowAsync()
@@ -85,9 +116,9 @@ public partial class TaskDetail : IAsyncDisposable
             _followingLiveTasks = true;
         }
 
-        if (_liveTaskId is { } previous && previous != TaskId)
+        if (_liveTaskId is { } previous && previous != CurrentTaskId)
             await LeaveAsync(previous);
-        if (!InFlight || _liveTaskId == TaskId) return;
+        if (!InFlight || _liveTaskId == CurrentTaskId) return;
 
         if (_logHub is null)
         {
@@ -114,10 +145,10 @@ public partial class TaskDetail : IAsyncDisposable
             }
         }
 
-        _liveTaskId = TaskId;
+        _liveTaskId = CurrentTaskId;
         try
         {
-            await _logHub.InvokeAsync("JoinTaskGroup", TaskId);
+            await _logHub.InvokeAsync("JoinTaskGroup", CurrentTaskId);
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or Microsoft.AspNetCore.SignalR.HubException)
         {
@@ -143,7 +174,7 @@ public partial class TaskDetail : IAsyncDisposable
     internal void OnLogsReceived(IReadOnlyList<TaskLogDto> logs)
     {
         var known = _logs.Select(log => log.Id).ToHashSet();
-        var added = logs.Where(log => log.TaskId == TaskId && known.Add(log.Id)).ToList();
+        var added = logs.Where(log => log.TaskId == CurrentTaskId && known.Add(log.Id)).ToList();
         if (added.Count == 0) return;
         _logs = [.. _logs, .. added];
         _ = InvokeAsync(StateHasChanged);
@@ -152,7 +183,7 @@ public partial class TaskDetail : IAsyncDisposable
     /// <summary>The agent started the task: the live list turns it to Running.</summary>
     private void OnLiveTasksChanged()
     {
-        var live = LiveTasks.Tasks.FirstOrDefault(task => task.Id == TaskId);
+        var live = LiveTasks.Tasks.FirstOrDefault(task => task.Id == CurrentTaskId);
         if (live is null || _task is null || live.Status == _task.Status) return;
         _task = _task with { Status = live.Status, StartedAt = live.StartedAt ?? _task.StartedAt };
         _ = InvokeAsync(StateHasChanged);
@@ -160,20 +191,20 @@ public partial class TaskDetail : IAsyncDisposable
 
     private void OnLiveTaskCompleted(TaskCompletedNotification notification)
     {
-        if (notification.TaskId == TaskId)
+        if (notification.TaskId == CurrentTaskId)
             _ = InvokeAsync(ReloadFinishedAsync);
     }
 
     /// <summary>The task ended: its final state and its complete log replace what was streamed.</summary>
     internal async Task ReloadFinishedAsync()
     {
-        var taskId = TaskId;
+        var taskId = CurrentTaskId;
         try
         {
             var task = await Api.Pipelines.GetTaskAsync(taskId);
-            if (task is null || TaskId != taskId) return;
+            if (task is null || CurrentTaskId != taskId) return;
             var logs = await Api.Monitoring.GetTaskLogsAsync(taskId);
-            if (TaskId != taskId) return;
+            if (CurrentTaskId != taskId) return;
             (_task, _logs) = (task, logs);
         }
         catch (HttpRequestException)

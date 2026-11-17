@@ -71,7 +71,29 @@ public enum PipelineSetupReadinessKind
 
     /// <summary>No enrolled runner reports Docker and the production deployment uses the template's default
     /// commands, which run Docker Compose.</summary>
-    NoDockerRunner
+    NoDockerRunner,
+
+    /// <summary>R-9: the pipelines read variables that no library, vault, declared variable or run parameter
+    /// defines (a <c>$(NAME)</c> or an environment sample's <c>#{NAME}#</c>): a run stops on them. Items are
+    /// variable names.</summary>
+    UndefinedVariables,
+
+    /// <summary>R-36: a pipeline starts another on success (<c>on_success:</c>), and the launch that follows is given no
+    /// <c>deployServer</c> while the target requires one without a default and the project's servers do not make the choice
+    /// unique: the follow-up will be refused. A warning (the upstream run itself is not at risk). Items are
+    /// <c>upstream &gt; target</c> pipeline names.</summary>
+    ChainedDeployServerMissing,
+
+    /// <summary>R-36: a pipeline starts another on success (<c>on_success:</c>) and the target declares another required
+    /// parameter with no default that the launch that follows does not supply (it gives the release as
+    /// <c>candidateVersion</c> and nothing else): the follow-up will be refused. A warning. Items are
+    /// <c>upstream &gt; target &gt; parameter</c> names.</summary>
+    ChainedRequiredParameterMissing,
+
+    /// <summary>R-30: the branch holds a .NET repository with no <c>global.json</c> at its root, so no SDK version is pinned: the
+    /// pipelines' toolchain step installs the SDK channel of the projects' <c>TargetFramework</c> instead of an exact one. A
+    /// warning (nothing fails). Items are the file to add (<c>global.json</c>).</summary>
+    NoGlobalJson
 }
 
 /// <summary>
@@ -81,5 +103,10 @@ public enum PipelineSetupReadinessKind
 public enum PipelineSetupReadinessSeverity
 {
     Warning,
-    Blocking
+    Blocking,
+
+    /// <summary>R-21: a mistake of the setup that the user must fix, shown as an error, which does not stop the run the
+    /// finding is read from (a follow-up that will be refused, the upstream run itself is not at risk). Not
+    /// <see cref="Blocking"/>: it never holds back a launch or the wizard.</summary>
+    Error
 }

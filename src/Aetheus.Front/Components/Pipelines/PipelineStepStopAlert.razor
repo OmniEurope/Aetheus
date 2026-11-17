@@ -8,6 +8,10 @@
     <OmniAlert Severity="@view.Severity" Title="@L["StepStopTitle"]" data-testid="step-stop-reason">
         <OmniStack>
             <div>@view.Headline</div>
+            @if (!string.IsNullOrWhiteSpace(LastErrorLine))
+            {
+                <div data-testid="step-stop-last-error"><strong>@L["StepStopLastError"]</strong> <code class="step-stop-detail-text">@LastErrorLine</code></div>
+            }
             @if (view.Detail is { } detail)
             {
                 <OmniFieldset Collapsible="true" Expanded="false" data-testid="step-stop-detail">

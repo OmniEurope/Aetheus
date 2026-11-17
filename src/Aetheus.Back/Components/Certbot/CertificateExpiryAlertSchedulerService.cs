@@ -12,7 +12,7 @@ public sealed class CertificateExpiryAlertSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<CertificateExpiryAlertSchedulerService> logger,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null)
+    IPostgresLeaderLease leaderLease)
     : PeriodicBackgroundService(CheckInterval, leaderLease, "aetheus:certificate-expiry-alerts", timeProvider)
 {
     internal static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(30);

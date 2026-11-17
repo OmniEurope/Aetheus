@@ -15,13 +15,15 @@
         }
     </ActionsContent>
     <MenuContent>
+        @* R-28: the organization's exclusion rules; a rule moves the lines it matches to the second tab. *@
+        <OmniMenuItem OnClick="OnManageRulesAsync" title="@L["SystemLogRules"]"><Icon><OmniIcon Name="OmniIconName.Filter" /></Icon><ChildContent>@L["SystemLogRules"]</ChildContent></OmniMenuItem>
         <OmniMenuItem Tone="OmniTone.Danger" OnClick="OnPurgeAsync" title="@L["PurgeLogs"]"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent>@L["Purge"]</ChildContent></OmniMenuItem>
     </MenuContent>
 </OmniPageHeader>
 
 <OmniStack Class="page-fill-body">
 <OmniCard>
-    <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End">
+    <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End" Class="system-logs-filters">
         <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="ddFile">@L["LogFile"]</OmniLabel>
             <OmniDropDown Id="ddFile" TValue="string" @bind-Value="_selectedFile"
@@ -65,6 +67,14 @@
         @* No Refresh and no polling toggle, the page follows the log files live. *@
     </OmniRow>
 </OmniCard>
+
+@* R-28: the second tab holds the lines an exclusion rule of the organization matches; nothing is lost. *@
+<UrlSyncedTabs Slugs="@TabSlugs" Class="system-logs-tabs">
+    <Tabs>
+        <OmniTabsItem Key="journal" Title="@L["SystemLogsTabJournal"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("description")" /></Icon></OmniTabsItem>
+        <OmniTabsItem Key="filtered" Title="@L["SystemLogsTabFiltered"]"><Icon><OmniIcon Name="OmniIconName.Filter" /></Icon></OmniTabsItem>
+    </Tabs>
+</UrlSyncedTabs>
 
 @if (_loadFailed)
 {
@@ -117,12 +127,21 @@
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="SystemLogEntryDto" Title="" Width="5.75rem"
+            <OmniDataGridColumn TItem="SystemLogEntryDto" Title="" Width="6.5rem"
                                 Sortable="false" TextAlign="OmniAlignment.Center">
                 <Template Context="entry">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                        <OmniButton Variant="@(string.IsNullOrWhiteSpace(entry.Exception) ? OmniButtonVariant.Ghost : OmniButtonVariant.Danger)" OnClick="@(() => ShowMessageDialogAsync(entry))" title="@L["ViewMessage"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyMessageAsync(entry.Message))" title="@L["CopyMessage"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
+                        @* R-29 (2026-10-30): "View message" is blue on every row, with or without an exception; the user's explicit exception to STD-BTN. *@
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ShowMessageDialogAsync(entry))" title="@L["ViewMessage"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
+                        @* A row shows at most two actions (STD-BTN): the blue one, then the line's menu. R-28: from the menu, the
+                           rule dialog opens pre-filled from the line (a line already filtered out is excluded). *@
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem OnClick="@(() => OnCopyMessageAsync(entry.Message))" title="@L["CopyMessage"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["CopyMessage"]</ChildContent></OmniMenuItem>
+                            @if (!ShowExcluded)
+                            {
+                                <OmniMenuItem OnClick="@(() => OnExcludeLineAsync(entry))" title="@L["SystemLogRuleExclude"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["SystemLogRuleExclude"]</ChildContent></OmniMenuItem>
+                            }
+                        </OmniOverflowMenu>
                     </span>
                 </Template>
             </OmniDataGridColumn>

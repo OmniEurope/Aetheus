@@ -52,6 +52,10 @@ public class StderrLineClassifierTests
     [InlineData("{\"level\":\"error\",\"msg\":\"boom\"}")]
     [InlineData("Program.cs(3,5): error CS1002: ; expected")]
     [InlineData("panic: runtime error: index out of range")]
+    // R-72: the failed tests the QA default repeats at the end of its step (the failed-step card shows these).
+    [InlineData("ERROR failed MiniTests.ThisOneFails_WithAName (17ms)")]
+    [InlineData("ERROR   Expected: \"expected\"")]
+    [InlineData("ERROR              ↓ (pos 0)")]
     public void ALineThatStatesAnError_IsAnError(string line) =>
         Assert.Equal(TaskLogLevel.Error, ExecutorHelper.ClassifyLine(line, TaskLogLevel.Error));
 

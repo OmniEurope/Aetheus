@@ -19,12 +19,19 @@ internal static class ProcessRunner
         Func<string, TaskLogLevel, Task> onOutput,
         ILogger logger,
         CancellationToken cancellationToken,
-        string? standardInput = null)
+        string? standardInput = null,
+        Func<Process, ILogger, Task<bool>>? stopTree = null)
     {
         // When a secret (e.g. a mail admin password) must reach the child process without appearing
         // on the argv / process list, the caller passes it here and we pipe it to stdin, then close.
         if (standardInput is not null)
             psi.RedirectStandardInput = true;
+
+        // ACORE-001: a sudo command runs in a process group of its own, so its root children can be stopped and
+        // their exit proven although the agent can neither see nor kill them (SudoProcessGroup).
+        stopTree ??= OperatingSystem.IsLinux() && SudoProcessGroup.Isolate(psi)
+            ? SudoProcessGroup.StopAsync
+            : (p, l) => StopTreeAsync(p, l);
 
         using var process = new Process { StartInfo = psi };
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -48,6 +55,7 @@ internal static class ProcessRunner
         // kills its whole tree before the runner returns, so an apt, a deploy restart or a certbot run
         // never keeps acting after the task (and the lock it held) is gone.
         var exited = false;
+        var treeStopped = true;
         try
         {
             var stdout = ExecutorHelper.StreamOutputAsync(process.StandardOutput, TaskLogLevel.Info, onOutput, timeoutCts.Token, logger);
@@ -82,7 +90,13 @@ internal static class ProcessRunner
         finally
         {
             if (!exited)
-                await KillTreeAsync(process, logger).ConfigureAwait(false);
+                treeStopped = await stopTree(process, logger).ConfigureAwait(false);
+
+            // A cancelled task is acknowledged as stopped only with the proof above; without it the agent
+            // must not tell the control plane that the task stopped (R-12, same contract as
+            // ExecutorProcessRunner). A timeout keeps its own result: nobody acknowledges it.
+            if (!treeStopped && cancellationToken.IsCancellationRequested)
+                throw new ProcessTreeNotTerminatedException(cancellationToken);
         }
     }
 
@@ -125,20 +139,36 @@ internal static class ProcessRunner
         return (result, lines);
     }
 
-    private static async Task KillTreeAsync(Process process, ILogger logger)
+    internal static async Task<bool> StopTreeAsync(
+        Process process, ILogger logger, Action<bool>? kill = null, TimeSpan? killWait = null)
     {
         // Runs in the finally of RunAsync: a refusal (EPERM on a sudo child) is logged, never thrown over
-        // the task's real outcome.
-        if (!ProcessTreeTerminator.Kill(process, logger)) return;
+        // the task's real outcome. What is returned is the proof: true only when the process and every
+        // descendant seen before the kill were observed to have exited, so a refused kill of a privileged
+        // child (or a tree that outlives the wait) is never taken for a stop.
+        if (ExecutorProcessRunner.HasExited(process)) return true;
 
-        using var wait = new CancellationTokenSource(KillWait);
+        var descendants = ProcessTreeSnapshot.CaptureDescendants(process.Id);
         try
         {
-            await process.WaitForExitAsync(wait.Token).ConfigureAwait(false);
+            ProcessTreeTerminator.Kill(kill ?? process.Kill, process.Id, logger);
+
+            var wait = killWait ?? KillWait;
+            using var waitCts = new CancellationTokenSource(wait);
+            var exited = await Task.WhenAll(descendants.Prepend(process)
+                    .Select(candidate => ExecutorProcessRunner.WaitForExitAsync(candidate, waitCts.Token)))
+                .ConfigureAwait(false);
+            if (exited.All(static done => done)) return true;
+
+            logger.LogCritical(
+                "Process tree rooted at PID {Pid} could not be proven terminated within {Wait}s of being killed",
+                process.Id, wait.TotalSeconds);
+            return false;
         }
-        catch (OperationCanceledException)
+        finally
         {
-            logger.LogError("Process {Pid} did not exit within {Wait}s of being killed", process.Id, KillWait.TotalSeconds);
+            foreach (var descendant in descendants)
+                descendant.Dispose();
         }
     }
 }

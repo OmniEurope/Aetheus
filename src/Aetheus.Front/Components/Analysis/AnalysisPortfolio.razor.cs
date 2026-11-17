@@ -14,6 +14,7 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
     private List<AnalysisPortfolioProjectDto> _projectSummaries = [];
     private int _count;
     private HubConnection? _hubConnection;
+    private bool _cveWatchShown;
 
     // Column header filters are the grid filter source.
     private List<GridFilter> _columnFilters = [];
@@ -104,7 +105,17 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
 
     private void OpenRun(AnalysisPortfolioRowDto row)
     {
-        if (row.PipelineRunId.HasValue) Navigation.NavigateTo($"/pipelines/runs/{row.PipelineRunId}");
+        // R-21: a row of the CVE watch opens the page of its run (R-22), a row of a pipeline the pipeline run.
+        if (row.Source == AnalysisScanSource.CveWatch) Navigation.NavigateTo($"/{CveWatchRunNumber.Href(row.AnalysisReportId)}");
+        else if (row.PipelineRunId.HasValue) Navigation.NavigateTo($"/pipelines/runs/{row.PipelineRunId}");
+    }
+
+    private const int CveWatchTabIndex = 2;
+
+    /// <summary>The CVE watch tab is built the first time it is shown (by its tab or by <c>?tab=cve-watch</c>) and kept.</summary>
+    private void OnTabChanged(int index)
+    {
+        if (index == CveWatchTabIndex) _cveWatchShown = true;
     }
 
     private string Posture(AnalysisCategory category) => category is AnalysisCategory.Sast

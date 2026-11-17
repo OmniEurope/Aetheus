@@ -245,6 +245,32 @@ public sealed class PortAllocationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ReallocateInLibraryAsync_GivesAKeyHoldingAPortANewOneAndReleasesTheOldOne()
+    {
+        var ownerKey = PortRegistryService.ProjectOwnerKey(5);
+        var old = (await _registry.AllocateAsync(9, 1, ownerKey, "w6.prod", 5, Ct)).Single();
+        _db.VariableLibraryEntries.Add(
+            new VariableLibraryEntry { VariableLibraryId = 104, Key = "PORT_FRONT", Value = old.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+        await _db.SaveChangesAsync(Ct);
+
+        var written = await _sut.ReallocateInLibraryAsync(104, 9, ["PORT_FRONT"], Ct);
+
+        var fresh = int.Parse(Assert.Single(written).Value, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.NotEqual(old, fresh);
+        var held = await _db.ServerPortReservations.AsNoTracking().Select(row => row.Port).ToListAsync(Ct);
+        Assert.Equal([fresh], held);
+    }
+
+    [Fact]
+    public async Task PreviewFreePortsAsync_NamesTheNextPortsAndReservesNothing()
+    {
+        var ports = await _sut.PreviewFreePortsAsync(100, 7, 2, Ct);
+
+        Assert.Equal([10000, 10001], ports);
+        Assert.Empty(await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct));
+    }
+
+    [Fact]
     public async Task AllocateIntoLibraryAsync_ExistingKeyWithAValue_IsRefusedAndReservesNothing()
     {
         // A value somebody typed is never overwritten behind their back.

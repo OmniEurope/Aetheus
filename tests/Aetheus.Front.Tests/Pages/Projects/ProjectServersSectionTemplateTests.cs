@@ -26,7 +26,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
         var answer = new TaskCompletionSource<PaginatedResult<ProjectServerDto>>();
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/projects/1/servers", _ => answer.Task);
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        Assert.NotEmpty(cut.FindComponents<AetheusLoader>());
+        Assert.NotEmpty(cut.FindComponents<ZoneVeil>());
         Assert.DoesNotContain("NoProjectServers", cut.Markup);
 
         answer.SetResult(new PaginatedResult<ProjectServerDto> { Items = [], TotalCount = 0 });
@@ -38,7 +38,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
         // that second answer, never on a wrong state.
         cut.WaitForAssertion(() =>
         {
-            Assert.Empty(cut.FindComponents<AetheusLoader>());
+            Assert.Empty(cut.FindComponents<ZoneVeil>());
             Assert.Contains("Servers", cut.Markup);
             Assert.Contains("NoProjectServers", cut.Markup);
         });

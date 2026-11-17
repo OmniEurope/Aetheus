@@ -5,6 +5,9 @@ namespace Aetheus.Front.Components.Shared;
 public sealed record PipelineRunTableItem
 {
     public int RunId { get; init; }
+
+    /// <summary>R-8: the number a person reads, unique within the pipeline. <see cref="RunId"/> stays the key of the links.</summary>
+    public int BuildNumber { get; init; }
     public int PipelineId { get; init; }
     public string PipelineName { get; init; } = string.Empty;
     public int? ProjectId { get; init; }
@@ -18,6 +21,17 @@ public sealed record PipelineRunTableItem
     public string? CurrentStep { get; init; }
     public string? BranchName { get; init; }
     public string? CommitHash { get; init; }
+
+    /// <summary>R-34: for a run that delivers a recorded release, the head of the source branch the run checked out
+    /// (<see cref="CommitHash"/> then holds the release's commit). Null for any other run.</summary>
+    public string? SourceCommitHash { get; init; }
+
+    /// <summary>R-34: the version of the release the run delivers, when it is a deployment of a recorded release.</summary>
+    public string? DeployedVersion { get; init; }
+
+    /// <summary>The commit of the release the run delivers, null when the run names none or it records no commit.</summary>
+    private static string? DeployedCommitOf(PipelineRunDto run) =>
+        run.DeployedRelease?.CommitHash is { Length: > 0 } commit ? commit : null;
 
     /// <summary>The run's commit as Aetheus recorded it, for the link to its page.</summary>
     public int? CommitId { get; init; }
@@ -41,15 +55,20 @@ public sealed record PipelineRunTableItem
     /// <summary>The code of the stored problem PipelineRefusedLaunchRecorder writes for a refused launch.</summary>
     internal const string LaunchRefusedCode = "LaunchRefused";
 
-    /// <summary>The warning of a refused automated launch: the stored problem, or the sentence runs refused
+    /// <summary>The code of the stored problem a launch someone asked for (interface, API) carries when the
+    /// pre-checks refused it (R-36).</summary>
+    internal const string ManualLaunchRefusedCode = "ManualLaunchRefused";
+
+    /// <summary>The warning of a refused launch: the stored problem, or the sentence runs refused
     /// before warnings had codes carry.</summary>
     private static bool IsLaunchRefusedWarning(string warning) =>
-        StoredProblem.CodeOf(warning) == LaunchRefusedCode
+        StoredProblem.CodeOf(warning) is LaunchRefusedCode or ManualLaunchRefusedCode
         || warning.StartsWith(LaunchRefusedPrefix, StringComparison.Ordinal);
 
     public static PipelineRunTableItem FromRun(PipelineRunDto run) => new()
     {
         RunId = run.Id,
+        BuildNumber = run.BuildNumber,
         PipelineId = run.PipelineId,
         PipelineName = run.PipelineName,
         ProjectId = run.ProjectId,
@@ -62,9 +81,14 @@ public sealed record PipelineRunTableItem
         ServerOs = run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerId.HasValue)?.ServerOs,
         CurrentStep = PipelineHelper.GetCurrentStepLabel(run),
         BranchName = run.BranchName,
-        CommitHash = run.CommitHash,
-        CommitId = (run.Commits.FirstOrDefault(commit => string.Equals(commit.Sha, run.CommitHash, StringComparison.OrdinalIgnoreCase))
-            ?? run.Commits.FirstOrDefault())?.Id,
+        // R-34: a run that delivers a recorded release lists that release's commit, not the source head it checked out.
+        CommitHash = DeployedCommitOf(run) ?? run.CommitHash,
+        SourceCommitHash = DeployedCommitOf(run) is null ? null : run.CommitHash,
+        DeployedVersion = DeployedCommitOf(run) is null ? null : run.DeployedRelease!.Version,
+        CommitId = DeployedCommitOf(run) is not null
+            ? null
+            : (run.Commits.FirstOrDefault(commit => string.Equals(commit.Sha, run.CommitHash, StringComparison.OrdinalIgnoreCase))
+                ?? run.Commits.FirstOrDefault())?.Id,
         RepositoryUrl = run.RepositoryUrl,
         RepositoryId = run.RepositoryId,
         GateGrade = run.GateGrade,

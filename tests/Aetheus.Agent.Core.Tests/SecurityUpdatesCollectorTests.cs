@@ -43,6 +43,25 @@ public class SecurityUpdatesCollectorTests
     }
 
     [Fact]
+    public async Task Probe_SimulatesWithNewPackages_SoAPendingKernelIsListed()
+    {
+        const string withKernel = """
+            Inst linux-image-6.8.0-149-generic (6.8.0-149.149 Ubuntu:24.04/noble-security [amd64])
+            Inst linux-generic [6.8.0-147.147] (6.8.0-149.149 Ubuntu:24.04/noble-security [amd64])
+            """;
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("apt-get", Arg.Is<IReadOnlyList<string>>(a => a.SequenceEqual(new[] { "-s", "upgrade", "--with-new-pkgs" })),
+                Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(new ShellExecResult(0, withKernel, ""));
+
+        var result = await Build(shell).CollectAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.ProbeSucceeded);
+        Assert.Equal(2, result.PendingTotal);
+        Assert.Contains(result.Updates, u => u.Package == "linux-image-6.8.0-149-generic");
+    }
+
+    [Fact]
     public async Task ProbeFails_ReportsUnknown_NotUpToDate()
     {
         var shell = Substitute.For<IShellRunner>();

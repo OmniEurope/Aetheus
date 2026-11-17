@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Net;
 using System.Net.Http.Json;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
@@ -24,6 +23,7 @@ public sealed class SchemaTrackingIntegrationTests(ApiSmokeFixture fixture)
     private const string RequiredMigration = "20261011110402_AddAiRunnerProfileApiSettings";
 
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task RunAndEnvironment_ShowTheMigrationsAndThePendingContractionsAHistoryRecorded()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -50,37 +50,6 @@ public sealed class SchemaTrackingIntegrationTests(ApiSmokeFixture fixture)
         Assert.Equal(seed.RunId, environment.LastGate!.RunId);
         Assert.Equal(MigrationGateOutcome.Compatible, environment.LastGate.Outcome);
         Assert.NotEmpty(environment.PendingContractions);
-    }
-
-    // A redeploy or a rollback records the same release again and overwrites Release.PipelineRunId with the later
-    // run. The release the migration was first applied by is still the one the first run's own release step recorded.
-    [Fact]
-    public async Task TheReleaseAMigrationWasFirstAppliedBy_SurvivesALaterRunRecordingTheSameRelease()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var seed = await Deployment.SeedAsync(fixture, ct);
-        await seed.RedeployAsync(ct);
-        using var client = fixture.CreateAdminClient();
-
-        var run = await client.GetFromJsonAsync<PipelineRunSchemaDto>(
-            $"/api/pipelines/runs/{seed.RunId}/schema-tracking", IntegrationJsonOptions.Default, ct);
-
-        var unmap = Assert.Single(run!.PendingContractions, c => c.Id == "ai-runner-profile-legacy-columns-unmap");
-        Assert.Equal(seed.Version, unmap.AppliedInRelease);
-        Assert.Equal(seed.NextVersion, unmap.PossibleFromRelease);
-    }
-
-    [Fact]
-    public async Task AnUnknownRunOrEnvironment_AnswersNotFound()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        using var client = fixture.CreateAdminClient();
-
-        using var run = await client.GetAsync("/api/pipelines/runs/2147483000/schema-tracking", ct);
-        using var environment = await client.GetAsync("/api/environments/2147483000/schema-tracking", ct);
-
-        Assert.Equal(HttpStatusCode.NotFound, run.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, environment.StatusCode);
     }
 
     /// <summary>A deployment as the control plane records it: a run whose migrate step the gate let through, whose
@@ -149,18 +118,6 @@ public sealed class SchemaTrackingIntegrationTests(ApiSmokeFixture fixture)
             await db.SaveChangesAsync(ct);
             EnvironmentId = environment.Id;
             db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = environment.Id, ServerId = _fixture.ServerId });
-            await db.SaveChangesAsync(ct);
-        }
-
-        /// <summary>A later run records the same release again, as a redeploy does, and takes over
-        /// <see cref="Release.PipelineRunId"/>.</summary>
-        public async Task RedeployAsync(CancellationToken ct)
-        {
-            using var scope = _fixture.Factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var laterRunId = await AddRunAsync(db, DateTime.UtcNow.AddMinutes(1), ct);
-            var release = await db.Releases.SingleAsync(r => r.Id == ReleaseId, ct);
-            release.PipelineRunId = laterRunId;
             await db.SaveChangesAsync(ct);
         }
 

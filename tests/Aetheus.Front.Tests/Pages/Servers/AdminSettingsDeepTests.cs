@@ -2,6 +2,8 @@
 using System.Reflection;
 using Aetheus.Front.Components.Settings;
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
@@ -148,12 +150,15 @@ public class AdminSettingsDeepTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Post, "api/auth/registration-tokens",
             new RegistrationTokenDto { Id = 9, Token = "tok-new", ExpiresAt = DateTime.UtcNow.AddDays(1) });
 
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/settings?tab=tokens");
         var cut = Render<AdminSettings>();
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+        var grid = cut.FindComponent<AetheusDataGrid<RegistrationTokenDto>>().Instance;
 
         var tokensField = typeof(AdminSettings).GetField("_tokens", Priv)!;
         var method = typeof(AdminSettings).GetMethod("GenerateToken", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
+        await cut.InvokeAsync(() => grid.BackgroundRefresh);
 
         // Success path: a POST was sent and the token list was reloaded (GET) - non-empty from SetupAll.
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/auth/registration-tokens"));

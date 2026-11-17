@@ -26,6 +26,51 @@ public class PortsObserveOperationExecutorTests
 
     private static Task NoOutput(string _, TaskLogLevel __) => Task.CompletedTask;
 
+    // Both protocols measured, as a scan whose two probes succeeded.
+    private ListeningPortsScan Measured(ObservedPortDto[] ports) => new(
+        ports,
+        [new ProtocolMeasurement("tcp", _time.GetUtcNow()), new ProtocolMeasurement("udp", _time.GetUtcNow())]);
+
+    // ACORE-003: a scan in which a probe failed is not a scan in which nothing listens.
+    [Fact]
+    public async Task Execute_NoProtocolMeasured_FailsWithoutReportingAnEmptyScan()
+    {
+        _collector.ScanAsync(Arg.Any<CancellationToken>()).Returns(ListeningPortsScan.None);
+        var messages = new List<string>();
+
+        var result = await Build().ExecuteAsync(
+            OperationKind.PortsObserve, string.Empty, 30,
+            (message, _) => { messages.Add(message); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(messages, message => message.Contains("could not be read", StringComparison.Ordinal));
+        await _apiClient.DidNotReceive().ReportObservedPortsAsync(
+            Arg.Any<int>(), Arg.Any<ObservedPortsReportDto>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_OneProtocolFailed_ReportsOnlyTheProtocolThatWasMeasured()
+    {
+        _time.Advance(TimeSpan.FromSeconds(30));
+        _collector.ScanAsync(Arg.Any<CancellationToken>()).Returns(new ListeningPortsScan(
+            [new ObservedPortDto { Port = 8080, Protocol = "tcp", Holder = "web", Interface = "0.0.0.0" }],
+            [new ProtocolMeasurement("tcp", _time.GetUtcNow() - TimeSpan.FromSeconds(30))]));
+
+        var result = await Build().ExecuteAsync(
+            OperationKind.PortsObserve, string.Empty, 30, NoOutput, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        await _apiClient.Received(1).ReportObservedPortsAsync(
+            7,
+            Arg.Is<ObservedPortsReportDto>(report =>
+                report.Protocols != null
+                && report.Protocols.Count == 1
+                && report.Protocols[0].Protocol == "tcp"
+                && report.Protocols[0].AgeSeconds == 30),
+            Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(OperationKind.PortsObserve, true)]
     [InlineData(OperationKind.PortsentryStatus, false)]
@@ -36,10 +81,10 @@ public class PortsObserveOperationExecutorTests
     [Fact]
     public async Task Execute_ReportsWhatTheCollectorSaw()
     {
-        _collector.CollectAsync(Arg.Any<CancellationToken>()).Returns(new List<ObservedPortDto>
-        {
+        _collector.ScanAsync(Arg.Any<CancellationToken>()).Returns(Measured(
+        [
             new() { Port = 10031, Protocol = "tcp", Holder = "portfolio-prod-front", Interface = "0.0.0.0" }
-        });
+        ]));
 
         var result = await Build().ExecuteAsync(
             OperationKind.PortsObserve, string.Empty, 30, NoOutput, TestContext.Current.CancellationToken);
@@ -59,7 +104,7 @@ public class PortsObserveOperationExecutorTests
     {
         // "Nothing is listening" is a real answer the registry must record; skipping the call would
         // leave stale observations in place and let the page claim ports are still taken.
-        _collector.CollectAsync(Arg.Any<CancellationToken>()).Returns(new List<ObservedPortDto>());
+        _collector.ScanAsync(Arg.Any<CancellationToken>()).Returns(Measured([]));
 
         var result = await Build().ExecuteAsync(
             OperationKind.PortsObserve, string.Empty, 30, NoOutput, TestContext.Current.CancellationToken);
@@ -72,7 +117,7 @@ public class PortsObserveOperationExecutorTests
     [Fact]
     public async Task Execute_ReportFails_FailsTheTask()
     {
-        _collector.CollectAsync(Arg.Any<CancellationToken>()).Returns(new List<ObservedPortDto>());
+        _collector.ScanAsync(Arg.Any<CancellationToken>()).Returns(Measured([]));
         _apiClient
             .ReportObservedPortsAsync(Arg.Any<int>(), Arg.Any<ObservedPortsReportDto>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new HttpRequestException("backend down")));
@@ -91,8 +136,8 @@ public class PortsObserveOperationExecutorTests
     [Fact]
     public async Task Execute_CollectorThrows_FailsWithoutReporting()
     {
-        _collector.CollectAsync(Arg.Any<CancellationToken>())
-            .Returns<List<ObservedPortDto>>(_ => throw new InvalidOperationException("ss missing"));
+        _collector.ScanAsync(Arg.Any<CancellationToken>())
+            .Returns<ListeningPortsScan>(_ => throw new InvalidOperationException("ss missing"));
 
         var result = await Build().ExecuteAsync(
             OperationKind.PortsObserve, string.Empty, 30, NoOutput, TestContext.Current.CancellationToken);

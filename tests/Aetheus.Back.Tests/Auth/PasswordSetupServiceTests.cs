@@ -28,6 +28,7 @@ namespace Aetheus.Back.Tests.Auth;
 public sealed class PasswordSetupServiceTests : IDisposable
 {
     private const string SigningKey = "unit-test-signing-key-least-32-bytes!!";
+    private static readonly TokenHashKeys Keys = new(new JwtOptions { SigningKey = SigningKey });
     private const string Front = "https://aetheus.example.org";
     private static readonly DateTimeOffset Now = new(2026, 10, 28, 9, 0, 0, TimeSpan.Zero);
 
@@ -62,7 +63,7 @@ public sealed class PasswordSetupServiceTests : IDisposable
             new AuthRepository(_db, _clock),
             new MailTemplateRenderer(new MailTemplateRepository(_db), NullLogger<MailTemplateRenderer>.Instance),
             _sender,
-            new JwtOptions { SigningKey = SigningKey },
+            Keys,
             _clock,
             configuration,
             http,
@@ -111,7 +112,7 @@ public sealed class PasswordSetupServiceTests : IDisposable
         Assert.Contains(Front + "/login/set-password#token=" + token, mail.TextBody, StringComparison.Ordinal);
         var row = await _db.PasswordSetupTokens.AsNoTracking().SingleAsync(Ct);
         Assert.Equal(user.Id, row.UserId);
-        Assert.Equal(AuthTokenHelper.HashToken(SigningKey, token), row.TokenHash);
+        Assert.Equal(Keys.Hash(TokenHashPurpose.PasswordSetupToken, token), row.TokenHash);
         Assert.NotEqual(token, row.TokenHash);
         Assert.Equal(Now.UtcDateTime + PasswordSetupService.WelcomeLifetime, row.ExpiresAt);
         Assert.Null(row.UsedAt);
@@ -137,6 +138,23 @@ public sealed class PasswordSetupServiceTests : IDisposable
         Assert.False(stored.MustChangePassword);
         Assert.NotEqual(stampBefore, stored.SecurityStamp);
         Assert.NotNull((await _db.PasswordSetupTokens.AsNoTracking().SingleAsync(Ct)).UsedAt);
+    }
+
+    [Fact]
+    public async Task R53_Complete_AcceptsALinkStoredUnderTheLegacyHash()
+    {
+        var user = await SeedUserAsync();
+        var service = Service();
+        await service.SendWelcomeAsync(user.Id, user.Username, user.Email!, Ct);
+        var token = TokenIn(Assert.Single(_sent));
+        // A link mailed before R-53: its row carries the hash keyed directly with the signing key.
+        var row = await _db.PasswordSetupTokens.SingleAsync(Ct);
+        Assert.Equal(Keys.Hash(TokenHashPurpose.PasswordSetupToken, token), row.TokenHash);
+        row.TokenHash = Keys.HashCandidates(TokenHashPurpose.PasswordSetupToken, token)[1];
+        await _db.SaveChangesAsync(Ct);
+
+        Assert.True(await service.CompleteAsync(new CompletePasswordSetupRequest { Token = token, NewPassword = "Chosen-By-Jean-2026!" }, Ct));
+        Assert.False(await service.CompleteAsync(new CompletePasswordSetupRequest { Token = token, NewPassword = "Second-Try-Pwd-2026!" }, Ct));
     }
 
     [Fact]
@@ -225,7 +243,8 @@ public sealed class PasswordSetupServiceTests : IDisposable
         Assert.Equal(2, _sent.Count);
         var second = TokenIn(_sent[1]);
         Assert.NotEqual(first, second);
-        var row = await _db.PasswordSetupTokens.AsNoTracking().SingleAsync(t => t.TokenHash == AuthTokenHelper.HashToken(SigningKey, second), Ct);
+        var secondHash = Keys.Hash(TokenHashPurpose.PasswordSetupToken, second);
+        var row = await _db.PasswordSetupTokens.AsNoTracking().SingleAsync(t => t.TokenHash == secondHash, Ct);
         Assert.Equal(PasswordSetupPurpose.AdminLink, row.Purpose);
         Assert.Equal(Now.UtcDateTime + PasswordSetupService.WelcomeLifetime, row.ExpiresAt);
         Assert.False(await service.CompleteAsync(new CompletePasswordSetupRequest { Token = first, NewPassword = "Old-Link-Pwd-2026!" }, Ct));

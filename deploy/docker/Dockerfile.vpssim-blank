@@ -43,7 +43,7 @@ RUN mkdir -p /run/sshd \
     && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
     && printf '\n=== Aetheus VPS-sim (BLANK) — disposable local sandbox (NOT production) ===\n\n' > /etc/motd
 
-# --- Optional .NET SDK 10.0 (-vps -net10) ------------------------------------
+# --- Optional .NET SDK 11.0 (-vps -net10) ------------------------------------
 # Opt-in build arg (INSTALL_DOTNET=1, set by ylaunch's -net10 via compose). When
 # off (default) the box stays bare. Installs via Microsoft's official, channel-
 # pinned dotnet-install.sh - the same mechanism + SDK version the agent's
@@ -63,7 +63,7 @@ RUN if [ "$INSTALL_DOTNET" = "1" ]; then \
         && rm -rf /var/lib/apt/lists/* \
         && curl -fsSL "$DOTNET_INSTALLER_URL" -o /tmp/dotnet-install.sh \
         && echo "$DOTNET_INSTALLER_SHA256  /tmp/dotnet-install.sh" | sha256sum -c - \
-        && bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /usr/share/dotnet \
+        && bash /tmp/dotnet-install.sh --version 11.0.100 --install-dir /usr/share/dotnet \
         && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
         && rm -f /tmp/dotnet-install.sh \
         && /usr/local/bin/dotnet --version; \

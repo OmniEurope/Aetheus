@@ -132,6 +132,10 @@ public partial class PipelineFleet
     private bool CanUpdate(PipelineFleetItemDto item) =>
         Permissions.CanWrite(ResourceType.Pipeline, item.PipelineId);
 
+    // R-8: "Update all pipelines" of the chosen project, or of the whole fleet, once a listed row has a newer version.
+    private bool ShowsBulkTemplateUpdate =>
+        _items.Any(item => item.Freshness == PipelineFleetFreshness.Outdated && CanUpdate(item));
+
     private string FreshnessText(PipelineFleetFreshness freshness) => freshness switch
     {
         PipelineFleetFreshness.Current => L["Current"],

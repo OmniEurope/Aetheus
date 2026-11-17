@@ -17,7 +17,7 @@ namespace Aetheus.Back.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.14")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -44,6 +44,9 @@ namespace Aetheus.Back.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -51,6 +54,8 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.HasIndex("Name")
                         .IsUnique();
+
+                    b.HasIndex("OrganizationId");
 
                     b.ToTable("AgentPools");
                 });
@@ -1550,6 +1555,10 @@ namespace Aetheus.Back.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ConfigFileForeignOwner")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("DocumentRoot")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1739,6 +1748,10 @@ namespace Aetheus.Back.Data.Migrations
                         .HasColumnType("bigint");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("EntryRoute")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime>("FirstSeenAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2881,6 +2894,135 @@ namespace Aetheus.Back.Data.Migrations
                     b.ToTable("DependencyTrackOutboxItems");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.DependencyUpdate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Advisory")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Branch")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("BranchRetiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CiPipelineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CiPipelineRunId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Ecosystem")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FromVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("GitInternalRepoId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsMajorUpgrade")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("License")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("LicenseOfTargetVersion")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LockFilesJson")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
+                    b.Property<int?>("LockPipelineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LockPipelineRunId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LockRefreshOwner")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PullRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QaPipelineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QaPipelineRunId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReadyHandledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("VulnerabilityMatchId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LockPipelineRunId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("VulnerabilityMatchId");
+
+                    b.HasIndex("GitInternalRepoId", "Ecosystem", "PackageName", "TargetVersion")
+                        .IsUnique();
+
+                    b.ToTable("DependencyUpdates");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.DockerComposeStack", b =>
                 {
                     b.Property<int>("Id")
@@ -4007,6 +4149,12 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int>("ProbeIntervalSeconds")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("ProbeRequestResultAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ProbeRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("ProbeTimeoutSeconds")
                         .HasColumnType("integer");
 
@@ -4029,6 +4177,18 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.Property<int?>("ServerId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("TelemetryExportDeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("TelemetryExportReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("TelemetryExportRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("TelemetrySetupRequested")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -4516,6 +4676,28 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int?>("EnvironmentId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ExternalImportCommit")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExternalImportPath")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("ExternalImportSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ExternalImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalImportedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("LastScheduledOccurrence")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4854,6 +5036,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("Uid")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("WaitingReason")
                         .HasColumnType("text");
 
@@ -4873,6 +5058,14 @@ namespace Aetheus.Back.Data.Migrations
                     b.HasIndex("StartedAt");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("Uid")
+                        .IsUnique()
+                        .HasFilter("\"Uid\" IS NOT NULL");
+
+                    b.HasIndex("PipelineId", "BuildNumber")
+                        .IsUnique()
+                        .HasFilter("\"BuildNumber\" > 0");
 
                     b.HasIndex("PipelineId", "IdempotencyKey")
                         .IsUnique()
@@ -5319,12 +5512,18 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<DateTime?>("DeletionRequestedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("DependencyUpdatesEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int?>("GitConnectionId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("MigrationGateEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -5377,6 +5576,134 @@ namespace Aetheus.Back.Data.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.ToTable("Projects");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectInventory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Coverage")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("GitInternalRepoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ItemCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("MatchedChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Ref")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("SourceFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GitInternalRepoId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("ReadAt");
+
+                    b.HasIndex("ProjectId", "Origin", "GitInternalRepoId")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("ProjectId", "Origin", "GitInternalRepoId"), false);
+
+                    b.ToTable("ProjectInventories");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectInventoryItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Ecosystem")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsDirect")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("PackageUrl")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectInventoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourcePath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("Ecosystem", "PackageName");
+
+                    b.HasIndex("ProjectInventoryId", "Ecosystem", "PackageName", "Version", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("ProjectInventoryItems");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectReleaseNumberAllocation", b =>
@@ -5908,6 +6235,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SupersededReleaseId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("TagName")
                         .HasColumnType("text");
 
@@ -5926,6 +6256,8 @@ namespace Aetheus.Back.Data.Migrations
                         .HasFilter("\"Status\" = 6");
 
                     b.HasIndex("PublishedAt");
+
+                    b.HasIndex("SupersededReleaseId");
 
                     b.HasIndex("ProjectId", "Version")
                         .IsUnique();
@@ -6409,6 +6741,12 @@ namespace Aetheus.Back.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("MachineJobsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MachineRebootJson")
+                        .HasColumnType("text");
+
                     b.Property<bool>("MailSetupAvailable")
                         .HasColumnType("boolean");
 
@@ -6474,6 +6812,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<string>("Tags")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("TaskCounter")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("TeamspeakSetupAvailable")
                         .HasColumnType("boolean");
@@ -6548,6 +6889,68 @@ namespace Aetheus.Back.Data.Migrations
                     b.HasIndex("ServerId");
 
                     b.ToTable("ServerApps");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerHostInventory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Ecosystem")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("MatchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OsId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("OsPrettyName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("OsVersion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("OsVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PackageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackagesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ReportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RunningKernelRelease")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("ServerId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServerId")
+                        .IsUnique();
+
+                    b.ToTable("ServerHostInventories");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerMetric", b =>
@@ -6767,6 +7170,72 @@ namespace Aetheus.Back.Data.Migrations
                     b.ToTable("ServerPortReservations");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerRebootSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Hour")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastHandledOccurrenceUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastOccurrenceUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LastOutcome")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastOutcomeAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("LastTaskId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Minute")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OutcomeDetail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("ServerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SkipReason")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServerId")
+                        .IsUnique();
+
+                    b.ToTable("ServerRebootSchedules");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerTask", b =>
                 {
                     b.Property<int>("Id")
@@ -6851,6 +7320,9 @@ namespace Aetheus.Back.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Operation")
                         .HasColumnType("integer");
 
@@ -6869,8 +7341,17 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StopAcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StopWaitExpiredAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("TimeoutSeconds")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("Uid")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -6878,11 +7359,21 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.HasIndex("PipelineStepRunId");
 
+                    b.HasIndex("Uid")
+                        .IsUnique()
+                        .HasFilter("\"Uid\" IS NOT NULL");
+
                     b.HasIndex("IsDeferredCleanup", "Status");
 
                     b.HasIndex("PipelineRunId", "IsDeferredCleanup")
                         .IsUnique()
                         .HasFilter("\"IsDeferredCleanup\" = TRUE AND \"PipelineRunId\" IS NOT NULL");
+
+                    b.HasIndex("ServerId", "CreatedAt");
+
+                    b.HasIndex("ServerId", "Number")
+                        .IsUnique()
+                        .HasFilter("\"Number\" > 0");
 
                     b.HasIndex("ServerId", "Status");
 
@@ -6928,6 +7419,63 @@ namespace Aetheus.Back.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ServerTokens");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerVulnerabilityFinding", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AdvisoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BinaryPackages")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("Ecosystem")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("FirstMatchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FixedVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("InstalledVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("NotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("ServerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdvisoryId");
+
+                    b.HasIndex("ServerId", "AdvisoryId", "PackageName", "InstalledVersion")
+                        .IsUnique();
+
+                    b.ToTable("ServerVulnerabilityFindings");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ServiceConnection", b =>
@@ -7015,6 +7563,48 @@ namespace Aetheus.Back.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ServiceInfos");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.SystemLogExclusionRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Pattern")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Pattern", "Category")
+                        .IsUnique();
+
+                    b.ToTable("SystemLogExclusionRules");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.TaskLog", b =>
@@ -7438,6 +8028,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<bool>("MustChangePassword")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("MustSetUpAccount")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
@@ -7540,6 +8133,34 @@ namespace Aetheus.Back.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("UserOrganizationRoles");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.UserPipelineNotificationPreference", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PipelineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EventType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "PipelineId", "EventType");
+
+                    b.HasIndex("PipelineId", "EventType");
+
+                    b.ToTable("UserPipelineNotificationPreferences");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.UserPreference", b =>
@@ -7838,6 +8459,470 @@ namespace Aetheus.Back.Data.Migrations
                     b.ToTable("VaultSecretVersions");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityAdvisory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.PrimitiveCollection<string[]>("Aliases")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("KevAddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("MatchedModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PrimaryCveId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("SeverityPublished")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Aliases");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Aliases"), "gin");
+
+                    b.HasIndex("ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("Id")
+                        .HasDatabaseName("IX_VulnerabilityAdvisories_MatchPending")
+                        .HasFilter("\"MatchedModifiedAt\" <> \"ModifiedAt\" OR \"MatchedModifiedAt\" IS NULL");
+
+                    b.HasIndex("PrimaryCveId");
+
+                    b.ToTable("VulnerabilityAdvisories");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityAffectedPackage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AdvisoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Ecosystem")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FixedVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("RangesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VersionsJson")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdvisoryId");
+
+                    b.HasIndex("Ecosystem")
+                        .HasDatabaseName("IX_VulnerabilityAffectedPackages_Ecosystem_Pattern");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("Ecosystem"), new[] { "AdvisoryId" });
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Ecosystem"), new[] { "varchar_pattern_ops" });
+
+                    b.HasIndex("Ecosystem", "PackageName");
+
+                    b.ToTable("VulnerabilityAffectedPackages");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityEndOfLifeCycle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Cycle")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateOnly?>("EndOfLifeOn")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("EndedWithoutDate")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsLts")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LatestVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Product")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateOnly?>("ReleasedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("SupportEndsOn")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Product", "Cycle")
+                        .IsUnique();
+
+                    b.ToTable("VulnerabilityEndOfLifeCycles");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityFeedPass", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int?>("Items")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Succeeded")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Trigger")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Source", "StartedAt");
+
+                    b.ToTable("VulnerabilityFeedPasses");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityFeedState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AppliedRecords")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("Cursor")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DumpETag")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("DumpEntries")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ETag")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("LastBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("LastDeltaRecords")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("LastDurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("LastErrorAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LoadCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LoadMaxModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LoadedEntries")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RefusedRecords")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RejectedPackages")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("StoredAdvisories")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Source")
+                        .IsUnique();
+
+                    b.ToTable("VulnerabilityFeedStates");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityKevEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CveId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CveId")
+                        .IsUnique();
+
+                    b.ToTable("VulnerabilityKevEntries");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityMatch", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AdvisoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AnalysisFindingId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Ecosystem")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("FirstMatchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FixedVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("NotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProjectInventoryItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnalysisFindingId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ProjectInventoryItemId");
+
+                    b.HasIndex("AdvisoryId", "ProjectInventoryItemId")
+                        .IsUnique();
+
+                    b.ToTable("VulnerabilityMatches");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityRemediation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BaseBranch")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Branch")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("FromVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("GitInternalRepoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LockFilesJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PipelineRunId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PullRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestedByUsername")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ResolvedVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetVersion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("VulnerabilityMatchId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GitInternalRepoId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("PipelineRunId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("PullRequestId");
+
+                    b.HasIndex(new[] { "VulnerabilityMatchId" }, "IX_VulnerabilityRemediations_ActivePerMatch")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN (0, 1, 2, 3)");
+
+                    b.HasIndex(new[] { "VulnerabilityMatchId" }, "IX_VulnerabilityRemediations_VulnerabilityMatchId");
+
+                    b.ToTable("VulnerabilityRemediations");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.WebhookSubscription", b =>
                 {
                     b.Property<int>("Id")
@@ -8043,6 +9128,17 @@ namespace Aetheus.Back.Data.Migrations
                     b.HasIndex("ReleasesId");
 
                     b.ToTable("ReleaseArtifacts", (string)null);
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.AgentPool", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.AgentPoolServer", b =>
@@ -8890,6 +9986,40 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.DependencyUpdate", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.GitInternalRepo", "GitInternalRepo")
+                        .WithMany()
+                        .HasForeignKey("GitInternalRepoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.VulnerabilityMatch", "VulnerabilityMatch")
+                        .WithMany()
+                        .HasForeignKey("VulnerabilityMatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("GitInternalRepo");
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("VulnerabilityMatch");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.DockerComposeStack", b =>
                 {
                     b.HasOne("Aetheus.Back.Data.Entities.Server", "Server")
@@ -9559,6 +10689,59 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("Organization");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectInventory", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.GitInternalRepo", "GitInternalRepo")
+                        .WithMany()
+                        .HasForeignKey("GitInternalRepoId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GitInternalRepo");
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectInventoryItem", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.ProjectInventory", "ProjectInventory")
+                        .WithMany("Items")
+                        .HasForeignKey("ProjectInventoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("ProjectInventory");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectReleaseNumberAllocation", b =>
                 {
                     b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
@@ -9712,6 +10895,11 @@ namespace Aetheus.Back.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Aetheus.Back.Data.Entities.Release", null)
+                        .WithMany()
+                        .HasForeignKey("SupersededReleaseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("CreatedByPipelineRun");
 
                     b.Navigation("PipelineRun");
@@ -9862,6 +11050,17 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("Server");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerHostInventory", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.Server", "Server")
+                        .WithMany()
+                        .HasForeignKey("ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Server");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerMetric", b =>
                 {
                     b.HasOne("Aetheus.Back.Data.Entities.Server", "Server")
@@ -9913,6 +11112,17 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("Server");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerRebootSchedule", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.Server", "Server")
+                        .WithOne("RebootSchedule")
+                        .HasForeignKey("Aetheus.Back.Data.Entities.ServerRebootSchedule", "ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Server");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerTask", b =>
                 {
                     b.HasOne("Aetheus.Back.Data.Entities.PipelineRun", "PipelineRun")
@@ -9949,6 +11159,25 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("Server");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ServerVulnerabilityFinding", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.VulnerabilityAdvisory", "Advisory")
+                        .WithMany()
+                        .HasForeignKey("AdvisoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Server", "Server")
+                        .WithMany()
+                        .HasForeignKey("ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Advisory");
+
+                    b.Navigation("Server");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ServiceConnection", b =>
                 {
                     b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
@@ -9968,6 +11197,17 @@ namespace Aetheus.Back.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Server");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.SystemLogExclusionRule", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.TaskLog", b =>
@@ -10110,6 +11350,25 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.UserPipelineNotificationPreference", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.Pipeline", "Pipeline")
+                        .WithMany()
+                        .HasForeignKey("PipelineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Pipeline");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.UserPreference", b =>
                 {
                     b.HasOne("Aetheus.Back.Data.Entities.User", "User")
@@ -10231,6 +11490,106 @@ namespace Aetheus.Back.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("VaultSecret");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityAffectedPackage", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.VulnerabilityAdvisory", "Advisory")
+                        .WithMany("AffectedPackages")
+                        .HasForeignKey("AdvisoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Advisory");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityMatch", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.VulnerabilityAdvisory", "Advisory")
+                        .WithMany()
+                        .HasForeignKey("AdvisoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.AnalysisFinding", "AnalysisFinding")
+                        .WithMany()
+                        .HasForeignKey("AnalysisFindingId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.ProjectInventoryItem", "ProjectInventoryItem")
+                        .WithMany()
+                        .HasForeignKey("ProjectInventoryItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Advisory");
+
+                    b.Navigation("AnalysisFinding");
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("ProjectInventoryItem");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityRemediation", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.GitInternalRepo", "GitInternalRepo")
+                        .WithMany()
+                        .HasForeignKey("GitInternalRepoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.PipelineRun", "PipelineRun")
+                        .WithMany()
+                        .HasForeignKey("PipelineRunId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Aetheus.Back.Data.Entities.PullRequest", "PullRequest")
+                        .WithMany()
+                        .HasForeignKey("PullRequestId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Aetheus.Back.Data.Entities.VulnerabilityMatch", "VulnerabilityMatch")
+                        .WithMany()
+                        .HasForeignKey("VulnerabilityMatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GitInternalRepo");
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("PipelineRun");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("PullRequest");
+
+                    b.Navigation("VulnerabilityMatch");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.WorkItem", b =>
@@ -10498,6 +11857,11 @@ namespace Aetheus.Back.Data.Migrations
                     b.Navigation("ProjectServers");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectInventory", b =>
+                {
+                    b.Navigation("Items");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.ProjectServer", b =>
                 {
                     b.Navigation("Libraries");
@@ -10583,6 +11947,8 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.Navigation("ProjectServers");
 
+                    b.Navigation("RebootSchedule");
+
                     b.Navigation("RkhunterScanResults");
 
                     b.Navigation("RkhunterState");
@@ -10645,6 +12011,11 @@ namespace Aetheus.Back.Data.Migrations
             modelBuilder.Entity("Aetheus.Back.Data.Entities.VaultSecret", b =>
                 {
                     b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.VulnerabilityAdvisory", b =>
+                {
+                    b.Navigation("AffectedPackages");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.WorkItem", b =>

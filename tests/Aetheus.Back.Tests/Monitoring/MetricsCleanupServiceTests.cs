@@ -17,7 +17,7 @@ public class MetricsCleanupServiceTests
         var sp = new ServiceCollection().AddScoped(_ => repo).BuildServiceProvider();
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var logger = Substitute.For<ILogger<MetricsCleanupService>>();
-        return (new MetricsCleanupService(scopeFactory, config, logger, clock), repo);
+        return (new MetricsCleanupService(scopeFactory, config, logger, clock, leaderLease: LeaderLeaseDouble.Leader()), repo);
     }
 
     [Fact]

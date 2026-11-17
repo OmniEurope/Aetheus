@@ -1,0 +1,6 @@
+<Project>
+  <!-- Standalone: no central package management of an enclosing repository. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

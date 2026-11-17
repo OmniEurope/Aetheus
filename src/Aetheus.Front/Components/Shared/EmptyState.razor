@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-<OmniStack Align="OmniAlignment.Center" Justify="OmniJustification.Center" Gap="OmniSpacing.Medium" Class="empty-state">
+<OmniStack Align="OmniAlignment.Center" Justify="OmniJustification.Center" Gap="OmniSpacing.Medium" Class="empty-state" @attributes="AdditionalAttributes">
     @if (!string.IsNullOrWhiteSpace(Icon))
     {
         <OmniIcon Name="@MaterialIconMap.Resolve(Icon)" Class="empty-state-icon" />

@@ -48,7 +48,7 @@ public class ServerPortObservationController(
         return Ok(await tasks.CreateOperationAsync(new CreateOperationRequest
         {
             ServerId = serverId,
-            Name = "Observe listening ports",
+            Name = ServerTaskNames.PortObservation,
             Operation = OperationKind.PortsObserve,
             Target = string.Empty,
             TimeoutSeconds = 60
@@ -79,7 +79,7 @@ public class ServerPortObservationController(
         // The agent's own clock is not trusted for the stamp the UI shows as "last scan": a host with a
         // skewed clock would otherwise report a scan in the future or in the past.
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
-        await registry.ReplaceObservedAsync(serverId, report.Ports, observedAt, ct);
+        await registry.ReplaceObservedAsync(serverId, report.Ports, observedAt, ct, report.Protocols);
         logger.LogDebug(
             "Server {ServerId} reported {Count} listening ports.", serverId, report.Ports.Count);
         return NoContent();

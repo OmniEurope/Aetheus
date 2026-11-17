@@ -14,6 +14,9 @@ public interface IPipelineRunLineageReader
     /// <summary>When the run started and, once it has, ended; null for an unknown run.</summary>
     Task<PipelineRunWindow?> GetRunWindowAsync(int runId, CancellationToken ct = default);
 
+    /// <summary>R-8: the number of the run that started this one, null when no run did.</summary>
+    Task<int?> GetUpstreamBuildNumberAsync(int runId, CancellationToken ct = default);
+
     /// <summary>Follow-up runs started by <paramref name="runId"/> through a success chain, within
     /// the requested interval and ordered oldest first.</summary>
     Task<List<PipelineRunLinkDto>> GetDownstreamRunsAsync(

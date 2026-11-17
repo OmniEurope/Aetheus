@@ -1,0 +1,76 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inherits EntityLiveListBase
+@page "/pipelines/schedule"
+
+<PageTitle>@L["PipelineSchedule"] - Aetheus</PageTitle>
+
+@* PLAN-005 lot 3, recette R-21: the organization's scheduled pipelines on one page, to see at a glance what runs
+   when and what runs at the same time. Tiles, the night and week calendar (lot 4, a drop writes once) and the
+   cards. One visible action, the rest in the menus; a write is held under the application's one veil. *@
+<OmniPageHeader Title="@L["PipelineSchedule"]" Subtitle="@L["PipelineScheduleSubtitle"]">
+    <Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))" Disabled="@(!CanSchedule)"
+                    title="@(CanSchedule ? null : L["SchedulePermissionDenied"].Value)" data-testid="schedule-main-action"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["SchedulePipeline"]</span></ChildContent></OmniButton>
+    </ActionsContent>
+    <MenuContent>
+        <OmniMenuItem OnClick="@ReloadAsync" data-testid="schedule-menu-refresh"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Refresh"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Href="pipelines" data-testid="schedule-menu-pipelines"><Icon><OmniIcon Name="OmniIconName.Graph" /></Icon><ChildContent>@L["ScheduleOpenPipelines"]</ChildContent></OmniMenuItem>
+    </MenuContent>
+</OmniPageHeader>
+
+<OmniStack Gap="OmniSpacing.Large">
+    @if (_failure is { } failure)
+    {
+        <PipelineScheduleRefusal Status="@failure.Status" Message="@failure.Message" OnReload="@ReloadAsync" />
+    }
+
+    @if (Organizations.Active is null)
+    {
+        @* R-34: no dead end, the organization is chosen right here. *@
+        <OrganizationRequiredPrompt Message="@L["ScheduleNoOrganization"]" />
+    }
+    else if (_plan is not null && _summary is not null)
+    {
+        <OmniTileGrid Columns="4">
+            <OmniStatTile Value="@_summary.EnabledCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["ScheduleTileTasks"]" Detail="@TasksDetail" data-testid="schedule-tile-tasks">
+                <Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon>
+            </OmniStatTile>
+            <OmniStatTile Value="@_summary.TonightRuns.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["ScheduleTileTonight"]" Detail="@TonightDetail" data-testid="schedule-tile-tonight">
+                <Icon><OmniIcon Name="OmniIconName.Layers" /></Icon>
+            </OmniStatTile>
+            <OmniStatTile Value="@_summary.Overlaps.Count.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["ScheduleTileOverlaps"]" Detail="@OverlapsDetail"
+                          OnClick="@ToggleOverlapFilter" data-testid="schedule-tile-overlaps">
+                <Icon><OmniIcon Name="@(_summary.Overlaps.Count > 0 ? OmniIconName.Warning : OmniIconName.CheckCircle)" /></Icon>
+            </OmniStatTile>
+            <OmniStatTile Value="@NextValue" Title="@L["ScheduleTileNext"]" Detail="@NextDetail" data-testid="schedule-tile-next">
+                <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
+            </OmniStatTile>
+        </OmniTileGrid>
+
+        <PipelineScheduleFilters Plan="@_plan" Kind="@Kind" Server="@ServerFilter" />
+
+        <PipelineSchedulePlanView Plan="@ViewPlan" Zone="@Zone" NowUtc="@NowUtc" CanWrite="@CanWrite" LoadRange="@LoadRangeAsync" OnMove="@WriteMoveAsync" OnServerActionMove="@WriteServerActionMoveAsync" />
+
+        <OmniHeading Level="OmniHeadingLevel.H2" Help="@TimeHelp">@L["ScheduleTasks"]</OmniHeading>
+
+        @if (VisibleTasks.Count == 0 && VisibleServerActions.Count == 0)
+        {
+            <EmptyState Icon="event" Title="@L[EmptyTitleKey]" Description="@L[EmptyDescriptionKey]" />
+        }
+        else
+        {
+            <OmniTileGrid Columns="3" MinColumnWidth="19rem" EqualHeights="false">
+                @foreach (var item in VisibleTasks)
+                {
+                    <PipelineScheduleTaskCard @key="item.PipelineId" Item="@item" Summary="@_summary" Zone="@Zone" NowUtc="@NowUtc" WindowDays="@WindowDays"
+                                              CanWrite="@CanWrite(item)" OnEdit="@OpenEditAsync" OnToggle="@ToggleAsync" OnSourceBranchChosen="@ChooseSourceBranchAsync" />
+                }
+                @foreach (var action in VisibleServerActions)
+                {
+                    <ServerActionScheduleCard @key="action.Id" Item="@action" Summary="@_summary" Zone="@Zone" NowUtc="@NowUtc" WindowDays="@WindowDays" />
+                }
+            </OmniTileGrid>
+        }
+    }
+</OmniStack>

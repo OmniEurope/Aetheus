@@ -4,7 +4,6 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineFleetPagingIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

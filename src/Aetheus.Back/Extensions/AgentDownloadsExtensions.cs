@@ -16,8 +16,40 @@ namespace Aetheus.Back.Extensions;
 /// </summary>
 internal static class AgentDownloadsExtensions
 {
-    internal sealed record PreparedArchive(string Path, string Sha256);
-    private static readonly ConcurrentDictionary<string, Lazy<Task<PreparedArchive>>> PreparedLinuxArchives = new();
+    /// <summary>A re-packed Linux archive. <paramref name="IsTransient"/>: built for one response only
+    /// (the cache was full), the caller deletes it once served.</summary>
+    internal sealed record PreparedArchive(string Path, string Sha256, bool IsTransient = false);
+
+    /// <summary>The prepared archives kept between requests, at most <paramref name="capacity"/>. Its key
+    /// carries the server URL, which in Development comes from the request Host header: bounded, so a
+    /// client varying that header cannot grow the dictionary, or the temp files behind it, without
+    /// limit (M5). A request past the bound gets a transient archive instead.</summary>
+    internal sealed class PreparedArchiveCache(int capacity)
+    {
+        private readonly ConcurrentDictionary<string, Lazy<Task<PreparedArchive>>> _entries = new();
+        private readonly Lock _gate = new();
+
+        internal int Count => _entries.Count;
+
+        /// <summary>The entry of <paramref name="key"/>, created by <paramref name="create"/> while the
+        /// cache has room; null when it is full and holds no such key.</summary>
+        internal Lazy<Task<PreparedArchive>>? GetOrAddWithinCapacity(string key, Func<Lazy<Task<PreparedArchive>>> create)
+        {
+            lock (_gate)
+            {
+                if (_entries.TryGetValue(key, out var existing)) return existing;
+                if (_entries.Count >= capacity) return null;
+                var created = create();
+                _entries[key] = created;
+                return created;
+            }
+        }
+
+        internal void Remove(string key) => _entries.TryRemove(key, out _);
+    }
+
+    internal const int MaxPreparedLinuxArchives = 8;
+    private static readonly PreparedArchiveCache PreparedLinuxArchives = new(MaxPreparedLinuxArchives);
     private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> FileHashes = new();
 
     public static WebApplication MapAgentDownloads(this WebApplication app)
@@ -97,12 +129,21 @@ internal static class AgentDownloadsExtensions
             if (prebuiltArchive is not null)
             {
                 var prepared = await GetPreparedLinuxArchiveAsync(prebuiltArchive, serverUrl, installScript, hostConfig);
-                httpContext.Response.Headers["X-Content-SHA256"] = prepared.Sha256;
-                await using var preparedStream = new FileStream(
-                    prepared.Path, FileMode.Open, FileAccess.Read, FileShare.Read,
-                    bufferSize: 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                httpContext.Response.ContentLength = preparedStream.Length;
-                await preparedStream.CopyToAsync(httpContext.Response.Body, httpContext.RequestAborted);
+                try
+                {
+                    httpContext.Response.Headers["X-Content-SHA256"] = prepared.Sha256;
+                    await using var preparedStream = new FileStream(
+                        prepared.Path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                        bufferSize: 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    httpContext.Response.ContentLength = preparedStream.Length;
+                    await preparedStream.CopyToAsync(httpContext.Response.Body, httpContext.RequestAborted);
+                }
+                finally
+                {
+                    // A transient archive (cache full) belongs to this response alone.
+                    if (prepared.IsTransient && File.Exists(prepared.Path))
+                        File.Delete(prepared.Path);
+                }
                 return;
             }
 
@@ -168,8 +209,12 @@ internal static class AgentDownloadsExtensions
         return app;
     }
 
-    internal static async Task<PreparedArchive> GetPreparedLinuxArchiveAsync(
+    internal static Task<PreparedArchive> GetPreparedLinuxArchiveAsync(
         string prebuiltArchive, string serverUrl, string? freshInstallScript, string? freshHostConfig)
+        => GetPreparedLinuxArchiveAsync(PreparedLinuxArchives, prebuiltArchive, serverUrl, freshInstallScript, freshHostConfig);
+
+    internal static async Task<PreparedArchive> GetPreparedLinuxArchiveAsync(
+        PreparedArchiveCache cache, string prebuiltArchive, string serverUrl, string? freshInstallScript, string? freshHostConfig)
     {
         var archive = new FileInfo(prebuiltArchive);
         var scriptStamp = freshInstallScript is not null && File.Exists(freshInstallScript)
@@ -182,29 +227,35 @@ internal static class AgentDownloadsExtensions
                 .Select(file => $"{file}:{File.GetLastWriteTimeUtc(file).Ticks}"))
             : string.Empty;
         var key = string.Join('|', archive.FullName, archive.Length, archive.LastWriteTimeUtc.Ticks, scriptStamp, hostConfigStamp, serverUrl);
-        var lazy = PreparedLinuxArchives.GetOrAdd(
+        var lazy = cache.GetOrAddWithinCapacity(
             key,
-            _ => new Lazy<Task<PreparedArchive>>(
-                async () =>
-                {
-                    var path = await BuildPrebuiltLinuxArchiveWithMarkerAsync(
-                        prebuiltArchive, serverUrl, freshInstallScript, freshHostConfig).ConfigureAwait(false);
-                    return new PreparedArchive(path, await ComputeFileSha256Async(path).ConfigureAwait(false));
-                },
+            () => new Lazy<Task<PreparedArchive>>(
+                () => BuildPreparedLinuxArchiveAsync(prebuiltArchive, serverUrl, freshInstallScript, freshHostConfig, isTransient: false),
                 LazyThreadSafetyMode.ExecutionAndPublication));
+        if (lazy is null)
+            return await BuildPreparedLinuxArchiveAsync(
+                prebuiltArchive, serverUrl, freshInstallScript, freshHostConfig, isTransient: true).ConfigureAwait(false);
         try
         {
             var prepared = await lazy.Value.ConfigureAwait(false);
             if (File.Exists(prepared.Path)) return prepared;
 
-            PreparedLinuxArchives.TryRemove(key, out _);
+            cache.Remove(key);
             throw new IOException("Prepared Linux agent archive disappeared before it could be served.");
         }
         catch
         {
-            PreparedLinuxArchives.TryRemove(key, out _);
+            cache.Remove(key);
             throw;
         }
+    }
+
+    private static async Task<PreparedArchive> BuildPreparedLinuxArchiveAsync(
+        string prebuiltArchive, string serverUrl, string? freshInstallScript, string? freshHostConfig, bool isTransient)
+    {
+        var path = await BuildPrebuiltLinuxArchiveWithMarkerAsync(
+            prebuiltArchive, serverUrl, freshInstallScript, freshHostConfig).ConfigureAwait(false);
+        return new PreparedArchive(path, await ComputeFileSha256Async(path).ConfigureAwait(false), isTransient);
     }
 
     private static readonly Lock _packageLock = new();
@@ -245,7 +296,7 @@ internal static class AgentDownloadsExtensions
             var existingWinZip = Directory.GetFiles(downloadsPath, "aetheus-agent-win-x64*.zip").FirstOrDefault();
             if (existingWinZip == null || refreshDevelopmentPackages)
             {
-                var windowsBuildPath = Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Windows", "bin", "Debug", "net10.0-windows");
+                var windowsBuildPath = Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Windows", "bin", "Debug", "net11.0-windows");
                 var windowsInstallScriptPath = Path.Combine(scriptsPath, "install-agent-windows.ps1");
 
                 if (Directory.Exists(windowsBuildPath) && File.Exists(windowsInstallScriptPath))
@@ -290,10 +341,10 @@ internal static class AgentDownloadsExtensions
     {
         var solutionRootPath = Path.GetFullPath(Path.Combine(backContentRootPath, "..", ".."));
         // Prefer cross-compiled linux-x64 publish output (produced by ylaunch -ra).
-        var linuxPublishPath = Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0", "linux-x64", "publish");
+        var linuxPublishPath = Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net11.0", "linux-x64", "publish");
         var linuxBuildPath = Directory.Exists(linuxPublishPath)
             ? linuxPublishPath
-            : Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0");
+            : Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net11.0");
         var linuxInstallScriptPath = Path.Combine(solutionRootPath, "deploy", "agent-installer", "install-agent-linux.sh");
         var hostConfigPath = HostConfigSourcePath(solutionRootPath);
 
@@ -388,8 +439,8 @@ internal static class AgentDownloadsExtensions
     internal static void WarnIfLinuxAgentPublishStale(WebApplication app)
     {
         var solutionRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", ".."));
-        var publishDll = Path.Combine(solutionRoot, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0", "linux-x64", "publish", "Aetheus.Agent.Core.dll");
-        var buildDll = Path.Combine(solutionRoot, "src", "Aetheus.Agent.Core", "bin", "Debug", "net10.0", "Aetheus.Agent.Core.dll");
+        var publishDll = Path.Combine(solutionRoot, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net11.0", "linux-x64", "publish", "Aetheus.Agent.Core.dll");
+        var buildDll = Path.Combine(solutionRoot, "src", "Aetheus.Agent.Core", "bin", "Debug", "net11.0", "Aetheus.Agent.Core.dll");
         if (!File.Exists(publishDll) || !File.Exists(buildDll)) return;
 
         var publishTime = File.GetLastWriteTimeUtc(publishDll);

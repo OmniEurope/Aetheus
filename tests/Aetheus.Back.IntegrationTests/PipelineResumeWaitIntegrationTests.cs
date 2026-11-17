@@ -11,7 +11,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>Recette R-39: the wait for a resume on PostgreSQL, through the migration that adds
 /// <c>ResumeDeadline</c>. The conditional updates are the concurrency checks: two resumes, or a resume
 /// racing the expiry, move the run once.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineResumeWaitIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

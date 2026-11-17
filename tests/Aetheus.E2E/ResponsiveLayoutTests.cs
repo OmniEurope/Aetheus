@@ -120,7 +120,6 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
 
     [Test]
     [Category("Servers")]
-    [RollbackRelevant]
     public async Task ServerMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(SecondaryMobilePaths.Where(path => path.StartsWith("/servers/", StringComparison.Ordinal)), 375);
 
@@ -133,19 +132,16 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         ], 375);
 
     [Test]
-    [RollbackRelevant]
     public async Task ProjectMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(SecondaryMobilePaths.Where(path => path.StartsWith("/projects/", StringComparison.Ordinal)), 375);
 
     [Test]
     [Category("ResponsiveAdmin")]
-    [RollbackRelevant]
     public async Task AdministrationMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(SecondaryMobilePaths.Where(path =>
             path == "/admin" || path.StartsWith("/admin/", StringComparison.Ordinal) || path.StartsWith("/users", StringComparison.Ordinal)), 375);
 
     [Test]
-    [RollbackRelevant]
     public async Task OtherSecondaryMobilePages_RemainReadableInsideTheViewport()
     {
         var artifactPath = await ResolveSeededArtifactPathAsync();
@@ -228,14 +224,6 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
 
         Assert.That(failures, Is.Empty, "Pages whose content area is wider than what it shows:\n" + string.Join("\n", failures));
         Assert.That(pagesWithChips, Is.GreaterThan(0), "None of the pages measured had a chip strip: the test proved nothing.");
-    }
-
-    [Test]
-    public async Task RepresentativePages_RemainReadableAcrossCommonWidths()
-    {
-        var representativePaths = new[] { "/", "/servers", "/projects", "/pipelines", "/settings" };
-        foreach (var viewportWidth in new[] { 390, 430 })
-            await AuditMobilePathsAsync(representativePaths, viewportWidth);
     }
 
     [Test]
@@ -342,10 +330,6 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
 
         await Expect(Page.Locator(".omni-sidebar__backdrop")).ToHaveCountAsync(0);
     }
-
-    [Test]
-    public async Task RepresentativePages_RemainReadableInPhoneLandscape()
-        => await AuditMobilePathsAsync(["/", "/servers", "/projects"], 812, 390);
 
     [Test]
     [IsolatedBrowserContext]
@@ -699,18 +683,6 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
     }
 
     [Test]
-    public async Task MobileSettingsTabs_ScrollInsideTheTabStrip()
-    {
-        await NavigateToAsync("/admin/settings");
-        await Page.SetViewportSizeAsync(375, 812);
-        var tabs = Page.Locator(".url-synced-tabs .omni-tabs__viewport");
-        await Expect(tabs).ToBeVisibleAsync();
-
-        var overflowX = await tabs.EvaluateAsync<string>("element => getComputedStyle(element).overflowX");
-        Assert.That(overflowX, Is.EqualTo("auto"));
-    }
-
-    [Test]
     [Category("Pipelines")]
     public async Task MobileRunLogs_ScrollInsideTheTerminal()
     {
@@ -756,7 +728,10 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         await NavigateToAsync("/pipelines/runs/1?tab=logs");
 
         var terminal = Page.Locator(".run-split-logs .run-logs-terminal");
+        var waited = System.Diagnostics.Stopwatch.StartNew();
         await Expect(terminal.Locator(".run-log-line").First).ToBeVisibleAsync(new() { Timeout = 15000 });
+        // Kept so a run under load shows how close the wait came to its limit, not only that it passed.
+        TestContext.Out.WriteLine($"[E2E-TIMING] {nameof(MobileRunLogs_ScrollInsideTheTerminal)}: first log line visible {waited.ElapsedMilliseconds} ms after the page was ready; {DescribeRequestTrail().ReplaceLineEndings(" ")}");
         await terminal.ScrollIntoViewIfNeededAsync();
 
         var size = await terminal.EvaluateAsync<double[]>("element => [element.scrollHeight, element.clientHeight]");

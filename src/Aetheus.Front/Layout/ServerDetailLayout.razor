@@ -87,7 +87,7 @@
                             <OmniColumn Span="12" MediumSpan="6">
                                 <OmniStack Gap="OmniSpacing.XSmall">
                                     <OmniLabel For="server-edit-name">@L["Name"]</OmniLabel>
-                                    <OmniTextBox Id="server-edit-name" @bind-Value="_editName" maxlength="100" />
+                                    <OmniTextBox Id="server-edit-name" @bind-Value="_editName" Autocomplete="organization" maxlength="100" />
                                 </OmniStack>
                             </OmniColumn>
                             <OmniColumn Span="6" MediumSpan="3">
@@ -114,9 +114,9 @@
                     Request="@Loader.Server.AgentUpdateRequest"
                     OnRetry="@UpdateAgentAsync" OnStale="@ReloadAgentUpdateAsync" />
             }
-            @* R-119: while a task launched from the section runs, OE's busy veil lies over the section body; its content
-               stays mounted underneath (the task follower stays readable, see .server-task-follower in app.css). *@
-            <div class="@(Loader.TaskPending ? "blade-content omni-busy" : "blade-content")" aria-busy="@(Loader.TaskPending ? "true" : "false")" data-testid="server-section-body">
+            @* R-119, R-37: while a blocking task runs (ServerBlockingTasks: system upgrade, reboot) the page veil is held; the section body stays mounted. *@
+            <VeilHold Busy="@Loader.TaskPending" />
+            <div class="blade-content" data-testid="server-section-body">
                 @Body
             </div>
             </OmniStack>

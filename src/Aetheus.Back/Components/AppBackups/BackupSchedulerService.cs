@@ -16,7 +16,7 @@ public sealed class BackupSchedulerService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<BackupSchedulerService> logger,
-    IPostgresLeaderLease? leaderLease = null)
+    IPostgresLeaderLease leaderLease)
     : PeriodicBackgroundService(
         BackendRuntimeDefaults.SchedulerCheckInterval, leaderLease, "aetheus:backup-scheduler", timeProvider)
 {

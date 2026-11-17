@@ -1,18 +1,4 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@inherits ServerTaskAwareSectionBase
 @page "/servers/{Id:int}/updates"
-@layout Aetheus.Front.Layout.ServerDetailLayout
-@implements IDisposable
-@inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
-
-<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["PatchTitle"] - Aetheus</PageTitle>
-
-@if (Loader?.Server is not null)
-{
-    <Aetheus.Front.Components.Servers.ServerDetailSections.ServerPatchSection
-        @ref="_section"
-        ServerId="@Id"
-        Server="@Loader.Server"
-        PatchManagementAvailable="@Loader.Server.PatchManagementAvailable"
-        OnRefreshRequested="StateHasChanged" />
-}
+@inject Microsoft.AspNetCore.Components.NavigationManager Nav
+@* R-23: packages and updates is a tab of the application management page; the old URL, bookmarks and links keep working through this redirect. *@

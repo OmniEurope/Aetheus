@@ -10,7 +10,7 @@ public sealed class AlertOccurrenceRetentionService(
     IServiceScopeFactory scopeFactory,
     ILogger<AlertOccurrenceRetentionService> logger,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, LeaseName)
 {
     /// <summary>Alert occurrences are kept 365 days, measured on <c>TriggeredAt</c> (decision of
     /// 2026-10-23). A notification mail whose alert was purged opens the existing "alert not found"
@@ -19,12 +19,7 @@ public sealed class AlertOccurrenceRetentionService(
 
     internal const string LeaseName = "aetheus:alert-occurrence-retention";
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync(LeaseName, RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(BackendRuntimeDefaults.MaintenanceInterval);
         do

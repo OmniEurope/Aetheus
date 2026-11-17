@@ -12,9 +12,4 @@ public partial class Docker
         _section?.HandleTaskCompleted(notification);
         return Task.CompletedTask;
     }
-
-    // ServerChanged on the section asks the parent to merge a fresh Server snapshot. The
-    // loader is the single source of truth - heartbeats already refresh through Loader.OnChanged.
-    private void OnServerChanged(Aetheus.Shared.Components.Servers.ServerDetailDto _) => StateHasChanged();
-
 }

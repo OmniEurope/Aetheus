@@ -59,14 +59,15 @@ public sealed class DailyRecapSchedulerServiceTests : IDisposable
         var repo = new DailyRecapRepository(Context());
         var compatibility = Substitute.For<IAgentCompatibilityPolicy>();
         compatibility.Evaluate(Arg.Any<ServerDto>()).Returns(new AgentCompatibilityDto());
-        return new DailyRecapService(repo, new DailyRecapCollector(repo, compatibility, new ConfigurationBuilder().Build()), _sender, NotificationMailKit.Templates(),
+        return new DailyRecapService(repo, new DailyRecapCollector(repo, compatibility, new ConfigurationBuilder().Build()),
+            new DailyRecapRecipientScope(repo, Substitute.For<IResourceAuthorizationService>()), _sender, NotificationMailKit.Templates(),
             Substitute.For<IAuditService>(), _clock,
             new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Cors:Origins:0"] = "https://app.example.org" }).Build(),
             NullLogger<DailyRecapService>.Instance);
     }
 
     private DailyRecapSchedulerService Sut(Func<DailyRecapService> service, IPostgresLeaderLease? lease = null) =>
-        new(BackgroundServiceTestKit.ScopeFactoryOf(typeof(DailyRecapService), () => service()), _logger, _clock, lease);
+        new(BackgroundServiceTestKit.ScopeFactoryOf(typeof(DailyRecapService), () => service()), _logger, _clock, lease ?? LeaderLeaseDouble.Leader());
 
     private void ReachSendTime() => _clock.SetUtcNow(SendTime);
 

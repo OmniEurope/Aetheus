@@ -61,7 +61,8 @@ public sealed class PipelineRunLauncherTests : BunitContext
         await launcher.LaunchAsync(5, sourceBranch: null);
 
         var details = Services.Toasts().Select(message => message.Detail).ToList();
-        Assert.Equal(["PipelineLaunching", "PipelineTriggered"], details);
+        // The "launching" notice is withdrawn when the launch answers; the confirmation names the run.
+        Assert.Equal(["PipelineTriggered"], details);
     }
 
     [Fact]
@@ -168,10 +169,10 @@ public sealed class PipelineRunLauncherTests : BunitContext
         var result = await launcher.LaunchAsync(5, sourceBranch: null);
 
         Assert.Null(result);
-        // The click is acknowledged (R-35), then exactly one danger notification carries the reason.
+        // The click is acknowledged (R-35) and that notice is withdrawn on the refusal: exactly one danger
+        // notification carries the reason.
         var toasts = Services.Toasts().ToList();
-        Assert.Equal(2, toasts.Count);
-        Assert.Contains(toasts, message => message.Severity == OmniSeverity.Info);
+        Assert.Single(toasts);
         var notification = Assert.Single(toasts, message => message.Severity == OmniSeverity.Danger);
         Assert.Contains("The pipeline YAML is invalid: While scanning", notification.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain(handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("/run", StringComparison.Ordinal));

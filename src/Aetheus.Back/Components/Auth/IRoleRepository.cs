@@ -56,8 +56,9 @@ public interface IRoleRepository
     Task<List<RoleUserDto>> GetUsersInRoleAsync(int roleId, CancellationToken ct = default);
     Task<(List<RoleUserDto> Items, int Total)> GetUsersInRolePagedAsync(
         int roleId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
-        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null);
+        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null,
+        bool siteAdminView = true);
     Task<(List<RoleUserDto> Items, int Total)> GetUsersAvailableForRolePagedAsync(
         int roleId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
-        CancellationToken ct = default, IReadOnlyList<int>? organizationIds = null);
+        CancellationToken ct = default, IReadOnlyList<int>? organizationIds = null, bool siteAdminView = true);
 }

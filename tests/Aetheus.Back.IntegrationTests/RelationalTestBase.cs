@@ -15,7 +15,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// indexes, foreign keys, filtered indexes, or real transaction isolation.
 /// </para>
 /// </summary>
-public abstract class RelationalTestBase(PostgresFixture fixture)
+public abstract class RelationalTestBase(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     protected string ConnectionString => fixture.ConnectionString;
 

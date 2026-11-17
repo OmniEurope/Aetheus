@@ -7,6 +7,15 @@ public interface IPackageRegistryRepository
 {
     Task<RegistryPackage?> GetPackageAsync(PackageRegistryKind kind, string normalizedName, CancellationToken ct = default);
 
+    /// <summary>Whether pipeline run <paramref name="runId"/> is still <c>Running</c>, belongs to a pipeline of
+    /// project <paramref name="projectId"/>, and that pipeline's owner is an active user holding the Admin role:
+    /// the second gate on a run's registry credential (<see cref="PackageRunTokens"/>), in one query.</summary>
+    Task<bool> IsRunAuthorizedAsync(int runId, int projectId, CancellationToken ct = default);
+
+    /// <summary>Why a run of <paramref name="projectId"/> may or may not receive a registry credential: the state
+    /// of its pipeline owner (<see cref="PackageRunOwnerState"/>).</summary>
+    Task<PackageRunOwnerState> GetRunOwnerStateAsync(int runId, int projectId, CancellationToken ct = default);
+
     /// <summary>True only when the package exists and an administrator opened it to anonymous reading
     /// (R-58); an unknown package reads false, so an anonymous caller cannot tell it from a private one.</summary>
     Task<bool> IsAnonymousDownloadAllowedAsync(
@@ -27,6 +36,10 @@ public interface IPackageRegistryRepository
     Task<RegistryPackage?> GetPackageWithFilesAsync(
         PackageRegistryKind kind, string normalizedName, bool forUpdate, CancellationToken ct = default);
     Task<RegistryPackage?> GetPackageByIdAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Marks a tracked package as changed, so the next save stamps its <c>UpdatedAt</c>: a
+    /// publication only adds a version row, which alone leaves the package row untouched.</summary>
+    void MarkPublished(RegistryPackage package);
     Task<RegistryPackage?> GetPackageByIdForUpdateAsync(int id, CancellationToken ct = default);
     Task<(List<PackageRegistrySearchPackage> Items, int Total)> SearchAsync(
         PackageRegistryKind kind, string? search, int skip, int take, bool includePrerelease, CancellationToken ct = default);

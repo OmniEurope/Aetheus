@@ -48,6 +48,18 @@ public static class QueryableSortExtensions
         return property is null ? defaultOrder(query) : query.OrderByResolved(property, descending);
     }
 
+    /// <summary>Appends <paramref name="key"/> as the last sort key of an ordered query. A page cut from an
+    /// order with ties (a status, a version) is not stable: the same row can close one page and open the next,
+    /// or never appear. The row's unique key as the last key makes the order total; an ordering already
+    /// present with that key is not repeated by the provider.</summary>
+    public static IOrderedQueryable<T> ThenByKey<T, TKey>(
+        this IQueryable<T> ordered, Expression<Func<T, TKey>> key, bool descending = false)
+    {
+        if (ordered is not IOrderedQueryable<T> sorted)
+            throw new InvalidOperationException("The query has no ordering to complete.");
+        return descending ? sorted.ThenByDescending(key) : sorted.ThenBy(key);
+    }
+
     private static IQueryable<T> OrderByResolved<T>(this IQueryable<T> query, PropertyInfo property, bool descending)
     {
         var parameter = Expression.Parameter(typeof(T), "row");

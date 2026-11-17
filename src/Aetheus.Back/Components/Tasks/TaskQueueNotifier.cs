@@ -7,6 +7,7 @@ namespace Aetheus.Back.Components.Tasks;
 
 public sealed class TaskQueueNotifier(
     IHubContext<ServerHub> serverHub,
+    IEncryptionService encryption,
     ILogger<TaskQueueNotifier> logger) : ITaskQueueNotifier
 {
     public async Task NotifyTaskQueuedAsync(
@@ -14,7 +15,8 @@ public sealed class TaskQueueNotifier(
         string? serverNameOverride = null,
         CancellationToken ct = default)
     {
-        var dto = TaskDtoMapper.ToMaskedDto(task);
+        // R-12: an AI run says which definition it belongs to, so the AI task list finds its row after a rename.
+        var dto = TaskDtoMapper.ToMaskedDto(task, AiRunDefinitionLink.Read(encryption, task));
         if (!string.IsNullOrEmpty(serverNameOverride) && string.IsNullOrEmpty(dto.ServerName))
             dto = dto with { ServerName = serverNameOverride };
 

@@ -109,6 +109,7 @@ public sealed class DotnetFormatSarifTests
     [InlineData("M\tDirectory.Build.props")] // the script missed these two (see AffectedFormatScope)
     [InlineData("M\tsrc/Directory.Build.targets")]
     [InlineData("M\tDirectory.Packages.props")]
+    [InlineData("M\tglobal.json")]
     [InlineData("M\tApp.slnx")]
     [InlineData("M\tApp.sln")]
     [InlineData("M\tsrc/App/App.csproj")]

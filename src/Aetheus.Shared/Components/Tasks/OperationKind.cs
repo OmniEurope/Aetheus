@@ -110,8 +110,8 @@ public enum OperationKind
 
     /// <summary>
     /// ADR-024 4.1: apply pending OS security/package updates via the controlled-sudo recipe. Runs in
-    /// two modes carried in <c>AETHEUS_PATCH_DRY_RUN</c>: a non-mutating dry-run (<c>apt-get -s upgrade</c>,
-    /// no sudo, lists what would change) and an apply (<c>sudo -n /usr/bin/apt-get -y upgrade</c> against
+    /// two modes carried in <c>AETHEUS_PATCH_DRY_RUN</c>: a non-mutating dry-run (<c>apt-get -s upgrade --with-new-pkgs</c>,
+    /// no sudo, lists what would change) and an apply (<c>sudo -n /usr/bin/apt-get upgrade --with-new-pkgs -y</c> against
     /// the argv-exact <c>/etc/sudoers.d/aetheus-patch</c> drop-in). Before applying, the agent runs the
     /// dry-run and ABORTS honestly if any <see cref="Aetheus.Shared.Components.Tasks.CriticalPackages"/> (or a
     /// per-server override) would be upgraded - never a fake success. Target is unused. Requires the
@@ -126,6 +126,14 @@ public enum OperationKind
     /// uninstalling an arbitrary package stays refused (no sudo rule without a fixed list). Target
     /// <c>"-"</c>. Gated by the <c>package.inventory</c> software capability, not by the package grant.</summary>
     PackageInventory = 213,
+
+    /// <summary>Recette R-8 (option B of 2026-11-07): reboots the host, ordered only by Aetheus's reboot scheduler for
+    /// one occurrence of the server's reboot schedule. The order carries the schedule version and a deadline
+    /// (<see cref="Aetheus.Shared.Components.Servers.ServerRebootOrder"/>); before acting, the agent refuses an expired
+    /// order and asks the backend to confirm it (schedule still enabled, unchanged, nothing else running), then runs
+    /// <c>sudo -n /bin/systemctl reboot</c> against the argv-exact <c>/etc/sudoers.d/aetheus-reboot</c> drop-in.
+    /// Target <c>"-"</c>. Gated by the <c>host.reboot</c> grant capability.</summary>
+    ServerReboot = 214,
 
     // Apache
     ApacheReload = 300,

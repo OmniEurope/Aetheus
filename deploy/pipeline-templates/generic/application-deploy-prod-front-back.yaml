@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Deploys an already-qualified candidate release of a front and an API to production (R-11, ADR-057): the API has its own
+# host, its own certificate and its own virtual hosts beside the front's. It is the setup wizard's choice for a project
+# whose shape is the front-end and back-end tile; a monolith uses `application-deploy-prod`.
+#
+# Everything the deployment does is the common core's (`application-deploy-prod-core`, whose header describes the
+# stages, the parameters and the variables), but the three steps that name hosts: they are replaced here, by the name
+# of the step, with the ones that also name the API's host. The stage that holds a replaced step is written again whole
+# (the stage a template writes replaces the core's field for field), so its `agent` and `depends_on` are the core's,
+# copied.
+name: application-deploy-prod-front-back-template
+extends: application-deploy-prod-core@1
+trigger: manual
+stages:
+  - name: Apply HTTP vhosts
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Prepare host]
+    steps:
+      - name: Apply the versioned HTTP vhosts
+        type: apache-config
+        config_files:
+          "$(APP_HOST).conf": ".pipeline/configs/apache/app-http.conf"
+          "$(API_HOST).conf": ".pipeline/configs/apache/api-http.conf"
+        timeout_seconds: 600
+
+  - name: TLS
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Apply HTTP vhosts]
+    steps:
+      - name: Issue, renew and check the certificates
+        type: aetheus
+        function: ensure-tls-certificates
+        with:
+          hosts: "$(APP_HOST) $(API_HOST)"
+          email: "$(CERTBOT_EMAIL:-)"
+        timeout_seconds: 900
+
+  - name: Apply Apache vhosts
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [TLS]
+    steps:
+      - name: Apply the versioned HTTPS vhosts
+        type: apache-config
+        config_files:
+          "$(APP_HOST)-ssl.conf": ".pipeline/configs/apache/app-https.conf"
+          "$(API_HOST)-ssl.conf": ".pipeline/configs/apache/api-https.conf"
+        timeout_seconds: 600

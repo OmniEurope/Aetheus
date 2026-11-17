@@ -18,7 +18,7 @@ public sealed class ReleaseRetentionService(
     IConfiguration configuration,
     TimeProvider timeProvider,
     ILogger<ReleaseRetentionService> logger,
-    IPostgresLeaderLease leaderLease) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, LeaseName)
 {
     internal const string LeaseName = "aetheus:release-retention";
 
@@ -30,10 +30,7 @@ public sealed class ReleaseRetentionService(
     /// <summary>Archive transactions per sweep, so one sweep stays bounded; the next tick continues.</summary>
     internal const int MaxBatchesPerSweep = 20;
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease.RunAsLeaderAsync(LeaseName, RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(BackendRuntimeDefaults.MaintenanceInterval);
 

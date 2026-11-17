@@ -20,10 +20,10 @@
     </OmniTileGrid>
 }
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" SettleOnHeartbeat="true" />
+<ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" AdoptPrefixes="ServiceTaskPrefixes" SettleOnHeartbeat="true" />
 <ServiceActionsInFlightBanner Services="@Server.Services" ActionStateOf="@ActionStateOf" />
 
-<UrlSyncedTabs Slugs="@(new[] { "manageable", "other", "system" })">
+<UrlSyncedTabs Slugs="@(new[] { "manageable", "other", "system", "updates", "cve" })">
     <Tabs>
         <OmniTabsItem Key="manageable" Title="@($"{L["Manageable"]} ({ModuleCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("build"))" /></Icon><ChildContent>
 <OmniStack>
@@ -65,7 +65,7 @@
                say so, and show the complete read-only package list at the end of this tab. *@
             <OmniAlert Severity="OmniSeverity.Info" Class="services-packages-not-listed">
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["ServicesPackagesNotListed"]</OmniText>
-                <OmniLink Href="@($"/servers/{ServerId}/updates")">@L["ServicesPackagesSeeUpdates"]</OmniLink>
+                <OmniLink Href="@($"/servers/{ServerId}/services?tab=updates")">@L["ServicesPackagesSeeUpdates"]</OmniLink>
             </OmniAlert>
             <OmniHeading Level="OmniHeadingLevel.H5">@L["InstalledServices"] (@OtherInstalled.Count())</OmniHeading>
             @if (!OtherInstalled.Any())
@@ -110,7 +110,7 @@
             }
             else
             {
-                <OmniDataGrid @ref="_systemGrid" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@SystemServices.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true">
+                <OmniDataGrid @ref="_systemGrid" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@SystemServices.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.TenRowsMaxHeight">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ServiceInfoDto" Property="Name" Title="@L["Service"]" Filterable="true" />
                         <OmniDataGridColumn TItem="ServiceInfoDto" Property="Type" Title="@L["Type"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText">
@@ -131,6 +131,16 @@
             }
 </OmniStack>
         </ChildContent></OmniTabsItem>
+
+        @* R-23: the packages and updates page is a tab of this page; the old /servers/{id}/updates URL redirects here. *@
+        <OmniTabsItem Key="updates" Title="@L["PatchTitle"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("system_update"))" /></Icon><ChildContent>
+            <ServerPatchSection @ref="_patchSection" ServerId="@ServerId" Server="@Server" PatchManagementAvailable="@Server.PatchManagementAvailable" OnRefreshRequested="@(() => OnServiceChanged.InvokeAsync())" />
+        </ChildContent></OmniTabsItem>
+
+        @* R-41: the CVE of the host system, beside the updates that fix them. *@
+        <OmniTabsItem Key="cve" Title="@L["ServerHostCveTitle"]"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon><ChildContent>
+            <ServerHostCveSection ServerId="@ServerId" />
+        </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>
 
@@ -148,9 +158,13 @@
                enabled. *@
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseLogsAsync" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
-        @* Recette R-116: while a read is pending, OE's busy veil lies over the log zone; the lines already on screen
-           stay mounted underneath, and a zone that holds nothing yet is a veiled block of sensible height. *@
-        <OmniStack Class="@(_logsLoading ? (string.IsNullOrEmpty(_logsContent) ? "omni-busy action-veil-placeholder" : "omni-busy") : null)" aria-busy="@(_logsLoading ? "true" : "false")" data-testid="service-logs-zone">
+        @* Recette R-116, R-1: a pending read holds no page veil, which would cover this switch and close button for as long
+           as the agent takes and every 30 seconds while following. The lines on screen stay; an empty zone keeps its height. *@
+        <OmniStack Class="@(_logsLoading && string.IsNullOrEmpty(_logsContent) ? "action-veil-placeholder" : null)" data-testid="service-logs-zone">
+        @if (_logsLoading && string.IsNullOrEmpty(_logsContent))
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["Loading"]</OmniText>
+        }
         @if (!_logsLoading || !string.IsNullOrEmpty(_logsContent))
         {
             @if (HasInsufficientJournalPermissions)

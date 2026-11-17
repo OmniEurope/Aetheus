@@ -20,6 +20,8 @@ variables:
   APPLICATION_QA_EXTENDED_ENABLED: "false"
 
 stages:
+  # CACHE_SCENARIO=cold is read by the default build of application-ci (a NuGet cache of this run alone); a project
+  # whose own APPLICATION_CI_COMMANDS replace that default reads it, or ignores it, itself.
   - name: NightlyCI
     group: Build
     execution_role: build

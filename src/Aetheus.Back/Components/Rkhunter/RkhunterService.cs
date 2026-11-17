@@ -110,7 +110,9 @@ public class RkhunterService(IRkhunterRepository repo, IAuditService audit, ITas
         if (!string.IsNullOrWhiteSpace(request.CronExpression))
             Cronos.CronExpression.Parse(request.CronExpression);
 
-        await repo.UpdateScanScheduleAsync(serverId, request.CronExpression?.Trim(), ct).ConfigureAwait(false);
+        // A server where rkhunter was never installed has no state to hold the schedule: say so, never a 200 that stored nothing.
+        if (!await repo.UpdateScanScheduleAsync(serverId, request.CronExpression?.Trim(), ct).ConfigureAwait(false))
+            throw new ConflictException("rkhunter is not installed on this server: install it before scheduling its scans.");
         await audit.LogAsync("RkhunterSchedule", "Rkhunter", serverId, request.CronExpression ?? "disabled", ct).ConfigureAwait(false);
     }
 }

@@ -9,7 +9,12 @@ public sealed class AnalysisFindingDetailTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
 
-    public AnalysisFindingDetailTests() => _handler = BunitTestHelper.RegisterServices(this);
+    public AnalysisFindingDetailTests()
+    {
+        _handler = BunitTestHelper.RegisterServices(this);
+        // R-21: the page reads its finding's project name for the trail.
+        _handler.SetJsonResponse("api/projects/1", new ProjectDetailDto { Id = 1, Name = "Aetheus" });
+    }
 
     [Fact]
     public void R504_OpenedFromARun_TheFileLinkIsThatRunsCommit_NotTheLatestOccurrence()
@@ -55,6 +60,33 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         cut.Find(".analysis-source-location button.analysis-source-open").Click();
         Assert.Contains("ref=runcommit2472", navigation.Uri);
         Assert.Contains("path=src%2FSample.cs", navigation.Uri);
+    }
+
+    [Fact]
+    public void R21_TheFindingPage_StaysInItsProject_TrailMenuAndBackArrow()
+    {
+        Services.GetRequiredService<PermissionService>().SetPermissions([], isAdmin: true);
+        _handler.SetJsonResponse("api/analysis/findings/7", new AnalysisFindingDto
+        {
+            Id = 7,
+            ProjectId = 5,
+            Title = "Architecture dependency cycle",
+            Status = AnalysisFindingStatus.Open
+        });
+        _handler.SetJsonResponse("api/analysis/findings/7/occurrences?take=100", new List<AnalysisFindingOccurrenceDto>());
+        _handler.SetJsonResponse("api/analysis/findings/7/decisions", new List<AnalysisFindingDecisionDto>());
+        _handler.SetJsonResponse("api/projects/5", new ProjectDetailDto { Id = 5, Name = "Wordmorrow" });
+
+        var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 7));
+
+        cut.WaitForAssertion(() =>
+        {
+            var items = Services.GetRequiredService<Aetheus.Front.Components.Shared.BreadcrumbService>().Items;
+            Assert.Equal(["Projects", "Wordmorrow", "AnalysisPortfolio", "Architecture dependency cycle"], items.Select(item => item.Text));
+            Assert.Equal(["/projects", "/projects/5/overview", "/projects/5/quality"], items.Take(3).Select(item => item.Href));
+            Assert.Equal(5, Services.GetRequiredService<Aetheus.Front.Components.Shared.ProjectNavContextService>().ProjectId);
+            Assert.Contains("/projects/5/quality", cut.Markup, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -357,5 +389,46 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         cut.FindAll("button").Single(button => button.TextContent.Contains("Documentation", StringComparison.Ordinal)).Click();
 
         Assert.Equal(expected ?? before, navigation.Uri);
+    }
+
+    [Theory]
+    [InlineData("cve-watch", true)]
+    [InlineData("semgrep", false)]
+    public void R14_TheWhatToDoBlock_IsOnTheFindingPageOfTheCveWatchOnly(string scannerKey, bool shown)
+    {
+        Services.GetRequiredService<PermissionService>().SetPermissions([], isAdmin: true);
+        var occurrence = new AnalysisFindingOccurrenceDto { Id = 1, ScannerKey = scannerKey, ToolName = scannerKey };
+        _handler.SetJsonResponse("api/analysis/findings/21", new AnalysisFindingDto
+        {
+            Id = 21,
+            ProjectId = 1,
+            Title = "Vulnerable package",
+            Message = "A package is affected.",
+            Status = AnalysisFindingStatus.Open,
+            LatestOccurrence = occurrence
+        });
+        _handler.SetJsonResponse("api/analysis/findings/21/occurrences?take=100", new List<AnalysisFindingOccurrenceDto> { occurrence });
+        _handler.SetJsonResponse("api/analysis/findings/21/decisions", new List<AnalysisFindingDecisionDto>());
+        _handler.SetJsonResponse("api/analysis/cve-watch/by-finding/21", new CveWatchMatchDto
+        {
+            MatchId = 9,
+            ProjectId = 1,
+            PackageName = "lib",
+            Version = "1.0.0",
+            Status = Aetheus.Shared.Components.VulnerabilityWatch.VulnerabilityMatchStatus.Affected,
+            Recommendation = new CveWatchRecommendationDto { Kind = CveRecommendationKind.NoFixYet }
+        });
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/cve-watch/9/remediation", new CveRemediationDto { MatchId = 9 });
+
+        var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 21));
+
+        cut.WaitForState(() => cut.Markup.Contains("analysis-finding-summary-card", StringComparison.Ordinal));
+        if (shown)
+            cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='cve-remediation']")));
+        else
+        {
+            Assert.Empty(cut.FindAll("[data-testid='cve-remediation']"));
+            Assert.DoesNotContain(_handler.RequestsSnapshot(), request => request.Url.Contains("cve-watch/by-finding", StringComparison.Ordinal));
+        }
     }
 }

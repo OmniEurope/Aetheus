@@ -10,8 +10,8 @@ namespace Aetheus.Agent.Core.Tests;
 /// the former <c>prod-deploy-prepare.sh</c> script, the ones
 /// <c>DeploymentSafetyAuditTests.CanonicalDeployBootstrapsProductionStateWithoutExposingExistingSecrets</c>
 /// and <c>ProductionSecretZero_SurvivesAgentReinstall_AndMissingStateFailsClosed</c> pin in the script:
-/// a state directory outside <c>/var/lib</c>, nested or traversing, differing canonical and legacy
-/// environments, and secret regeneration over persistent state. Path shape is checked on the string;
+/// a state directory outside <c>/var/lib</c>, nested or traversing, a legacy environment file (now ignored:
+/// only the current layout is read), and secret regeneration over persistent state. Path shape is checked on the string;
 /// the file checks run on a real directory standing for <c>/var/lib</c> through <see cref="ProductionStatePaths"/>.
 /// </summary>
 public sealed class VerifyProductionStateFunctionTests : IDisposable
@@ -157,35 +157,25 @@ public sealed class VerifyProductionStateFunctionTests : IDisposable
         Assert.Contains(LogLines, line => line.EndsWith(".env-prod exists; its secrets will be reused, never regenerated.", StringComparison.Ordinal));
     }
 
+    // Only the current layout is read (user decision 2026-11-12): a LEGACY_ENV_FILE a library still carries changes nothing.
     [Fact]
-    public async Task CanonicalAndLegacyEnvironmentsThatDiffer_AreRefused()
+    public async Task ALegacyEnvironmentThatDiffers_IsIgnored()
     {
         var envFile = UseRealStateDirectory();
         File.WriteAllText(envFile, "DB_PASSWORD=a\n");
         _env["LEGACY_ENV_FILE"] = _harness.Write("legacy/.env-prod", "DB_PASSWORD=b\n");
 
-        Assert.Equal("Canonical and legacy production environments differ; refusing automatic selection.", await FailureAsync());
-    }
-
-    [Fact]
-    public async Task IdenticalCanonicalAndLegacyEnvironments_AreAccepted()
-    {
-        var envFile = UseRealStateDirectory();
-        File.WriteAllText(envFile, "DB_PASSWORD=a\n");
-        _parameters["legacy_env_file"] = _harness.Write("legacy/.env-prod", "DB_PASSWORD=a\n");
-
         Assert.Equal(0, (await RunAsync()).Result.ExitCode);
     }
 
     [Fact]
-    public async Task AMissingEnvironmentWithALegacyOne_WillBeMigrated()
+    public async Task AMissingEnvironmentWithALegacyOne_IsNotMigrated_AndPersistentStateRefusesIt()
     {
         UseRealStateDirectory();
         _env["LEGACY_ENV_FILE"] = _harness.Write("legacy/.env-prod", "DB_PASSWORD=a\n");
         _docker.Volumes.Add((Project + "-db-data", Project));
 
-        Assert.Equal(0, (await RunAsync()).Result.ExitCode);
-        Assert.Empty(_docker.Commands);
+        Assert.StartsWith("Persistent production state exists but ", await FailureAsync(), StringComparison.Ordinal);
     }
 
     [Theory]

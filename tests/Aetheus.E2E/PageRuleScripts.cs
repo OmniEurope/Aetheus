@@ -95,13 +95,25 @@ internal static class PageRuleScripts
           const parse = (value) => parseFloat(value) || 0;
           const hasText = (el) => (el.textContent || '').trim().length > 0;
 
+          // Only the text drawn in the element's own flow counts: a hidden or out-of-flow descendant (the closed
+          // content of an OmniTooltip, 20 px wide and 1600 px tall off screen) is not a line of the element.
+          const drawnInFlow = (node, root) => {
+            for (let up = node.parentElement; up && up !== root; up = up.parentElement) {
+              if (getComputedStyle(up).visibility !== 'visible' || !inFlow(up)) return false;
+            }
+            return true;
+          };
           const lineCount = (el) => {
-            const range = document.createRange();
-            range.selectNodeContents(el);
             const tops = [];
-            for (const rect of range.getClientRects()) {
-              if (rect.width < 1 || rect.height < 1) continue;
-              if (!tops.some((top) => Math.abs(top - rect.top) < rect.height * 0.6)) tops.push(rect.top);
+            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+              if (!text.textContent.trim() || !drawnInFlow(text, el)) continue;
+              const range = document.createRange();
+              range.selectNodeContents(text);
+              for (const rect of range.getClientRects()) {
+                if (rect.width < 1 || rect.height < 1) continue;
+                if (!tops.some((top) => Math.abs(top - rect.top) < rect.height * 0.6)) tops.push(rect.top);
+              }
             }
             return tops.length;
           };
@@ -173,7 +185,7 @@ internal static class PageRuleScripts
             const heights = rows.map((row) => row.getBoundingClientRect().height).sort((a, b) => a - b);
             grids.push({ grid: name, rowHeight: heights.length ? px(heights[Math.floor(heights.length / 2)]) : 0, rows: heights.length });
           });
-          // Rule 3: a grid that is the main content of the page fills at least 75 % of the viewport and the page itself does not scroll.
+          // Rule 3: a grid that is the main content of the page fills the room it has below its own top and the page itself does not scroll.
           if (gridRoots.length === 1) {
             const rect = gridRoots[0].getBoundingClientRect();
             const name = grids[0].grid;
@@ -183,7 +195,17 @@ internal static class PageRuleScripts
             const share = rect.height / Math.max(1, bottom - top);
             facts.gridShare = px(share);
             if (share >= 0.5) {
-              if (rect.height < H * 0.75 - 1) add('3.grid-height', name, px(rect.height) + '<' + px(H * 0.75));
+              // The floor is the room the grid has (docs/contracts/ui-patterns.md, R-121): the visible part of the page below
+              // the grid's own top, never a share of the window, since a grid that starts low can only fill what is left.
+              // The bottom-of-page margin is intentional (R-100): the padding-bottom of main and of every wrapper between the grid
+              // and main is read from the computed styles and taken off the room, so a real shortfall is still reported.
+              let bottomPadding = 0;
+              for (let node = gridRoots[0].parentElement; node; node = node.parentElement) {
+                bottomPadding += parseFloat(getComputedStyle(node).paddingBottom) || 0;
+                if (node === main) break;
+              }
+              const room = Math.min(H, main.getBoundingClientRect().bottom) - rect.top - bottomPadding;
+              if (rect.height < room - 1) add('3.grid-height', name, px(rect.height) + '<' + px(room));
               if (main.scrollHeight > main.clientHeight + 2) add('3.page-scroll-with-grid', name, main.scrollHeight + '>' + main.clientHeight);
             }
           }

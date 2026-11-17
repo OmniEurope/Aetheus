@@ -88,7 +88,7 @@ internal sealed class PipelineCancellationRepository(
         variables[PipelineRunHelpers.CancellationRequestedVariable] = "true";
         run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
 
-        await taskLifecycle.CancelPendingTasksExceptStagesAsync(runId, preserved, ct)
+        await taskLifecycle.CancelActiveTasksExceptStagesAsync(runId, preserved, ct)
             .ConfigureAwait(false);
 
         var pendingSteps = await db.PipelineStepRuns
@@ -123,6 +123,41 @@ internal sealed class PipelineCancellationRepository(
             .ToListAsync(ct).ConfigureAwait(false);
         MarkCancelled(orphanedSteps);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<CancelledTaskStopWait> GetCancelledTaskStopWaitAsync(
+        int runId, DateTime timedOutBefore, CancellationToken ct)
+    {
+        // A task that never started has no process tree on any agent: only a task cancelled while it was
+        // running (StartedAt set) can still be dying. CompletedAt is the instant it was cancelled.
+        var cancellationInstants = await db.Tasks.AsNoTracking()
+            .Where(task => task.PipelineRunId == runId
+                           && task.Status == TaskExecutionStatus.Cancelled
+                           && task.StartedAt != null
+                           && task.StopAcknowledgedAt == null
+                           && task.StopWaitExpiredAt == null)
+            .Select(task => task.CompletedAt)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var timedOut = cancellationInstants.Count(at => at is null || at <= timedOutBefore);
+        return new CancelledTaskStopWait(cancellationInstants.Count - timedOut, timedOut);
+    }
+
+    public async Task<int> MarkCancelledTaskStopWaitExpiredAsync(
+        int runId, DateTime timedOutBefore, DateTime expiredAt, CancellationToken ct)
+    {
+        var expired = await db.Tasks
+            .Where(task => task.PipelineRunId == runId
+                           && task.Status == TaskExecutionStatus.Cancelled
+                           && task.StartedAt != null
+                           && task.StopAcknowledgedAt == null
+                           && task.StopWaitExpiredAt == null
+                           && (task.CompletedAt == null || task.CompletedAt <= timedOutBefore))
+            .ToListAsync(ct).ConfigureAwait(false);
+        foreach (var task in expired)
+            task.StopWaitExpiredAt = expiredAt;
+        if (expired.Count > 0)
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return expired.Count;
     }
 
     private void MarkCancelled(IEnumerable<PipelineStepRun> steps)

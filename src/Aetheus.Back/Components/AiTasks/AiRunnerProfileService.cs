@@ -32,12 +32,12 @@ public sealed class AiRunnerProfileService(
     internal static readonly TimeSpan ModelListReadInterval = TimeSpan.FromMinutes(1);
 
     public async Task<PaginatedResult<AiRunnerProfileDto>> GetProfilesAsync(
-        PaginationRequest request, CancellationToken ct)
+        PaginationRequest request, CancellationToken ct, int? organizationId = null)
     {
         var (page, pageSize) = request.Normalize();
         var (items, total) = await repo.GetProfilesPageAsync(
             request.Search, page, pageSize, ct, request.Filters,
-            request.SortBy, request.SortDescending).ConfigureAwait(false);
+            request.SortBy, request.SortDescending, organizationId).ConfigureAwait(false);
         return new PaginatedResult<AiRunnerProfileDto>
         {
             Items = items.Select(MapProfile).ToList(),

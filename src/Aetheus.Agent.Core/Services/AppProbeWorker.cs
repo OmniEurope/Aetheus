@@ -21,6 +21,7 @@ public sealed class AppProbeWorker(
 
     private List<AppProbeConfigDto> _configs = [];
     private readonly Dictionary<int, DateTime> _nextDue = new();
+    private readonly Dictionary<int, DateTime> _answeredProbeRequests = new();
     private readonly List<AppProbeResultDto> _buffer = [];
     private DateTime _lastConfigRefresh = DateTime.MinValue;
     private int _droppedSinceLastReport;
@@ -63,6 +64,8 @@ public sealed class AppProbeWorker(
                 var live = _configs.Select(c => c.MonitoredAppId).ToHashSet();
                 foreach (var stale in _nextDue.Keys.Where(k => !live.Contains(k)).ToList())
                     _nextDue.Remove(stale);
+                foreach (var stale in _answeredProbeRequests.Keys.Where(k => !live.Contains(k)).ToList())
+                    _answeredProbeRequests.Remove(stale);
             }
             catch (Exception ex)
             {
@@ -73,7 +76,7 @@ public sealed class AppProbeWorker(
 
         var due = _configs
             .Where(c => !string.IsNullOrWhiteSpace(c.ProbeUrl)
-                && (!_nextDue.TryGetValue(c.MonitoredAppId, out var next) || now >= next))
+                && (!_nextDue.TryGetValue(c.MonitoredAppId, out var next) || now >= next || IsNewProbeRequest(c)))
             .ToList();
 
         if (due.Count > 0)
@@ -94,13 +97,22 @@ public sealed class AppProbeWorker(
 
             var results = await Task.WhenAll(probeTasks).ConfigureAwait(false);
             foreach (var config in due)
+            {
                 _nextDue[config.MonitoredAppId] = now.AddSeconds(Math.Max(config.ProbeIntervalSeconds, AppMonitoringDefaults.AgentProbeTickSeconds));
+                if (config.ProbeRequestedAt is { } requestedAt)
+                    _answeredProbeRequests[config.MonitoredAppId] = requestedAt;
+            }
 
             AppendToBuffer(results);
         }
 
         await FlushAsync(ct).ConfigureAwait(false);
     }
+
+    // R-29: a user asked for an immediate probe from the Supervision; probe at once, once per request.
+    private bool IsNewProbeRequest(AppProbeConfigDto config) =>
+        config.ProbeRequestedAt is { } requestedAt
+        && (!_answeredProbeRequests.TryGetValue(config.MonitoredAppId, out var answered) || requestedAt > answered);
 
     private void AppendToBuffer(IEnumerable<AppProbeResultDto> results)
     {
@@ -165,13 +177,14 @@ public sealed class AppProbeWorker(
                 StatusCode = statusCode,
                 Error = statusCode == config.ExpectedStatusCode
                     ? null
-                    : $"Unexpected status {statusCode} (expected {config.ExpectedStatusCode})"
+                    : AppProbeFailure.ForStatus(config.ProbeUrl, statusCode, config.ExpectedStatusCode)
             };
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             sw.Stop();
-            var reason = timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested ? "Probe timed out" : ex.Message;
+            var reason = timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested ? AppProbeFailure.ForTimeout(config.ProbeUrl)
+                : AppProbeFailure.ForException(config.ProbeUrl, ex);
             return AppProbeResultDto.Failure(
                 config.MonitoredAppId, timestamp, (int)sw.ElapsedMilliseconds, reason);
         }

@@ -35,7 +35,7 @@ public class TaskTimeoutServiceTests
         var hub = Substitute.For<IHubContext<ServerHub>>();
         hub.Clients.Returns(clients);
 
-        return (new TaskTimeoutService(scopeFactory, logger, options, hub, clock), repo, proxy);
+        return (new TaskTimeoutService(scopeFactory, logger, options, hub, clock, leaderLease: LeaderLeaseDouble.Leader()), repo, proxy);
     }
 
     [Fact]

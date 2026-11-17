@@ -17,7 +17,7 @@ public sealed record PortReservationDto
 
     /// <summary>The linked project's name when the row was read from the list query, which joins it.
     /// Null when no project is linked, and also right after a creation, whose response has not joined
-    /// it - the list is reloaded rather than guessing a name the server never sent.</summary>
+    /// it - the port section then reads the name from the projects it already holds, and reads the list again.</summary>
     public string? ProjectName { get; init; }
 
     public string OwnerLabel { get; init; } = string.Empty;
@@ -26,7 +26,9 @@ public sealed record PortReservationDto
     public DateTime UpdatedAt { get; init; }
 
     /// <summary>When the agent last saw this port listening. Null on a declared or manual row that no
-    /// scan has confirmed, and on every row until the server has been scanned once.</summary>
+    /// scan has confirmed, and on every row until the server has been scanned once. On an observed row
+    /// (which exists only while its port listens) it is when the row was last written, up to five
+    /// minutes behind the scan; it is not a scan time, which is the server's.</summary>
     public DateTime? ObservedAt { get; init; }
 }
 
@@ -167,9 +169,25 @@ public sealed record ObservedPortDto
 }
 
 /// <summary>
-/// What an on-demand scan found, pushed by the agent through its own token. The whole
-/// <c>Observed</c> source of that server is replaced by this payload, so a shorter list really means
-/// "these ports stopped listening", never "the report was truncated".
+/// A protocol whose probe really succeeded, and how long ago. The age is measured on the agent's own
+/// clock (the time since its probe returned), so the backend can date the sighting without trusting the
+/// agent's wall clock, and a cached scan keeps its real age instead of reading as fresh.
+/// </summary>
+public sealed record ObservedProtocolScanDto
+{
+    [Required]
+    [StringLength(PortRegistryLimits.MaxProtocolLength, MinimumLength = 1)]
+    public string Protocol { get; init; } = PortRegistryLimits.TcpProtocol;
+
+    [Range(0, PortRegistryLimits.MaxObservedScanAgeSeconds)]
+    public double AgeSeconds { get; init; }
+}
+
+/// <summary>
+/// What an on-demand scan found, pushed by the agent through its own token. The <c>Observed</c> rows of
+/// every protocol listed in <see cref="Protocols"/> are replaced by this payload, so a shorter list really
+/// means "these ports stopped listening", never "the report was truncated". The rows of a protocol that
+/// was not measured are left as they were.
 /// </summary>
 public sealed record ObservedPortsReportDto
 {
@@ -178,6 +196,11 @@ public sealed record ObservedPortsReportDto
     public List<ObservedPortDto> Ports { get; init; } = [];
 
     public DateTime ObservedAt { get; init; }
+
+    /// <summary>The protocols whose probe succeeded. Null identifies an agent predating this field: every
+    /// protocol is then taken as measured, as before.</summary>
+    [MaxLength(PortRegistryLimits.MaxProtocolLength)]
+    public List<ObservedProtocolScanDto>? Protocols { get; init; }
 }
 
 /// <summary>The window of host ports Aetheus may hand out on one server.</summary>
@@ -293,4 +316,8 @@ public static class PortRegistryLimits
     /// what keeps a malformed or hostile agent payload from turning into an unbounded write.
     /// </summary>
     public const int MaxObservedPorts = 512;
+
+    /// <summary>The oldest a protocol measurement may claim to be (one day); an older or negative age is a
+    /// malformed report, not a measurement.</summary>
+    public const int MaxObservedScanAgeSeconds = 86_400;
 }

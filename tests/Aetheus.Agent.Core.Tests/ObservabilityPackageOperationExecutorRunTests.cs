@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Executors;
+using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -16,18 +17,21 @@ namespace Aetheus.Agent.Core.Tests;
 public sealed class ObservabilityPackageOperationExecutorRunTests
 {
     private const string Target = "optional-observability";
+    private const string PinnedSdk = "/home/agent/.aetheus/dotnet/11.0.100/dotnet";
 
     private sealed record HarnessCall(
         string[] Argv, IReadOnlyDictionary<string, string?> Environment, int TimeoutSeconds,
         bool PromotionExisted, bool PublishExisted, long PromotionLength, string HarnessDirectory);
 
     private static ObservabilityPackageOperationExecutor Build(
-        Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ExecutorResult>> runner) =>
+        Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ExecutorResult>> runner,
+        Func<string, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ToolchainResolution>>? sdk = null) =>
         new(
             NullLogger<ObservabilityPackageOperationExecutor>.Instance,
             Options.Create(new AetheusAgentOptions { ServerUrl = "https://packages.example/" }))
         {
-            RunProcessAsync = runner
+            RunProcessAsync = runner,
+            ResolveDotnetSdkAsync = sdk ?? ((_, _, _) => Task.FromResult(ToolchainResolution.Found(PinnedSdk)))
         };
 
     private static Dictionary<string, string> SignedEnvironment()
@@ -50,8 +54,62 @@ public sealed class ObservabilityPackageOperationExecutorRunTests
 
     private static Task<ExecutorResult> Execute(
         ObservabilityPackageOperationExecutor executor, Dictionary<string, string> environment,
-        OperationKind kind = OperationKind.PipelinePublishObservabilityBundle, string target = Target, int timeout = 600) =>
-        executor.ExecuteAsync(kind, target, environment, timeout, new OutputLog().Write, TestContext.Current.CancellationToken);
+        OperationKind kind = OperationKind.PipelinePublishObservabilityBundle, string target = Target, int timeout = 600,
+        OutputLog? log = null) =>
+        executor.ExecuteAsync(
+            kind, target, environment, timeout, (log ?? new OutputLog()).Write, TestContext.Current.CancellationToken);
+
+    // R-20: run 3373 restored the net11.0 consumer with the host SDK 10.0.202 (NETSDK1045) after publishing.
+    // The harness now receives the SDK the agent resolved from the workspace global.json, never the caller's.
+    [Fact]
+    public async Task AValidRun_HandsTheHarnessTheResolvedPinnedSdk_NotTheCallersDotnet()
+    {
+        string? resolvedFor = null;
+        IReadOnlyDictionary<string, string?>? harnessEnvironment = null;
+        var executor = Build(
+            (startInfo, _, _, _) =>
+            {
+                harnessEnvironment = startInfo.Environment.ToDictionary(e => e.Key, e => e.Value);
+                return Task.FromResult(new ExecutorResult(0, false));
+            },
+            (workspace, _, _) =>
+            {
+                resolvedFor = workspace;
+                return Task.FromResult(ToolchainResolution.Found(PinnedSdk));
+            });
+        var environment = SignedEnvironment();
+        environment["DOTNET"] = "/usr/bin/dotnet";
+
+        var result = await Execute(executor, environment);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("/work/candidate", resolvedFor);
+        Assert.NotNull(harnessEnvironment);
+        Assert.Equal(PinnedSdk, harnessEnvironment["DOTNET"]);
+    }
+
+    [Fact]
+    public async Task ARunWhosePinnedSdkCannotBeProvided_FailsWithItsReason_WithoutStartingTheHarness()
+    {
+        var started = 0;
+        var executor = Build(
+            (_, _, _, _) =>
+            {
+                started++;
+                return Task.FromResult(new ExecutorResult(0, false));
+            },
+            (_, _, _) => Task.FromResult(ToolchainResolution.Failed("Pinned SDK manifest not found: global.json")));
+        var log = new OutputLog();
+
+        var result = await Execute(executor, SignedEnvironment(), log: log);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Equal(0, started);
+        var line = Assert.Single(log.Lines);
+        Assert.Equal(TaskLogLevel.Error, line.Level);
+        Assert.Contains("Pinned SDK manifest not found: global.json", line.Message, StringComparison.Ordinal);
+        Assert.Contains("net10.0 and net11.0", line.Message, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task AValidRun_ExtractsTheEmbeddedHarness_StartsItWithTheTrustedEnvironment_AndRemovesItAfterwards()

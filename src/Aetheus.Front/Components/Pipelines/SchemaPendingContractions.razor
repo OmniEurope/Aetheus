@@ -5,8 +5,20 @@
    registry (never hand-kept text), with the release from which each can ship. Used by the run's Schema tab
    and by the production environment page. *@
 <OmniStack data-testid="schema-pending-contractions">
-    <OmniHeading Level="OmniHeadingLevel.H5">@L["SchemaPendingContractionsTitle"]</OmniHeading>
-    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["SchemaPendingContractionsHint"]</OmniText>
+    @* STD-BTN detection 11 (R-66): the copy for an AI is the one visible action, the download sits in the menu. *@
+    <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["SchemaPendingContractionsTitle"]</OmniHeading>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CopyMarkdownAsync" data-testid="schema-export-copy" title="@L["SchemaContractionExportCopy"]" Label="@L["SchemaContractionExportCopy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]" data-testid="schema-export-menu">
+            <OmniMenuItem OnClick="DownloadMarkdownAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["DownloadMarkdown"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
+    </OmniRow>
+    <OmniFieldset Collapsible="true" Expanded="false" data-testid="schema-pending-help">
+        <Legend>@L["SchemaPendingHelpTitle"]</Legend>
+        <ChildContent>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted" data-testid="schema-pending-help-body">@L["SchemaPendingHelpBody"]</OmniText>
+        </ChildContent>
+    </OmniFieldset>
     @if (Contractions.Count == 0)
     {
         <OmniEmptyState Title="@L["SchemaNoPendingContractions"]" />

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Text.RegularExpressions;
 
 namespace Aetheus.Agent.Core.Operations;
 
@@ -125,6 +126,158 @@ internal sealed class ApacheSiteOperations(
         await onOutput($"Apache config test failed without {siteFile}: the file was written back to {available}.", TaskLogLevel.Error).ConfigureAwait(false);
         return configTest;
     }
+
+    /// <summary>One site taken out by <see cref="RemoveManyAsync"/>: what is needed to put it back.</summary>
+    private sealed record RemovedSite(string SiteFile, string Available, string Enabled, string? LinkTarget, byte[] Content);
+
+    /// <summary>
+    /// Recette R-26: disables and deletes several sites with ONE configuration test and ONE reload, once all of them are
+    /// out. Removing them one by one tests Apache after each, so a site whose neighbour (of the same project) already
+    /// points to a deleted certificate was put back by the failing test of the neighbour's remaining configuration, and
+    /// none could go. Per site, a precondition that does not hold (not a link to its sites-available file, still enabled
+    /// under another name, an entry another account owns) leaves that site as it is and reports why; the others go on.
+    /// When the single test or the reload fails, every site removed here is put back, so the host is as it was, and the
+    /// reason names the other enabled site the test blamed when there is one (it is not one of these sites).
+    /// </summary>
+    /// <returns>For each site file, null when it is gone, otherwise why it stays.</returns>
+    internal async Task<IReadOnlyDictionary<string, string?>> RemoveManyAsync(
+        IReadOnlyList<string> siteFiles, int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        var results = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var removed = new List<RemovedSite>();
+        foreach (var siteFile in siteFiles.Distinct(StringComparer.Ordinal))
+        {
+            if (await TakeOutAsync(siteFile, removed, onOutput, ct).ConfigureAwait(false) is { } refusal)
+                results[siteFile] = refusal;
+        }
+        if (removed.Count == 0)
+            return results;
+
+        // The output of the test is kept to read which file Apache blames; it still goes to the task log.
+        var testOutput = new List<string>();
+        Task Tee(string line, TaskLogLevel level)
+        {
+            lock (testOutput) testOutput.Add(line);
+            return onOutput(line, level);
+        }
+        string? failure = null;
+        var configTest = await runPrivilegedOperation(OperationKind.ApacheTestConfig, timeoutSeconds, Tee, ct).ConfigureAwait(false);
+        if (configTest.ExitCode != 0)
+        {
+            string[] captured;
+            lock (testOutput) captured = [.. testOutput];
+            failure = ConfigurationFailureReason(captured, removed);
+            await PutBackAsync(removed, onOutput).ConfigureAwait(false);
+        }
+        else
+        {
+            var reload = await runPrivilegedOperation(OperationKind.ApacheReload, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+            if (reload.ExitCode != 0)
+            {
+                failure = $"Apache could not reload without these sites (exit code {reload.ExitCode}): they were put back.";
+                await PutBackAsync(removed, onOutput).ConfigureAwait(false);
+                var restored = await runPrivilegedOperation(OperationKind.ApacheReload, timeoutSeconds, onOutput, CancellationToken.None).ConfigureAwait(false);
+                if (restored.ExitCode != 0)
+                    await onOutput("Apache could not be reloaded on the previous configuration either: check the Apache service.", TaskLogLevel.Error).ConfigureAwait(false);
+            }
+        }
+        foreach (var site in removed)
+            results[site.SiteFile] = failure;
+        return results;
+    }
+
+    // Takes one site out (link removed, file deleted). Null when it is out, the reason it stays otherwise.
+    private async Task<string?> TakeOutAsync(
+        string siteFile, List<RemovedSite> removed, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        string? refusal = !isLinux ? "Apache operations are only supported on Linux"
+            : !IsAcceptedSiteFile(siteFile) ? $"Invalid Apache site file name '{siteFile}'."
+            : !Directory.Exists(sitesAvailablePath) || !Directory.Exists(sitesEnabledPath) ? "Apache sites-available/sites-enabled directories were not found."
+            : AvailableFile(siteFile) is null ? $"{Path.Combine(sitesAvailablePath, siteFile)} is not a regular file of sites-available."
+            : null;
+        if (refusal is not null)
+        {
+            await onOutput(refusal, TaskLogLevel.Error).ConfigureAwait(false);
+            return refusal;
+        }
+
+        var available = AvailableFile(siteFile)!;
+        var enabled = Path.Combine(sitesEnabledPath, siteFile);
+        string? target = null;
+        var linkRemoved = false;
+        try
+        {
+            if (EntryExists(enabled))
+            {
+                target = readLinkTarget(enabled);
+                if (target is null || !PointsTo(enabled, available))
+                    return await RefuseAsync($"{enabled} is not a link to {available}: it is left as it is.", onOutput).ConfigureAwait(false);
+                DeleteEntry(enabled);
+                linkRemoved = true;
+                await onOutput($"Disabled site: removed {enabled}", TaskLogLevel.Info).ConfigureAwait(false);
+            }
+            if (EnabledEntriesFor(available).FirstOrDefault() is { } enabledEntry)
+            {
+                PutLinkBack(enabled, target, linkRemoved);
+                return await RefuseAsync($"Apache site {siteFile} is enabled ({enabledEntry}): disable it before deleting it.", onOutput).ConfigureAwait(false);
+            }
+            var content = await File.ReadAllBytesAsync(available, ct).ConfigureAwait(false);
+            File.Delete(available);
+            await onOutput($"Deleted {available}", TaskLogLevel.Info).ConfigureAwait(false);
+            removed.Add(new RemovedSite(siteFile, available, enabled, linkRemoved ? target : null, content));
+            return null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            PutLinkBack(enabled, target, linkRemoved);
+            return await RefuseAsync(
+                $"Apache site {siteFile}: {ex.Message}. The entry belongs to another account (sticky directory): the agent can only change the sites it created.",
+                onOutput).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<string> RefuseAsync(string message, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        await onOutput(message, TaskLogLevel.Error).ConfigureAwait(false);
+        return message;
+    }
+
+    private void PutLinkBack(string enabled, string? target, bool linkRemoved)
+    {
+        if (linkRemoved && target is not null)
+            createSiteSymbolicLink(enabled, target);
+    }
+
+    // The file first, then its link: Apache never sees a link to a file that is not there.
+    private async Task PutBackAsync(List<RemovedSite> removed, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        foreach (var site in removed)
+        {
+            await File.WriteAllBytesAsync(site.Available, site.Content, CancellationToken.None).ConfigureAwait(false);
+            PutLinkBack(site.Enabled, site.LinkTarget, site.LinkTarget is not null);
+            await onOutput($"Put back {site.SiteFile}.", TaskLogLevel.Error).ConfigureAwait(false);
+        }
+    }
+
+    // Apache's own message names the file ("... of /etc/apache2/sites-enabled/<site>:"): a file that is not one of the
+    // sites being removed is the one that breaks the configuration.
+    private string ConfigurationFailureReason(string[] testOutput, List<RemovedSite> removed)
+    {
+        var blamedSite = BlamedSiteRegex(sitesEnabledPath);
+        var blamed = testOutput
+            .Select(line => blamedSite.Match(line))
+            .Where(match => match.Success)
+            .Select(match => match.Groups[1].Value)
+            .FirstOrDefault(site => removed.All(removedSite => removedSite.SiteFile != site));
+        return blamed is null
+            ? "Apache's configuration test fails without these sites, so they were put back. Read the output of apache2ctl configtest in the task log, fix the configuration, then delete again."
+            : $"Apache's configuration test fails because of the enabled site {blamed}, which is not one of the sites being removed (often its certificate is gone), so nothing was removed. "
+                + $"Fix or disable {blamed} (Apache section of this server), then delete again.";
+    }
+
+    private static Regex BlamedSiteRegex(string sitesEnabledPath) =>
+        new(Regex.Escape(sitesEnabledPath.TrimEnd('/')) + @"/([a-zA-Z0-9][a-zA-Z0-9_.\-]*)", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     // Configtest, then reload. Either failing undoes the change; after a failed reload, Apache is reloaded
     // again on the previous configuration so the server does not stay on a half-applied state.

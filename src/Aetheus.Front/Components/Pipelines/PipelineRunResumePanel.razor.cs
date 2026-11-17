@@ -75,6 +75,8 @@ public partial class PipelineRunResumePanel
                 var status = await Api.Pipelines.CancelPipelineRunAsync(run.Id);
                 if (status.Success)
                     Toast.Info("RunCancelled", "RunCancelledDetail");
+                else if (status.NotFound)
+                    Toast.Warning("CancelRun", "RunNoLongerCancellable"); // already finished: an expected race, not a failure
                 else if (status.Forbidden)
                     Toast.Error("PipelineRunFailed", "PipelineRunForbidden");
                 else

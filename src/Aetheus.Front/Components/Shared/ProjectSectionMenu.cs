@@ -29,4 +29,17 @@ public sealed class ProjectSectionMenu
     }
 
     public void Clear() => Set([]);
+
+    /// <summary>
+    /// True when the header's Settings button is the page's main action (blue) because the section moved its
+    /// own action into the menu (the monitoring page, R-32).
+    /// </summary>
+    public bool SettingsPrimary { get; private set; }
+
+    public void SetSettingsPrimary(bool primary)
+    {
+        if (SettingsPrimary == primary) return;
+        SettingsPrimary = primary;
+        Changed?.Invoke();
+    }
 }

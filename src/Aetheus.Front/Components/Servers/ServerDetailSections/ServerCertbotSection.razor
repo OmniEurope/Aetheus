@@ -10,11 +10,17 @@
    R3-41: Create is the one visible action; the maintenance actions sit in the "More actions" menu with the
    conditions their buttons had. *@
 <SectionContent SectionName="@PageHeaderActions.SectionName">
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["NewCertificate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(AgentOffline || !Certbot.IsInstalled || ActionBusy)" title="@L["NewCertificate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     <OmniOverflowMenu Label="@L["MoreActions"]">
-        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["CertbotNormalizeTitle"]" OnClick="@(() => ShowConfirm(L["CertbotNormalize"], L["ConfirmCertbotNormalize"], () => ExecuteActionAsync(CertbotAction.Normalize), L["CertbotNormalize"]))"><Icon><OmniIcon Name="OmniIconName.Swap" /></Icon><ChildContent>@L["CertbotNormalize"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["CertbotRenewalCheckTitle"]" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["CertbotRenewalCheck"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["RenewAll"]" OnClick="@(() => ShowConfirm(L["RenewAllCerts"], L["ConfirmRenewAllCerts"], () => ExecuteActionAsync(CertbotAction.RenewAll), L["Renew"]))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["RenewAll"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || ActionBusy)" title="@L["CertbotNormalizeTitle"]" OnClick="@(() => ShowConfirm(L["CertbotNormalize"], L["ConfirmCertbotNormalize"], () => ExecuteActionAsync(CertbotAction.Normalize), L["CertbotNormalize"]))"><Icon><OmniIcon Name="OmniIconName.Swap" /></Icon><ChildContent>@L["CertbotNormalize"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || ActionBusy)" title="@L["CertbotRenewalCheckTitle"]" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["CertbotRenewalCheck"]</ChildContent></OmniMenuItem>
+        @* Recette R-19: only the certificates the last test failed, one after the other; offered only while one failed. A helper
+           too old to take names would test every certificate instead: the item is then disabled (the outdated-helper alert says why). *@
+        @if (HasFailedCertificates)
+        {
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || ActionBusy || !HelperTakesCertificateNames)" Class="certbot-retest-failed" title="@L["CertbotRetestFailedTitle"]" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheckFailed))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["CertbotRetestFailed"]</ChildContent></OmniMenuItem>
+        }
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || ActionBusy)" title="@L["RenewAll"]" OnClick="@(() => ShowConfirm(L["RenewAllCerts"], L["ConfirmRenewAllCerts"], () => ExecuteActionAsync(CertbotAction.RenewAll), L["Renew"]))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["RenewAll"]</ChildContent></OmniMenuItem>
     </OmniOverflowMenu>
 </SectionContent>
 
@@ -88,22 +94,22 @@
     </OmniAlert>
 }
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Certbot" SettleOnHeartbeat="true" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="@ServerTaskNames.CertbotPrefix" SettleOnHeartbeat="true" AdoptedTitle="@AdoptedTitle" />
 
 <UrlSyncedTabs Slugs="@(new[] { "certificates", "relations" })">
     <Tabs>
         @* --- Certificates tab --- *@
         <OmniTabsItem Key="certificates" Title="@L["Certificates"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("verified")" /></Icon><ChildContent>
             @* R-121: no counter nor filter box above the grid; the filters are the inline row under its header. *@
-            <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Certificates"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" ShowHeaderFilterMenu="false" Items="@Certbot.Certificates" TItem="CertbotCertificateDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+            <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Certificates"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" FilterPlacement="OmniDataGridFilterPlacement.Row" Items="@Certbot.Certificates" TItem="CertbotCertificateDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="CertbotCertificateDto" Property="Name" Title="@L["CertName"]" Filterable="true" />
-                    <OmniDataGridColumn TItem="CertbotCertificateDto" Key="Domains" Title="@L["Domains"]" Width="12rem" Sortable="false" Filterable="true" FilterPredicate="@DomainsMatch" ExportValue="@(c => string.Join(", ", c.Domains))">
+                    <OmniDataGridColumn TItem="CertbotCertificateDto" Key="Domains" Title="@L["Domains"]" Width="12rem" Value="@(c => string.Join(", ", c.Domains))" Filterable="true" FilterPredicate="@DomainsMatch" ExportValue="@(c => string.Join(", ", c.Domains))">
                         <Template Context="c">
                             <CertbotDomainsCell Certificate="@c" />
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="CertbotCertificateDto" Property="ExpiryDate" Title="@L["Expiry"]" Width="11.25rem" Sortable="false" Filterable="true" AdvancedFilter="true">
+                    <OmniDataGridColumn TItem="CertbotCertificateDto" Property="ExpiryDate" Title="@L["Expiry"]" Width="11.25rem" Filterable="true" AdvancedFilter="true">
                         <Template Context="c">
                             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@c.ExpiryDate.ToString("d")</OmniText>
@@ -114,7 +120,7 @@
                             </OmniStack>
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="CertbotCertificateDto" Property="RenewalConvention" Title="@L["CertbotRenewal"]" Width="12.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ConventionFilterText">
+                    <OmniDataGridColumn TItem="CertbotCertificateDto" Property="RenewalConvention" Title="@L["CertbotRenewal"]" Width="12.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ConventionFilterText">
                         <Template Context="c">
                             <OmniBadge Icon="@(BadgeIcon.For(ConventionStyle(c)))" Fill="OmniFill.Solid" Tone="@ConventionStyle(c)" title="@ConventionDetail(c)" data-testid="certbot-convention">@ConventionText(c)</OmniBadge>
                         </Template>
@@ -129,6 +135,8 @@
                                     {
                                         <OmniMenuItem Disabled="@AgentOffline" Class="certbot-remove-domain" OnClick="@(() => ConfirmRemoveDomain(c, domain))"><Icon><OmniIcon Name="OmniIconName.Remove" /></Icon><ChildContent>@string.Format(L["CertbotRemoveDomainItem"], domain)</ChildContent></OmniMenuItem>
                                     }
+                                    @* Recette R-19: the dry run of this certificate only. *@
+                                    <OmniMenuItem Disabled="@(AgentOffline || !HelperTakesCertificateNames)" Class="certbot-retest-one" title="@L["CertbotRetestOneTitle"]" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck, c.Name))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["CertbotRetestOne"]</ChildContent></OmniMenuItem>
                                     <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowDestructiveConfirm(L["RevokeCert"], string.Format(L["ConfirmRevokeCert"], c.Name),
                                             () => ExecuteActionAsync(CertbotAction.RevokeAndDelete, c.Name), L["Revoke"].Value))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Revoke"]</ChildContent></OmniMenuItem>
                                 </OmniOverflowMenu>

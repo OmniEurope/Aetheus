@@ -9,12 +9,29 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else
 {
     @* One wizard for both starting points: the "start from" choice is the first thing of its Project step
        and swaps the steps behind it (the templates' steps, or those of copying an existing project). *@
+    @* R-55: the page veil is held while the pipelines are being created; the wizard stays mounted under it. *@
+    <VeilHold Busy="@_saving" />
+    @* R-23: the mirror of an external repository is synchronized before the repository is read: the page veil is held while it
+       runs, and a failed synchronization is said with its cause and can be retried. *@
+    <VeilHold Busy="@MirrorSync.Busy" />
+    @if (MirrorSync.Failure is { } mirrorFailure)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" Title="@L["PipelineSetupMirrorSyncFailedTitle"]" data-testid="setup-mirror-sync-failed">
+            <OmniStack Gap="OmniSpacing.Small">
+                <span>@mirrorFailure</span>
+                <div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" Busy="@MirrorSync.Busy" OnClick="@RetryMirrorSyncAsync"
+                                data-testid="setup-mirror-sync-retry"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+                </div>
+            </OmniStack>
+        </OmniAlert>
+    }
     <WizardDialog Steps="@_steps" CanAdvance="@CanAdvance" StepChanged="@OnStepChanged" InitialStep="@_initialStep"
                   OnFinishClicked="@FinishAsync" OnCancelClicked="@GoBack" FinishText="@FinishText" />
 }

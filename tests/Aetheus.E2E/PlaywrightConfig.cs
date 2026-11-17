@@ -18,6 +18,32 @@ internal static class PlaywrightConfig
     public static readonly string BackendUrl =
         Environment.GetEnvironmentVariable("E2E_BACKEND_URL") ?? "https://localhost:5301";
 
+    /// <summary>
+    /// Launch options that give the browser a secure context on <paramref name="frontendUrl"/>. The .NET 11
+    /// WebAssembly runtime refuses to start without <c>crypto.subtle</c> ("This engine doesn't support
+    /// crypto.subtle"), and a browser only offers it to HTTPS and loopback origins. The QA stack, the
+    /// launcher's E2E stack and the pipeline rehearsal reach the front over plain HTTP on a container or
+    /// <c>host.docker.internal</c> name, so for such an origin Chromium is told to treat exactly that origin as
+    /// secure. The flag is ignored by Playwright's default headless shell (proved in the QA image: isSecureContext
+    /// stays false), which is why the full Chromium in its new headless mode is selected as well. The origin
+    /// itself is not changed, so the backend's CORS and the front's API base address stay valid. HTTPS and
+    /// loopback origins (a developer's own browser run) keep the launch options untouched.
+    /// </summary>
+    public static BrowserTypeLaunchOptions WithSecureFrontendOrigin(BrowserTypeLaunchOptions? options, string frontendUrl)
+    {
+        var launch = options ?? new BrowserTypeLaunchOptions();
+        var origin = new Uri(frontendUrl);
+        if (origin.Scheme != Uri.UriSchemeHttp
+            || origin.IsLoopback
+            // A *.localhost name (its last DNS label is localhost) is already a secure context.
+            || string.Equals(origin.Host.Split('.')[^1], "localhost", StringComparison.OrdinalIgnoreCase))
+            return launch;
+
+        launch.Channel = "chromium";
+        launch.Args = [.. launch.Args ?? [], $"--unsafely-treat-insecure-origin-as-secure={origin.GetLeftPart(UriPartial.Authority)}"];
+        return launch;
+    }
+
     /// <summary>The seeded admin's username: a display name used to find its row in lists, never a
     /// sign-in (owner decision 2026-10-28; <see cref="AdminEmail"/> signs in).</summary>
     public static readonly string AdminUser =

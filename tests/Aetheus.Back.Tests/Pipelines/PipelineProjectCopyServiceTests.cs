@@ -377,6 +377,37 @@ public sealed class PipelineProjectCopyServiceTests
         Assert.DoesNotContain("w7.", pipeline.YamlDefinition, StringComparison.Ordinal);
     }
 
+    // Recette R-86 (b): the pipelines created in the target project (and so the `.pipeline/<name>.yaml`
+    // files written for them) carry the target slug, and the references between them follow.
+    [Fact]
+    public async Task Copy_OfSlugNamedPipelines_CreatesThemUnderTheTargetSlug_WithTheirReferences()
+    {
+        _pipelines.GetProjectNameAsync(SourceProjectId, Arg.Any<CancellationToken>()).Returns("W7");
+        _pipelines.GetProjectNameAsync(TargetProjectId, Arg.Any<CancellationToken>()).Returns("Acme");
+        _pipelines.GetPipelineDefinitionsForProjectAsync(SourceProjectId, Arg.Any<CancellationToken>()).Returns(
+        [
+            (20, "w7-ci", "name: w7-ci\ntrigger: manual\non_success:\n  - pipeline: w7-deploy\nstages: []\n"),
+            (21, "w7-deploy", "name: w7-deploy\ntrigger: manual\nstages: []\n"),
+            (22, "other-tool", "name: other-tool\ntrigger: manual\nstages: []\n")
+        ]);
+        _libraries.GetLibrariesAsync(SourceProjectId, Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaginatedResult<VariableLibraryDto>());
+        _vaults.GetVaultsAsync(SourceProjectId, Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaginatedResult<VaultDto>());
+        var created = new List<CreatePipelineRequest>();
+        _pipelineService.When(service => service.CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => created.Add(call.Arg<CreatePipelineRequest>()));
+
+        await _sut.CopyAsync(Request() with { SourcePrefix = "aetheus", Prefix = "ats" }, null, null, null, null, Ct);
+
+        Assert.Equal(["acme-ci", "acme-deploy", "ats-other-tool"], created.Select(item => item.Name));
+        var ci = created.Single(item => item.Name == "acme-ci");
+        Assert.Contains("name: acme-ci", ci.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("pipeline: acme-deploy", ci.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("w7-", ci.YamlDefinition, StringComparison.Ordinal);
+        Assert.Equal(".pipeline/acme-ci.yaml", $".pipeline/{PipelineGitPathPolicy.Slugify(ci.Name)}.yaml");
+    }
+
     [Fact]
     public async Task Plan_IntoTheSameProject_IsRefused() =>
         await Assert.ThrowsAsync<BadRequestException>(() => _sut.PlanAsync(

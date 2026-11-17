@@ -75,7 +75,7 @@ public class MainLayoutRenderTests : BunitContext
         SetProperty(instance, "Configuration", config);
 
         // Wire ActiveOrganizationService
-        var orgs = new ActiveOrganizationService(api, new Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences());
+        var orgs = new ActiveOrganizationService(api, new Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences(), auth);
         SetProperty(instance, "Orgs", orgs);
 
         // Wire the shared busy veil (R-99)

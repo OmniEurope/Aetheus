@@ -110,6 +110,29 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
     }
 
     [Fact]
+    public async Task PreparedArchive_PastTheCacheBound_IsServedTransient_AndTheCacheDoesNotGrow()
+    {
+        // M5: in Development the server URL comes from the request Host header; varying it must not grow
+        // the cache (or the temp files behind it) without limit.
+        CreateSolution(crlfTemplates: false);
+        var prebuilt = await CreatePrebuiltArchiveAsync();
+        var cache = new AgentDownloadsExtensions.PreparedArchiveCache(capacity: 2);
+
+        var one = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(cache, prebuilt, "https://one.example.test", null, null);
+        var two = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(cache, prebuilt, "https://two.example.test", null, null);
+        var three = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(cache, prebuilt, "https://three.example.test", null, null);
+        var oneAgain = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(cache, prebuilt, "https://one.example.test", null, null);
+        _archives.AddRange([one.Path, two.Path, three.Path]);
+
+        Assert.False(one.IsTransient);
+        Assert.False(two.IsTransient);
+        Assert.True(three.IsTransient);
+        Assert.Equal(2, cache.Count);
+        Assert.Equal(one, oneAgain);
+        Assert.Equal("https://three.example.test\n", Encoding.UTF8.GetString((await ReadArchiveAsync(three.Path))[".aetheus-server-url"]));
+    }
+
+    [Fact]
     public async Task PreparedArchive_ThatDisappeared_IsRefusedOnceThenPreparedAgain()
     {
         CreateSolution(crlfTemplates: false);
@@ -181,7 +204,7 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
     /// template tree, optionally rewritten with CRLF endings as a Windows checkout would have them.</summary>
     private string CreateSolution(bool crlfTemplates)
     {
-        var agentOutput = Path.Combine(_root, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0");
+        var agentOutput = Path.Combine(_root, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net11.0");
         Directory.CreateDirectory(agentOutput);
         File.WriteAllText(Path.Combine(agentOutput, "Aetheus.Agent.Linux.dll"), "binary");
         Directory.CreateDirectory(Path.Combine(_root, "deploy", "agent-installer"));

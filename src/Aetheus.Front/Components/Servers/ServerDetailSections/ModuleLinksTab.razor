@@ -14,7 +14,7 @@
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"
         Class="pipeline-list-search" />
 
-    <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_links" TItem="LinkedResourceDto"
+    <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_links" TItem="LinkedResourceDto" KeyProperty="LinkId"
         Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" Density="OmniDensity.Compact" EmptyText="@L["NoRecords"]"
         Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -33,7 +33,7 @@
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="LinkedResourceDto" Title="@L["Actions"]" Width="100px" Sortable="false" Filterable="false" >
                     <Template Context="l">
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteLinkAsync(l.LinkId))" title="@L["Unlink"]"><Icon><OmniIcon Name="OmniIconName.LinkBreak" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteLinkAsync(l))" title="@L["Unlink"]"><Icon><OmniIcon Name="OmniIconName.LinkBreak" /></Icon></OmniButton>
                     </Template>
                 </OmniDataGridColumn>
             </Columns>

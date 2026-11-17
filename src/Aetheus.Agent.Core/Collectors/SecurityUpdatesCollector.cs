@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Collectors;
 
 /// <summary>
 /// ADR-024 4.1: reports pending OS updates (total + security) at heartbeat by running
-/// <c>apt-get -s upgrade</c> (a non-mutating simulation - no sudo, no changes). No-fake contract
+/// <c>apt-get -s upgrade --with-new-pkgs</c> (a non-mutating simulation - no sudo, no changes; new packages included so a pending kernel is listed). No-fake contract
 /// (mirrors <c>RkhunterCollector</c>'s installed-vs-failed decoupling):
 /// <list type="bullet">
 /// <item>no <c>apt-get</c> binary =&gt; <c>PackageManagerPresent=false</c> (feature N/A), never "0 updates";</item>
@@ -34,10 +33,10 @@ public sealed class SecurityUpdatesCollector(
 
         try
         {
-            var res = await Shell.RunExecAsync("apt-get", ["-s", "upgrade"], ct).ConfigureAwait(false);
+            var res = await Shell.RunExecAsync("apt-get", BuildAptSimulateArgv(), ct).ConfigureAwait(false);
             if (res.ExitCode != 0)
             {
-                Logger.LogDebug("[SecurityUpdatesCollector] `apt-get -s upgrade` exited {Code}", res.ExitCode);
+                Logger.LogDebug("[SecurityUpdatesCollector] `apt-get -s upgrade --with-new-pkgs` exited {Code}", res.ExitCode);
                 return new SecurityUpdatesDataDto { PackageManagerPresent = true, ProbeSucceeded = false };
             }
 
@@ -58,4 +57,10 @@ public sealed class SecurityUpdatesCollector(
             return new SecurityUpdatesDataDto { PackageManagerPresent = true, ProbeSucceeded = false };
         }
     }
+
+    // `apt-get -s upgrade --with-new-pkgs`: the unprivileged simulation, shared with SystemPackageUpgradeExecutor (Operations
+    // depends on Collectors, never the reverse). `--with-new-pkgs` lists a kernel ABI bump (a new linux-image package) and
+    // never removes a package.
+    internal static IReadOnlyList<string> BuildAptSimulateArgv() =>
+        ["-s", "upgrade", "--with-new-pkgs"];
 }

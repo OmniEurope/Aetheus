@@ -137,6 +137,18 @@ public class ServerPortObservationControllerTests
     }
 
     [Fact]
+    public async Task ReportObserved_ForwardsTheProtocolsTheAgentMeasured()
+    {
+        SetUser(new Claim("ServerId", "7"));
+        var protocols = new List<ObservedProtocolScanDto> { new() { Protocol = "tcp", AgeSeconds = 12 } };
+
+        await _sut.ReportObserved(7, new ObservedPortsReportDto { Protocols = protocols }, Ct);
+
+        await _registry.Received(1).ReplaceObservedAsync(
+            7, Arg.Any<IReadOnlyCollection<ObservedPortDto>>(), Now, Arg.Any<CancellationToken>(), protocols);
+    }
+
+    [Fact]
     public async Task ReportObserved_ForeignServer_IsForbidden()
     {
         SetUser(new Claim("ServerId", "8"));

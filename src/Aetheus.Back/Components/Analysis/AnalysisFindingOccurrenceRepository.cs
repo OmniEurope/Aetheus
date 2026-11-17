@@ -40,6 +40,7 @@ internal sealed class AnalysisFindingOccurrenceRepository(AppDbContext db)
                     : new PipelineRun
                     {
                         Id = occurrence.AnalysisReport.PipelineRun.Id,
+                        BuildNumber = occurrence.AnalysisReport.PipelineRun.BuildNumber,
                         PipelineId = occurrence.AnalysisReport.PipelineRun.PipelineId,
                         Pipeline = new Pipeline
                         {

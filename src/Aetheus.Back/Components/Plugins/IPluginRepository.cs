@@ -9,7 +9,7 @@ public interface IPluginRepository
     Task<(List<PluginRegistration> Items, int TotalCount)> GetPageAsync(
         string? search, string? sortBy, bool sortDescending,
         int page, int pageSize, CancellationToken ct = default,
-        IReadOnlyList<GridFilter>? columnFilters = null);
+        IReadOnlyList<GridFilter>? columnFilters = null, int? organizationId = null);
 
     /// <summary>The distinct authors of the registered plugins.</summary>
     Task<List<string>> GetAuthorsAsync(CancellationToken ct = default);

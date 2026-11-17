@@ -4,6 +4,13 @@
    project telemetry events (ADR-021); exports use the grid's filters and include every matching
    line. *@
 <OmniStack Class="page-fill-body">
+@if (_loading && _items.Count == 0 && !_loadFailed)
+{
+    @* R-34: a slow first read is said above the grid, which stays drawn with its headers. OE alone draws a thin bar and
+       a status read only to screen readers, which leaves the panel looking empty while the read lasts. LoadingContent
+       is not used: it turns on OE's image-waiting veil, which hides the rows until its script lifts it. *@
+    <div data-testid="app-logs-loading"><ZoneVeil Label="@L["LogsLoading"]" /></div>
+}
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger">

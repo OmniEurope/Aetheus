@@ -14,6 +14,7 @@ public partial class PipelineSetupReadinessPanel
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private PipelineSetupProvisionState ProvisionState { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
 
     [Parameter] public PipelineSetupReadinessDto? Readiness { get; set; }
     [Parameter] public bool Loading { get; set; }
@@ -34,6 +35,18 @@ public partial class PipelineSetupReadinessPanel
     /// <summary>Raised after the project changed from here (requirements provisioned, a repository
     /// created), so the host re-runs the readiness check.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>R-40 (d): keys of empty values another block of the summary already asks for (the production panel); they are
+    /// left out of the findings so a value is asked in one place only.</summary>
+    [Parameter] public IReadOnlySet<string>? AskedElsewhere { get; set; }
+
+    /// <summary>R-20: the optional first push the wizard offers once it created the repository; null where the host has none
+    /// (the user is then taken to the new repository page, R-31).</summary>
+    [Parameter] public PipelineSetupFirstPush? FirstPush { get; set; }
+
+    /// <summary>R-69: the application is an external repository. The repository to prepare is then attached, never created
+    /// empty: a project holding an empty internal repository keeps it as its source and the external one stays beside it.</summary>
+    [Parameter] public bool ExternalApplication { get; set; }
 
     private bool _provisioning;
     private string? _provisionError;
@@ -72,7 +85,17 @@ public partial class PipelineSetupReadinessPanel
             : [.. Readiness.Checks.Where(check => check.Kind is not (PipelineSetupReadinessKind.NoRepository
                 or PipelineSetupReadinessKind.EmptyBranch
                 or PipelineSetupReadinessKind.MissingRequiredLibraries
-                or PipelineSetupReadinessKind.MissingRequiredVaults))];
+                or PipelineSetupReadinessKind.MissingRequiredVaults))
+                .Select(WithoutAskedElsewhere).OfType<PipelineSetupReadinessCheckDto>()];
+
+    private PipelineSetupReadinessCheckDto? WithoutAskedElsewhere(PipelineSetupReadinessCheckDto check)
+    {
+        if (AskedElsewhere is not { Count: > 0 } asked || check.EmptyValues.Count == 0) return check;
+        var rows = check.EmptyValues.Where(row => !asked.Contains(row.Key)).ToList();
+        return rows.Count == 0
+            ? null
+            : check with { EmptyValues = rows, Items = [.. check.Items.Where(item => !asked.Contains(item))] };
+    }
 
     private bool CanProvision => Readiness is not null && TemplateNames.Count > 0 && Pending.Count > 0;
 
@@ -99,14 +122,25 @@ public partial class PipelineSetupReadinessPanel
 
     private string Purpose(RecapElement element) => PipelineReadinessText.Purpose(L, element.IsVault, element.Name);
 
+    /// <summary>R-69: the project's external repository page, where the repository is attached (the wizard is run again after).</summary>
+    private void AttachExternalRepository() => Nav.NavigateTo($"/projects/{ProjectId}/external-repo");
+
     private async Task CreateRepositoryAsync()
     {
         var created = await Dialog.OpenAsync<GitRepositoryCreateDialog>(
             L["NewRepository"].Value,
             new Dictionary<string, object?> { [nameof(GitRepositoryCreateDialog.ProjectId)] = ProjectId },
             new OmniDialogOptions { Width = "500px", AutoFocusFirstElement = false });
-        if (created is true)
+        // R-20: the wizard offers the first push where it stands (commands to copy, then the wait), and the repository now
+        // exists, so the host reads the project again.
+        if (FirstPush is not null && created is int repositoryId && await FirstPush.OfferAsync(repositoryId))
+        {
             await OnChanged.InvokeAsync();
+            return;
+        }
+        // R-31: the new repository page tells how to push the code and leads back to this page.
+        if (GitRepositoryCreateDialog.RepositoryPageHref(created, ReturnUrl, Nav) is { } href)
+            Nav.NavigateTo(href);
     }
 
     private async Task ProvisionAsync()

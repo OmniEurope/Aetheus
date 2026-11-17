@@ -29,7 +29,7 @@ public sealed class AnalysisContinuousSyncServiceTests
         BackgroundServiceTestKit.ScopeFactory(
             (typeof(IAnalysisRepository), _repo), (typeof(IDependencyTrackClient), _client), (typeof(INotificationService), _notifications)),
         Options.Create(new DependencyTrackOptions { Enabled = enabled, SyncIntervalMinutes = intervalMinutes }),
-        _clock, _logger, lease);
+        _clock, _logger, lease ?? LeaderLeaseDouble.Leader());
 
     private void Tracking(params AnalysisTrackingProject[] projects) =>
         _repo.GetActiveTrackingProjectsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(projects.ToList());

@@ -7,6 +7,7 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
     [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
+    [Inject] private AdministrationScopeService Scope { get; set; } = default!;
 
     private List<AiRunnerProfileDto> _profiles = [];
 
@@ -63,7 +64,7 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
         var (page, pageSize) = args.ToPageRequest(25);
         var (sortBy, sortDescending) = args.ToSortRequest(DefaultSortField);
         return Api.Ai.GetAiRunnerProfilesAsync(page, pageSize, filters: args.ToApiFilters(),
-            sortBy: sortBy, sortDescending: sortDescending);
+            sortBy: sortBy, sortDescending: sortDescending, organizationId: Scope.SelectedFor(null));
     }
 
     protected override async Task LoadPageAsync(int page, int pageSize)
@@ -71,7 +72,7 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
         var filters = _columnFilters;
         var result = await LoadPageResultAsync(
             () => Api.Ai.GetAiRunnerProfilesAsync(page, pageSize, filters: filters,
-                sortBy: _sortBy, sortDescending: _sortDescending));
+                sortBy: _sortBy, sortDescending: _sortDescending, organizationId: Scope.SelectedFor(null)));
         _profiles = result.Items;
     }
 
@@ -81,9 +82,11 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
             profile is null ? L["Create"] : L["Edit"],
             new Dictionary<string, object?> { ["ProfileId"] = profile?.Id },
             new OmniDialogOptions { Width = "760px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        if (result is not true) return;
+        if (result is not AiRunnerProfileDto saved) return;
+        // R-10: the saved profile shows at once from the answer, the quiet read behind it puts it in its place.
+        if (_grid is not null) await _grid.ShowRowAsync(saved);
+        else await ReloadPageAsync();
         await LoadFilterValuesAsync();
-        await ReloadPageAsync();
     }
 
     private async Task DeleteAsync(AiRunnerProfileDto profile)
@@ -95,7 +98,8 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
         await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Ai.DeleteAiRunnerProfileAsync(profile.Id),
             "Deleted",
-            ReloadPageAsync,
+            // R-10: the profile leaves the grid at once, the quiet read behind it confirms.
+            () => _grid is not null ? _grid.HideRowAsync(profile) : ReloadPageAsync(),
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
@@ -45,17 +46,17 @@ public sealed class ServerMailLogsTabTests : BunitContext
         _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/logs", new MailTaskQueuedDto { TaskId = 62 });
         _handler.SetJsonResponse("api/logs/task/62", new List<TaskLogDto> { new() { Id = 1, TaskId = 62, Message = "line" } });
         var cut = Render<ServerMailLogsTab>(p => p.Add(x => x.ServerId, 10));
-        Assert.Empty(cut.FindAll(".omni-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
 
         cut.FindAll("button").First(b => b.TextContent.Contains("FetchLogs", StringComparison.Ordinal)).Click();
 
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find(".omni-busy").GetAttribute("aria-busy")));
+        cut.WaitForAssertion(() => Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy));
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
         Assert.NotNull(cut.Find("input[placeholder='MailLogFilter']"));
 
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
             new TaskCompletedNotification { TaskId = 62, ServerId = 10, Status = TaskExecutionStatus.Success }));
-        Assert.Empty(cut.FindAll(".omni-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     [Fact]

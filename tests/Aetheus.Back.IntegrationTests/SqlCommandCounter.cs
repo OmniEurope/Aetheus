@@ -24,26 +24,35 @@ internal sealed class SqlCommandCounter : IObserver<DiagnosticListener>, IObserv
         /// <summary>How many of <see cref="Commands"/> read role permissions: the authorization checks of
         /// the call, told apart from its other work (e-mail rendering, inserts).</summary>
         public int PermissionCommands { get; init; }
+
+        /// <summary>The text of every command the call sent, in order.</summary>
+        public IReadOnlyList<string> Statements { get; init; } = [];
     }
 
-    private sealed class Tally
+    private sealed class Tally(SqlCommandCounter owner)
     {
+        /// <summary>The counter that opened the measure. Every live counter observes the same EF Core
+        /// listener, so a counter alive in a test class running in parallel would otherwise count this
+        /// measure's commands a second time.</summary>
+        public readonly SqlCommandCounter Owner = owner;
         public int Commands;
         public int PermissionCommands;
         public long SqlTicks;
+        public readonly List<string> Statements = [];
     }
 
     /// <summary>Runs <paramref name="action"/>, timing it and counting the SQL commands it sent.</summary>
     public async Task<Measure<T>> MeasureAsync<T>(Func<Task<T>> action)
     {
-        var tally = new Tally();
+        var tally = new Tally(this);
         Current.Value = tally;
         var stopwatch = Stopwatch.StartNew();
         var result = await action();
         stopwatch.Stop();
         return new Measure<T>(result, stopwatch.Elapsed, Volatile.Read(ref tally.Commands), TimeSpan.FromTicks(Interlocked.Read(ref tally.SqlTicks)))
         {
-            PermissionCommands = Volatile.Read(ref tally.PermissionCommands)
+            PermissionCommands = Volatile.Read(ref tally.PermissionCommands),
+            Statements = [.. tally.Statements]
         };
     }
 
@@ -56,11 +65,12 @@ internal sealed class SqlCommandCounter : IObserver<DiagnosticListener>, IObserv
 
     public void OnNext(KeyValuePair<string, object?> value)
     {
-        if (Current.Value is not { } tally) return;
+        if (Current.Value is not { } tally || !ReferenceEquals(tally.Owner, this)) return;
         Interlocked.Increment(ref tally.Commands);
         if (value.Value is CommandExecutedEventData executed)
         {
             Interlocked.Add(ref tally.SqlTicks, executed.Duration.Ticks);
+            lock (tally.Statements) tally.Statements.Add(executed.Command.CommandText);
             if (executed.Command.CommandText.Contains("\"ResourcePermissions\"", StringComparison.Ordinal))
                 Interlocked.Increment(ref tally.PermissionCommands);
         }

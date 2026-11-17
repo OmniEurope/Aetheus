@@ -1,0 +1,82 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-005 lot 3: one scheduled pipeline, as a card of the planner's grid. The frequency is said in words at the
+   reader's clock (the UTC time the engine reads beside it), the duration is the average of the last successful
+   runs or the planned hour, and the overlap state is an icon and a text, never a colour alone. The actions
+   are the card's menu. *@
+<OmniCard data-testid="@($"schedule-card-{Item.PipelineId}")">
+    <HeaderContent>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Small">
+            <OmniText Element="OmniTextElement.Strong" Truncate="true"><OmniLink Href="@($"pipelines/{Item.PipelineId}")">@Item.PipelineName</OmniLink></OmniText>
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem OnClick="@(() => OnEdit.InvokeAsync(Item))" Disabled="@(!CanWrite)" title="@DeniedHint" data-testid="schedule-edit">
+                    <Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["ScheduleEditFrequency"]</ChildContent>
+                </OmniMenuItem>
+                <OmniMenuItem OnClick="@(() => OnToggle.InvokeAsync(Item))" Disabled="@(!CanWrite)" title="@DeniedHint" data-testid="schedule-toggle">
+                    <Icon><OmniIcon Name="@(Item.Enabled ? OmniIconName.Pause : OmniIconName.Play)" /></Icon><ChildContent>@L[Item.Enabled ? "ScheduleSwitchOff" : "ScheduleSwitchOn"]</ChildContent>
+                </OmniMenuItem>
+                <OmniMenuItem Href="@($"pipelines/{Item.PipelineId}")">
+                    <Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent>@L["ScheduleOpenPipeline"]</ChildContent>
+                </OmniMenuItem>
+            </OmniOverflowMenu>
+        </OmniStack>
+    </HeaderContent>
+    <ChildContent>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                <OmniIcon Name="OmniIconName.CalendarBlank" />
+                <span data-testid="schedule-frequency">@FrequencyText</span>
+                @if (!Item.Enabled)
+                {
+                    <OmniBadge Tone="OmniTone.Neutral" data-testid="schedule-off"><Icon><OmniIcon Name="OmniIconName.Pause" /></Icon><ChildContent>@L["ScheduleOff"]</ChildContent></OmniBadge>
+                }
+                else if (UtcText.Length > 0)
+                {
+                    <OmniText Tone="OmniTextTone.Muted" data-testid="schedule-utc">(@UtcText)</OmniText>
+                }
+            </OmniStack>
+            @if (Item.Frequency == ScheduleFrequency.Custom)
+            {
+                <OmniText Tone="OmniTextTone.Muted"><code data-testid="schedule-cron">@Item.CronExpression</code></OmniText>
+            }
+            @if (Item.CanChooseSourceBranch)
+            {
+                @* R-5: the schedule is the one of a definition read on a branch; the card says which, and the bar changes what the
+                   planner reads (display only, the pipeline's own source branch is never written here). *@
+                <OmniStack Gap="OmniSpacing.Small" data-testid="schedule-source">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                        <OmniIcon Name="OmniIconName.GitFork" />
+                        <span data-testid="schedule-source-label">@SourceText</span>
+                    </OmniStack>
+                    <OmniSelectBar @key="@($"{Item.SourceBranch}|{_selectorRevision}")" TValue="string" Options="@SourceOptions" Label="@L["ScheduleSourceChoice"]" Id="@($"schedule-source-{Item.PipelineId}")" Size="OmniControlSize.Small" Disabled="@(!CanWrite)"
+                                   Value="@Item.SourceBranch" ValueExpression="@(() => Item.SourceBranch)" ValueChanged="@ChooseSourceAsync" />
+                    @if (Item.ChosenBranchMissing)
+                    {
+                        <OmniText Tone="OmniTextTone.Muted" data-testid="schedule-source-missing">@MissingText</OmniText>
+                    }
+                </OmniStack>
+            }
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniIcon Name="OmniIconName.Timer" />
+                <span data-testid="schedule-duration">@DurationText</span>
+            </OmniStack>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniIcon Name="OmniIconName.ArrowRight" />
+                <span data-testid="schedule-next">@NextText</span>
+            </OmniStack>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                @if (Item.Enabled && Partners.Count > 0)
+                {
+                    <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" data-testid="schedule-overlap"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>@OverlapText</ChildContent></OmniBadge>
+                }
+                else if (Item.Enabled)
+                {
+                    <OmniBadge Tone="OmniTone.Success" Fill="OmniFill.Tonal" data-testid="schedule-no-overlap"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@NoOverlapText</ChildContent></OmniBadge>
+                }
+                @if (!CanWrite)
+                {
+                    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" title="@DeniedHint" data-testid="schedule-read-only"><Icon><OmniIcon Name="OmniIconName.Lock" /></Icon><ChildContent>@L["ScheduleReadOnly"]</ChildContent></OmniBadge>
+                }
+            </OmniStack>
+        </OmniStack>
+    </ChildContent>
+</OmniCard>

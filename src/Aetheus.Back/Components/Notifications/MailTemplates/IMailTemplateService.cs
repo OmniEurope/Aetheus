@@ -36,5 +36,6 @@ public interface IMailTemplateService
     /// caller's own address through the platform sender; the outcome is the sender's, verbatim.
     /// </summary>
     Task<MailTemplateTestResultDto> SendTestAsync(
-        MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? userId, CancellationToken ct = default);
+        MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? userId, int? organizationId,
+        CancellationToken ct = default);
 }

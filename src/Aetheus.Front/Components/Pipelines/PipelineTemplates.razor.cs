@@ -18,12 +18,16 @@ public partial class PipelineTemplates : IAsyncDisposable
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
 
+    // The templates API answers the whole list: the page holds it, and the grid's window (sort, column filters
+    // and page cut here, as the grid asks) is what is drawn. The list is read again only when it is stale
+    // (first load, after a change, after a failed read), never for a sort, a filter or a scroll.
     private List<PipelineTemplateSummaryDto> _templates = [];
+    private List<PipelineTemplateSummaryDto> _rows = [];
+    private int _rowCount;
+    private bool _templatesStale = true;
     private AetheusDataGrid<PipelineTemplateSummaryDto>? _grid;
     private static readonly IReadOnlyList<string> YamlContentTypes =
         ["application/x-yaml", "application/yaml", "text/yaml", "text/x-yaml", "text/plain"];
-    private bool _loading;
-    private bool _loadFailed;
     private bool _showImporter;
     private bool _canWrite;
     private HubConnection? _hubConnection;
@@ -34,7 +38,7 @@ public partial class PipelineTemplates : IAsyncDisposable
             Breadcrumb.Set(new BreadcrumbItem(L["PipelineTemplates"]));
         Permissions.OnPermissionsChanged += OnPermissionsChanged;
         RefreshPermission();
-        await LoadTemplatesAsync();
+        // The templates are the grid's own first request (LoadData); the hub below only refreshes them.
         await StartRealtimeAsync();
     }
 
@@ -46,14 +50,29 @@ public partial class PipelineTemplates : IAsyncDisposable
 
     private void RefreshPermission() => _canWrite = Permissions.CanWrite(ResourceType.PipelineTemplate);
 
-    private async Task LoadTemplatesAsync()
+    private async Task LoadTemplatesAsync(GridLoadArgs args)
     {
-        if (_loading) return;
-        _loading = true;
-        _loadFailed = false;
-        try { _templates = await Api.PipelineTemplates.GetPipelineTemplatesAsync(); }
-        catch (HttpRequestException) { _templates = []; _loadFailed = true; }
-        finally { _loading = false; }
+        if (_templatesStale)
+        {
+            _templates = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
+            _templatesStale = false;
+        }
+        _rows = args.ToClientPage(_templates);
+        _rowCount = args.ClientFilteredCount(_templates);
+    }
+
+    /// <summary>One page of the export, cut from a read of the list with the grid's sort and column filters.</summary>
+    private async Task<PaginatedResult<PipelineTemplateSummaryDto>> ReadTemplatesExportAsync(GridLoadArgs args)
+    {
+        var all = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
+        return new PaginatedResult<PipelineTemplateSummaryDto> { Items = args.ToClientPage(all), TotalCount = args.ClientFilteredCount(all) };
+    }
+
+    // The read behind a change must not be answered by the client cache.
+    private void MarkTemplatesStale()
+    {
+        Api.PipelineTemplates.InvalidateTemplateCache();
+        _templatesStale = true;
     }
 
     private async Task StartRealtimeAsync()
@@ -76,8 +95,8 @@ public partial class PipelineTemplates : IAsyncDisposable
         catch { /* SignalR is best-effort; local mutations still reload explicitly. */ }
     }
 
-    // A live change re-reads the list without the loader; the grid notes the rows it holds before
-    // the new list lands, so a template created elsewhere reads bold for a few seconds. A failure
+    // A live change re-reads the list without the loader; the grid cuts its window from the new list and
+    // notes the rows it did not hold, so a template created elsewhere reads bold for a few seconds. A failure
     // keeps the rows on screen for the next event.
     private async Task ReloadFromRealtimeAsync()
     {
@@ -85,10 +104,9 @@ public partial class PipelineTemplates : IAsyncDisposable
         {
             // FRONT-012: the event says the server list changed; the client cache must not answer for it.
             Api.PipelineTemplates.InvalidateTemplateCache();
-            var templates = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
+            _templates = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
+            _templatesStale = false;
             if (_grid is not null) await _grid.Refresh();
-            _templates = templates;
-            _loadFailed = false;
         }
         catch (HttpRequestException) { /* realtime reload - the next event or a user action retries */ }
         StateHasChanged();
@@ -110,7 +128,9 @@ public partial class PipelineTemplates : IAsyncDisposable
             if (await Api.PipelineTemplates.DeletePipelineTemplateAsync(template.Id))
             {
                 Toast.Success("Deleted");
-                await LoadTemplatesAsync();
+                // R-10: the template leaves the grid at once, the quiet read behind it confirms.
+                MarkTemplatesStale();
+                if (_grid is not null) await _grid.HideRowAsync(template);
             }
         });
     }
@@ -138,7 +158,21 @@ public partial class PipelineTemplates : IAsyncDisposable
         if (result is null) return;
         _showImporter = false;
         Toast.Success("Imported");
-        await LoadTemplatesAsync();
+        // R-10: the imported template shows as the server answered it (the quiet read behind it settles what the user may do with it).
+        var imported = new PipelineTemplateSummaryDto
+        {
+            Id = result.Id,
+            Name = result.Name,
+            Description = result.Description,
+            Category = result.Category,
+            Version = result.Version,
+            OrganizationId = result.OrganizationId,
+            UpdatedAt = DateTime.UtcNow,
+            IsShared = result.IsShared,
+            CanEdit = _canWrite && !result.IsShared
+        };
+        MarkTemplatesStale();
+        if (_grid is not null) await _grid.ShowRowAsync(imported);
     }
 
     public async ValueTask DisposeAsync()

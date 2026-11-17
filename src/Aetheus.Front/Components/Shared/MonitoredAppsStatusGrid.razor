@@ -28,12 +28,9 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="OnlineVisitorCount" Title="@L["CurrentVisitors"]" Width="11rem"
             Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators"
-            Visible="@(Applications?.Any(app => app.OnlineVisitorCount.HasValue) == true)">
+            Visible="@(Applications?.Any(app => app.OnlineVisitorState != OnlineAudienceState.Unavailable) == true)">
             <Template Context="app">
-                @if (app.OnlineVisitorCount is int onlineVisitors)
-                {
-                    <span title="@L["OnlineUsersAvailable"]">@onlineVisitors</span>
-                }
+                <OnlineAudienceValue Count="@app.OnlineVisitorCount" State="@app.OnlineVisitorState" LastEventAt="@app.OnlineVisitorLastEventAt" ShowHelp="false" />
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" >

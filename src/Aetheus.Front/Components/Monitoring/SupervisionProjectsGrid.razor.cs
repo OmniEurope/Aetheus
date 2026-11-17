@@ -26,6 +26,9 @@ public partial class SupervisionProjectsGrid
     private static readonly Func<SupervisionRow, object?> LocalLastEventAt = row => row.LastEventAt?.ToLocalTime();
 
     private IReadOnlyList<OmniDataGridGroup> _groups = [new(nameof(SupervisionRow.ProjectName), false)];
+    // The grid reads its open rows back from the host on every render: without this, every reload of the
+    // page closed the storage detail the reader had opened.
+    private IReadOnlyList<object> _expandedKeys = [];
     private IReadOnlyList<SupervisionRow> _rows = [];
     private IReadOnlyList<MonitoredAppStatusDto>? _builtFromApplications;
     private ProjectStorageReportDto? _builtFromStorage;

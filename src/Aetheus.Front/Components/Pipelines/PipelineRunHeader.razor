@@ -4,7 +4,7 @@
 
 @* The header identifies the run and links to its pipeline; attention badges complement the
    detailed overview tiles. *@
-<OmniPageHeader Title="@($"#{Run.Id} {L["PipelineRun"]}")" ShowBack="@(!string.IsNullOrWhiteSpace(PipelineHref))"
+<OmniPageHeader Title="@($"#{Run.BuildNumber} {L["PipelineRun"]}")" ShowBack="@(!string.IsNullOrWhiteSpace(PipelineHref))"
                                  Class="pipeline-run-page-header" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
     <Badges>
@@ -31,9 +31,14 @@
     @* R-30, R-31, R-40: Rerun is pinned (never folded, on a row of its own on a phone, the menu
        staying on line 1) and has no chevron; its variants are in the page menu. *@
     <PinnedActionsContent>
+        @* R-22: after a missed confirmation, replaying the failed stage is the main action, in plain sight. *@
+        @if (RetryFailedPinned)
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" Class="@(Retrying ? "run-retry-failed btn-busy" : "run-retry-failed")" Busy="@Retrying" OnClick="RetryFailedRequested"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["RerunFailedSteps"]</span></ChildContent></OmniButton>
+        }
         @if (CanRerun)
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" Class="@(Rerunning ? "btn-busy" : null)" Busy="@Rerunning" OnClick="@(() => RerunRequested.InvokeAsync(null))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Rerun"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="@(RetryFailedPinned ? OmniButtonVariant.Secondary : OmniButtonVariant.Primary)" Class="@(Rerunning ? "btn-busy" : null)" Busy="@Rerunning" OnClick="@(() => RerunRequested.InvokeAsync(null))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Rerun"]</span></ChildContent></OmniButton>
         }
     </PinnedActionsContent>
     <MenuContent>
@@ -52,7 +57,7 @@
         {
             <OmniMenuItem OnClick="CancelRequested"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["CancelRun"]</ChildContent></OmniMenuItem>
         }
-        @if (CanRerun && HasFailedSteps)
+        @if (CanRerun && HasFailedSteps && !RetryFailedPinned)
         {
             <OmniMenuItem OnClick="RetryFailedRequested"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["RerunFailedSteps"]</ChildContent></OmniMenuItem>
         }

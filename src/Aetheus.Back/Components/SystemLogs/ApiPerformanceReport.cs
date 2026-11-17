@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
-using OmniEurope.Performance;
+using OmniEurope.Diagnostics;
 
 namespace Aetheus.Back.Components.SystemLogs;
 
-/// <summary>Map the shared OmniEurope.Performance collector report into the administration-page
+/// <summary>Map the shared OmniEurope.Diagnostics collector report into the administration-page
 /// contract, using the same source as optional telemetry export.</summary>
 public static class ApiPerformanceReport
 {

@@ -34,6 +34,10 @@ public sealed class SdkPinGuardTests
         ("10.0.2", "5.3.0"),
         ("10.0.3", "5.6.0"),
         ("10.0.4", "5.9.0"),
+        // SDK 11.0.1xx ships Roslyn 5.12.0, which nuget.org does not publish as a stable package (latest: 5.9.0,
+        // 2026-11-11). An analyzer built on 5.9.0 loads under a 5.12 host compiler (only a newer one is refused,
+        // CS9057), so the pin stays on the newest stable. Move it to 5.12.x when nuget.org carries it (ADR-048).
+        ("11.0.1", "5.9.0"),
     ];
 
     private static readonly string[] PinnedPackages =

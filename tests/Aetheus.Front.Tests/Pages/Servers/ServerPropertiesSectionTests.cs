@@ -8,7 +8,8 @@ public class ServerPropertiesSectionTests : BunitContext
 {
     public ServerPropertiesSectionTests()
     {
-        BunitTestHelper.RegisterServices(this);
+        // The section also holds the reboot schedule card (recette R-8), which reads the schedule: none here.
+        BunitTestHelper.RegisterServices(this).SetResponse(HttpMethod.Get, "reboot-schedule", System.Net.HttpStatusCode.NoContent);
     }
 
     [Fact]
@@ -28,6 +29,7 @@ public class ServerPropertiesSectionTests : BunitContext
         Assert.Contains("192.168.1.1", cut.Markup);
         Assert.Contains("Normal", cut.Markup);   // Type badge text
         Assert.Contains("Online", cut.Markup);   // Status badge text
+        cut.WaitForAssertion(() => Assert.Contains("ServerRebootCardTitle", cut.Markup, StringComparison.Ordinal));
     }
 
     [Fact]

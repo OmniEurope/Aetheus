@@ -42,6 +42,23 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
     /// <summary>Completes when a beat has been asked for; consumes the request.</summary>
     internal Task WaitForHeartbeatRequestAsync(CancellationToken ct) => _heartbeatRequested.WaitAsync(ct);
 
+    // R-41: a system upgrade has just changed the installed packages; the CVE watch is told now, not tomorrow.
+    private readonly SemaphoreSlim _hostPackageReportRequested = new(0, 1);
+    private readonly Lock _hostPackageReportRequestGate = new();
+
+    /// <summary>Asks the host package reporter for a report as soon as it is free.</summary>
+    public void RequestHostPackageReport()
+    {
+        lock (_hostPackageReportRequestGate)
+        {
+            if (_hostPackageReportRequested.CurrentCount == 0)
+                _hostPackageReportRequested.Release();
+        }
+    }
+
+    /// <summary>Completes when a host package report has been asked for; consumes the request.</summary>
+    internal Task WaitForHostPackageReportRequestAsync(CancellationToken ct) => _hostPackageReportRequested.WaitAsync(ct);
+
     // Recette R-119: an operation (a mail change, an Apache site enabled or deleted...) has just changed what a
     // cached inventory reports. The heartbeat drops that cached inventory before the next beat, so the page, and a
     // reload, read the real state instead of the one collected up to SlowInventoryTtl ago.

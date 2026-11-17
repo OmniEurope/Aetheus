@@ -5,9 +5,9 @@
 @* Recette R-29 (after R-44, R-45): the page's main action sits in the page header, on the title line, with its
    menu beside it. STD-BTN detection 11: Apply visible, the other actions in the menu. *@
 <SectionContent SectionName="@PageHeaderActions.SectionName">
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ApplyAsync" Disabled="@(!CanApply || !CanUpgrade)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["PatchApply"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ApplyAsync" Disabled="@(!CanApply || !CanUpgrade || ActionBusy)" Class="@(ActionBusy ? "btn-busy" : null)" Busy="@(ActionBusy)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["PatchApply"]</span></ChildContent></OmniButton>
     <OmniOverflowMenu Label="@L["MoreActions"]">
-        <OmniMenuItem OnClick="@CheckAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["PatchCheck"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@CheckAsync" Disabled="@ActionBusy"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["PatchCheck"]</ChildContent></OmniMenuItem>
         @if (!CanApply && CanEnableComponent)
         {
             @* R1-5: the component is enabled from here, in the dialog of the server menu, never with a command on the host. *@
@@ -17,11 +17,11 @@
 </SectionContent>
 
 <OmniStack Gap="OmniSpacing.Large">
-    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" SettleOnHeartbeat="true" OnSettled="@(() => LoadAsync(live: true))" />
+    <ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" AdoptPrefixes="PatchTaskPrefixes" SettleOnHeartbeat="true" OnSettled="@(() => LoadAsync(live: true))" />
 
     @if (_loading)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else if (_status is null || !_status.PackageManagerPresent)
     {
@@ -62,7 +62,7 @@
 
         @if (_status.Updates.Count > 0)
         {
-            <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["PatchTitle"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_status.Updates" TItem="PendingUpdateDto" KeyOf="@(row => row.Package)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+            <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["PatchTitle"])" ExportFields="@ExportContext.Fields()" MaxHeight="@AetheusGrid.TenRowsMaxHeight" Items="@_status.Updates" TItem="PendingUpdateDto" KeyOf="@(row => row.Package)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="PendingUpdateDto" Property="Package" Title="@L["PatchPackage"]"  Filterable="true"/>
                     <OmniDataGridColumn TItem="PendingUpdateDto" Property="CurrentVersion" Title="@L["PatchCurrentVersion"]" Width="200px"  Filterable="true"/>

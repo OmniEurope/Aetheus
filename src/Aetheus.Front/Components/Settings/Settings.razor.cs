@@ -33,6 +33,8 @@ public partial class Settings : IDisposable
     private TotpSetupResponse? _totpSetup;
     private string _verifyCode = string.Empty;
     private string _disablePassword = string.Empty;
+    private string _disableCode = string.Empty;
+    private bool _disableUseRecoveryCode;
 
     // --- Self-service password change ---
     // S-UX-PW3K: form model carrying DataAnnotations so the change-password form gets inline,
@@ -194,15 +196,24 @@ public partial class Settings : IDisposable
         _totpBusy = false;
     }
 
+    // R-50: the password and a second factor. The server ends every other session and answers with this
+    // one's new tokens, adopted here so the page stays signed in.
     private async Task DisableTotp()
     {
-        if (string.IsNullOrWhiteSpace(_disablePassword)) return;
+        if (string.IsNullOrWhiteSpace(_disablePassword) || string.IsNullOrWhiteSpace(_disableCode)) return;
         _totpBusy = true;
-        var ok = await Api.Auth.DisableTotpAsync(_disablePassword);
-        if (ok)
+        var session = await Api.Auth.DisableTotpAsync(new TotpDisableRequest
         {
+            Password = _disablePassword,
+            Code = _disableCode.Trim(),
+            UseRecoveryCode = _disableUseRecoveryCode
+        });
+        if (session is { Token.Length: > 0 })
+        {
+            await Auth.LoginAsync(session.Token, session.RefreshToken);
             _totpEnabled = false;
-            _disablePassword = string.Empty;
+            _disablePassword = _disableCode = string.Empty;
+            _disableUseRecoveryCode = false;
             Toast.Success("Saved", "TotpDisabledSuccess");
         }
         else

@@ -8,6 +8,9 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+
+    /// <summary>Recette R-12: what a task adopted on arrival is called, as the page names the task it launches itself.</summary>
+    internal string? AdoptedTitle(string taskName) => TeamspeakAdoptedTitles.For(L, taskName);
     [Inject] private IJSRuntime Js { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
@@ -16,6 +19,13 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
     private bool _actionRunning;
+    private ServerFollowerBusyLink? _busyLink;
+
+    // R-12: the actions stay disabled while a task adopted on arrival runs.
+    private bool ActionBusy => _actionRunning || (_busyLink?.Busy ?? false);
+
+    protected override void OnAfterRender(bool firstRender) =>
+        (_busyLink ??= new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged))).Follower = _follower;
 
     // SITE-OFFLINE-001: every TeamSpeak operation is an agent task; disabled while the agent cannot claim one.
     private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
@@ -118,15 +128,15 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     }
 
     // A heartbeat or a TeamSpeak task is live data. The state is fetched again and each grid on
-    // screen refreshes quietly through its own LoadData, so its page, sort and header filters are
+    // screen is read again quietly (R-10: no bar), so its page, sort and header filters are
     // kept.
     private async Task RefreshLiveAsync()
     {
         await _data.RefreshStateAsync();
         await LoadPlatformValuesAsync();
-        if (_clientsGrid is not null) await _clientsGrid.Refresh();
-        if (_channelsGrid is not null) await _channelsGrid.Refresh();
-        if (_bansGrid is not null) await _bansGrid.Refresh();
+        if (_clientsGrid is not null) await _clientsGrid.RestoreRowsAsync();
+        if (_channelsGrid is not null) await _channelsGrid.RestoreRowsAsync();
+        if (_bansGrid is not null) await _bansGrid.RestoreRowsAsync();
     }
 
     // The platforms the clients grid's Platform header filter offers, across every client.

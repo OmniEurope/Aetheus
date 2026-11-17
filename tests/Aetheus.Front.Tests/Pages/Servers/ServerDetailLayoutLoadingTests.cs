@@ -55,7 +55,7 @@ public class ServerDetailLayoutLoadingTests : BunitContext
         Assert.Contains("Servers", items[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("omni-page-header__crumb-loading", items[1].ClassList);
         Assert.NotNull(items[1].QuerySelector(".omni-skeleton"));
-        Assert.Contains("Services", items[2].TextContent, StringComparison.Ordinal);
+        Assert.Contains("ServerApplicationsManagement", items[2].TextContent, StringComparison.Ordinal);
         Assert.All(items, item => Assert.True(item.TextContent.Trim().Length > 0 || item.QuerySelector(".omni-skeleton") is not null));
     }
 
@@ -86,6 +86,21 @@ public class ServerDetailLayoutLoadingTests : BunitContext
         Assert.Empty(cut.FindAll(".omni-page-header__crumb-loading"));
         Assert.Empty(cut.FindAll(".omni-detail-shell__loading"));
         Assert.False(cut.Find(".omni-detail-shell__content").HasAttribute("hidden"));
+    }
+
+    [Fact]
+    public void WhenTheTrailIsResetAfterTheLayoutNamedTheServer_TheServerIsNamedAgain()
+    {
+        // /servers/{id}/updates redirects from another layout to a server section while the loader holds the server:
+        // this layout mounts and names the server, then OE's trail service resets the trail for the new path.
+        var cut = RenderOnServicesPage(Server(), loadCompleted: true);
+        Assert.Empty(cut.FindAll(".omni-page-header__crumb-loading"));
+
+        cut.InvokeAsync(() => Services.GetRequiredService<OmniBreadcrumbService>().Reset());
+
+        var items = cut.FindAll(".omni-page-header__trail .omni-breadcrumb__item");
+        Assert.Contains("mail-srv", items[1].TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".omni-page-header__crumb-loading"));
     }
 
     [Fact]

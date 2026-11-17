@@ -47,7 +47,7 @@ public sealed class PipelineRunMetrics
         {
             var points = await api.Analysis.GetCoverageTrendAsync(runId);
             CoverageTrend = points
-                .Select(p => new CoverageTrendVm($"#{p.RunId}", Math.Round(p.LineRate * 100, 1), Math.Round(p.BranchRate * 100, 1)))
+                .Select(p => new CoverageTrendVm($"#{p.RunNumber}", Math.Round(p.LineRate * 100, 1), Math.Round(p.BranchRate * 100, 1)))
                 .ToList();
         }
         catch (HttpRequestException) { CoverageTrend = []; }
@@ -60,7 +60,7 @@ public sealed class PipelineRunMetrics
         {
             var points = await api.Analysis.GetComplexityTrendAsync(runId);
             ComplexityTrend = points
-                .Select(p => new ComplexityTrendVm($"#{p.RunId}", Math.Round(p.AvgCyclomatic, 1), Math.Round(p.MaxCyclomatic, 1),
+                .Select(p => new ComplexityTrendVm($"#{p.RunNumber}", Math.Round(p.AvgCyclomatic, 1), Math.Round(p.MaxCyclomatic, 1),
                     p.CrapAvg.HasValue ? Math.Round(p.CrapAvg.Value, 1) : null))
                 .ToList();
         }

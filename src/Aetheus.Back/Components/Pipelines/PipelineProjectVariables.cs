@@ -15,6 +15,13 @@ namespace Aetheus.Back.Components.Pipelines;
 internal static class PipelineProjectVariables
 {
     /// <summary>
+    /// R-13: the variable the deployment templates read to know whether the expand/contract migration gate runs
+    /// (<c>true</c> or <c>false</c>). It is the project's <see cref="Project.MigrationGateEnabled"/> setting read at every run,
+    /// and, written over the template's own default, the setting stays the single truth: toggling it needs no pipeline rewrite.
+    /// </summary>
+    internal const string MigrationGateVariable = "APPLICATION_MIGRATION_GATE_ENABLED";
+
+    /// <summary>
     /// Adds the project system variables into <paramref name="vars"/> with <c>TryAdd</c> semantics
     /// (caller-supplied overrides win). The mirror URL is re-homed onto the executing backend's clone
     /// base via <see cref="MirrorCloneUrl.Rehome"/> (a no-op for any non-mirror URL).
@@ -27,7 +34,10 @@ internal static class PipelineProjectVariables
     {
         if (project is null) return;
 
-        var repositoryUrl = MirrorCloneUrl.Rehome(configuration, project.RepositoryUrl) ?? string.Empty;
+        // R-4: a step is never handed an external address to clone, only Aetheus's own clone URL of the project mirror.
+        var repositoryUrl = ExternalRepositoryAddress.IsUnmirrored(project.RepositoryUrl)
+            ? string.Empty
+            : MirrorCloneUrl.Rehome(configuration, project.RepositoryUrl) ?? string.Empty;
         var branch = string.IsNullOrWhiteSpace(sourceBranch)
             ? project.DefaultBranch ?? "main"
             : sourceBranch;
@@ -36,5 +46,6 @@ internal static class PipelineProjectVariables
         vars.TryAdd("BUILD_PROJECTNAME", project.Name);
         vars.TryAdd("REPOSITORY_URL", repositoryUrl);
         vars.TryAdd("DEFAULT_BRANCH", branch);
+        vars.TryAdd(MigrationGateVariable, project.MigrationGateEnabled ? "true" : "false");
     }
 }

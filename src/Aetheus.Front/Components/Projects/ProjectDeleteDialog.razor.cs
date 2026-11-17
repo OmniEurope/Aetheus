@@ -49,7 +49,7 @@ public partial class ProjectDeleteDialog : IDisposable
         var result = await dialog.OpenAsync<ProjectDeleteDialog>(
             localizer["ProjectDeletionTitle"].Value,
             new Dictionary<string, object?> { [nameof(ProjectId)] = projectId },
-            new OmniDialogOptions { Width = "640px", AutoFocusFirstElement = false });
+            new OmniDialogOptions { Width = "640px", Height = "720px", AutoFocusFirstElement = false });
         return result is true;
     }
 
@@ -131,7 +131,6 @@ public partial class ProjectDeleteDialog : IDisposable
     {
         if (!CanDelete || _preview is null) return;
         _deleting = true;
-        StateHasChanged();
         try
         {
             if (HasFoundResources)
@@ -152,7 +151,6 @@ public partial class ProjectDeleteDialog : IDisposable
         finally
         {
             _deleting = false;
-            StateHasChanged();
         }
     }
 

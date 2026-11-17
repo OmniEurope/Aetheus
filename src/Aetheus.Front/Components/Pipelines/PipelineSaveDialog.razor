@@ -24,6 +24,10 @@
     {
         <OmniAlert Severity="OmniSeverity.Warning">@L["PipelineSaveRepositoryChanged"]</OmniAlert>
     }
+    else if (SettingsOnly)
+    {
+        <OmniAlert Severity="OmniSeverity.Info">@L["PipelineSaveSettingsOnly"]</OmniAlert>
+    }
     else
     {
         <OmniAlert Severity="OmniSeverity.Info">

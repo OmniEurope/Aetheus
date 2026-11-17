@@ -8,6 +8,13 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
 {
     internal static readonly TimeSpan AgentSessionLeaseDuration = TimeSpan.FromMinutes(2);
 
+    /// <summary>A poll that finds the lease already live with more than <c>duration - slack</c> left writes
+    /// nothing. Every poll used to rewrite the lease (one committed UPDATE, so one disk flush, every 10 s on an
+    /// idle runner, every 2 s on a busy one, R-2); now the lease is rewritten about once per slack, and a
+    /// poller that keeps polling still always holds a lease with at least <c>duration - slack</c> to run, so
+    /// "the lease is live" keeps meaning "the agent polled within the last 90 to 120 seconds".</summary>
+    internal static readonly TimeSpan AgentSessionLeaseRenewalSlack = TimeSpan.FromSeconds(30);
+
     // The task is assigned to this agent session and fencing token, and that session still holds a live
     // lease on the task's server: the precondition of every lease-guarded task transition.
     private static Expression<Func<ServerTask, bool>> HeldByLiveAgentSession(
@@ -18,6 +25,15 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
             && task.Server.AgentSessionFencingToken == fencingToken
             && task.Server.AgentSessionLeaseExpiresAt > now;
 
+    private Task<long?> ReadHeldTokenAsync(int serverId, string agentSessionId, DateTime renewalDueBefore, CancellationToken ct) =>
+        db.Servers.AsNoTracking()
+            .Where(server => server.Id == serverId
+                && server.AgentSessionId == agentSessionId
+                && server.AgentSessionFencingToken > 0
+                && server.AgentSessionLeaseExpiresAt >= renewalDueBefore)
+            .Select(server => (long?)server.AgentSessionFencingToken)
+            .SingleOrDefaultAsync(ct);
+
     internal async Task<long?> AcquireAgentSessionLeaseAsync(
         int serverId,
         string agentSessionId,
@@ -26,8 +42,14 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var expiresAt = now.Add(AgentSessionLeaseDuration);
 
+        // A lease the same session holds with most of its duration left needs no write at all: a read-only poll.
+        var renewalDueBefore = now.Add(AgentSessionLeaseDuration - AgentSessionLeaseRenewalSlack);
+
         if (db.Database.IsRelational())
         {
+            if (await ReadHeldTokenAsync(serverId, agentSessionId, renewalDueBefore, ct).ConfigureAwait(false) is { } held)
+                return held;
+
             var renewed = await db.Servers
                 .Where(server => server.Id == serverId
                     && server.AgentSessionId == agentSessionId
@@ -107,6 +129,10 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
         var trackedServer = await db.Servers.FindAsync([serverId], ct).ConfigureAwait(false);
         if (trackedServer is null)
             return null;
+        if (trackedServer.AgentSessionId == agentSessionId
+            && trackedServer.AgentSessionFencingToken > 0
+            && trackedServer.AgentSessionLeaseExpiresAt >= renewalDueBefore)
+            return trackedServer.AgentSessionFencingToken;
         if (trackedServer.AgentSessionId != agentSessionId)
         {
             if (trackedServer.AgentSessionLeaseExpiresAt > now)
@@ -195,6 +221,23 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
         task.StartedAt = startedAt;
         if (db.Database.IsRelational()) AttachUnchanged(task);
         return true;
+    }
+
+    public async Task<DateTime?> GetStartedAtUnderLeaseAsync(
+        int taskId,
+        string agentSessionId,
+        long fencingToken,
+        CancellationToken ct = default)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        return await db.Tasks.AsNoTracking()
+            .Where(HeldByLiveAgentSession(agentSessionId, fencingToken, now))
+            .Where(task => task.Id == taskId
+                && task.Status == TaskExecutionStatus.Running
+                && task.StartedAt != null)
+            .Select(task => task.StartedAt)
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -315,6 +358,7 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
         int exitCode,
         DateTime completedAt,
         string environmentVariables,
+        string? stepOutputVariablesJson,
         CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -348,7 +392,14 @@ internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProv
                         setters => setters
                             .SetProperty(step => step.Status, status)
                             .SetProperty(step => step.ExitCode, exitCode)
-                            .SetProperty(step => step.CompletedAt, completedAt),
+                            .SetProperty(step => step.CompletedAt, completedAt)
+                            // R-18: the step turns Success in the very statement that records what it published.
+                            // A sibling step completing at the same moment advances the run on every step it sees
+                            // as Success; were the variables saved afterwards, it would dispatch the next stage
+                            // without them (a function parameter built from one resolved to empty).
+                            .SetProperty(
+                                step => step.OutputVariablesJson,
+                                step => stepOutputVariablesJson ?? step.OutputVariablesJson),
                         ct)
                     .ConfigureAwait(false);
                 if (stepUpdated == 0)

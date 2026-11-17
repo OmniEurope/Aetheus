@@ -54,7 +54,7 @@ public sealed class NotificationEmailerTests
         var message = NotificationMailKit.Build(
             new NotificationEmail("alice@x.org", "release <b>1.0</b> deployed", "release.deployed", "{\"Version\":\"<1.0>\"}"));
 
-        Assert.Equal("[Aetheus] Release deployed: release <b>1.0</b> deployed", message.Subject);
+        Assert.Equal("Aetheus - Deployment", message.Subject);
         Assert.DoesNotContain("Source event", message.TextBody, StringComparison.Ordinal);
         Assert.Contains("Version\t<1.0>", message.TextBody, StringComparison.Ordinal);
         Assert.NotNull(message.HtmlBody);
@@ -82,7 +82,7 @@ public sealed class NotificationEmailerTests
 
         Assert.Equal("Connection refused", result.Message);
         await _sender.Received(1).SendAsync(
-            Arg.Is<EmailMessage>(m => m.To == "admin@x.org" && m.HtmlBody != null && m.Subject.Contains("\"mail\"") && m.TextBody.Contains("mail")),
+            Arg.Is<EmailMessage>(m => m.To == "admin@x.org" && m.HtmlBody != null && m.Subject == "Aetheus - Test" && m.TextBody.Contains("mail")),
             Arg.Any<CancellationToken>());
     }
 }

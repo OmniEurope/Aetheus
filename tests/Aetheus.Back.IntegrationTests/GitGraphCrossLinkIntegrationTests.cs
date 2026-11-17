@@ -14,7 +14,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// The InMemory unit suite is blind to both: it neither materialises the join tables relationally
 /// nor enforces the unique indexes.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class GitGraphCrossLinkIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

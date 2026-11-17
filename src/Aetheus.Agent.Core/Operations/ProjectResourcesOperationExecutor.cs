@@ -17,7 +17,8 @@ namespace Aetheus.Agent.Core.Operations;
 /// archive directories. Something it cannot read is printed <c>UNREADABLE</c>, never taken for absent.</description></item>
 /// <item><description>Removal reads the host again and removes only what is both in the confirmed list and still there,
 /// in order: <c>docker rm -f</c>, <c>docker volume rm</c>, <c>docker network rm</c> (argv, no shell), each virtual host
-/// disabled then deleted through the site operations (configtest and reload, put back on failure), each certificate
+/// disabled then deleted together through the site operations (one configtest and one reload once all are out, all put
+/// back on failure, naming the other site Apache blames when there is one), each certificate
 /// through <c>sudo -n aetheus-certbot-manage delete &lt;host&gt;</c>, then the directories, then <c>docker image rm</c>
 /// (never forced, refused while a container uses the image), then the upstream file like a virtual host, refused
 /// while an enabled site uses one of its <c>Define</c>. One line per resource
@@ -83,6 +84,18 @@ public sealed class ProjectResourcesOperationExecutor(
     /// <summary>Runs an Apache site operation (disable, delete) through the Apache executor.</summary>
     internal Func<OperationKind, string, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ExecutorResult>> RunSiteOperationAsync { get; init; }
         = (kind, siteFile, timeout, onOutput, ct) => apache.ExecuteAsync(kind, siteFile, s_noEnvironment, timeout, onOutput, ct);
+
+    /// <summary>Recette R-26: removes the project's virtual hosts (disabled, then deleted) with one configuration test and
+    /// one reload once all are out, through the Apache executor; null for a site that is gone, the reason it stays otherwise.</summary>
+    internal Func<IReadOnlyList<string>, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<IReadOnlyDictionary<string, string?>>> RemoveSitesAsync { get; init; }
+        = (siteFiles, timeout, onOutput, ct) => apache.RemoveSitesAsync(siteFiles, timeout, onOutput, ct);
+
+    /// <summary>The virtual hosts of one removal, taken out together the first time one of them is reached.</summary>
+    private sealed class SiteBatch(IReadOnlyList<string> siteFiles)
+    {
+        public IReadOnlyList<string> SiteFiles { get; } = siteFiles;
+        public IReadOnlyDictionary<string, string?>? Results { get; set; }
+    }
 
     /// <summary>Deletes a certificate lineage through the certbot manage helper.</summary>
     internal Func<string, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ExecutorResult>> DeleteCertificateAsync { get; init; }
@@ -282,10 +295,14 @@ public sealed class ProjectResourcesOperationExecutor(
         var clean = state.Unreadable.Count == 0;
         // Hosts whose virtual host is not gone: their certificate must stay, or Apache fails at its next reload.
         var hostsWithSite = new HashSet<string>(StringComparer.Ordinal);
+        // R-26: the virtual hosts go together (one configuration test), so a site whose neighbour already points to a
+        // deleted certificate is not put back by the test of that neighbour's remaining configuration.
+        var sites = new SiteBatch([.. spec.Remove.Distinct()
+            .Where(item => item.Kind == ProjectServerResourceKind.VirtualHost && state.Found.Contains(item)).Select(item => item.Name)]);
         // Kind order: virtual hosts are handled before the certificates they use.
         foreach (var item in spec.Remove.Distinct().OrderBy(item => item.Kind))
         {
-            var (outcome, reason) = await OutcomeOfAsync(spec, state, item, hostsWithSite, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+            var (outcome, reason) = await OutcomeOfAsync(spec, state, item, hostsWithSite, sites, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
             if (item.Kind == ProjectServerResourceKind.VirtualHost && outcome == ProjectServerResourceOutcome.Failed)
                 hostsWithSite.Add(item.Scope);
             clean &= outcome != ProjectServerResourceOutcome.Failed;
@@ -304,7 +321,7 @@ public sealed class ProjectResourcesOperationExecutor(
     /// <summary>What happened to one confirmed resource: already gone, removed, or failed with its reason.</summary>
     private async Task<(ProjectServerResourceOutcome Outcome, string? Reason)> OutcomeOfAsync(
         ProjectServerResourceSpec spec, HostState state, ProjectServerResourceRef item, IReadOnlySet<string> hostsWithSite,
-        int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+        SiteBatch sites, int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
         if (!state.Found.Contains(item))
             return state.IsUnreadable(item)
@@ -313,7 +330,9 @@ public sealed class ProjectResourcesOperationExecutor(
         var blocker = item.Kind == ProjectServerResourceKind.Certificate
             ? await CertificateBlockerAsync(item.Name, hostsWithSite, ct).ConfigureAwait(false) : null;
         if (blocker is not null) return (ProjectServerResourceOutcome.Failed, blocker);
-        var failure = await RemoveOneAsync(spec, item, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+        if (item.Kind == ProjectServerResourceKind.Certificate)
+            return await RemoveCertificateAsync(item.Name, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+        var failure = await RemoveOneAsync(spec, item, sites, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
         return failure is null ? (ProjectServerResourceOutcome.Removed, null) : (ProjectServerResourceOutcome.Failed, failure);
     }
 
@@ -328,18 +347,16 @@ public sealed class ProjectResourcesOperationExecutor(
         var enabled = ListDirectory(SitesEnabledPath);
         if (enabled is null) return $"vhost not known to be removed: {SitesEnabledPath} cannot be read";
         if (ProjectServerResourceNames.VirtualHostFiles(host).Any(enabled.Contains)) return "vhost not removed: it is still enabled";
-        var lineage = $"{LetsEncryptPath}/live/{host}/";
-        foreach (var site in enabled.Where(site => !IsDanglingLink(site)).Order(StringComparer.Ordinal))
-        {
-            var read = await ReadSiteAsync(SitesEnabledPath, site, ct).ConfigureAwait(false);
-            if (read.Text is null) return $"the enabled site {site} cannot be read, so it may still use the certificate: {read.Failure}";
-            if (read.Text.Contains(lineage, StringComparison.Ordinal)) return $"the enabled site {site} still uses it";
-        }
-        return null;
+        var use = await EnabledSites.UsingCertificateAsync(host, enabled, LetsEncryptPath, ct).ConfigureAwait(false);
+        if (use.Unreadable is not null) return use.Unreadable;
+        return use.Sites.Count > 0 ? $"the enabled site {use.Sites[0]} still uses it" : null;
     }
 
+    /// <summary>The enabled sites, read through this executor's seams (directory listing, direct read, read helper).</summary>
+    private ApacheEnabledSites EnabledSites => new(SitesEnabledPath, ReadSiteFile, LinkTargetOf, ListDirectory, SiteReader);
+
     /// <summary>Removes one resource; null when it is gone, the reason otherwise.</summary>
-    private async Task<string?> RemoveOneAsync(ProjectServerResourceSpec spec, ProjectServerResourceRef item, int timeoutSeconds,
+    private async Task<string?> RemoveOneAsync(ProjectServerResourceSpec spec, ProjectServerResourceRef item, SiteBatch sites, int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
         switch (item.Kind)
@@ -351,13 +368,8 @@ public sealed class ProjectResourcesOperationExecutor(
             case ProjectServerResourceKind.Network:
                 return await DockerAsync(["network", "rm", item.Name], ct).ConfigureAwait(false);
             case ProjectServerResourceKind.VirtualHost:
-                var disabled = await RunSiteOperationAsync(OperationKind.ApacheDisableSite, item.Name, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
-                if (disabled.ExitCode != 0) return $"the site could not be disabled (exit code {disabled.ExitCode})";
-                var deleted = await RunSiteOperationAsync(OperationKind.ApacheDeleteSite, item.Name, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
-                return deleted.ExitCode == 0 ? null : $"the site file could not be deleted (exit code {deleted.ExitCode})";
-            case ProjectServerResourceKind.Certificate:
-                var certificate = await DeleteCertificateAsync(item.Name, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
-                return certificate.ExitCode == 0 ? null : $"certbot could not delete it (exit code {certificate.ExitCode})";
+                sites.Results ??= await RemoveSitesAsync(sites.SiteFiles, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+                return sites.Results.TryGetValue(item.Name, out var reason) ? reason : null;
             case ProjectServerResourceKind.StateDirectory:
             case ProjectServerResourceKind.BackupArchives:
             case ProjectServerResourceKind.DeploymentDirectory:
@@ -369,6 +381,45 @@ public sealed class ProjectResourcesOperationExecutor(
             default:
                 return "unknown resource kind";
         }
+    }
+
+    /// <summary>The certbot manage helper's exit code for a certbot that stayed busy (its global lock was still held after the wait).</summary>
+    private const int CertbotBusyExitCode = 75;
+
+    /// <summary>The certbot manage helper's exit code for a lineage certbot does not know.</summary>
+    private const int CertbotUnknownLineageExitCode = 76;
+
+    /// <summary>
+    /// Recette R-48: deletes a certificate lineage and says why when it stays. A busy certbot (its lock held by another
+    /// run) is not a failure of the certificate: it is untouched and the cleanup can be run again. A lineage certbot does
+    /// not know is already gone only when nothing is left of it in <c>live</c> and <c>renewal</c>; otherwise it stays a
+    /// failure, because the files that remain are not removed by anyone. Any other failure carries certbot's own last lines.
+    /// </summary>
+    private async Task<(ProjectServerResourceOutcome Outcome, string? Reason)> RemoveCertificateAsync(
+        string host, int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        var printed = new List<string>();
+        var result = await DeleteCertificateAsync(host, timeoutSeconds, async (line, level) =>
+        {
+            printed.Add(line);
+            await onOutput(line, level).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+        if (result.ExitCode == 0) return (ProjectServerResourceOutcome.Removed, null);
+        var output = CertbotOutputExcerpt.Of(printed);
+        var detail = output.Length > 0 ? $": {output}" : string.Empty;
+        if (result.ExitCode == CertbotBusyExitCode)
+            return (ProjectServerResourceOutcome.Failed,
+                $"certbot est occupé (un autre certbot tient son verrou, par exemple un test à blanc) : le certificat n'a pas été touché, relancer le nettoyage une fois certbot libre{detail}");
+        if (result.ExitCode != CertbotUnknownLineageExitCode)
+            return (ProjectServerResourceOutcome.Failed, $"certbot could not delete it (exit code {result.ExitCode}){detail}");
+        var live = ListDirectory($"{LetsEncryptPath}/live");
+        var renewal = ListDirectory($"{LetsEncryptPath}/renewal");
+        if (live is null || renewal is null)
+            return (ProjectServerResourceOutcome.Failed, $"certbot ne le connaît pas, mais {LetsEncryptPath} ne peut pas être lu : on ne sait pas s'il reste des fichiers{detail}");
+        if (live.Contains(host) || renewal.Contains($"{host}.conf"))
+            return (ProjectServerResourceOutcome.Failed,
+                $"certbot ne le connaît pas, mais des fichiers restent dans {LetsEncryptPath}/live ou renewal : laissé tel quel{detail}");
+        return (ProjectServerResourceOutcome.Absent, "certbot ne le connaît pas et il ne reste rien : déjà supprimé");
     }
 
     /// <summary>Removes an image the Compose project built, never with <c>--force</c>: an image a container still
@@ -427,24 +478,10 @@ public sealed class ProjectResourcesOperationExecutor(
         return null;
     }
 
-    /// <summary>Whether an enabled site is a link whose target is gone from its directory: Apache cannot load it, so it
-    /// uses no certificate and no Define (left by a site removed from sites-available without a2dissite). A link
-    /// whose target directory cannot be listed is not called dangling: it is read, and blocks if it cannot be.</summary>
-    private bool IsDanglingLink(string site)
-    {
-        var target = LinkTargetOf($"{SitesEnabledPath}/{site}");
-        var directory = target is null ? null : Path.GetDirectoryName(target);
-        var entries = directory is null ? null : ListDirectory(directory);
-        return entries is not null && !entries.Contains(Path.GetFileName(target!));
-    }
+    private bool IsDanglingLink(string site) => EnabledSites.IsDanglingLink(site);
 
-    /// <summary>A site file: read directly when the agent account can, otherwise through the read-only helper. A
-    /// file neither way can read is a failure with its reason, never an empty text.</summary>
-    private async Task<SiteFileRead> ReadSiteAsync(string directory, string site, CancellationToken ct)
-    {
-        var text = ReadSiteFile($"{directory}/{site}");
-        return text is not null ? SiteFileRead.Of(text) : await SiteReader.ReadAsync(directory, site, ct).ConfigureAwait(false);
-    }
+    private Task<SiteFileRead> ReadSiteAsync(string directory, string site, CancellationToken ct) =>
+        EnabledSites.ReadAsync(directory, site, ct);
 
     private async Task<string?> DockerAsync(IReadOnlyList<string> argv, CancellationToken ct)
     {

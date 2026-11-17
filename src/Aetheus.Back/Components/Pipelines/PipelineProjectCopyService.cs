@@ -178,7 +178,8 @@ public sealed class PipelineProjectCopyService(
 
         var renames = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var source in sources)
-            renames[source.Name] = PipelineCopyAdapter.NewName(source.Name, request.SourcePrefix, request.Prefix);
+            renames[source.Name] = PipelineCopyAdapter.NewName(
+                source.Name, request.SourcePrefix, request.Prefix, slugs.Source, slugs.Target);
         foreach (var resource in plan.Libraries.Concat(plan.Vaults))
             renames.TryAdd(resource.Dto.SourceName, resource.Dto.NewName);
         var copiedNames = sources.Select(source => renames[source.Name]).ToHashSet(StringComparer.Ordinal);

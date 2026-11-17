@@ -18,10 +18,11 @@ public interface IPipelineProductionSetupService
     /// variables it reads and where each value comes from. Writes nothing.</summary>
     Task<PipelineProductionAnalysisDto> AnalyzeAsync(int projectId, string? composeFile, CancellationToken ct = default);
 
-    /// <summary><see cref="AnalyzeAsync(int, string?, CancellationToken)"/>, offering the servers of
-    /// <paramref name="servers"/> when the project has none (recette R-77).</summary>
+    /// <summary><see cref="AnalyzeAsync(int, string?, CancellationToken)"/> reading <paramref name="branch"/>, the branch the
+    /// wizard creates the pipelines on (R-9; null, or a branch the repository lacks, reads its default branch), offering the
+    /// servers of <paramref name="servers"/> when the project has none (recette R-77).</summary>
     Task<PipelineProductionAnalysisDto> AnalyzeAsync(
-        int projectId, string? composeFile, ProductionServerScope servers, CancellationToken ct = default);
+        int projectId, string? composeFile, string? branch, ProductionServerScope servers, CancellationToken ct = default);
 
     /// <summary>Creates what the analysis proposed: the variables in the libraries and the vault <c>prod</c> of the
     /// project, the ports in the port registry, and the project's configuration repository with its versioned
@@ -40,6 +41,12 @@ public interface IPipelineProductionSetupService
     /// nothing outside the project's own configuration repository and library; a sample with no such token is left as
     /// it is, so mending twice changes nothing. Audited.</summary>
     Task<PipelineProductionRepairResultDto> RepairEnvSampleAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>R-38: creates the generic Apache virtual host templates in the project's own configuration repository (created
+    /// when missing), whether or not the Compose file could be read: they depend only on the shape and the strategy asked for.
+    /// A file the repository holds is kept; nothing is ever written to the project's source, external or not. Returns the
+    /// repository with the files it added and the ones it kept.</summary>
+    Task<ProjectConfigRepositoryDto> ApplyApacheTemplatesAsync(PipelineProductionApacheRequest request, CancellationToken ct = default);
 }
 
 /// <summary>The servers the caller administers (a launch needs Admin on its target servers), offered to a project that has
@@ -96,30 +103,50 @@ public sealed class PipelineProductionSetupService(
         VariableLibraryDto? Library,
         VaultDto? Vault,
         Dictionary<string, VariableEntryDto> LibraryEntries,
-        HashSet<string> VaultKeys);
+        HashSet<string> VaultKeys,
+        ProductionTemplates? Templates = null);
 
     public Task<PipelineProductionAnalysisDto> AnalyzeAsync(
         int projectId, string? composeFile, CancellationToken ct = default) =>
-        AnalyzeAsync(projectId, composeFile, ProductionServerScope.None, ct);
+        AnalyzeAsync(projectId, composeFile, null, ProductionServerScope.None, ct);
 
     public async Task<PipelineProductionAnalysisDto> AnalyzeAsync(
-        int projectId, string? composeFile, ProductionServerScope servers, CancellationToken ct = default) =>
-        (await InspectAsync(projectId, composeFile, servers, ct).ConfigureAwait(false)).Analysis;
+        int projectId, string? composeFile, string? branch, ProductionServerScope servers, CancellationToken ct = default) =>
+        (await InspectAsync(projectId, composeFile, branch, servers, ct).ConfigureAwait(false)).Analysis;
 
     public Task<PipelineProductionApplyResultDto> ApplyAsync(
         PipelineProductionApplyRequest request, CancellationToken ct = default) =>
         ApplyAsync(request, ProductionServerScope.None, ct);
+
+    /// <summary>
+    /// Recette R-89: the strategy the operator chose rules the ports, the upstream entries and the virtual hosts.
+    /// R-11: the shape the user chose picks the deployment template, so it also decides the API's virtual hosts; the
+    /// Compose file only checks it (the wizard says so when they disagree). A monolith has the replacement only.
+    /// </summary>
+    private static string ResolveStrategy(PipelineProductionApplyRequest request, string composeStrategy)
+    {
+        var strategy = !string.IsNullOrWhiteSpace(request.Strategy) ? request.Strategy
+            : request.Monolith ? ProductionStrategy.Replace
+            : composeStrategy;
+        if (request.Monolith && strategy == ProductionStrategy.BlueGreen)
+            throw new BadRequestException(
+                $"A monolith is deployed with the '{ProductionStrategy.Replace}' strategy only: a blue-green deployment needs the API's own host.");
+        return strategy;
+    }
 
     public async Task<PipelineProductionApplyResultDto> ApplyAsync(
         PipelineProductionApplyRequest request, ProductionServerScope servers, CancellationToken ct = default)
     {
         ValidateRequest(request);
 
-        var inspection = await InspectAsync(request.ProjectId, request.ComposeFile, servers, ct).ConfigureAwait(false);
+        var inspection = await InspectAsync(request.ProjectId, request.ComposeFile, request.Branch, servers, ct).ConfigureAwait(false);
         var analysis = inspection.Analysis;
         if (!analysis.Readable || !string.Equals(analysis.ComposeFile, request.ComposeFile, StringComparison.Ordinal))
             throw new BadRequestException(
                 $"The Compose file '{request.ComposeFile}' was not found in the project's repository.");
+        if (analysis.TemplatesUnreadable)
+            throw new BadRequestException(
+                "The environment sample or the Apache templates of the repository could not be read: PORT_FRONT and PORT_BACK would not be set up. Try again.");
         var library = inspection.Library
             ?? throw new BadRequestException(
                 $"The variable library '{inspection.Slug}{ProdSuffix}' does not exist: create the libraries and vaults first.");
@@ -131,10 +158,9 @@ public sealed class PipelineProductionSetupService(
             : analysis.Servers.Find(item => string.Equals(item.Name, request.Server, StringComparison.Ordinal))
                 ?? throw new BadRequestException($"'{request.Server}' is not a server of this project.");
 
-        // Recette R-89: the strategy the operator chose rules the ports, the upstream entries and the virtual hosts.
-        var strategy = string.IsNullOrWhiteSpace(request.Strategy) ? analysis.Strategy : request.Strategy;
+        var strategy = ResolveStrategy(request, analysis.Strategy);
         var plans = ProductionVariableClassifier.ForStrategy(inspection.Plans, strategy);
-        var declaresApi = ProductionVariableClassifier.DeclaresApi(plans, strategy);
+        var declaresApi = !request.Monolith;
 
         var writes = new Writes();
         foreach (var plan in plans)
@@ -148,7 +174,7 @@ public sealed class PipelineProductionSetupService(
         var entries = writes.Entries;
 
         var repository = await configRepository.EnsureAsync(
-            request.ProjectId, ConfigFiles(plans, declaresApi, strategy == ProductionStrategy.BlueGreen), ct).ConfigureAwait(false);
+            request.ProjectId, ConfigFiles(plans, declaresApi, strategy == ProductionStrategy.BlueGreen, inspection.Templates), ct).ConfigureAwait(false);
         if (server is { Candidate: true })
             await AttachAsync(request.ProjectId, server, ct).ConfigureAwait(false);
         logger.LogInformation(
@@ -165,6 +191,26 @@ public sealed class PipelineProductionSetupService(
             Entries = entries,
             ConfigRepository = repository
         };
+    }
+
+    public async Task<ProjectConfigRepositoryDto> ApplyApacheTemplatesAsync(
+        PipelineProductionApacheRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!string.IsNullOrWhiteSpace(request.Strategy) && request.Strategy is not (ProductionStrategy.BlueGreen or ProductionStrategy.Replace))
+            throw new BadRequestException(
+                $"'{request.Strategy}' is not a deployment strategy: use '{ProductionStrategy.BlueGreen}' or '{ProductionStrategy.Replace}'.");
+        var blueGreen = request.Strategy == ProductionStrategy.BlueGreen;
+        if (request.Monolith && blueGreen)
+            throw new BadRequestException(
+                $"A monolith is deployed with the '{ProductionStrategy.Replace}' strategy only: a blue-green deployment needs the API's own host.");
+
+        var repository = await configRepository.EnsureAsync(
+            request.ProjectId, ProjectConfigFiles.GenericApacheFiles(!request.Monolith, blueGreen), ct).ConfigureAwait(false);
+        logger.LogInformation(
+            "Apache templates of project {ProjectId}: {Added} created, {Kept} kept, configuration repository {Repository}.",
+            request.ProjectId, repository.FilesAdded.Count, repository.FilesKept.Count, repository.Slug);
+        return repository;
     }
 
     /// <summary>Recette R-77: the server chosen for a project that had none becomes the project's, as the project's
@@ -340,7 +386,7 @@ public sealed class PipelineProductionSetupService(
     };
 
     private async Task<Inspection> InspectAsync(
-        int projectId, string? composeFile, ProductionServerScope scope, CancellationToken ct)
+        int projectId, string? composeFile, string? requestedBranch, ProductionServerScope scope, CancellationToken ct)
     {
         var slug = await PipelineProjectResourceNames.FindSlugAsync(pipelines, projectId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Project {projectId} not found.");
@@ -359,11 +405,13 @@ public sealed class PipelineProductionSetupService(
         var configurationDto = configuration is null ? null : DescribeConfiguration(configuration);
 
         var refused = configuration is null ? [] : await FindRefusedNamesAsync(projectId, ct).ConfigureAwait(false);
-        var repository = await FindSourceRepositoryAsync(projectId, ct).ConfigureAwait(false);
+        var source = await ReadSourceAsync(projectId, ct).ConfigureAwait(false);
+        var repository = source.Repository;
         if (repository is null)
-            return Unreadable(slug, library, vault, libraryEntries, vaultKeys, servers, defaultServer, configurationDto, refused);
+            return Unreadable(slug, library, vault, libraryEntries, vaultKeys, servers, defaultServer, configurationDto, refused, source,
+                await FindMissingApacheTemplatesAsync(projectId, configuration is not null, null, ct).ConfigureAwait(false));
 
-        var branch = string.IsNullOrWhiteSpace(repository.DefaultBranch) ? "main" : repository.DefaultBranch;
+        var branch = await ResolveBranchAsync(repository, requestedBranch, ct).ConfigureAwait(false);
         var probe = new PipelineSetupRepositoryProbe(git, logger, repository.Id, branch);
         var (files, _) = await probe.FindComposeFilesAsync(ct).ConfigureAwait(false);
         files.Sort(StringComparer.Ordinal);
@@ -379,6 +427,7 @@ public sealed class PipelineProductionSetupService(
         var analysis = new PipelineProductionAnalysisDto
         {
             Readable = true,
+            ExternalSource = source.ExternalSource,
             Branch = branch,
             ComposeFiles = files,
             ComposeFile = chosen,
@@ -388,23 +437,66 @@ public sealed class PipelineProductionSetupService(
             DeclaresFrontPort = plans.Any(plan => plan.Name == ProductionVariableClassifier.FrontPort),
             DeclaresBackPort = plans.Any(plan => plan.Name == ProductionVariableClassifier.BackPort),
             DeclaresBlueGreen = ProductionVariableClassifier.DeclaresBlueGreen(variables),
+            TemplatesUnreadable = !templates.Complete,
             ConfigRepository = configurationDto,
-            RefusedEnvNames = refused
+            RefusedEnvNames = refused,
+            MissingApacheTemplates = templates.Complete
+                ? await FindMissingApacheTemplatesAsync(projectId, configuration is not null, templates, ct).ConfigureAwait(false)
+                : []
         };
-        return new Inspection(analysis, plans, slug, library, vault, libraryEntries, vaultKeys);
+        return new Inspection(analysis, plans, slug, library, vault, libraryEntries, vaultKeys, templates);
+    }
+
+    /// <summary>R-38: the project's source already holds this generic Apache template, so the deployment reads it from there.</summary>
+    private static bool HeldBySource(ProductionTemplates? templates, string path) =>
+        templates?.ApachePaths?.Contains(path, StringComparer.Ordinal) == true;
+
+    /// <summary>R-38: the generic Apache virtual hosts the production deployment applies that neither the project's configuration
+    /// repository nor the source branch read holds, as the deployment would look for them (the configuration repository first,
+    /// then the source). The apply adds them; this tells the wizard that something is left to apply even when the ports and
+    /// secrets are all there.</summary>
+    private async Task<List<string>> FindMissingApacheTemplatesAsync(
+        int projectId, bool hasConfigurationRepository, ProductionTemplates? templates, CancellationToken ct)
+    {
+        var missing = new List<string>();
+        foreach (var path in ProjectConfigFiles.GenericApacheFiles(includeApi: true).Keys.Order(StringComparer.Ordinal))
+        {
+            if (HeldBySource(templates, path)) continue;
+            if (hasConfigurationRepository
+                && await configRepository.ReadAsync(projectId, path, null, null, ct).ConfigureAwait(false) is not null)
+                continue;
+            missing.Add(path);
+        }
+        return missing;
+    }
+
+    /// <summary>R-9: the branch the pipelines are created on is the one whose Compose file is read, develop for a repository
+    /// that keeps its work there while its default branch is main. A branch the repository does not hold (or whose branches
+    /// cannot be listed) reads the default branch, as before; the analysis names the branch it read.</summary>
+    private async Task<string> ResolveBranchAsync(GitLightRepoDto repository, string? requested, CancellationToken ct)
+    {
+        var fallback = string.IsNullOrWhiteSpace(repository.DefaultBranch) ? "main" : repository.DefaultBranch;
+        var wanted = requested?.Trim();
+        if (string.IsNullOrEmpty(wanted) || string.Equals(wanted, fallback, StringComparison.Ordinal)) return fallback;
+        var branches = await git.GetBranchesAsync(repository.Id, ct).ConfigureAwait(false);
+        return branches.Exists(branch => string.Equals(branch.Name, wanted, StringComparison.Ordinal)) ? wanted : fallback;
     }
 
     private static Inspection Unreadable(
         string slug, VariableLibraryDto? library, VaultDto? vault, Dictionary<string, VariableEntryDto> entries,
         HashSet<string> vaultKeys, List<ProductionServerDto> servers, string? defaultServer,
-        ProjectConfigRepositoryDto? configuration, List<ProductionRefusedNameDto> refused) =>
+        ProjectConfigRepositoryDto? configuration, List<ProductionRefusedNameDto> refused, ProductionSourceReading source,
+        List<string> missingApacheTemplates) =>
         new(new PipelineProductionAnalysisDto
         {
             Readable = false,
+            ExternalSource = source.ExternalSource,
+            SourceProblem = source.Problem,
             Servers = servers,
             DefaultServer = defaultServer,
             ConfigRepository = configuration,
-            RefusedEnvNames = refused
+            RefusedEnvNames = refused,
+            MissingApacheTemplates = missingApacheTemplates
         },
             [], slug, library, vault, entries, vaultKeys);
 
@@ -456,17 +548,17 @@ public sealed class PipelineProductionSetupService(
             DefaultValue = plan.Secret ? null : plan.DefaultValue
         };
 
-    private async Task<GitLightRepoDto?> FindSourceRepositoryAsync(int projectId, CancellationToken ct)
+    private async Task<ProductionSourceReading> ReadSourceAsync(int projectId, CancellationToken ct)
     {
         // The project's own repository (internal, or the mirror of its external source): never the configuration
-        // repository, never an external source attached beside it.
-        var repositories = (await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false))
-            .Where(item => !item.IsAdditionalSource && !item.IsConfiguration)
-            .ToList();
-        var repository = repositories.Find(item => !item.IsEmpty);
-        if (repository is null && repositories.Count > 0)
-            logger.LogInformation("Project {ProjectId} has no commit to read its Compose file from yet.", projectId);
-        return repository;
+        // repository, never an external source attached beside it (recette R-69 names the state where that is the only one
+        // holding code).
+        var source = ProductionSourceReading.Of(await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false));
+        if (source.Repository is null)
+            logger.LogInformation(
+                "Project {ProjectId} has no commit to read its Compose file from yet (external source: {External}, problem: {Problem}).",
+                projectId, source.ExternalSource, source.Problem);
+        return source;
     }
 
     private async Task<VariableLibraryDto?> FindLibraryAsync(int projectId, string name, CancellationToken ct) =>
@@ -603,16 +695,19 @@ public sealed class PipelineProductionSetupService(
     }
 
     /// <summary>The versioned files of the configuration repository: the environment sample of the Compose file and
-    /// the generic Apache virtual hosts. The repository never overwrites a file it already holds.</summary>
+    /// the generic Apache virtual hosts the source does not already hold (the configuration repository wins at read time,
+    /// so a generic copy would shadow the source's own file). The repository never overwrites a file it already holds.</summary>
     private static Dictionary<string, string> ConfigFiles(
-        IEnumerable<ProductionVariablePlan> plans, bool declaresApi, bool blueGreen)
+        IEnumerable<ProductionVariablePlan> plans, bool declaresApi, bool blueGreen, ProductionTemplates? sourceTemplates)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [ProductionEnvSampleBuilder.Path] = ProductionEnvSampleBuilder.Build(plans.Where(plan => plan.Name != DomainKey))
         };
         foreach (var (path, content) in ProjectConfigFiles.GenericApacheFiles(declaresApi, blueGreen))
-            files[path] = content;
+        {
+            if (!HeldBySource(sourceTemplates, path)) files[path] = content;
+        }
         return files;
     }
 }

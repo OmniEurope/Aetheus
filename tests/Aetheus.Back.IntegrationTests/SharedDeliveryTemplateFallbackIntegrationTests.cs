@@ -14,8 +14,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// resolver runs them. A user of such an organization lists and reads them, never changes them; its own
 /// template of the same name wins; another customer organization's template stays out of reach.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class SharedDeliveryTemplateFallbackIntegrationTests(PostgresFixture fixture)
+public sealed class SharedDeliveryTemplateFallbackIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string PlatformSlug = "aetheus";
     private const string SharedTemplate = "application-ci";

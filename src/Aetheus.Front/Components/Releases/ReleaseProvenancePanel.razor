@@ -16,7 +16,7 @@
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-provenance-row">
                         <a href="/pipelines/@use.Run.PipelineId" class="detail-value-link">@use.Run.PipelineName</a>
-                        <a href="/pipelines/runs/@use.Run.RunId" class="detail-value-link">#@use.Run.RunId</a>
+                        <a href="/pipelines/runs/@use.Run.RunId" class="detail-value-link">#@use.Run.BuildNumber</a>
                     </OmniStack>
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(use.Kind)</OmniBadge>
@@ -52,7 +52,7 @@
                             {
                                 <ShortId Value="@input.Sha256" Href="@(input.ArtifactId is { } digestArtifactId ? $"/artifacts/{digestArtifactId}" : null)" Copyable="false" Class="text-mono" />
                             }
-                            @L["ReleaseInputFromRun"] <a href="/pipelines/runs/@input.SourcePipelineRunId" class="detail-value-link">#@input.SourcePipelineRunId</a>
+                            @L["ReleaseInputFromRun"] <a href="/pipelines/runs/@input.SourcePipelineRunId" class="detail-value-link">#@input.SourcePipelineRunNumber</a>
                             @if (input.SourceReleaseId is { } sourceReleaseId)
                             {
                                 <span> · </span><ShortId Value="@input.SourceReleaseVersion" Href="@($"/releases/{sourceReleaseId}")" Copyable="false" />
@@ -92,7 +92,7 @@
                         {
                             <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["ReleaseInputPackageDirect"]</OmniBadge>
                         }
-                        <a href="/pipelines/runs/@package.PipelineRunId" class="detail-value-link" title="@L["ReleaseInputPackageSbomRun"]">#@package.PipelineRunId</a>
+                        <a href="/pipelines/runs/@package.PipelineRunId" class="detail-value-link" title="@L["ReleaseInputPackageSbomRun"]">#@package.PipelineRunNumber</a>
                     </OmniStack>
                 </OmniStack>
             }

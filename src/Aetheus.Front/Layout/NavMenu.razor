@@ -3,14 +3,14 @@
     <OmniPanelMenuItem Text="@L["Dashboard"]" Icon="@IconFor("dashboard")" Href="/" />
     @if (Permissions.CanReadAny(ResourceType.Server))
     {
-    <OmniPanelMenuItem Text="@L["Servers"]" Icon="@IconFor("dns")" Href="servers" Expanded="@IsOnSection("servers")">
+    <OmniPanelMenuItem Text="@L["Servers"]" Icon="@IconFor("dns")" Href="servers" Expanded="@IsOnSection("servers")" Badge="@ServersQualityBadge()">
         @* A group is open inside its section and closed elsewhere, and its entries are always
            there, so its chevron opens and closes a real list wherever the user is. *@
         @if (GetSpecificServerId() is { } serverId)
         {
             @* Item #1 - migrated from legacy `?section=` query strings to real routes. *@
             <OmniPanelMenuItem Text="@L["Overview"]" Icon="@IconFor("dashboard")" Href="@($"servers/{serverId}/overview")" />
-            <OmniPanelMenuItem Text="@L["Services"]" Icon="@IconFor("engineering")" Href="@($"servers/{serverId}/services")" />
+            <OmniPanelMenuItem Text="@L["ServerApplicationsManagement"]" Icon="@IconFor("engineering")" Href="@($"servers/{serverId}/services")" />
             @* R1-28: the mail configuration of this server, right under Services, only once its mail stack is installed
                (the general "Mailboxes" entry below stays the cross-server directory). Docker / Apache / Certbot /
                TeamSpeak / Portsentry / Rkhunter are listed in the Services tab as manageable modules. *@
@@ -18,7 +18,6 @@
             {
                 <OmniPanelMenuItem Text="@L["Mail"]" Icon="@IconFor("mail")" Href="@($"servers/{serverId}/mail")" Match="OmniNavMatch.Exact" />
             }
-            <OmniPanelMenuItem Text="@L["PatchTitle"]" Icon="@IconFor("system_update")" Href="@($"servers/{serverId}/updates")" />
             <OmniPanelMenuItem Text="@L["Projects"]" Icon="@IconFor("folder")" Href="@($"servers/{serverId}/projects")" />
             <OmniPanelMenuItem Text="@L["Pipelines"]" Icon="@IconFor("account_tree")" Href="@($"servers/{serverId}/pipelines")" />
             <OmniPanelMenuItem Text="@L["Libraries"]" Icon="@IconFor("library_books")" Href="@($"servers/{serverId}/libraries")" />
@@ -27,11 +26,15 @@
             <OmniPanelMenuItem Text="@L["PortRegistryTitle"]" Icon="@IconFor("lan")" Href="@($"servers/{serverId}/ports")" />
             <OmniPanelMenuItem Text="@L["Tasks"]" Icon="@IconFor("task_alt")" Href="@($"servers/{serverId}/tasks")" />
             <OmniPanelMenuItem Text="@L["Logs"]" Icon="@IconFor("receipt_long")" Href="@($"servers/{serverId}/logs")" />
+            @* R-7: the quality of this server's host system, with its own grade (never a project's). *@
+            <OmniPanelMenuItem Text="@L["Quality"]" Icon="@IconFor("shield")" Href="@($"servers/{serverId}/quality")" Badge="@ServerQualityBadge(serverId)" />
         }
         else
         {
             <OmniPanelMenuItem Text="@L["Tasks"]" Icon="@IconFor("task_alt")" Href="tasks" />
             <OmniPanelMenuItem Text="@L["Logs"]" Icon="@IconFor("receipt_long")" Href="logs" />
+            @* R-7: the Quality entry of the servers shows the lowest grade among the servers, never a project's. *@
+            <OmniPanelMenuItem Text="@L["Quality"]" Icon="@IconFor("shield")" Href="servers/quality" Badge="@ServersQualityBadge()" />
             <div class="nav-alert-item">
                 <OmniPanelMenuItem Text="@L["Alerts"]" Icon="@IconFor("notification_important")" Href="alerts"
                                    aria-describedby="@(AlertNotify.UnreadCount > 0 ? "nav-alert-count" : null)" />
@@ -44,8 +47,6 @@
             </div>
         }
     </OmniPanelMenuItem>
-    @* Recette R1-41: the mailboxes of every server the reader sees, one click from the menu. *@
-    <OmniPanelMenuItem Text="@L["MailboxDirectory"]" Icon="@IconFor("inbox")" Href="mail" />
     }
 
     @if (CanReadProjectArea())
@@ -55,7 +56,8 @@
         {
             @foreach (var item in ProjectNavigationCatalog.VisibleItems(Permissions, projectId))
             {
-                <OmniPanelMenuItem Text="@L[item.LabelKey]" Icon="@IconFor(item.Icon)" Href="@item.Path(projectId)" />
+                <OmniPanelMenuItem Text="@L[item.LabelKey]" Icon="@IconFor(item.Icon)" Href="@item.Path(projectId)"
+                                   Badge="@(item.Slug == "quality" ? ProjectQualityBadge(projectId) : null)" />
             }
         }
         else
@@ -65,7 +67,9 @@
             {
                 <OmniPanelMenuItem Text="@L["Pipelines"]" Icon="@IconFor("account_tree")" Href="pipelines" />
             }
-            <OmniPanelMenuItem Text="@L["AnalysisPortfolio"]" Icon="@IconFor("shield")" Href="analysis" />
+            @* R-6: the Quality entry shows the lowest grade of the projects, never a red badge. *@
+            <OmniPanelMenuItem Text="@L["AnalysisPortfolio"]" Icon="@IconFor("shield")" Href="analysis"
+                               Badge="@MainQualityBadge()" />
             @* Lists monitored applications across projects; project-specific supervision stays in
                the project menu. *@
             @if (Permissions.CanReadAny(ResourceType.Project))
@@ -91,7 +95,18 @@
         }
     </OmniPanelMenuItem>
     }
-    @* Notifications, for every signed-in user, between Projects and Settings. *@
+    @* Recette R-36 (2026-11-03): after Projects come the mailboxes of every server the reader sees (R1-41, same
+       condition as before: readable servers), then the planner, then Notifications and Settings. *@
+    @if (Permissions.CanReadAny(ResourceType.Server))
+    {
+    <OmniPanelMenuItem Text="@L["MailboxDirectory"]" Icon="@IconFor("inbox")" Href="mail" />
+    }
+    @* PLAN-005, recette R-35 and R-36: the planner covers every project and server, so it is a global entry. *@
+    @if (Permissions.CanReadAny(ResourceType.Pipeline))
+    {
+    <OmniPanelMenuItem Text="@L["PipelineSchedule"]" Icon="@IconFor("event")" Href="pipelines/schedule" />
+    }
+    @* Notifications, for every signed-in user, after the planner and before Settings. *@
     <Aetheus.Front.Components.Notifications.NotificationsNavItem />
     <OmniPanelMenuItem Text="@L["Settings"]" Icon="@IconFor("settings")" Href="settings" />
     <OmniPanelMenuItem Text="@L["HelpCenter"]" Icon="@IconFor("help")" Href="help" />
@@ -128,6 +143,7 @@
             <OmniPanelMenuItem Text="@L["AuditLogs"]" Icon="@IconFor("policy")" Href="admin/audit" />
             <OmniPanelMenuItem Text="@L["SystemLogs"]" Icon="@IconFor("description")" Href="admin/system-logs" />
             <OmniPanelMenuItem Text="@L["Performance"]" Icon="@IconFor("speed")" Href="admin/performance" />
+            <OmniPanelMenuItem Text="@L["CveSourcesTitle"]" Icon="@IconFor("shield")" Href="admin/cve-sources" />
             <OmniPanelMenuItem Text="@L["Plugins"]" Icon="@IconFor("extension")" Href="admin/plugins" />
             <OmniPanelMenuItem Text="@L["Dashboards"]" Icon="@IconFor("space_dashboard")" Href="admin/dashboards" />
             <OmniPanelMenuItem Text="@L["Platform"]" Icon="@IconFor("tune")" Href="admin/settings" />
@@ -136,3 +152,4 @@
         </OmniPanelMenuItem>
     }
 </OmniPanelMenu>
+

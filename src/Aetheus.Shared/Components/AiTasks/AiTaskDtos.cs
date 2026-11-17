@@ -209,6 +209,15 @@ public sealed record CreateAiTaskDefinitionRequest : AiTaskDefinitionRequest;
 
 public sealed record UpdateAiTaskDefinitionRequest : AiTaskDefinitionRequest;
 
+/// <summary>Replaces only the schedule of an AI task (recette R-8, a move in the planner): the six-field cron expression
+/// (seconds first, UTC) the task fires on. Everything else about the task stays as it is.</summary>
+public sealed record SetAiTaskScheduleRequest
+{
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
+    public string Schedule { get; init; } = string.Empty;
+}
+
 public sealed record AiRunResultDto
 {
     public int Id { get; init; }

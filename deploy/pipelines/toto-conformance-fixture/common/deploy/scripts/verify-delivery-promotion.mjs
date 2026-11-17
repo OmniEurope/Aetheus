@@ -56,8 +56,9 @@ for (const [name, expected] of Object.entries(candidate.artifacts ?? {})) {
     throw new Error(`Candidate artifact '${name}' differs from the validated digest.`);
 }
 
-// Accept only live schema states proven by this candidate or the current release's sealed rollback
-// evidence so deployment never crosses an untested migration path (ADR-042). See
+// Accept only live schema states proven by this candidate (including the intermediate states of its own
+// forward migration) or the current release's sealed rollback evidence so deployment never crosses an
+// untested migration path (ADR-042). See
 // docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const { baseline } = candidate;
 const describe = state => `${state.hash} (${state.migrations.length} migrations)`;
@@ -89,6 +90,23 @@ const previousReleaseOf = async live => {
   return liveContract.candidateVersion ?? liveContract.candidateId;
 };
 
+// An interrupted forward migration of this very candidate: a migrating deploy that stopped partway
+// (a migration failed after earlier ones committed, each in its own transaction) leaves production on
+// an intermediate state of the path QA itself walked from schemaBefore to schemaAfter. The live history
+// must extend schemaBefore and be extended by schemaAfter, both strictly and element by element, so the
+// remaining migrations are exactly the ones QA applied next. Returns how many of the candidate's
+// migrations are applied and how many it carries, else null.
+const interruptedForwardMigrationOf = live => {
+  const before = baseline.schemaBefore.migrations;
+  const after = baseline.schemaAfter.migrations;
+  if (!Array.isArray(before) || !Array.isArray(after)
+      || before.length >= live.migrations.length || live.migrations.length >= after.length
+      || before.some((migration, index) => live.migrations[index] !== migration)
+      || live.migrations.some((migration, index) => after[index] !== migration))
+    return null;
+  return { applied: live.migrations.length - before.length, total: after.length - before.length };
+};
+
 if (baseline?.bootstrap === true) {
   // A first release has no prior state: either the database is empty, or it already carries exactly
   // what this delivery produces (a retried bootstrap).
@@ -107,6 +125,7 @@ if (baseline?.bootstrap === true) {
     throw new Error("The production schema state required to verify this candidate is missing.");
   const live = fingerprint(migrationsFromHistory(await readFile(productionSchemaPath, "utf8")));
   let liveVersion;
+  let interrupted;
   if (live.hash === baseline.schemaBefore.hash)
     process.stdout.write(
       `Production stands on the proven pre-migration schema ${describe(live)}; migrating deploy.\n`);
@@ -114,6 +133,11 @@ if (baseline?.bootstrap === true) {
     process.stdout.write(
       `Production already stands on the proven post-migration schema ${describe(live)}; `
       + "the migration is a no-op and only the binaries move.\n");
+  else if ((interrupted = interruptedForwardMigrationOf(live)) !== null)
+    process.stdout.write(
+      "Production stopped partway through this candidate's own forward migration: "
+      + `${interrupted.applied} of ${interrupted.total} migrations already applied on ${describe(live)}; `
+      + `the migrating deploy applies the remaining ${interrupted.total - interrupted.applied}.\n`);
   else if ((liveVersion = await previousReleaseOf(live)) !== null)
     process.stdout.write(
       `Previously deployed release: production runs ${liveVersion} on ${describe(live)}, whose QA `

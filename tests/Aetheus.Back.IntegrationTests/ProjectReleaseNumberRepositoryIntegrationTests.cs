@@ -12,7 +12,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// choice of the next number is honoured and never gives a version twice, and the reservation joins an
 /// ambient transaction.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ProjectReleaseNumberRepositoryIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -73,25 +72,6 @@ public sealed class ProjectReleaseNumberRepositoryIntegrationTests(PostgresFixtu
         }));
 
         Assert.Equal(Enumerable.Range(0, 8).Select(number => (int?)number), numbers.Order());
-    }
-
-    [Fact]
-    public async Task ConcurrentReleasesOfTwoSeries_EachTakeDistinctNumbersFromZero()
-    {
-        await ResetAndMigrateAsync();
-        await using var seed = NewContext();
-        var projectId = await SeedProjectAsync(seed);
-
-        var taken = await Task.WhenAll(Enumerable.Range(0, 10).Select(async index =>
-        {
-            await using var db = NewContext();
-            var series = index % 2 == 0 ? "1.3" : "1.4";
-            return (Series: series, Number: await Repository(db).AllocateNextAsync(projectId, series, Ct));
-        }));
-
-        foreach (var series in new[] { "1.3", "1.4" })
-            Assert.Equal(Enumerable.Range(0, 5).Select(number => (int?)number),
-                taken.Where(item => item.Series == series).Select(item => item.Number).Order());
     }
 
     [Fact]

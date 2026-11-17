@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
+using Aetheus.Back.Components.PackageRegistry;
 using Aetheus.Back.Data.Entities;
 using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 
@@ -23,9 +24,15 @@ public interface IPipelineAnalysisTaskFactory
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
         Dictionary<string, string> legVars, PipelineStageDefinition stageDef);
 
-    void CreateObservabilityTask(
+    /// <summary>
+    /// Creates the observability publication task with the run's own registry credential
+    /// (<c>AETHEUS_PACKAGE_TOKEN</c>, <see cref="IPackageRunTokenIssuer"/>), never a vault value.
+    /// </summary>
+    /// <returns><c>null</c> when the task was created; otherwise why the step is refused (a pipeline
+    /// without a project, or whose owner is missing, disabled or not an administrator).</returns>
+    Task<string?> CreateObservabilityTaskAsync(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        Dictionary<string, string> legVars, HashSet<string> secretKeys);
+        Dictionary<string, string> legVars, HashSet<string> secretKeys, int? projectId, CancellationToken ct);
 
     void CreateCoverageTask(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
@@ -49,7 +56,10 @@ public interface IPipelineAnalysisTaskFactory
 }
 
 /// <inheritdoc cref="IPipelineAnalysisTaskFactory"/>
-public sealed class PipelineAnalysisTaskFactory(IPipelineStepTaskBuilder taskBuilder)
+public sealed class PipelineAnalysisTaskFactory(
+    IPipelineStepTaskBuilder taskBuilder,
+    IPackageRunTokenIssuer packageRunTokens,
+    ISecretMaskingService secretMasking)
     : IPipelineAnalysisTaskFactory
 {
     public string? CreateAnalysisGateTask(
@@ -71,15 +81,24 @@ public sealed class PipelineAnalysisTaskFactory(IPipelineStepTaskBuilder taskBui
         return null;
     }
 
-    public void CreateObservabilityTask(
+    public async Task<string?> CreateObservabilityTaskAsync(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        Dictionary<string, string> legVars, HashSet<string> secretKeys)
+        Dictionary<string, string> legVars, HashSet<string> secretKeys, int? projectId, CancellationToken ct)
     {
+        if (projectId is not { } id)
+            return $"Step '{stepDef.Name}': a package registry token is issued only to a pipeline of a project.";
+        var grant = await packageRunTokens.MintAsync(runId, id, ct).ConfigureAwait(false);
+        if (grant.Token is not { } packageToken)
+            return $"Step '{stepDef.Name}': no package registry token for this run: {grant.Refusal}";
+        secretMasking.RegisterRuntimeSecret(runId, packageToken);
+
         var variables = ScopeStepEnvironment(legVars, secretKeys, stepDef);
         variables["AETHEUS_WORKING_DIR"] = legVars.GetValueOrDefault("WORKSPACE", "");
+        variables["AETHEUS_PACKAGE_TOKEN"] = packageToken;
         taskBuilder.TrackTypedTask(
             runId, legServer, stepRun, stepDef, "optional-observability", variables,
             OperationKind.PipelinePublishObservabilityBundle);
+        return null;
     }
 
     public void CreateCoverageTask(

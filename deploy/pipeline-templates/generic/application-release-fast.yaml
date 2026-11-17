@@ -4,10 +4,12 @@
 # Nothing is required in its repository (ADR-050, recette R3-64); a pipeline that sets the commands empty fails
 # the step and says so.
 # The template carries the same default as the production deployment (recette R2-9), for a Docker server: the
-# checked-out source is copied into DEPLOY_DIR (kept between releases, so the project's volumes and files stay)
-# and started there with Docker Compose, in the project named by COMPOSE_PROJECT (library `prod`, else
-# APPLICATION_PREFIX), with ENV_FILE (library `prod`) as the Compose env file when it is set, and the commit as
-# SOURCE_COMMIT. It waits for every service to run (healthy when it declares a health check) and otherwise
+# checked-out source is copied into a new, empty build directory under DEPLOY_DIR/releases (R-7: nothing of a previous
+# release can enter the build; the project's Docker volumes and its bind-mounted runtime data stay outside, see the
+# commands) and started there with Docker Compose (the file named by COMPOSE_FILE, which the setup wizard writes from the
+# project's Compose file, else one of the four usual names at the root), in the project named by COMPOSE_PROJECT
+# (library `prod`, else APPLICATION_PREFIX), with the environment file rendered by the step as the Compose env file (see below; ENV_FILE
+# of the library `prod`, when set, replaces it), and the commit as SOURCE_COMMIT. It waits for every service to run (healthy when it declares a health check) and otherwise
 # fails. A project that deploys otherwise sets APPLICATION_RELEASE_FAST_COMMANDS, which replaces the default whole.
 # The server is the `deployServer` parameter, the name of a server of the project (the setup wizard writes the
 # server of the project's production environment, among the project's servers). The checkout and the release
@@ -22,14 +24,37 @@
 # colour or retires a failed first deployment. Like the production deployment it reads from the libraries
 # COMPOSE_FILE, COMPOSE_PROJECT, STATE_DIR, UPSTREAM_DEFINE, UPSTREAM_CONF, UPSTREAM_LINK, APACHE_RELOAD_HELPER, the
 # four PORT_FRONT/BACK_BLUE/GREEN ports, DOMAIN, APP_SUBDOMAIN, API_SUBDOMAIN and HOST_PREFIX, and renders the
-# environment file from the versioned sample DEPLOY_ENV_SAMPLE. This template reads no vault, so the replacement
-# asks for none: a pipeline whose sample needs secrets declares the vault `<project>.prod` under `vaults:` itself.
+# environment file from the versioned sample DEPLOY_ENV_SAMPLE.
+# The environment of the replacement: like the production deployment, the step renders the versioned sample
+# DEPLOY_ENV_SAMPLE (`env_template`) from the vault and the libraries `<project>.prod` into a temporary file with the rights of its
+# owner only, hands its path to the commands in DEPLOY_ENV_FILE (the default commands pass it to Docker Compose with --env-file) and
+# erases it when the step ends, whatever the outcome. The vault `<project>.prod` is declared under `vaults:` for that. ENV_FILE of
+# the library `prod`, when set, is an explicit override: it is used instead. With neither, the default commands fail and say so.
 # The Apache virtual hosts and the certificates stay the production deployment's: a fast release does not apply
 # them. Every name only the blue-green path reads is written `$(NAME:-)`, so a replacement project is asked for
 # none of them; the host preparation refuses an empty one instead.
+#
+# R-33: a fast release is a release of its own, with a real version, on the candidate's machinery (application-candidate
+# v5): the platform allocates <APPLICATION_VERSION_PREFIX>.<n> in the project's series (release_number: allocate), or the run
+# parameter applicationVersion gives it; a version already published is refused at the launch. The backend writes it as
+# APPLICATION_VERSION, which is APP_VERSION for the Compose file (both strategies) and the version of the release recorded
+# as deployed once the release has succeeded.
+# R-32: then `main` follows what was deployed, as after a production deployment: "Advance main" moves it onto the release's
+# commit and tags it v<version>. The release is recorded before the transaction is closed (Record release, Release
+# recorded, then Commit) and demoted after a rollback, as in application-deploy-prod-core; Advance main comes after
+# "Erase environment file", the one stage both strategies pass (`always()`), only after a run that has not failed.
 name: application-release-fast-template
 trigger: manual
+release_number: allocate
 parameters:
+  # R-33: empty, the platform allocates <APPLICATION_VERSION_PREFIX>.<n>; given, it is the version (read by the backend).
+  - name: applicationVersion
+    display_name: Release version (empty for the next one)
+    display_name_fr: Version de la release (vide pour la suivante)
+    type: string
+    default: ""
+    description: A version major.minor.patch with an optional -suffix (for example 1.0.0). Left empty, the platform allocates the next version of the APPLICATION_VERSION_PREFIX series. A version already published for the project is refused.
+    description_fr: Une version majeur.mineur.correctif avec un suffixe -xxx facultatif (par exemple 1.0.0). Laissée vide, la plateforme attribue la version suivante de la série APPLICATION_VERSION_PREFIX. Une version déjà publiée pour le projet est refusée.
   # Written again by the setup wizard as a choice among the project's servers, with the server of its production
   # environment as default (recette R-21). None is guessed: a run without it is refused before it starts.
   - name: deployServer
@@ -44,8 +69,17 @@ variables:
   APPLICATION_HAS_BACKEND: "true"
   APPLICATION_HAS_DATABASE: "false"
   APPLICATION_ROLLBACK_ENABLED: "true"
+  # R-33: the series the release numbers count in (written again by the setup wizard). APPLICATION_VERSION is written
+  # by the backend at the launch; APP_VERSION hands it to the Compose file, AETHEUS_CANDIDATE_VERSION names the release
+  # "Advance main" moves `main` onto.
+  APPLICATION_VERSION_PREFIX: "0.1"
+  APP_VERSION: "$(APPLICATION_VERSION)"
+  AETHEUS_CANDIDATE_VERSION: "$(APPLICATION_VERSION)"
+  # Written by the setup wizard from the project's Compose file, as in the production deployment (R-37). Both strategies
+  # read it: the replacement below, and the blue-green path through the library prod.
+  COMPOSE_FILE: ""
   APPLICATION_RELEASE_FAST_COMMANDS: |
-    # Default fast release on a Docker server: the checked-out source is copied into DEPLOY_DIR and started
+    # Default fast release on a Docker server: the checked-out source is copied into a new build directory and started
     # with Docker Compose. A project that deploys otherwise sets APPLICATION_RELEASE_FAST_COMMANDS.
     set -eu
     if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
@@ -57,22 +91,75 @@ variables:
       echo "No Compose project name: set COMPOSE_PROJECT in the prod library, or APPLICATION_PREFIX in this pipeline." >&2
       exit 1
     fi
+    # The exact revision of this run, or a failure: a release without a known source revision is never deployed.
     SOURCE_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
+    if test -z "$SOURCE_COMMIT"; then
+      echo "The workspace holds no checked-out revision: nothing to build and deploy." >&2
+      exit 1
+    fi
+    if test -n "${BUILD_SOURCEVERSION:-}" && test "$SOURCE_COMMIT" != "$BUILD_SOURCEVERSION"; then
+      echo "The workspace holds revision $SOURCE_COMMIT, not the revision $BUILD_SOURCEVERSION this run was launched on." >&2
+      exit 1
+    fi
     export SOURCE_COMMIT
     DEPLOY_DIR="${DEPLOY_DIR:-${HOME:-/tmp}/.deployments/$PROJECT}"
     mkdir -p "$DEPLOY_DIR"
-    # Readable by everyone, as in a checkout: the images copy these files for the non-root user of their
-    # containers, and the runner's restrictive umask would otherwise leave them unreadable.
-    tar --exclude=./.git --mode=a+rX -cf - . | (umask 022 && tar -xf - -C "$DEPLOY_DIR")
-    cd "$DEPLOY_DIR"
-    COMPOSE_FILE_NAME=""
-    for CANDIDATE in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
-      if test -f "$CANDIDATE"; then COMPOSE_FILE_NAME="$CANDIDATE"; break; fi
-    done
+    DEPLOY_REAL="$(cd "$DEPLOY_DIR" && pwd -P)"
+    # R-7: every release is built in a directory of its own, created empty under DEPLOY_DIR/releases, so nothing a
+    # previous release left (a file moved in the repository, a generated file) can reach the Docker build. What must
+    # outlive a release stays outside it and is never deleted here: the Docker named volumes (the Compose project name,
+    # -p below, is the same from one release to the next, so the project keeps its volumes), DEPLOY_DIR/shared (the
+    # host directories the Compose file bind-mounts for runtime data, linked into each release, see below) and the
+    # environment file (rendered outside DEPLOY_DIR). The last release that started and the one before it are kept,
+    # for a manual rollback; the others, and the leftover of a release that failed, are removed.
+    RELEASES_DIR="$DEPLOY_REAL/releases"
+    SHARED_DIR="$DEPLOY_REAL/shared"
+    mkdir -p "$RELEASES_DIR" "$SHARED_DIR"
+    rm -f "$DEPLOY_REAL/.release-files" "$DEPLOY_REAL"/.release-files.*
+    release_pointer() { cat "$DEPLOY_REAL/.release-$1" 2>/dev/null || true; }
+    prune_releases() {
+      KEEP_CURRENT="$(release_pointer current)"
+      KEEP_PREVIOUS="$(release_pointer previous)"
+      for OLD_RELEASE in "$RELEASES_DIR"/*; do
+        test -d "$OLD_RELEASE" || continue
+        case "${OLD_RELEASE##*/}" in
+          "$KEEP_CURRENT"|"$KEEP_PREVIOUS") continue ;;
+        esac
+        rm -rf -- "$OLD_RELEASE"
+        echo ">>> Removed the build directory of an earlier release: ${OLD_RELEASE##*/}"
+      done
+    }
+    prune_releases
+    BUILD_DIR="$(mktemp -d "$RELEASES_DIR/$(date -u +%Y%m%d%H%M%S)-XXXXXX")"
+    chmod 755 "$BUILD_DIR"
+    # The rendered environment file (DEPLOY_ENV_FILE, in the workspace) is never part of the release: it holds the vault
+    # secrets, and the copy below is readable by everyone. Readable by everyone otherwise, as in a checkout: the images
+    # copy these files for the non-root user of their containers, and the runner's restrictive umask would otherwise
+    # leave them unreadable.
+    tar --exclude=./.git "--exclude=./.deploy-env.*" --mode=a+rX -cf - . | (umask 022 && tar -xf - -C "$BUILD_DIR")
+    cd "$BUILD_DIR"
+    # The Compose file of the production deployment (R-37): the path the setup wizard detected in the repository and
+    # wrote as COMPOSE_FILE, as the production deployment reads it. Docker Compose reads COMPOSE_FILE itself, so the
+    # project's own name is read once, then removed from the environment so the -f below is the only file. Only a
+    # project that names none looks for the four usual names at the root of the repository.
+    COMPOSE_FILE_NAME="${COMPOSE_FILE:-}"
+    unset COMPOSE_FILE
     if test -z "$COMPOSE_FILE_NAME"; then
-      echo "No Compose file (compose.yaml, compose.yml, docker-compose.yaml or docker-compose.yml) at the root of the repository: add one, or set APPLICATION_RELEASE_FAST_COMMANDS in this pipeline." >&2
+      for CANDIDATE in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
+        if test -f "$CANDIDATE"; then COMPOSE_FILE_NAME="$CANDIDATE"; break; fi
+      done
+    fi
+    case "$COMPOSE_FILE_NAME" in
+      "") echo "No Compose file: COMPOSE_FILE is empty and none of compose.yaml, compose.yml, docker-compose.yaml or docker-compose.yml is at the root of the repository. Set COMPOSE_FILE in this pipeline, or APPLICATION_RELEASE_FAST_COMMANDS." >&2; exit 1 ;;
+      /*|*..*) echo "COMPOSE_FILE must be a path inside the repository: $COMPOSE_FILE_NAME" >&2; exit 1 ;;
+    esac
+    if ! test -f "$COMPOSE_FILE_NAME"; then
+      echo "The Compose file $COMPOSE_FILE_NAME is not in the checked-out revision ${SOURCE_COMMIT}." >&2
       exit 1
     fi
+    # The environment file Compose reads: ENV_FILE (library prod) when the project names one, an explicit override;
+    # else the file the step rendered from the versioned sample and the vault `<project>.prod` (DEPLOY_ENV_FILE), as
+    # the production deployment does. With neither, Compose would fail on every required variable: say so instead.
     set --
     if test -n "${ENV_FILE:-}"; then
       if ! test -f "$ENV_FILE"; then
@@ -80,8 +167,55 @@ variables:
         exit 1
       fi
       set -- --env-file "$ENV_FILE"
+    elif test -s "${DEPLOY_ENV_FILE:-}"; then
+      set -- --env-file "$DEPLOY_ENV_FILE"
+    else
+      echo "No environment file: DEPLOY_ENV_FILE is empty (the step that runs these commands renders it from the sample ${DEPLOY_ENV_SAMPLE:-.pipeline/configs/env/production.env}) and ENV_FILE is not set in the prod library. Add the sample to the repository, or set ENV_FILE, or set APPLICATION_RELEASE_FAST_COMMANDS." >&2
+      exit 1
     fi
-    echo ">>> docker compose project $PROJECT from $DEPLOY_DIR/$COMPOSE_FILE_NAME, commit ${SOURCE_COMMIT:-unknown}"
+    # R-33: the release version reaches the Compose file as APP_VERSION (build args and container environment).
+    export APP_VERSION="${APP_VERSION:-}"
+    # R-7: the host paths the Compose file bind-mounts and the release does not hold are runtime data (uploads, a
+    # database directory): they live in DEPLOY_DIR/shared and are linked into this release, so the new build directory
+    # starts from them instead of from nothing. The first release that moves them takes the copy the earlier releases,
+    # which were extracted in DEPLOY_DIR itself, kept there. A bind-mounted path the release holds is source: it comes
+    # with the release. Docker named volumes need nothing: they belong to the Compose project.
+    COMPOSE_CONFIG="$(docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" config)" || {
+      echo "The Compose file $COMPOSE_FILE_NAME does not resolve (docker compose config failed): the release is not started." >&2
+      exit 1
+    }
+    BIND_SOURCES="$(printf '%s\n' "$COMPOSE_CONFIG" | sed -n 's/^[[:space:]]*source:[[:space:]]*//p' | tr -d "\"'")"
+    while IFS= read -r BIND_SOURCE; do
+      case "$BIND_SOURCE" in
+        "$BUILD_DIR"/*) BIND_REL="${BIND_SOURCE#"$BUILD_DIR"/}"; BIND_REL="${BIND_REL%/}" ;;
+        *) continue ;;
+      esac
+      case "/$BIND_REL/" in
+        //*|*/../*) continue ;;
+      esac
+      if test -e "$BUILD_DIR/$BIND_REL" || test -L "$BUILD_DIR/$BIND_REL"; then continue; fi
+      case "$BIND_REL" in
+        releases|releases/*|shared|shared/*|.release-*)
+          echo "The Compose file bind-mounts $BIND_REL, a name the deployment directory reserves (releases, shared): rename that path." >&2
+          exit 1 ;;
+      esac
+      BIND_SHARED="$SHARED_DIR/$BIND_REL"
+      if ! test -e "$BIND_SHARED"; then
+        mkdir -p "$(dirname "$BIND_SHARED")"
+        if test -e "$DEPLOY_REAL/$BIND_REL" && ! test -L "$DEPLOY_REAL/$BIND_REL"; then
+          mv -- "$DEPLOY_REAL/$BIND_REL" "$BIND_SHARED"
+          echo ">>> $BIND_REL moved to $BIND_SHARED: runtime data stays outside the release directories."
+        else
+          mkdir -p "$BIND_SHARED"
+        fi
+      fi
+      mkdir -p "$(dirname "$BUILD_DIR/$BIND_REL")"
+      ln -s "$BIND_SHARED" "$BUILD_DIR/$BIND_REL"
+      echo ">>> $BIND_REL is linked to $BIND_SHARED."
+    done <<EOF
+    $BIND_SOURCES
+    EOF
+    echo ">>> docker compose project $PROJECT from $BUILD_DIR/$COMPOSE_FILE_NAME, commit ${SOURCE_COMMIT:-unknown}, version ${APP_VERSION:-unknown}"
     # The agent names the Buildx builder of a build step (BUILDX_BUILDER) without creating it when its Docker
     # maintenance is off: an absent or unhealthy builder is (re)created here, with the host's optional cap on
     # parallel build steps: BUILDX_MAX_PARALLELISM, a positive integer set per host (the agent's environment or a
@@ -111,6 +245,14 @@ variables:
       exit 1
     fi
     docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" ps
+    # The release is up: it becomes the current one and the one it replaced the previous one (its source and Compose
+    # file stay in DEPLOY_DIR/releases for a manual rollback); the release before that is removed.
+    RELEASE_NAME="${BUILD_DIR##*/}"
+    RELEASE_REPLACED="$(release_pointer current)"
+    if test -n "$RELEASE_REPLACED"; then printf '%s\n' "$RELEASE_REPLACED" > "$DEPLOY_REAL/.release-previous"; fi
+    printf '%s\n' "$RELEASE_NAME" > "$DEPLOY_REAL/.release-current"
+    prune_releases
+    echo ">>> Release $RELEASE_NAME is the current build directory in $RELEASES_DIR."
   # R-28: how the release is brought up, the production deployment's own switch: `replace` runs the commands
   # above, `bluegreen` the zero-downtime cutover below.
   DEPLOY_STRATEGY: "replace"
@@ -128,15 +270,28 @@ variables:
   BG_UPSTREAM_CONF: "$(UPSTREAM_CONF:-)"
   BG_RELOAD_HELPER: "$(APACHE_RELOAD_HELPER:-)"
   BG_PUBLIC_ORIGIN: "https://$(HOST_PREFIX:-)$(APP_SUBDOMAIN:suffix=.)$(DOMAIN:-)"
-  BG_PUBLIC_API_ORIGIN: "https://$(HOST_PREFIX:-)$(API_SUBDOMAIN:-).$(DOMAIN:-)"
+  BG_PUBLIC_API_ORIGIN: "https://$(HOST_PREFIX:-)$(API_SUBDOMAIN:suffix=.)$(DOMAIN:-)"
   BG_REVISION: "$(BUILD_SOURCEVERSION)"
   # APP_VERSION, SOURCE_COMMIT, DOTNET_SDK_VERSION and the three public URLs are published by the host preparation,
   # so the replacement never receives them.
   BG_COMPOSE_ENV: "APP_VERSION,SOURCE_COMMIT,DOTNET_SDK_VERSION,FRONT_URL,API_BASE_URL,API_URL,PORT_FRONT_BLUE,PORT_BACK_BLUE,PORT_FRONT_GREEN,PORT_BACK_GREEN"
+  # R-13: the expand/contract migration gate, as in application-deploy-prod-core. The project's setting
+  # `MigrationGateEnabled` is written by the control plane into APPLICATION_MIGRATION_GATE_ENABLED at every run, over the
+  # value below. Blue-green only (APPLICATION_MIGRATION_GATE_STRATEGY is the two joined, for a single-comparison stage
+  # condition): the platform's `bluegreen-migrate` step reads the pending EF migrations from APPLICATION_MIGRATIONS_DIR (a
+  # path inside the checkout), refuses a destructive Up(), then applies them once. The default `.` is the whole checkout:
+  # the step finds the folder holding the single EF `*ModelSnapshot.cs`, so turning the setting on needs no path here;
+  # none or several found fail the run: a gate that cannot see the migrations never waves them through.
+  APPLICATION_MIGRATION_GATE_ENABLED: "false"
+  APPLICATION_MIGRATION_GATE_STRATEGY: "$(APPLICATION_MIGRATION_GATE_ENABLED)-$(DEPLOY_STRATEGY)"
+  APPLICATION_MIGRATIONS_DIR: "."
+  BG_MIGRATIONS_DIR: "$(WORKSPACE)/.release-source/$(APPLICATION_MIGRATIONS_DIR)"
 
 # Recette R3-67: the libraries a production deployment reads, named like the platform's own
 # (`<project>.share`, `<project>.prod`): `${{ project.slug }}` is the project's slug, so the setup wizard creates
 # them in the project under the name its runs read.
+vaults:
+  - "${{ project.slug }}.prod"
 variable_libraries:
   - "${{ project.slug }}.share"
   - "${{ project.slug }}.prod"
@@ -144,14 +299,36 @@ variable_libraries:
 stages:
   # The checkout in its own stage: the steps of one stage run concurrently (ADR-012), so in the release stage
   # the commands could start before the source is there.
+  #
+  # R-39: the clone of the exact revision is the platform's own preparation of the run workspace (it fetches the commit the
+  # run was launched on and checks it out detached). A step that only declares `checkout: true` runs nothing of its own,
+  # so this one verifies the result and fails, by name, when the workspace is not that revision: a fast release never
+  # builds and deploys whatever the workspace happens to hold.
   - name: Checkout
     group: Deploy
     execution_role: deploy
     agent: "${{ parameters.deployServer }}"
     os: linux
     steps:
-      - name: Check out the exact revision
-        checkout: true
+      - name: Verify the checked-out revision
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          if test -z "${BUILD_SOURCEVERSION:-}"; then
+            echo "This run names no source revision (BUILD_SOURCEVERSION is empty): a fast release deploys an exact revision and refuses an unpinned one." >&2
+            exit 1
+          fi
+          if ! git rev-parse --git-dir >/dev/null 2>&1; then
+            echo "The workspace is not a Git checkout: the revision $BUILD_SOURCEVERSION was not checked out." >&2
+            exit 1
+          fi
+          CHECKED_OUT="$(git rev-parse HEAD 2>/dev/null || true)"
+          if test "$CHECKED_OUT" != "$BUILD_SOURCEVERSION"; then
+            echo "The workspace holds revision '${CHECKED_OUT:-none}', not the revision $BUILD_SOURCEVERSION this run was launched on: refusing to build and deploy it." >&2
+            exit 1
+          fi
+          echo ">>> Workspace is at revision $CHECKED_OUT"
+        timeout_seconds: 300
 
   # Blue-green only (R-28). Copies the checked-out revision the colours are built from, writes the environment file
   # the native steps read (erased by the last stage), creates the Apache upstream (the Defines the virtual hosts
@@ -232,8 +409,8 @@ stages:
             SDK_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .release-source/global.json | head -n 1)"
             SDK_VERSION="${SDK_VERSION:-none}"
           fi
-          # No candidate names this release: the version is the pipeline's APP_VERSION when it sets one, otherwise
-          # the short commit.
+          # The version is APP_VERSION, the release version the backend wrote at the launch (R-33); the short commit
+          # only for a pipeline that overrides APP_VERSION empty.
           RELEASE_VERSION="${APP_VERSION:-}"
           RELEASE_VERSION="${RELEASE_VERSION:-$(printf '%s' "$SOURCE_SHA" | cut -c1-12)}"
           # The agent names the Buildx builder of a build step (BUILDX_BUILDER) without creating it when its Docker
@@ -288,12 +465,23 @@ stages:
     steps:
       - name: Run project fast release commands
         working_directory: "$(WORKSPACE)"
+        env_template: "$(DEPLOY_ENV_SAMPLE)"
         shell: |
           set -eu
           if test -z "${APPLICATION_RELEASE_FAST_COMMANDS:-}"; then
             echo "No fast release command declared: set APPLICATION_RELEASE_FAST_COMMANDS in this pipeline." >&2
             exit 1
           fi
+          # The environment file: rendered from the versioned sample, readable by its owner only, and erased whatever
+          # the outcome. Naming the vault keys here is what lets the step receive them (a secret reaches only the
+          # steps whose text mentions it). It stays in the workspace, which the default commands never copy to
+          # DEPLOY_DIR. The commands receive its path in DEPLOY_ENV_FILE.
+          export DB_PASSWORD JWT_KEY ENCRYPTION_KEY ENCRYPTION_SALT
+          umask 077
+          DEPLOY_ENV_FILE="$(mktemp "$(WORKSPACE)/.deploy-env.XXXXXX")"
+          export DEPLOY_ENV_FILE
+          trap 'rm -f "$DEPLOY_ENV_FILE"' EXIT
+          printf '%s' "$AETHEUS_ENV_FILE_B64" | base64 -d > "$DEPLOY_ENV_FILE"
           APPLICATION_HAS_FRONTEND="$(APPLICATION_HAS_FRONTEND)" \
           APPLICATION_HAS_BACKEND="$(APPLICATION_HAS_BACKEND)" \
           APPLICATION_HAS_DATABASE="$(APPLICATION_HAS_DATABASE)" \
@@ -305,12 +493,33 @@ stages:
   # colour is started and health-gated on its own ports, the Apache upstream is moved to it, the released application
   # is probed, then the previous colour is kept in reserve. The migration of a database is the project's own
   # business: its Compose file runs it.
+  # R-13: the expand/contract gate, when the project turned it on (see APPLICATION_MIGRATION_GATE_ENABLED above).
+  - name: Migrate
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Prepare host]
+    condition: "eq(variables['APPLICATION_MIGRATION_GATE_STRATEGY'], 'true-bluegreen')"
+    steps:
+      - name: Reconcile the shared schema
+        type: bluegreen-migrate
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        migrations_dir: "$(BG_MIGRATIONS_DIR)"
+        revision: "$(BG_REVISION)"
+        timeout_seconds: 3600
+
   - name: Up
     group: Deploy
     execution_role: deploy
     agent: "${{ parameters.deployServer }}"
     os: linux
-    depends_on: [FastRelease]
+    depends_on: [FastRelease, Migrate]
     condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
     steps:
       - name: Start and health-gate the idle colour
@@ -390,12 +599,44 @@ stages:
         evidence_gate: blocking
         timeout_seconds: 1800
 
+  # R-33: the release this run deployed, recorded under its version once the release answers, BEFORE the transaction
+  # is closed, as in the production deployment (application-deploy-prod-core): a failure to record it still hands
+  # control to the rollback, so the host and the platform never disagree. Both strategies reach it: on the replacement
+  # path the blue-green stages are skipped, and a skipped stage satisfies the dependency. No payload is retained with
+  # it: a candidate whose baseline restore (current-deployed, allow_missing) finds this release without an artifact
+  # starts as a bootstrap. In a stage of its own: the steps of one stage are concurrent (ADR-012).
+  - name: Record release
+    group: Release
+    execution_role: deploy
+    os: linux
+    depends_on: [Evidence]
+    steps:
+      - name: Record the fast release as deployed
+        type: release
+        version: "$(APPLICATION_VERSION)"
+        changelog: true
+        deployed: true
+        timeout_seconds: 300
+
+  # Says that this run marked the release as deployed, so that Demote release acts only on a release this run
+  # promoted. In a stage of its own: the steps of one stage are concurrent (ADR-012).
+  - name: Release recorded
+    group: Release
+    execution_role: deploy
+    os: linux
+    depends_on: [Record release]
+    steps:
+      - name: Remember that this run marked the release as deployed
+        outputs: [APPLICATION_RELEASE_RECORDED]
+        shell: echo "##aetheus[setvariable name=APPLICATION_RELEASE_RECORDED]true"
+        timeout_seconds: 60
+
   - name: Commit
     group: Deploy
     execution_role: deploy
     agent: "${{ parameters.deployServer }}"
     os: linux
-    depends_on: [Evidence]
+    depends_on: [Release recorded]
     condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
     steps:
       - name: Close the deployment transaction
@@ -446,6 +687,22 @@ stages:
         reload_helper: "$(BG_RELOAD_HELPER)"
         timeout_seconds: 1800
 
+  # A rollback undoes the release recorded above: it is demoted after the previous colour is back, otherwise it
+  # stays marked as deployed (and becomes the baseline of the next candidate) while the host serves the previous one.
+  # Only a failed run, and only a release this run marked as deployed (Release recorded).
+  - name: Demote release
+    group: Release
+    execution_role: deploy
+    os: linux
+    condition: "failed()"
+    depends_on: [Rollback]
+    steps:
+      - name: Demote the release this rollback undid
+        condition: "eq(variables['APPLICATION_RELEASE_RECORDED'], 'true')"
+        type: release
+        version: "$(APPLICATION_VERSION)"
+        deployed: false
+        timeout_seconds: 300
   # Blue-green only: the environment file written for the native steps and the copied source are erased, the run's
   # outcome notwithstanding.
   - name: Erase environment file
@@ -466,3 +723,21 @@ stages:
           rm -rf .release-source
           echo ">>> The environment file is erased."
         timeout_seconds: 300
+
+  # R-32: `main` follows what production now runs, as after a production deployment (application-deploy-prod-core,
+  # ADR-044): the backend moves the branch onto the commit of the release recorded above and tags it v<version>,
+  # without any credential on the agent. Last stage, only after a run that has not failed. The step refuses, and fails
+  # the run with its reason, a project with no internal repository holding the commit, a strictly protected branch and
+  # a tag already on another commit. It reads the release from AETHEUS_CANDIDATE_VERSION.
+  - name: Advance main
+    group: Release
+    execution_role: deploy
+    os: linux
+    depends_on: [Erase environment file]
+    condition: "succeeded()"
+    steps:
+      - name: Advance main onto the released commit
+        type: advance-branch
+        branch: main
+        tag: "v$(APPLICATION_VERSION)"
+        timeout_seconds: 60

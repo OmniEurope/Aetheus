@@ -52,6 +52,15 @@ public class Project
     /// its data is kept only so the cleanup can be relaunched; it goes once everything is removed.</summary>
     public DateTime? DeletionRequestedAt { get; set; }
 
+    /// <summary>PLAN-007 (recette R-9): a vulnerability fixed by a patch or minor version of a dependency gets its update
+    /// branch, and the CI and the candidate run on it. On by default; never deploys to production.</summary>
+    public bool DependencyUpdatesEnabled { get; set; } = true;
+
+    /// <summary>Recette R-13 (user decision 2026-11-09): the project follows the expand/contract model for its database, so its
+    /// migration gate is on and the overview shows the expand/contract tracking tab. Off by default; chosen in the pipeline setup
+    /// wizard, changed later in the project's settings.</summary>
+    public bool MigrationGateEnabled { get; set; }
+
     public int OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
 

@@ -18,7 +18,7 @@ public static class AetheusGridPresets
                 [nameof(OmniDataGrid<object>.AllowSorting)] = true,
                 [nameof(OmniDataGrid<object>.Filterable)] = true,
                 [nameof(OmniDataGrid<object>.FilterMode)] = OmniDataGridFilterMode.Simple,
-                [nameof(OmniDataGrid<object>.ShowHeaderFilterMenu)] = true,
+                [nameof(OmniDataGrid<object>.FilterPlacement)] = OmniDataGridFilterPlacement.HeaderMenu,
                 [nameof(OmniDataGrid<object>.AllowColumnResize)] = true,
                 // Enable column-edge double-click autofit so users can size columns to their
                 // content.

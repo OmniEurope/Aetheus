@@ -54,6 +54,22 @@ public class ProjectFormDialogTests : BunitContext
         ReleaseNumberingPattern = "1.0.$(BUILD_BUILDID)"
     };
 
+    [Fact]
+    public void NameField_UsesOrganizationToken()
+    {
+        var cut = Render<ProjectFormDialog>();
+
+        Assert.Equal("organization", cut.Find("#project-form-name").GetAttribute("autocomplete"));
+    }
+
+    [Fact]
+    public void NoField_DisablesAutocomplete()
+    {
+        var cut = Render<ProjectFormDialog>();
+
+        Assert.DoesNotContain(cut.FindAll("input"), i => i.GetAttribute("autocomplete") == "off");
+    }
+
     // ── Create mode render ────────────────────────────────────────────────────
 
     [Fact]

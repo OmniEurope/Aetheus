@@ -4,7 +4,7 @@ namespace Aetheus.Front.Components.Plugins;
 
 // X4D8: the plugin-register form, extracted from PluginManagement's inline panel into a dialog so the
 // management page is a clean full-height grid (consistent with Alerts/AlertEditDialog). Closes with
-// `true` on a successful registration so the caller reloads the list; dismiss leaves it untouched.
+// the registered plugin on success so the list draws it at once (R-10); dismiss leaves it untouched.
 public partial class PluginRegisterDialog
 {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -28,7 +28,7 @@ public partial class PluginRegisterDialog
             if (result is not null)
             {
                 Toast.Success("Registered", "PluginRegistered");
-                Dialog.Close(true);
+                Dialog.Close(result);
             }
             else
             {

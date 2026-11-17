@@ -10,9 +10,9 @@ namespace Aetheus.Agent.Core.Functions;
 /// <item><c>ENV_FILE</c> is set; its directory is the declared <c>STATE_DIR</c> when one is declared;</item>
 /// <item>that directory contains no <c>..</c>, is a direct child of <c>/var/lib</c>, and is not a
 /// symbolic link;</item>
-/// <item>neither the environment file nor the legacy one is a symbolic link, and when both exist they
-/// are byte for byte identical;</item>
-/// <item>when the environment file is missing, with no legacy file to migrate and no dated copy
+/// <item>the environment file is not a symbolic link. Only the current layout is read: no former
+/// (legacy) environment file is looked at or migrated (user decision 2026-11-12);</item>
+/// <item>when the environment file is missing, with no dated copy
 /// (<c>&lt;file&gt;-YYYYMMDDTHHMMSSZ</c>) to restore, the preparation would generate new secrets: that
 /// is refused when persistent state exists (a <c>&lt;project&gt;-{db-data,git-repos,dp-keys,artifacts,packages}</c>
 /// volume or a container named <c>&lt;project&gt;-*</c>), since new secrets could never open it.</item>
@@ -54,20 +54,14 @@ public sealed class VerifyProductionStateFunction : IPipelineFunction
         var envFile = FunctionShell.Input(context, "env_file", "ENV_FILE");
         if (envFile is null)
             return PipelineFunctionResult.Failure("ENV_FILE is required");
-        var legacy = FunctionShell.Input(context, "legacy_env_file", "LEGACY_ENV_FILE");
         var refusal = StateDirectoryRefusal(envFile, FunctionShell.Input(context, "state_dir", "STATE_DIR"))
-            ?? EnvironmentFileRefusal(envFile, legacy);
+            ?? (ProductionStatePaths.IsSymbolicLink(envFile) ? "Production environment file must not be a symbolic link." : null);
         if (refusal is not null)
             return PipelineFunctionResult.Failure(refusal);
 
         if (File.Exists(envFile))
         {
             await context.Log($">>> {envFile} exists; its secrets will be reused, never regenerated.").ConfigureAwait(false);
-            return PipelineFunctionResult.Success();
-        }
-        if (legacy is not null && File.Exists(legacy))
-        {
-            await context.Log($">>> {envFile} is missing; the preparation will migrate {legacy}.").ConfigureAwait(false);
             return PipelineFunctionResult.Success();
         }
         if (ProductionStatePaths.HasDatedBackup(envFile))
@@ -85,20 +79,6 @@ public sealed class VerifyProductionStateFunction : IPipelineFunction
             return $"ENV_FILE ({envFile}) does not live in STATE_DIR ({declared}).";
         return ProductionStatePaths.ShapeRefusal(stateDirectory, _stateRoot)
             ?? (ProductionStatePaths.IsSymbolicLink(stateDirectory) ? "Production state directory is symbolic." : null);
-    }
-
-    private static string? EnvironmentFileRefusal(string envFile, string? legacy)
-    {
-        if (ProductionStatePaths.IsSymbolicLink(envFile))
-            return "Production environment file must not be a symbolic link.";
-        if (legacy is null)
-            return null;
-        if (ProductionStatePaths.IsSymbolicLink(legacy))
-            return "Legacy production environment file must not be a symbolic link.";
-        return File.Exists(envFile) && File.Exists(legacy)
-            && !File.ReadAllBytes(envFile).AsSpan().SequenceEqual(File.ReadAllBytes(legacy))
-            ? "Canonical and legacy production environments differ; refusing automatic selection."
-            : null;
     }
 
     private async Task<PipelineFunctionResult> FirstDeployAsync(

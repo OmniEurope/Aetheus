@@ -127,6 +127,84 @@ public sealed class BlueGreenMigrationGateReportTests : IDisposable
     }
 
     [Fact]
+    public async Task SourceRoot_GatesTheFolderOfTheSingleModelSnapshot()
+    {
+        // R-13: the generic templates pass the whole sealed source when no folder is declared.
+        var source = SourceTree("src/App/Data/Migrations");
+        WriteMigrationIn(source, "src/App/Data/Migrations", "20260101000000_Base", "migrationBuilder.CreateTable(name: \"T\");");
+        WriteMigrationIn(source, "src/App/Data/Migrations", "20260103000000_DropOld", "migrationBuilder.DropColumn(name: \"Old\", table: \"T\");");
+        // A build output copy of the snapshot is not a second migrations folder.
+        SourceTree("src/App/obj/Debug/Migrations", source);
+        var log = new List<string>();
+
+        var result = await Execute(log, new HistoryShell(["20260101000000_Base"]), SourceEnvironment(source));
+
+        Assert.Equal(1, result.ExitCode);
+        var report = SingleReport(log);
+        Assert.Equal(MigrationGateOutcome.Refused, report.Outcome);
+        Assert.Equal("20260103000000_DropOld", Assert.Single(report.Migrations).MigrationId);
+        Assert.Contains(log, line => line.StartsWith("Migrations EF détectées dans", StringComparison.Ordinal)
+            && line.Contains(Path.Combine("src", "App", "Data", "Migrations"), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SourceRoot_WithoutAnyMigration_ReportsUnavailable()
+    {
+        var source = Path.Combine(_root, "source");
+        Directory.CreateDirectory(Path.Combine(source, "src", "App"));
+        var log = new List<string>();
+
+        var result = await Execute(log, new HistoryShell(["20260101000000_Base"]), SourceEnvironment(source));
+
+        Assert.NotEqual(0, result.ExitCode);
+        var report = SingleReport(log);
+        Assert.Equal(MigrationGateOutcome.Unavailable, report.Outcome);
+        Assert.Contains("Aucune migration EF trouvée", report.Detail, StringComparison.Ordinal);
+        Assert.Contains("APPLICATION_MIGRATIONS_DIR", report.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SourceRoot_WithSeveralModelSnapshots_ReportsUnavailableAndNamesThem()
+    {
+        var source = SourceTree("src/App/Migrations");
+        SourceTree("src/Audit/Migrations", source);
+        var log = new List<string>();
+
+        var result = await Execute(log, new HistoryShell(["20260101000000_Base"]), SourceEnvironment(source));
+
+        Assert.NotEqual(0, result.ExitCode);
+        var report = SingleReport(log);
+        Assert.Equal(MigrationGateOutcome.Unavailable, report.Outcome);
+        Assert.Contains("Plusieurs dossiers de migrations EF", report.Detail, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine("src", "App", "Migrations"), report.Detail, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine("src", "Audit", "Migrations"), report.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A source root (created under the test root when <paramref name="source"/> is null) holding an EF
+    /// model snapshot in <paramref name="relativeFolder"/>.</summary>
+    private string SourceTree(string relativeFolder, string? source = null)
+    {
+        source ??= Path.Combine(_root, "source");
+        var folder = Path.Combine(source, relativeFolder.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "AppDbContextModelSnapshot.cs"), "partial class AppDbContextModelSnapshot { }\n");
+        return source;
+    }
+
+    private void WriteMigrationIn(string source, string relativeFolder, string id, string upBody) => File.WriteAllText(
+        Path.Combine(source, relativeFolder.Replace('/', Path.DirectorySeparatorChar), id + ".cs"),
+        "public partial class M : Migration\n{\n"
+        + "    protected override void Up(MigrationBuilder migrationBuilder)\n    {\n"
+        + "        " + upBody + "\n    }\n}\n");
+
+    private Dictionary<string, string> SourceEnvironment(string source)
+    {
+        var env = BaseEnvironment();
+        env["AETHEUS_BG_MIGRATIONS_DIR"] = source;
+        return env;
+    }
+
+    [Fact]
     public async Task UnreadableHistory_ReportsUnavailable()
     {
         WriteMigration("20260101000000_Base", "migrationBuilder.CreateTable(name: \"T\");");

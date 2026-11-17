@@ -31,6 +31,10 @@ public interface IVaultService
     /// <summary>For each secret name of the named vaults, the id of the vault whose value a run of the project
     /// would read (same precedence and cross-project access as <see cref="ResolveVaultSecretsWithCrossAccessAndNamesAsync"/>).</summary>
     Task<Dictionary<string, int>> ResolveSecretOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
+    /// <summary>R-56: the id of each named vault a run of the project can read, by name (cross-project access as above).</summary>
+    Task<Dictionary<string, int>> ResolveVaultIdsWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
+    /// <summary>R-25: the vaults a run of the project can read that hold one of these keys (id, name, key), key names only.</summary>
+    Task<List<(int Id, string Name, string Key)>> FindKeyHoldersWithCrossAccessAsync(IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default);
     Task<List<string>> ExportSecretKeysAsync(int vaultId, CancellationToken ct = default);
     Task<int> ImportSecretsAsync(int vaultId, List<CreateVaultSecretRequest> secrets, CancellationToken ct = default);
 }

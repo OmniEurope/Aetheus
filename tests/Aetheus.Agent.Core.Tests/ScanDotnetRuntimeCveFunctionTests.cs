@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using Aetheus.Agent.Core.Functions;
 using Aetheus.Shared.Components.Pipelines;
+using Aetheus.Shared.Components.VulnerabilityWatch;
 
 namespace Aetheus.Agent.Core.Tests;
 
@@ -43,14 +44,14 @@ public sealed class ScanDotnetRuntimeCveFunctionTests : IDisposable
             DockerArchiveBuilder.Deps($"Microsoft.NETCore.App.Runtime.linux-x64/{version}"));
 
     private Task<(Executors.ExecutorResult Result, Dictionary<string, string> Variables)> RunAsync(
-        Func<HttpRequestMessage, HttpResponseMessage>? respond = null)
+        Func<HttpRequestMessage, HttpResponseMessage>? respond = null, TimeSpan? attemptTimeout = null)
     {
         var handler = new RecordedMetadataHandler(respond ?? (_ => Json(DotnetReleaseMetadataFixture.Channel10)));
         var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [PipelineFunctionVariables.ParametersJson] = JsonSerializer.Serialize(_parameters)
         };
-        return _harness.RunAsync(new ScanDotnetRuntimeCveFunction(new HttpClient(handler)), env);
+        return _harness.RunAsync(new ScanDotnetRuntimeCveFunction(new HttpClient(handler), (_, _) => Task.CompletedTask, attemptTimeout), env);
     }
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body) };
@@ -77,8 +78,8 @@ public sealed class ScanDotnetRuntimeCveFunctionTests : IDisposable
         Assert.Contains("Microsoft.AspNetCore.App.Runtime.linux-x64 10.0.13", text, StringComparison.Ordinal);
         Assert.Contains("Microsoft.NETCore.App.Runtime.linux-x64 10.0.13", text, StringComparison.Ordinal);
         Assert.Contains("fixed in 10.0.14", text, StringComparison.Ordinal);
-        Assert.Equal("High", finding.GetProperty("properties").GetProperty("severity").GetString());
-        Assert.Equal("error", finding.GetProperty("level").GetString());
+        Assert.Equal("Medium", finding.GetProperty("properties").GetProperty("severity").GetString());
+        Assert.Equal("warning", finding.GetProperty("level").GetString());
         Assert.Equal("https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-111497",
             JsonDocument.Parse(File.ReadAllText(Output)).RootElement.GetProperty("runs")[0].GetProperty("tool")
                 .GetProperty("driver").GetProperty("rules").EnumerateArray()
@@ -263,6 +264,139 @@ public sealed class ScanDotnetRuntimeCveFunctionTests : IDisposable
     }
 
     [Fact]
+    public async Task InputOutsideTheWorkspace_IsRefusedBeforeAnythingIsRead()
+    {
+        _parameters["input"] = "../elsewhere";
+        var outside = Path.Combine(_harness.Root, "elsewhere");
+        DockerArchiveBuilder.Write(Path.Combine(outside, "app-back.tar"), Layer(AspNetImageFiles("10.0.13")));
+
+        var (result, _) = await RunAsync();
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(PipelineFunctionOperationExecutor.FunctionError, result.FailureCode);
+        Assert.Contains("is outside the workspace", result.FailureReason, StringComparison.Ordinal);
+        Assert.False(File.Exists(Output));
+    }
+
+    [Fact]
+    public async Task InputInsideTheWorkspace_IsStillRead()
+    {
+        _parameters["input"] = "sub/images";
+        DockerArchiveBuilder.Write(Path.Combine(_harness.Workspace, "sub", "images", "app-back.tar"), Layer(AspNetImageFiles("10.0.13")));
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(ShippedCve, Results().Select(RuleId));
+    }
+
+    [Fact]
+    public async Task ManifestAboveTheSizeCap_FailsWithAClearReasonInsteadOfBeingReadWhole()
+    {
+        var path = Path.Combine(_harness.Workspace, ".analysis-image", "app-back.tar");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (var file = File.Create(path))
+        using (var archive = new System.Formats.Tar.TarWriter(file, System.Formats.Tar.TarEntryFormat.Pax, leaveOpen: false))
+        {
+            archive.WriteEntry(new System.Formats.Tar.PaxTarEntry(System.Formats.Tar.TarEntryType.RegularFile, "manifest.json")
+            {
+                DataStream = new MemoryStream(new byte[(4 * 1024 * 1024) + 1])
+            });
+        }
+
+        var (result, _) = await RunAsync();
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(PipelineFunctionOperationExecutor.FunctionError, result.FailureCode);
+        Assert.Contains("manifest.json", result.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("above the 4194304 bytes", result.FailureReason, StringComparison.Ordinal);
+        Assert.False(File.Exists(Output));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    public async Task MetadataThatFailsOnceWithAServerError_IsRetriedAndThenRead(HttpStatusCode status)
+    {
+        Image("app-back.tar", Layer(AspNetImageFiles("10.0.13")));
+        var calls = 0;
+
+        var (result, _) = await RunAsync(_ => ++calls == 1 ? new HttpResponseMessage(status) : Json(DotnetReleaseMetadataFixture.Channel10));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(2, calls);
+        Assert.Contains(ShippedCve, Results().Select(RuleId));
+    }
+
+    [Fact]
+    public async Task MetadataThatFailsThreeTimes_FailsTheStepAfterThreeAttemptsAndWritesNoReport()
+    {
+        Image("app-back.tar", Layer(AspNetImageFiles("10.0.13")));
+        var calls = 0;
+
+        var (result, _) = await RunAsync(_ =>
+        {
+            calls++;
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        });
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(3, calls);
+        Assert.Contains("after 3 attempts", result.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("release metadata could not be read", result.FailureReason, StringComparison.Ordinal);
+        Assert.False(File.Exists(Output));
+    }
+
+    [Fact]
+    public async Task MetadataThatTimesOutOnce_IsRetriedAndThenRead()
+    {
+        Image("app-back.tar", Layer(AspNetImageFiles("10.0.13")));
+        var calls = 0;
+
+        var (result, _) = await RunAsync(_ => ++calls == 1 ? throw new TaskCanceledException("timeout") : Json(DotnetReleaseMetadataFixture.Channel10));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(2, calls);
+        Assert.Contains(ShippedCve, Results().Select(RuleId));
+    }
+
+    [Fact]
+    public async Task MetadataThatNeverAnswers_IsCutByTheAttemptTimeoutThreeTimes()
+    {
+        Image("app-back.tar", Layer(AspNetImageFiles("10.0.13")));
+        _parameters["metadata_url"] = "https://metadata.test/release-metadata";
+        var calls = 0;
+        var handler = new HangingHandler(() => calls++);
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [PipelineFunctionVariables.ParametersJson] = JsonSerializer.Serialize(_parameters)
+        };
+
+        var (result, _) = await _harness.RunAsync(
+            new ScanDotnetRuntimeCveFunction(new HttpClient(handler), (_, _) => Task.CompletedTask, TimeSpan.FromMilliseconds(100)), env);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(3, calls);
+        Assert.Contains("timed out", result.FailureReason, StringComparison.Ordinal);
+        Assert.False(File.Exists(Output));
+    }
+
+    [Fact]
+    public async Task TheFindingSaysTheCveIsListedForTheRelease_NotThatTheImageEmbedsAVulnerableRuntime()
+    {
+        Image("app-back.tar", Layer(AspNetImageFiles("10.0.13")));
+
+        await RunAsync();
+
+        var finding = Assert.Single(Results(), item => RuleId(item) == ShippedCve);
+        var text = finding.GetProperty("message").GetProperty("text").GetString()!;
+        Assert.Contains("CVE listed for this .NET release, component not specified by Microsoft", text, StringComparison.Ordinal);
+        Assert.Contains("Whether the vulnerable component is part of this image is not known", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("embeds", text, StringComparison.Ordinal);
+        Assert.Equal("Medium", finding.GetProperty("properties").GetProperty("severity").GetString());
+    }
+
+    [Fact]
     public async Task Metadata_IsFetchedOncePerChannel()
     {
         Image("app-back.tar", Layer(AspNetImageFiles("10.0.13"), FrameworkImageFiles("10.0.13")));
@@ -275,6 +409,16 @@ public sealed class ScanDotnetRuntimeCveFunctionTests : IDisposable
         });
 
         Assert.Equal(["https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json"], requests.Select(uri => uri.AbsoluteUri));
+    }
+
+    private sealed class HangingHandler(Action onRequest) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            onRequest();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
     }
 
     private sealed class RecordedMetadataHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

@@ -7,6 +7,7 @@ using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -25,12 +26,12 @@ public class AppTelemetryServiceTests : IDisposable
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         _db = new AppDbContext(options);
-        var hasher = new IngestKeyHasher(Options.Create(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }));
+        var hasher = new IngestKeyHasher(new TokenHashKeys(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }));
         _sut = new AppTelemetryService(
             new AppMonitoringRepository(_db), new AppMetricRepository(_db),
             new AppLogRepository(_db), new AppErrorRepository(_db), new AppVisitorRepository(_db),
             hasher, _ingestService, Substitute.For<IAuditService>(),
-            new ConfigurationBuilder().Build(), _time);
+            new ConfigurationBuilder().Build(), new IngestKeyRejectionLog(_time, NullLogger<IngestKeyRejectionLog>.Instance), _time);
         _db.MonitoredApps.Add(new MonitoredApp { Id = 1, ProjectId = 1, Name = "app" });
         _db.SaveChanges();
     }
@@ -117,11 +118,11 @@ public class AppTelemetryServiceTests : IDisposable
         Assert.Equal(2, app.IngestKeyVersion);
         var repository = new AppMonitoringRepository(_db);
         var duringOverlap = await repository.ResolveIngestKeyHashAsync(
-            firstHash,
+            [firstHash],
             _time.GetUtcNow().UtcDateTime.AddDays(6),
             TestContext.Current.CancellationToken);
         var afterOverlap = await repository.ResolveIngestKeyHashAsync(
-            firstHash,
+            [firstHash],
             _time.GetUtcNow().UtcDateTime.AddDays(8),
             TestContext.Current.CancellationToken);
         Assert.Equal(1, duringOverlap?.AppId);
@@ -149,7 +150,7 @@ public class AppTelemetryServiceTests : IDisposable
         Assert.Null(app.SecondPreviousIngestKeyHash);
         Assert.Null(app.SecondPreviousIngestKeyValidUntil);
         Assert.Null(await new AppMonitoringRepository(_db).ResolveIngestKeyHashAsync(
-            "previous", _time.GetUtcNow().UtcDateTime, TestContext.Current.CancellationToken));
+            ["previous"], _time.GetUtcNow().UtcDateTime, TestContext.Current.CancellationToken));
         _ingestService.Received(1).InvalidateKeyCache("previous");
         _ingestService.Received(1).InvalidateKeyCache("second-previous");
     }

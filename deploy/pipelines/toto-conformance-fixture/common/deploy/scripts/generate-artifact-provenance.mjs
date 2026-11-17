@@ -41,7 +41,7 @@ const categories = categoryOverridePath ? loadCategoryOverride(categoryOverrideP
   dockerImages: [".pipeline-artifacts/aetheus-back.tar.gz", ".pipeline-artifacts/aetheus-front.tar.gz"],
   agentArchives: [".pipeline-artifacts/agent-release"],
   coverage: ["coverage"],
-  qaRuntime: ["tests/Aetheus.Back.IntegrationTests/bin/Release/net10.0",
+  qaRuntime: ["tests/Aetheus.Back.IntegrationTests/bin/Release/net11.0",
     "tests/Aetheus.Back.IntegrationTests/obj/project.assets.json",
     "tests/Aetheus.Back.IntegrationTests/obj/Aetheus.Back.IntegrationTests.csproj.nuget.g.props",
     "tests/Aetheus.Back.IntegrationTests/obj/Aetheus.Back.IntegrationTests.csproj.nuget.g.targets",

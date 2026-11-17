@@ -13,7 +13,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Repeated mail setup on an existing domain must respect the PostgreSQL uniqueness
 /// constraint and return a valid queued task.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class MailSetupRerunIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

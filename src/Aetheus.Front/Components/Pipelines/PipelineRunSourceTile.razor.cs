@@ -23,6 +23,15 @@ public partial class PipelineRunSourceTile
                 : Run.ProjectId is { } commitProjectId ? $"/git-repositories?projectId={commitProjectId}" : null
             : null;
 
+    /// <summary>R-34: the release a deployment run delivers (null for any other run).</summary>
+    private PipelineRunDeployedReleaseDto? DeployedRelease => Run.DeployedRelease;
+
+    private string? DeployedCommitHref => DeployedRelease?.CommitHash is { Length: > 0 } sha
+        ? RepoId is { } repositoryId
+            ? $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(sha)}"
+            : Run.ProjectId is { } projectId ? $"/git-repositories?projectId={projectId}" : null
+        : null;
+
     private string? CommitSha => Run.Commits.Count > 0 ? Run.Commits[0].Sha : Run.CommitHash;
 
     private List<(string Name, string Href)> BranchLinks => Run.Branches.Count > 0

@@ -69,4 +69,8 @@ public static class PermissionKeys
     public const string OrganizationRolesManage = "org.roles.manage";
     /// <summary>Change the organization's own version of the mail templates its notifications are sent with.</summary>
     public const string OrganizationMailTemplatesManage = "org.mailtemplates.manage";
+    /// <summary>Read the organization's exclusion rules of the system logs (R-28).</summary>
+    public const string OrganizationLogRulesView = "org.logrules.view";
+    /// <summary>Create, enable, disable and delete the organization's exclusion rules of the system logs (R-28).</summary>
+    public const string OrganizationLogRulesEdit = "org.logrules.edit";
 }

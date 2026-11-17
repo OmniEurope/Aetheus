@@ -60,7 +60,10 @@ public sealed class PipelineGitService(
         if (!PipelineRunHelpers.IsGitCommitHash(revision))
             throw new BadRequestException("Configuration templates require an immutable Git revision.");
 
-        var repo = await GetProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
+        // Decision 2026-11-10: a deployment configuration never comes from untrusted content, so the mirror of an
+        // external repository is never read here either, under the same rule as a definition (null, never a throw:
+        // each caller says the template is not read from a mirror, see IsExternalMirrorDefinitionSourceAsync).
+        var repo = await GetStoredDefinitionRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
         if (repo is null || repo.IsEmpty) return null;
         var diskPath = SafeDiskPath(projectId, repo);
         if (diskPath is null || !Directory.Exists(diskPath)) return null;
@@ -74,7 +77,7 @@ public sealed class PipelineGitService(
         int projectId, string revision, CancellationToken ct = default, int? sourceRepositoryId = null)
     {
         if (!PipelineRunHelpers.IsGitCommitHash(revision)) return null;
-        var repo = await GetProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
+        var repo = await GetStoredProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
         if (repo is null || repo.IsEmpty) return null;
         var diskPath = SafeDiskPath(projectId, repo);
         if (diskPath is null || !Directory.Exists(diskPath)) return null;
@@ -82,11 +85,21 @@ public sealed class PipelineGitService(
         return blob is null || blob.IsBinary || blob.Size > 256 * 1024 ? null : blob.Content;
     }
 
+    public async Task<bool> IsExternalMirrorDefinitionSourceAsync(
+        int projectId, int? sourceRepositoryId, CancellationToken ct = default)
+    {
+        var repositories = await gitService.GetAccessibleRepositoriesAsync([projectId], ct).ConfigureAwait(false);
+        if (sourceRepositoryId is { } named)
+            return repositories.Exists(repo => repo.Id == named && repo.IsExternalMirror);
+        var own = repositories.Where(repo => !repo.IsAdditionalSource && !repo.IsConfiguration).ToList();
+        return own.Exists(repo => repo.IsExternalMirror) && !own.Exists(repo => !repo.IsExternalMirror);
+    }
+
     private async Task<string?> ReadProjectPipelineYamlCoreAsync(
         int projectId, string pipelineName, string? revision, int? sourceRepositoryId,
         CancellationToken ct)
     {
-        var repo = await GetProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
+        var repo = await GetStoredDefinitionRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
         if (repo is null || repo.IsEmpty) return null;
 
         var diskPath = SafeDiskPath(projectId, repo);
@@ -140,7 +153,7 @@ public sealed class PipelineGitService(
     {
         try
         {
-            var repo = await GetProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
+            var repo = await GetStoredProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
             return await GetHeadCommitShaAsync(projectId, repo, sourceBranch, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -232,8 +245,14 @@ public sealed class PipelineGitService(
             $"chore(pipeline): update {pipelineName} via Aetheus" + RequestedBy(actor),
             ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
         await RecordIfCommittedAsync(repo.Id, ok, ct).ConfigureAwait(false);
-        if (!ok) logger.LogWarning("Failed to write pipeline '{Name}' to {Repo}: {Error}", pipelineName, repo.Slug, error);
-        return (ok ? GitWriteOutcome.Committed : GitWriteOutcome.Failed, error);
+        if (!ok)
+        {
+            logger.LogWarning("Failed to write pipeline '{Name}' to {Repo}: {Error}", pipelineName, repo.Slug, error);
+            return (GitWriteOutcome.Failed, error);
+        }
+        var followed = await KeepIntegrationBranchInStepAsync(
+            [new PipelineWriteTarget(repo.Id, diskPath, branch, relPath, DefaultBranchOf(repo))], ct).ConfigureAwait(false);
+        return (GitWriteOutcome.Committed, followed);
     }
 
     public async Task<(GitWriteOutcome Outcome, string? Error)> ApplyProjectPipelineChangeAsync(
@@ -252,12 +271,61 @@ public sealed class PipelineGitService(
         if (newError is not null) return (GitWriteOutcome.Failed, newError);
         if (oldTarget is null && newTarget is null) return (GitWriteOutcome.NoRepo, null);
 
-        if (TargetsSameBranch(oldTarget, newTarget))
-            return await UpdateSameTargetAsync(
-                oldTarget!, newTarget!, next!, nextYaml!, actor, ct).ConfigureAwait(false);
-        return await MoveTargetAsync(
-            previous, oldTarget, next, newTarget, nextYaml, actor, ct).ConfigureAwait(false);
+        var (outcome, error) = TargetsSameBranch(oldTarget, newTarget)
+            ? await UpdateSameTargetAsync(
+                oldTarget!, newTarget!, next!, nextYaml!, actor, ct).ConfigureAwait(false)
+            : await MoveTargetAsync(
+                previous, oldTarget, next, newTarget, nextYaml, actor, ct).ConfigureAwait(false);
+        if (outcome != GitWriteOutcome.Committed) return (outcome, error);
+
+        var followed = await KeepIntegrationBranchInStepAsync(
+            [.. new[] { newTarget, oldTarget }.OfType<PipelineWriteTarget>()], ct).ConfigureAwait(false);
+        return (GitWriteOutcome.Committed, followed);
     }
+
+    /// <summary>R-38. A definition written on the branch the deployments advance (the repository's default branch, which the
+    /// deploy pipelines' <c>advance-branch</c> step moves onto each deployed release) puts a commit on it that no release
+    /// built from the integration branch contains: the next "Advance main" would find the branch diverged and refuse.
+    /// The integration branch therefore takes that branch back in a merge, so every later release descends from it and the
+    /// branch stays fast-forwardable. A copy of the change committed on the integration branch would not do: it is a
+    /// different commit, so the branch would still hold one the releases lack. The merge writes the integration ref
+    /// directly, it is not a push, so it triggers no pipeline. Returns null when nothing was needed or the merge was
+    /// made, else the reason it could not be made (the pipeline change itself is stored either way): the caller reports
+    /// it, the branch has to be merged by hand.</summary>
+    private async Task<string?> KeepIntegrationBranchInStepAsync(
+        IReadOnlyList<PipelineWriteTarget> committedTargets, CancellationToken ct)
+    {
+        string? failure = null;
+        foreach (var target in committedTargets.DistinctBy(t => (t.DiskPath.ToUpperInvariant(), t.Branch)))
+        {
+            if (!string.Equals(target.Branch, target.DefaultBranch, StringComparison.Ordinal)
+                || string.Equals(target.Branch, IntegrationBranch, StringComparison.Ordinal))
+                continue;
+            var branches = await cli.GetBranchesAsync(target.DiskPath, target.DefaultBranch, ct).ConfigureAwait(false);
+            if (!branches.Exists(b => string.Equals(b.Name, IntegrationBranch, StringComparison.Ordinal))) continue;
+
+            var (merged, _, error) = await cli.MergeBranchesAsync(
+                target.DiskPath, target.Branch, IntegrationBranch,
+                ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+            if (merged)
+            {
+                await RecordIfCommittedAsync(target.RepositoryId, true, ct).ConfigureAwait(false);
+                continue;
+            }
+            logger.LogWarning(
+                "Pipeline change committed on '{Branch}' but '{Integration}' could not take it back: {Error}",
+                target.Branch, IntegrationBranch, error);
+            failure = $"the change is committed on '{target.Branch}' but '{IntegrationBranch}' could not take it back ({error}): "
+                + $"merge '{target.Branch}' into '{IntegrationBranch}' by hand, or the next deployment cannot advance '{target.Branch}'.";
+        }
+        return failure;
+    }
+
+    // The branch the integration work happens on, which the default branch is meant to follow.
+    private const string IntegrationBranch = GitDevelopBranchProvisioner.BranchName;
+
+    private static string DefaultBranchOf(GitLightRepoDto repo) =>
+        string.IsNullOrWhiteSpace(repo.DefaultBranch) ? "main" : repo.DefaultBranch;
 
     private static bool TargetsSameBranch(PipelineWriteTarget? oldTarget, PipelineWriteTarget? newTarget) =>
         oldTarget is not null
@@ -345,10 +413,12 @@ public sealed class PipelineGitService(
             ? string.IsNullOrWhiteSpace(repo.DefaultBranch) ? "main" : repo.DefaultBranch
             : location.SourceBranch;
         return (new PipelineWriteTarget(
-            repo.Id, diskPath, branch, $"{PipelineDir}/{PipelineGitPathPolicy.Slugify(location.PipelineName)}.yaml"), null);
+            repo.Id, diskPath, branch, $"{PipelineDir}/{PipelineGitPathPolicy.Slugify(location.PipelineName)}.yaml",
+            DefaultBranchOf(repo)), null);
     }
 
-    private sealed record PipelineWriteTarget(int RepositoryId, string DiskPath, string Branch, string RelativePath);
+    private sealed record PipelineWriteTarget(
+        int RepositoryId, string DiskPath, string Branch, string RelativePath, string DefaultBranch);
 
     private async Task RecordIfCommittedAsync(int repositoryId, bool committed, CancellationToken ct)
     {
@@ -416,11 +486,19 @@ public sealed class PipelineGitService(
     // A project with several repositories must bind the pipeline to one repository explicitly.
     // Falling back to the first alphabetical repository made the YAML source and checkout source
     // diverge, which can run a valid pipeline against an empty or unrelated workspace.
+    // The repository of a write: its default branch is detected on the disk first (see
+    // GetStoredProjectRepoAsync for the reads, which do not pay for that).
+    // R-12 (decision R-23): the external repository is never modified, and its internal mirror is refreshed by a forced
+    // fetch of every ref, which would erase a commit Aetheus made on it. A mirror is therefore never a write target: a
+    // project whose source is one is "external/DB-only" for definitions (NoRepo), exactly as a project with no repository.
     private async Task<GitLightRepoDto?> GetProjectRepoAsync(
-        int projectId, int? sourceRepositoryId, CancellationToken ct) =>
-        SelectProjectRepo(
-            await gitService.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false),
-            projectId, sourceRepositoryId);
+        int projectId, int? sourceRepositoryId, CancellationToken ct)
+    {
+        var repositories = await gitService.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false);
+        if (sourceRepositoryId is { } named && repositories.Exists(repo => repo.Id == named && repo.IsExternalMirror))
+            return null;
+        return SelectProjectRepo(repositories.Where(repo => !repo.IsExternalMirror).ToList(), projectId, sourceRepositoryId);
+    }
 
     /// <summary> The project's repository as stored, without the default-branch detection <see
     /// cref="IGitLightService.GetRepositoriesAsync"/> runs on every call (two git processes per
@@ -432,6 +510,21 @@ public sealed class PipelineGitService(
         SelectProjectRepo(
             await gitService.GetAccessibleRepositoriesAsync([projectId], ct).ConfigureAwait(false),
             projectId, sourceRepositoryId);
+
+    /// <summary>The repository a pipeline definition is read from, as stored. Decision 2026-11-10 (point 4): the
+    /// mirror of an external repository is untrusted (whoever can push to the external repository writes it), so it
+    /// is never a definition source, exactly as it is never a write target (<see cref="GetProjectRepoAsync"/>): a
+    /// pipeline whose source repository is a mirror reads nothing here and keeps Aetheus's stored definition, one
+    /// with no named source reads the project's internal repository only. The mirror stays the run's workspace
+    /// (<see cref="GetPipelineSourceAsync"/>); only the explicit import reads its <c>.pipeline/</c>.</summary>
+    private async Task<GitLightRepoDto?> GetStoredDefinitionRepoAsync(
+        int projectId, int? sourceRepositoryId, CancellationToken ct)
+    {
+        var repositories = await gitService.GetAccessibleRepositoriesAsync([projectId], ct).ConfigureAwait(false);
+        if (sourceRepositoryId is { } named && repositories.Exists(repo => repo.Id == named && repo.IsExternalMirror))
+            return null;
+        return SelectProjectRepo(repositories.Where(repo => !repo.IsExternalMirror).ToList(), projectId, sourceRepositoryId);
+    }
 
     private static GitLightRepoDto? SelectProjectRepo(
         List<GitLightRepoDto> repos, int projectId, int? sourceRepositoryId)

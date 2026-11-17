@@ -7,14 +7,14 @@ internal sealed class PersonalAccessTokenRepository(AppDbContext db) : IPersonal
 {
     public void Add(PersonalAccessToken token) => db.PersonalAccessTokens.Add(token);
 
-    public async Task<PersonalAccessToken?> FindActiveByHashWithUserAsync(string tokenHash, DateTime now, CancellationToken ct = default)
+    public async Task<PersonalAccessToken?> FindActiveByHashWithUserAsync(IReadOnlyCollection<string> tokenHashes, DateTime now, CancellationToken ct = default)
         => await db.PersonalAccessTokens
             .Include(t => t.User)
                 .ThenInclude(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                t => t.TokenHash == tokenHash
+                t => tokenHashes.Contains(t.TokenHash)
                      && t.RevokedAt == null
                      && t.ExpiresAt > now
                      && t.User.IsActive,

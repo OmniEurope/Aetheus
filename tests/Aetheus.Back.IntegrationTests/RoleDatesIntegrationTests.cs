@@ -9,8 +9,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// change, the change being a rename or a new set of permissions; the seeded roles took the migration's
 /// run time instead of the year 1.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class RoleDatesIntegrationTests(PostgresFixture fixture)
+public sealed class RoleDatesIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task ARole_IsDatedAtCreation_AndItsRenameAndItsPermissionsMoveUpdatedAt()

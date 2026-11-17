@@ -68,4 +68,35 @@ public class DefaultShellRunnerOutputTests
         Assert.StartsWith("éé", output.Value, StringComparison.Ordinal);
         Assert.True(output.Value.Length <= 3);
     }
+
+    [Fact]
+    public async Task ReadLinesAsync_HandsEveryLineOverInOrderAndCapturesThemWhole()
+    {
+        var seen = new List<(string Line, bool IsStandardError)>();
+
+        var output = await DefaultShellRunner.ReadLinesAsync(
+            Reader("one\r\ntwo\nthree"), true, 100,
+            (line, isStandardError) => { seen.Add((line, isStandardError)); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal([("one", true), ("two", true), ("three", true)], seen);
+        Assert.Equal("one\ntwo\nthree\n", output.Value);
+        Assert.False(output.Truncated);
+    }
+
+    [Fact]
+    public async Task ReadLinesAsync_StillStreamsEveryLineWhenTheCaptureIsFull()
+    {
+        var seen = new List<string>();
+
+        var output = await DefaultShellRunner.ReadLinesAsync(
+            Reader("aaaa\nbbbb\ncccc\n"), false, 10,
+            (line, _) => { seen.Add(line); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        // Only whole lines are captured (5 bytes each, so two fit in 10), but nothing is withheld from the stream.
+        Assert.Equal(["aaaa", "bbbb", "cccc"], seen);
+        Assert.Equal("aaaa\nbbbb\n", output.Value);
+        Assert.True(output.Truncated);
+    }
 }

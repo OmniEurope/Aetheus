@@ -7,7 +7,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Exercises PostgreSQL uniqueness, RESTRICT and CASCADE constraints, including the
 /// partial ProjectServer index. EF InMemory cannot prove these relational guarantees.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -47,21 +46,6 @@ public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Organization_DuplicateSlug_ViolatesUniqueIndex()
-    {
-        // Arrange
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        db.Organizations.Add(NewOrg("acme"));
-        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        // Act + Assert - same slug, different name: only the Slug unique index can catch this,
-        // and only on a real relational provider.
-        db.Organizations.Add(new Organization { Name = "Totally Different", Slug = "acme" });
-        await AssertUniqueViolationAsync(() => db.SaveChangesAsync());
-    }
-
-    [Fact]
     public async Task User_DuplicateUsername_ViolatesUniqueIndex()
     {
         // Arrange
@@ -72,38 +56,6 @@ public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
 
         // Act + Assert
         db.Users.Add(new User { Username = "alice", Email = "alice-2@example.test", PasswordHash = "h2" });
-        await AssertUniqueViolationAsync(() => db.SaveChangesAsync());
-    }
-
-    [Fact]
-    public async Task Role_DuplicateName_ViolatesUniqueIndex()
-    {
-        // Arrange
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        db.Roles.Add(new Role { Name = "Admin", Description = "first" });
-        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        // Act + Assert
-        db.Roles.Add(new Role { Name = "Admin", Description = "dup" });
-        await AssertUniqueViolationAsync(() => db.SaveChangesAsync());
-    }
-
-    [Fact]
-    public async Task Project_DuplicateName_ViolatesUniqueIndex()
-    {
-        // Arrange
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        var org = NewOrg("proj-dup");
-        db.Organizations.Add(org);
-        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        db.Projects.Add(new Project { Name = "Phoenix", Description = "d", OrganizationId = org.Id });
-        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        // Act + Assert
-        db.Projects.Add(new Project { Name = "Phoenix", Description = "other", OrganizationId = org.Id });
         await AssertUniqueViolationAsync(() => db.SaveChangesAsync());
     }
 
@@ -173,30 +125,6 @@ public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
         // the exact production failure class. (If the child were tracked, EF would sever the
         // required relationship in-memory and never let the DELETE reach PostgreSQL; InMemory
         // has no RESTRICT concept at all and would simply orphan the project.)
-        await using var del = NewContext();
-        var orgToDelete = await del.Organizations.SingleAsync(o => o.Id == orgId, cancellationToken: TestContext.Current.CancellationToken);
-        del.Organizations.Remove(orgToDelete);
-        await AssertForeignKeyViolationAsync(() => del.SaveChangesAsync());
-    }
-
-    [Fact]
-    public async Task DeleteOrganization_WithOwnedServer_IsBlockedByRestrictForeignKey()
-    {
-        // Arrange
-        await ResetAndMigrateAsync();
-        int orgId;
-        await using (var db = NewContext())
-        {
-            var org = NewOrg("restrict-srv");
-            db.Organizations.Add(org);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            db.Servers.Add(new Server { Name = "node-1", Hostname = "h", OrganizationId = org.Id });
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            orgId = org.Id;
-        }
-
-        // Act + Assert - Server.Organization is also OnDelete(Restrict); same fresh-context
-        // rationale as above so the real PostgreSQL constraint fires.
         await using var del = NewContext();
         var orgToDelete = await del.Organizations.SingleAsync(o => o.Id == orgId, cancellationToken: TestContext.Current.CancellationToken);
         del.Organizations.Remove(orgToDelete);

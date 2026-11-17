@@ -20,6 +20,9 @@ public interface IServerApiClient
     /// empty list is a real "nothing is listening", never a partial report.</summary>
     Task ReportObservedPortsAsync(int serverId, ObservedPortsReportDto report, CancellationToken ct = default);
 
+    /// <summary>R-41: pushes the host's release and installed packages; replaces the whole stored inventory of that server.</summary>
+    Task ReportHostPackagesAsync(int serverId, HostPackageInventoryReportDto report, CancellationToken ct = default);
+
     Task ReportBackupResultAsync(int runId, BackupExecuteResultDto result, CancellationToken ct = default);
     Task ReportRestoreCheckResultAsync(int runId, RestoreCheckResultDto result, CancellationToken ct = default);
 

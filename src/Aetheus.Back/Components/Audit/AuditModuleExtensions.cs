@@ -8,6 +8,8 @@ public static class AuditModuleExtensions
         services.AddScoped<IAuditRepository, AuditRepository>();
         services.AddScoped<IAuditChainService, AuditChainService>();
         services.AddScoped<IAuditService, AuditService>();
+        // R-7: the person a scope acts for once its work left their request (the deferred first dispatch).
+        services.AddScoped<IAuditActor, AuditActor>();
         return services;
     }
 }

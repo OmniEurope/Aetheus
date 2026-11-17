@@ -16,6 +16,21 @@ public class MonacoEditorTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
+    /// <summary>R-35: the JS opener hands the clicked <c>extends:</c> reference to the host, never an empty one.</summary>
+    [Fact]
+    public async Task TemplateLinkActivated_RaisesTheHostCallbackWithTheReference()
+    {
+        var received = new List<string>();
+        var cut = Render<MonacoEditor>(p => p
+            .Add(x => x.Value, "extends: ci@2")
+            .Add(x => x.OnTemplateRefClicked, reference => received.Add(reference)));
+
+        await cut.InvokeAsync(() => cut.Instance.OnTemplateLinkActivated("ci@2"));
+        await cut.InvokeAsync(() => cut.Instance.OnTemplateLinkActivated(" "));
+
+        Assert.Equal(["ci@2"], received);
+    }
+
     [Fact]
     public void Renders_EditorDiv()
     {

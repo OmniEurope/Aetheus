@@ -3,15 +3,16 @@
 namespace Aetheus.Front.Components.Shared;
 
 /// <summary>
-/// R-99: the veil of an action in progress. The page body (<c>MainLayout</c>'s <c>app-body-wrapper</c>) takes
-/// OE's <c>omni-busy</c> class and <c>aria-busy="true"</c> while an action runs through <see cref="RunAsync(Func{Task})"/>:
-/// the content stays mounted under the veil, the user cannot act on it and waits for the end. A deletion, or any
-/// action started from a confirmation, runs inside it, so the page never looks idle while the server works.
+/// R-1, R-36: the veil of the content area, loading level 2 (level 1 is the boot splash, level 3 a <see cref="ZoneVeil"/>
+/// over one component; see docs/architecture/omnieurope-ui-customizations.md, "Niveaux de chargement"). <c>MainLayout</c> draws OE's <c>OmniPageVeil</c> (a constant colour, the
+/// site's animated logo at its centre) over the page content while <see cref="IsBusy"/>: while an action runs
+/// through <see cref="RunAsync(Func{Task})"/>, or while a zone waits and holds it through <see cref="Hold"/>
+/// (<see cref="VeilHold"/>). The content stays mounted under the veil, the user cannot act on it and waits for the end.
 /// </summary>
 /// <remarks>
 /// The veil is shown (the layout re-rendered) before the action starts: a confirmation dialog returns without
-/// a render of its own. It is lifted whatever the outcome, an exception included. Several actions at once keep
-/// it until the last one ends. A dialog that runs its own action veils its own content instead (its own busy flag).
+/// a render of its own. It is lifted whatever the outcome, an exception included. Several actions or holds at once keep
+/// it until the last one ends. No zone, dialog included, veils itself: it holds this one.
 /// </remarks>
 public sealed class BusyVeil
 {
@@ -53,6 +54,17 @@ public sealed class BusyVeil
         {
             Lift();
         }
+    }
+
+    /// <summary>
+    /// Keeps the veil up until the returned handle is disposed (a zone that waits for something other than an action
+    /// it runs itself, see <see cref="VeilHold"/>). Disposing twice lifts it once; it counts like a running action.
+    /// </summary>
+    public IDisposable Hold()
+    {
+        _running++;
+        Changed?.Invoke();
+        return new VeilHoldHandle(Lift);
     }
 
     /// <summary>The counter always comes back first: a listener that throws cannot keep the veil on.</summary>

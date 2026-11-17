@@ -150,6 +150,7 @@ public sealed class BackupOperationExecutor(
         var (host, port, _, user, pwd) = DbParams(env, engine);
         var scratch = $"aetheus_restorecheck_{runId}";
         (bool Verified, string Message) result;
+        string? cleanupFailure = null;
         try
         {
             result = await VerifyRestoreAsync(
@@ -158,13 +159,10 @@ public sealed class BackupOperationExecutor(
         }
         finally
         {
-            // The scratch database holds restored production data: drop it on its own bounded budget,
-            // because the task token is already cancelled when the restore was interrupted.
             try
             {
-                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 30)));
-                await DropScratchDatabaseAsync(
-                    engine, host, port, user, pwd, scratch, timeoutSeconds, onOutput, cleanupCts.Token).ConfigureAwait(false);
+                cleanupFailure = await CleanUpScratchDatabaseAsync(
+                    engine, host, port, user, pwd, scratch, timeoutSeconds, onOutput).ConfigureAwait(false);
             }
             finally
             {
@@ -173,8 +171,40 @@ public sealed class BackupOperationExecutor(
         }
 
         await onOutput($"Restore-check: {(result.Verified ? "VERIFIED" : "FAILED")} - {result.Message}", result.Verified ? TaskLogLevel.Info : TaskLogLevel.Error).ConfigureAwait(false);
-        await apiClient.ReportRestoreCheckResultAsync(runId.Value, new RestoreCheckResultDto { Verified = result.Verified, Message = result.Message }, ct).ConfigureAwait(false);
-        return new ExecutorResult(result.Verified ? 0 : 1, false);
+        // The restore verdict and the cleanup outcome are two facts: the verdict stays what the restore
+        // proved, a copy of the restored data left behind is appended where the verdict is read and fails
+        // the task.
+        var reported = cleanupFailure is null ? result.Message : $"{result.Message} Warning: {cleanupFailure}";
+        await apiClient.ReportRestoreCheckResultAsync(runId.Value, new RestoreCheckResultDto { Verified = result.Verified, Message = reported }, ct).ConfigureAwait(false);
+        return new ExecutorResult(result.Verified && cleanupFailure is null ? 0 : 1, false);
+    }
+
+    /// <summary>
+    /// The scratch database holds restored production data: it is dropped on its own bounded budget, because
+    /// the task token is already cancelled when the restore was interrupted. Returns null when it is gone,
+    /// otherwise what went wrong (also logged as an error), so a failed drop is never read as a clean one.
+    /// </summary>
+    private async Task<string?> CleanUpScratchDatabaseAsync(
+        BackupDbEngine engine, string host, int port, string user, string? password, string scratch,
+        int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        string cause;
+        try
+        {
+            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 30)));
+            var drop = await DropScratchDatabaseAsync(
+                engine, host, port, user, password, scratch, timeoutSeconds, onOutput, cleanupCts.Token).ConfigureAwait(false);
+            if (drop.ExitCode == 0 && !drop.TimedOut) return null;
+            cause = drop.TimedOut ? "timed out" : $"exit {drop.ExitCode}";
+        }
+        catch (OperationCanceledException)
+        {
+            cause = "did not finish within its cleanup budget";
+        }
+
+        var failure = $"Scratch database '{scratch}' could not be dropped ({cause}); a copy of the restored data may remain on the database server.";
+        await onOutput($"Restore-check: {failure}", TaskLogLevel.Error).ConfigureAwait(false);
+        return failure;
     }
 
     private async Task<ExecutorResult> RunLiveRestoreAsync(
@@ -427,7 +457,7 @@ public sealed class BackupOperationExecutor(
             ? (true, "Database restore verified.")
             : (false, $"Restore failed (exit {restore.ExitCode}).");
 
-    private async Task DropScratchDatabaseAsync(
+    private async Task<ExecutorResult> DropScratchDatabaseAsync(
         BackupDbEngine engine,
         string host,
         int port,
@@ -438,10 +468,13 @@ public sealed class BackupOperationExecutor(
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
-        if (engine == BackupDbEngine.Postgres)
-            await RunAsync("dropdb", ["-h", host, "-p", port.ToString(), "-U", user, "--if-exists", scratch], PgEnv(password), timeoutSeconds, onOutput, ct).ConfigureAwait(false);
-        else if (engine == BackupDbEngine.MySql)
-            await RunAsync("mysql", ["-h", host, "-P", port.ToString(), "-u", user, "-e", $"DROP DATABASE IF EXISTS {scratch};"], MysqlEnv(password), timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+        // The result of the drop is the caller's to read: a refused or timed-out drop leaves the copy behind.
+        return engine switch
+        {
+            BackupDbEngine.Postgres => await RunAsync("dropdb", ["-h", host, "-p", port.ToString(), "-U", user, "--if-exists", scratch], PgEnv(password), timeoutSeconds, onOutput, ct).ConfigureAwait(false),
+            BackupDbEngine.MySql => await RunAsync("mysql", ["-h", host, "-P", port.ToString(), "-u", user, "-e", $"DROP DATABASE IF EXISTS {scratch};"], MysqlEnv(password), timeoutSeconds, onOutput, ct).ConfigureAwait(false),
+            _ => new ExecutorResult(0, false) // no database engine: nothing was created, nothing to drop
+        };
     }
 
     private static string? GetLiveRestoreRefusal(

@@ -8,6 +8,9 @@ public static class LoginRedirect
 {
     public const string LoginPath = "/login";
     public const string ChangePasswordPath = "/account/change-password";
+
+    /// <summary>R-1: the seeded administrator's first step, choosing its holder's own account.</summary>
+    public const string AccountSetupPath = "/account/setup";
     private const string Parameter = "returnUrl";
 
     /// <summary>
@@ -24,6 +27,10 @@ public static class LoginRedirect
     /// <summary>The forced password change, bringing the user back to where they are now.</summary>
     public static string ToChangePassword(NavigationManager nav) =>
         WithReturnUrl(ChangePasswordPath, Current(nav));
+
+    /// <summary>The seeded administrator's account setup (R-1), bringing the user back to where they are now.</summary>
+    public static string ToAccountSetup(NavigationManager nav) =>
+        WithReturnUrl(AccountSetupPath, Current(nav));
 
     /// <summary>
     /// <paramref name="path"/> with <paramref name="returnUrl"/> attached, once validated; the bare
@@ -78,6 +85,7 @@ public static class LoginRedirect
         var path = returnUrl.Split('?', '#')[0].TrimEnd('/');
         return path.Length == 0
             || path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase)
-            || path.Equals(ChangePasswordPath, StringComparison.OrdinalIgnoreCase);
+            || path.Equals(ChangePasswordPath, StringComparison.OrdinalIgnoreCase)
+            || path.Equals(AccountSetupPath, StringComparison.OrdinalIgnoreCase);
     }
 }

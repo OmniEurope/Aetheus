@@ -14,7 +14,7 @@ public sealed class ArtifactStorageMonitorService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<ArtifactStorageMonitorService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, LeaseName)
 {
     /// <summary>Only the leader measures and alerts to avoid duplicate notifications across
     /// replicas.</summary>
@@ -32,15 +32,7 @@ public sealed class ArtifactStorageMonitorService(
     private bool _historyLoaded;
     private DateTime? _lastAlertAt;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync(LeaseName, RunLeaderLoopAsync, stoppingToken).ConfigureAwait(false);
-    }
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         // A new leadership reloads the persisted history: the other colour may have measured meanwhile.
         _historyLoaded = false;

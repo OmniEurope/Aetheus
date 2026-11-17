@@ -1,0 +1,86 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@using Aetheus.Front.Components.Analysis
+@* R-17, R-20: the Overview tab of a server's quality page, built like the project's: a card with the grade block (plain rows with their
+   "?" help) and the count tiles beside it, the facts of the analysis as small tiles under it, then two tables of the host
+   vulnerabilities, the fixable ones (with their grade letters) and the ones with no published fix (without). A server has its own
+   grade, never a project's; a vulnerability with no published fix stays displayed but is not counted in the grade. *@
+<OmniCard Class="analysis-run-gate-overview analysis-grade-overview omni-u-p-md" data-testid="server-quality-overview-card">
+    <OmniStack>
+        <div class="analysis-run-gate-heading">
+            <OmniIcon Name="OmniIconName.ShieldCheck" />
+            <div>
+                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Quality"]</OmniHeading>
+            </div>
+        </div>
+        @if (Server.Grade is null)
+        {
+            <OmniAlert Severity="OmniSeverity.Info" data-testid="server-quality-not-graded">@NotGradedText</OmniAlert>
+        }
+    </OmniStack>
+    @if (Server.Grade is not null)
+    {
+        <div class="@(HasCountTiles ? "analysis-run-gate-layout" : "analysis-run-gate-layout analysis-run-gate-layout--figures-only")">
+            <div class="analysis-grade-block" data-testid="server-quality-grade-block">
+                <AnalysisGradeRow Kind="gate" TestId="grade-row-gate" Label="@L["ServerQualityGateLabel"]" Help="@L["ServerQualityGateHelp"]" Grade="@Server.Grade">
+                    <Hints>
+                        <small class="analysis-grade-measure-hint" data-testid="grade-row-gate-cause">@L["GateGradeSetBy"] @CauseText</small>
+                    </Hints>
+                </AnalysisGradeRow>
+                <AnalysisGradeRow Kind="domain" TestId="grade-row-domain" Label="@L["ServerQualityDomainLabel"]" Help="@L["ServerQualityDomainHelp"]"
+                                  Value="@string.Format(L["ServerQualityOpenCount"], Server.OpenCount)" Grade="@Server.Grade" Limiting="true" />
+            </div>
+            @* A count tile shows only when its count is at least one. *@
+            @if (HasCountTiles)
+            {
+                <OmniTileGrid Columns="1" Gap="OmniSpacing.Small" Class="analysis-run-gate-metrics analysis-summary-row">
+                    @if (Server.OpenCount > 0)
+                    {
+                        <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Value="@($"{Server.OpenCount}")" Title="@L["ServerQualityTileOpen"]" data-quality-shortcut="open">
+                            <Icon><OmniIcon Name="OmniIconName.Bug" /></Icon>
+                        </OmniStatTile>
+                    }
+                    @if (Server.Exploited > 0)
+                    {
+                        <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Class="analysis-critical" Value="@($"{Server.Exploited}")" Title="@L["ServerQualityTileExploited"]" data-quality-shortcut="exploited">
+                            <Icon><OmniIcon Name="OmniIconName.Lightning" /></Icon>
+                        </OmniStatTile>
+                    }
+                    @if (Server.FixableCount > 0)
+                    {
+                        <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Value="@($"{Server.FixableCount}")" Title="@L["ServerQualityTileFixable"]" OnClick="@(() => OnSelectTab.InvokeAsync(FindingsTab))" data-quality-shortcut="fixable">
+                            <Icon><OmniIcon Name="OmniIconName.ArrowUp" /></Icon>
+                        </OmniStatTile>
+                    }
+                </OmniTileGrid>
+            }
+        </div>
+    }
+
+    @* The facts of the analysis, small tiles of the project's meta row; the one that leads somewhere is itself the button. *@
+    <OmniTileGrid Columns="6" MinColumnWidth="9.5rem" Gap="OmniSpacing.Small" Class="analysis-grade-meta-tiles">
+        @if (!string.IsNullOrWhiteSpace(Server.OsName))
+        {
+            <OmniStatTile Value="@Server.OsName" Title="@L["OperatingSystem"]">
+                <Icon><OmniIcon Name="OmniIconName.HardDrive" /></Icon>
+            </OmniStatTile>
+        }
+        @if (Server.WithoutFixCount > 0)
+        {
+            <OmniStatTile Value="@($"{Server.WithoutFixCount}")" Title="@L["ServerQualityTileNoFix"]" OnClick="@(() => OnSelectTab.InvokeAsync(NoFixTab))" data-quality-shortcut="nofix">
+                <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+            </OmniStatTile>
+        }
+        <OmniStatTile Class="analysis-summary-static" Value="@(DateText(Server.MatchedAt))" Title="@L["ServerQualityTileLastAnalysis"]">
+            <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
+        </OmniStatTile>
+    </OmniTileGrid>
+</OmniCard>
+
+@if (Server.Grade is not null)
+{
+    @* R-20: one split for the tabs and for these tables (ServerHostFixability). *@
+    <OmniTileGrid Columns="2" MinColumnWidth="24rem" Gap="OmniSpacing.Large" data-testid="server-quality-tables">
+        <ServerHostVulnerabilityTable TestId="server-quality-table-fixable" Title="@L["ServerQualityTableFixable"]" Counts="@ServerHostFixability.Fixable(Server)" ShowGrades="true" />
+        <ServerHostVulnerabilityTable TestId="server-quality-table-nofix" Title="@L["ServerQualityTableNoFix"]" Counts="@Server.CountsWithoutFix" ShowGrades="false" />
+    </OmniTileGrid>
+}

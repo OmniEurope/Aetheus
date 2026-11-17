@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Back.Components.AiTasks;
 
@@ -17,8 +18,10 @@ public sealed class AiTasksController(
     [HttpGet("profiles")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<PaginatedResult<AiRunnerProfileDto>>> GetProfiles(
-        [FromQuery] PaginationRequest request, CancellationToken ct) =>
-        Ok(await profiles.GetProfilesAsync(request, ct).ConfigureAwait(false));
+        [FromQuery] PaginationRequest request, CancellationToken ct,
+        [FromQuery, Range(1, int.MaxValue)] int? organizationId = null) =>
+        // R-12: the Administration organization switcher narrows the list to one organization's profiles.
+        Ok(await profiles.GetProfilesAsync(request, ct, organizationId).ConfigureAwait(false));
 
     [HttpGet("profile-options")]
     public async Task<ActionResult<List<AiRunnerProfileDto>>> GetProfileOptions(CancellationToken ct)
@@ -137,6 +140,21 @@ public sealed class AiTasksController(
                 request.ProjectId, request.ServerId, Permission.Write, ct).ConfigureAwait(false))
             return Forbid();
         var definition = await service.UpdateDefinitionAsync(id, request, ct).ConfigureAwait(false);
+        return definition is null ? NotFound() : Ok(definition);
+    }
+
+    /// <summary>Replaces only the schedule of a task (a move in the build planner, recette R-8). The same right as an
+    /// update that keeps the owner: Write on the task's owner.</summary>
+    [HttpPut("tasks/{id:int}/schedule")]
+    public async Task<ActionResult<AiTaskDefinitionDto>> SetSchedule(
+        int id, [FromBody] SetAiTaskScheduleRequest request, CancellationToken ct)
+    {
+        var existing = await service.GetDefinitionAsync(id, ct).ConfigureAwait(false);
+        if (existing is null) return NotFound();
+        if (!await HasOwnerPermissionAsync(
+                existing.ProjectId, existing.ServerId, Permission.Write, ct).ConfigureAwait(false))
+            return Forbid();
+        var definition = await service.SetScheduleAsync(id, request.Schedule, ct).ConfigureAwait(false);
         return definition is null ? NotFound() : Ok(definition);
     }
 

@@ -5,7 +5,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else if (_artifact is null)
 {
@@ -61,7 +61,7 @@ else
                 }
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Play" Class="run-tile-icon" /> @L["PipelineRun"]</OmniText>
-                    <a href="/pipelines/runs/@_artifact.PipelineRunId" class="detail-value-link">#@_artifact.PipelineRunId</a>
+                    <a href="/pipelines/runs/@_artifact.PipelineRunId" class="detail-value-link">#@_artifact.PipelineRunNumber</a>
                 </OmniStack>
                 @if (_artifact.Branches.Count > 0)
                 {

@@ -107,6 +107,58 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // ──── Logout (M1) ────
+
+    private async Task<LoginResponse> LoginAdminAsync()
+    {
+        var response = await _anonClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
+        {
+            Email = "admin@aetheus.local",
+            Password = "admin"
+        }, cancellationToken: TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        var login = await response.Content.ReadFromJsonAsync<LoginResponse>(TestJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(string.IsNullOrEmpty(login!.RefreshToken));
+        return login;
+    }
+
+    private HttpRequestMessage LogoutRequestFor(LoginResponse login, HttpContent? content) =>
+        new(HttpMethod.Post, "/api/auth/logout")
+        {
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", login.Token) },
+            Content = content
+        };
+
+    [Fact]
+    public async Task Logout_WithoutABody_StillAnswers204()
+    {
+        // An older client posts no body at all: no 400 and no 415 for it.
+        var login = await LoginAdminAsync();
+
+        using var request = LogoutRequestFor(login, null);
+        var response = await _anonClient.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        // Nothing named a token, so the session's refresh token still works.
+        var refresh = await _anonClient.PostAsJsonAsync("/api/auth/token/refresh",
+            new RefreshTokenRequest { RefreshToken = login.RefreshToken! }, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_WithTheRefreshToken_RevokesIt_SoARefreshWithItThenFails()
+    {
+        var login = await LoginAdminAsync();
+
+        using var request = LogoutRequestFor(login, JsonContent.Create(new LogoutRequest { RefreshToken = login.RefreshToken }));
+        var response = await _anonClient.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var refresh = await _anonClient.PostAsJsonAsync("/api/auth/token/refresh",
+            new RefreshTokenRequest { RefreshToken = login.RefreshToken! }, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+    }
+
     // ──── Registration Tokens ────
 
     [Fact]

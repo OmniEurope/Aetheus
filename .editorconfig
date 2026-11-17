@@ -36,6 +36,9 @@ dotnet_diagnostic.PRM001.severity = warning
 dotnet_diagnostic.PRM002.severity = warning
 dotnet_diagnostic.PRM003.severity = warning
 dotnet_diagnostic.PRM004.severity = suggestion
+# BL0016 (.NET 11 Blazor analyzer: guard every JS interop call with try/catch) is off in every project (user decision
+# 2026-11-11): it contradicts the rule "no try/catch unless mandatory"; a JS failure bubbles to the ErrorBoundary and the logs.
+dotnet_diagnostic.BL0016.severity = none
 
 # EF migrations are the raw output of `dotnet ef migrations add` (byte-order mark, block-scoped
 # namespace): generated code, which the format check and the analyzers leave alone.

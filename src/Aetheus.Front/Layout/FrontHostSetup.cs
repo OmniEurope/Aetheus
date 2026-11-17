@@ -78,6 +78,12 @@ internal static class FrontHostSetup
               // Only 5xx and transient network errors, never 429 nor a token renewal (ApiRetryPolicy).
               options.Retry.ShouldHandle = Aetheus.Front.Components.Shared.ApiRetryPolicy.ShouldHandle;
           });
+        // R-4: the upload of a CVE dump, minutes long: no timeout and no resend, unlike the API client's pipeline.
+        services.AddHttpClient<Aetheus.Front.Components.VulnerabilityWatch.VulnerabilityDumpUploader>(client =>
+        {
+            client.BaseAddress = new Uri(apiBaseUrl);
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        }).AddHttpMessageHandler<AuthDelegatingHandler>();
         services.AddHttpClient<ClientErrorReporter>(client =>
         {
             client.BaseAddress = new Uri(apiBaseUrl);
@@ -90,6 +96,7 @@ internal static class FrontHostSetup
         // OE's breadcrumb service, which OmniPageHeader reads, installs the Aetheus route trail.
         services.AddScoped<IOmniBreadcrumbResolver, Aetheus.Front.Components.Shared.AetheusBreadcrumbResolver>();
         services.AddScoped<Aetheus.Front.Components.Shared.ProjectNavContextService>();
+        services.AddScoped<Aetheus.Front.Components.Shared.QualityChangeNotifier>();
         services.AddScoped<Aetheus.Front.Components.Shared.NotifyHelper>();
         services.AddScoped<Aetheus.Front.Components.Shared.GridExportContext>();
         services.AddScoped<Aetheus.Front.Components.Shared.ClipboardService>();
@@ -103,6 +110,7 @@ internal static class FrontHostSetup
         services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineRunDialogCoordinator>();
         services.AddScoped<Aetheus.Front.Components.Shared.PipelineImportState>();
         services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupProvisionState>();
+        services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupCollectionState>();
         // Scoped (one scope per page in WASM, as a singleton was): it reads the user preferences, which are scoped.
         services.AddScoped<Aetheus.Front.Components.Shared.ActiveOrganizationService>();
         // The Administration section's organization switcher (owner decision 2026-10-28), same lifetime.

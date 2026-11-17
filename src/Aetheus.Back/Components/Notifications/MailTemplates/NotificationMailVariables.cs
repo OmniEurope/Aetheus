@@ -16,6 +16,12 @@ public static class NotificationMailVariables
     /// <summary>The event and its named subject on one line, as the subject used to read.</summary>
     public const string Summary = "Summary";
 
+    /// <summary>One word saying what happened, in the recipient's language (recette R-26).</summary>
+    public const string EventWord = "EventWord";
+
+    /// <summary>The default subject: Aetheus, the project or server, then the event word, on one line; the project or server is left out when the event has none (recette R-26).</summary>
+    public const string SubjectLine = "SubjectLine";
+
     /// <summary>The sentence explaining the event.</summary>
     public const string Intro = "Intro";
 

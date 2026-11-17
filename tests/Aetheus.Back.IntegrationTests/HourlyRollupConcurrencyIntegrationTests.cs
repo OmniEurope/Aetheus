@@ -9,7 +9,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Reproduces competing rollup inserts on PostgreSQL by committing another writer between
 /// the sweep's read and write, verifying conflict tolerance.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class HourlyRollupConcurrencyIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime Hour = new(2026, 9, 30, 8, 0, 0, DateTimeKind.Utc);

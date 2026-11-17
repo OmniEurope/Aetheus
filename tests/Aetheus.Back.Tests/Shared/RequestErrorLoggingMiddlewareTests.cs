@@ -115,6 +115,53 @@ public sealed class RequestErrorLoggingMiddlewareTests
         Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
     }
 
+    [Fact]
+    public async Task R2_AForbiddenRequestRefusedForAForcedPasswordChange_IsInformation()
+    {
+        // The account must change its password first: ForcedPasswordChangeMiddleware refuses the page's other
+        // calls (the preference reads) by design and marks that refusal with its header.
+        var logger = new RecordingLogger<RequestErrorLoggingMiddleware>();
+        var context = Context(StatusCodes.Status403Forbidden, matchedRoute: true, "/api/users/me/preferences");
+        var middleware = new RequestErrorLoggingMiddleware(
+            httpContext =>
+            {
+                httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                httpContext.Response.Headers[Aetheus.Back.Components.Auth.ForcedPasswordChangeMiddleware.RequiredHeader] = "true";
+                return Task.CompletedTask;
+            }, logger, Counter());
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(LogLevel.Information, Assert.Single(logger.Entries).Level);
+    }
+
+    [Fact]
+    public async Task R2_ARequestWithTheWrongMethod_NamesItsCallerInTheWarning()
+    {
+        // A GET on /api/settings/{key} (a PUT-only route) answered 405 in the export and the line named nobody.
+        var logger = new RecordingLogger<RequestErrorLoggingMiddleware>();
+        var context = Context(StatusCodes.Status405MethodNotAllowed, matchedRoute: true, "/api/settings/about");
+        context.Request.Headers.Referer = "https://aetheus.example/settings/about";
+        context.Request.Headers.UserAgent = "Mozilla/5.0 line one\r\nHTTP 500 forged";
+        var middleware = new RequestErrorLoggingMiddleware(
+            httpContext =>
+            {
+                httpContext.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+                httpContext.Response.Headers.Allow = "PUT";
+                return Task.CompletedTask;
+            }, logger, Counter());
+
+        await middleware.InvokeAsync(context);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains("route allows [PUT]", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("referer [https://aetheus.example/settings/about]", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("origin [none]", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("user agent [Mozilla/5.0 line one  HTTP 500 forged]", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', entry.Message);
+    }
+
     [Theory]
     [InlineData("/api/ingest/otlp/v1/metrics")]
     [InlineData("/api/ingest/otlp/v1/logs")]

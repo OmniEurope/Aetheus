@@ -86,6 +86,11 @@ public sealed class PipelineHostOperationTaskFactory(
     /// own, or its definition's when the workspace comes from another repository.</param>
     private sealed record ImmutableProjectRun(PipelineRun Run, int ProjectId, string DefinitionCommit);
 
+    /// <summary>Decision 2026-11-10: whether the templates of this run would come from the mirror of an external
+    /// repository, which is never read for them, so a missing template is named for what it is.</summary>
+    private Task<bool> ReadsAnExternalMirrorAsync(ImmutableProjectRun source, CancellationToken ct) =>
+        pipelineGit.IsExternalMirrorDefinitionSourceAsync(source.ProjectId, source.Run.Pipeline!.SourceRepositoryId, ct);
+
     // Apache reverse-proxy task: render a versioned .pipeline/configs template at the immutable run
     // commit, base64 it, and dispatch an OperationKind.ApacheConfigureProxy to the Apache-manage
     // server. Invalid/missing inputs fail the step honestly (status Failed + run warning).
@@ -140,7 +145,10 @@ public sealed class PipelineHostOperationTaskFactory(
             source.Run.Pipeline!.SourceRepositoryId).ConfigureAwait(false);
         if (template is null)
         {
-            await FailAsync($"template '{templatePath}' was not found at commit {source.DefinitionCommit}.")
+            await FailAsync(await ReadsAnExternalMirrorAsync(source, ct).ConfigureAwait(false)
+                    ? $"template '{templatePath}' is never read from the mirror of an external repository, whose content "
+                      + "is untrusted: a deployment configuration comes only from the project's own repositories."
+                    : $"template '{templatePath}' was not found at commit {source.DefinitionCommit}.")
                 .ConfigureAwait(false);
             return;
         }
@@ -216,10 +224,13 @@ public sealed class PipelineHostOperationTaskFactory(
                     source.Run.Pipeline!.SourceRepositoryId, ct).ConfigureAwait(false);
             if (template is null)
             {
-                await FailAsync(
-                    $"template '{templatePath}' was found neither in the project's configuration repository nor at "
-                    + $"commit {source.DefinitionCommit} of its source: prepare the production deployment from the "
-                    + "pipeline setup wizard, which creates it.")
+                await FailAsync(await ReadsAnExternalMirrorAsync(source, ct).ConfigureAwait(false)
+                    ? $"template '{templatePath}' is not in the project's configuration repository, and is never read from "
+                      + "the mirror of an external repository, whose content is untrusted: add it to the configuration "
+                      + "repository (the pipeline setup wizard creates it)."
+                    : $"template '{templatePath}' was found neither in the project's configuration repository nor at "
+                      + $"commit {source.DefinitionCommit} of its source: prepare the production deployment from the "
+                      + "pipeline setup wizard, which creates it.")
                     .ConfigureAwait(false);
                 return;
             }

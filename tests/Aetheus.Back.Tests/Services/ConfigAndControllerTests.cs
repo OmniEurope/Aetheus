@@ -86,7 +86,7 @@ public class ConfigAndControllerTests
         mockService.GetLogFilesAsync(Arg.Any<CancellationToken>())
             .Returns([new SystemLogFileDto("syslog", 1024, DateTime.UtcNow)]);
 
-        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>());
+        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>(), Substitute.For<ISystemLogExclusionService>());
         var result = await controller.GetLogFiles(TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -101,7 +101,7 @@ public class ConfigAndControllerTests
         mockService.GetLogEntriesAsync(null, null, null, null, null, 1, 200, Arg.Any<CancellationToken>())
             .Returns(new PaginatedResult<SystemLogEntryDto> { Items = [], TotalCount = 0 });
 
-        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>());
+        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>(), Substitute.For<ISystemLogExclusionService>());
         var result = await controller.GetLogEntries(null, null, null, null, null, 0, 999, ct: TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
@@ -116,7 +116,7 @@ public class ConfigAndControllerTests
         mockService.PurgeOldLogsAsync(30, Arg.Any<CancellationToken>())
             .Returns(42);
 
-        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>());
+        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>(), Substitute.For<ISystemLogExclusionService>());
         var result = await controller.PurgeOldLogs(30, ct: TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -130,7 +130,7 @@ public class ConfigAndControllerTests
         mockService.DownloadLogFileAsync("auth.log", Arg.Any<CancellationToken>())
             .Returns(new MemoryStream([1, 2, 3]));
 
-        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>());
+        var controller = new SystemLogsController(mockService, Substitute.For<Aetheus.Back.Components.Settings.ISettingsService>(), Substitute.For<ISystemLogExclusionService>());
         var result = await controller.DownloadLogFile("auth.log", TestContext.Current.CancellationToken);
 
         var fileResult = Assert.IsType<FileStreamResult>(result);

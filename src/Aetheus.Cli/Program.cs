@@ -108,7 +108,7 @@ pipelineRunCommand.SetAction((parseResult, cancellationToken) => CliRuntime.Exec
     }
 
     var run = await response.Content.ReadFromJsonAsync<PipelineRunDto>(cancellationToken: ct);
-    Console.WriteLine($"Pipeline run started: #{run?.Id} - Status: {run?.Status}");
+    Console.WriteLine($"Pipeline run started: #{run?.BuildNumber} - Status: {run?.Status}");
     return 0;
 }, cancellationToken));
 

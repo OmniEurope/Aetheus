@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Consumers run .NET 10 and 11. Directory.Build.props sets a singular TargetFramework, cleared here so TargetFrameworks wins. -->
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <PackageId>Aetheus.WebAnalytics</PackageId>
-    <Version>1.1.1</Version>
+    <Version>1.3.1</Version>
     <!-- The asset path follows the package version, so a local build without parameter serves
          /_content/Aetheus.WebAnalytics/<package version>/ like the published package. -->
     <StaticAssetVersion Condition="'$(StaticAssetVersion)' == ''">$(Version)</StaticAssetVersion>

@@ -4,7 +4,8 @@ using System.Text.Json;
 namespace Aetheus.Back.Components.PackageRegistry;
 
 /// <summary>
-/// npm registry. Every endpoint needs a personal access token, except the packument, version and
+/// npm registry. Every endpoint needs a credential (a personal access token, or a pipeline run's token
+/// that publishes only the observability package, <see cref="PackageRunTokens"/>), except the packument, version and
 /// tarball reads of a package an administrator opened to anonymous download (R-58). Ping, search and
 /// publication stay authenticated.
 /// </summary>
@@ -78,7 +79,7 @@ public class NpmRegistryController(
     }
 
     [HttpPut("{**path}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PackageRegistryPolicies.Publish)]
     [RequestSizeLimit(PackageRegistryDefaults.MaxRequestBodyBytes)]
     public async Task<IActionResult> Publish(string path, CancellationToken ct)
     {
@@ -102,7 +103,8 @@ public class NpmRegistryController(
                 DecodePath(path),
                 document,
                 User.Identity?.Name ?? "unknown",
-                ct).ConfigureAwait(false);
+                ct,
+                observabilityPackagesOnly: PackageRegistryPolicies.IsPipelineRun(User)).ConfigureAwait(false);
         }
         return Created($"{RegistryBaseUrl}/{EncodePackagePath(DecodePath(path))}", new
         {

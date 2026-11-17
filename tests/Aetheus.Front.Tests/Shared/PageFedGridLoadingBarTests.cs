@@ -18,7 +18,7 @@ public sealed class PageFedGridLoadingBarTests : BunitContext
     {
         var runs = new List<PipelineRunDto>
         {
-            new() { Id = 10, PipelineId = 1, PipelineName = "ci", ProjectId = 1, Status = PipelineStatus.Success }
+            new() { Id = 10, BuildNumber = 10, PipelineId = 1, PipelineName = "ci", ProjectId = 1, Status = PipelineStatus.Success }
         };
         var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(p => p.Items, runs));
         Assert.Empty(cut.FindAll(Bar));

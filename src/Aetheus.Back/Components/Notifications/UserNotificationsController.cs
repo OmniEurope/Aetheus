@@ -67,6 +67,42 @@ public sealed class UserNotificationsController(
         return Ok(await service.UpdatePreferencesAsync(userId, request, ct));
     }
 
+    /// <summary>Whether the caller is e-mailed when this pipeline fails. Reading it is reading the pipeline.</summary>
+    [HttpGet("pipelines/{pipelineId:int}/failure-mail")]
+    public async Task<ActionResult<PipelineFailureMailPreferenceDto>> GetPipelineFailureMail(int pipelineId, CancellationToken ct)
+    {
+        if (CurrentUserId() is not { } userId) return Forbid();
+        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId, Permission.Read, ct))
+            return Forbid();
+
+        var preference = await service.GetPipelineFailureMailPreferenceAsync(userId, pipelineId, ct);
+        return preference is null ? NotFound() : Ok(preference);
+    }
+
+    /// <summary>The caller's own choice, never another user's: the user id comes from the token. Only a pipeline the
+    /// caller can read can be chosen for.</summary>
+    [HttpPut("pipelines/{pipelineId:int}/failure-mail")]
+    public async Task<ActionResult<PipelineFailureMailPreferenceDto>> SetPipelineFailureMail(
+        int pipelineId, [FromBody] SetPipelineFailureMailPreferenceRequest request, CancellationToken ct)
+    {
+        if (CurrentUserId() is not { } userId) return Forbid();
+        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId, Permission.Read, ct))
+            return Forbid();
+
+        var preference = await service.SetPipelineFailureMailPreferenceAsync(userId, pipelineId, request.IsEnabled, ct);
+        return preference is null ? NotFound() : Ok(preference);
+    }
+
+    /// <summary>The pipelines the caller saved a failure-mail choice for, among those they can still read.</summary>
+    [HttpGet("pipeline-failure-mails")]
+    public async Task<ActionResult<List<PipelineFailureMailChoiceDto>>> GetPipelineFailureMails(CancellationToken ct)
+    {
+        if (CurrentUserId() is not { } userId) return Ok(new List<PipelineFailureMailChoiceDto>());
+        var readable = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Pipeline, Permission.Read, ct);
+        if (readable is { Count: 0 }) return Ok(new List<PipelineFailureMailChoiceDto>());
+        return Ok(await service.GetPipelineFailureMailChoicesAsync(userId, readable, ct));
+    }
+
     [HttpGet("subscriptions")]
     public async Task<ActionResult<List<ProjectSubscriptionDto>>> GetSubscriptions(CancellationToken ct)
     {

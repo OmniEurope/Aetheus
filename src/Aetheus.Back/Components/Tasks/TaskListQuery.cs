@@ -11,6 +11,7 @@ internal static class TaskListQuery
 {
     internal static readonly GridQueryMap<ServerTask> Columns = new GridQueryMap<ServerTask>()
         .Number("id", t => t.Id)
+        .Number("number", t => t.Number)
         .Text("name", t => t.Name)
         .Text("serverName", t => t.Server.Name)
         .Enum("executor", t => t.Executor)

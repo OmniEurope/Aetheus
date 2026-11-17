@@ -2,14 +2,19 @@
 @* Deleting a project removes everything it owns, so the confirmation counts it first and asks for
    the project's name before the Delete button wakes up. Recette R-97: it also asks the agents what the
    project deployed on its servers. Recette R-49: the most useful counts stay in sight, the rest behind
-   "Afficher plus". Recette R-50: one veil over the whole deletion (OE's, content mounted under it), then the
+   "Afficher plus". Recette R-50, R-1: the page veil is held over the whole deletion (content mounted), then the
    end in the same dialog: what was deleted, what was not and why, and a single Fermer. Recette R-51: a project
    already deleted and waiting for its server cleanup comes back here to relaunch it. *@
-<div class="@(_deleting ? "omni-busy" : null)" aria-busy="@(_deleting ? "true" : "false")" data-testid="project-delete-zone">
+<VeilHold Busy="@_deleting" />
+<div data-testid="project-delete-zone" class="project-delete-dialog">
+<div class="project-delete-dialog__body">
 <OmniStack Gap="OmniSpacing.Large">
     @if (_loading)
     {
-        <AetheusLoader />
+        <OmniStack Gap="OmniSpacing.Small" Class="project-deletion-calculating">
+            <ZoneVeil />
+            <p>@L["ProjectDeletionCalculating"]</p>
+        </OmniStack>
     }
     else if (_preview is null)
     {
@@ -25,25 +30,28 @@
         {
             <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ProjectDeletionPending"]" Class="project-deletion-outcome">@L["ProjectDeletionPendingIntro"]</OmniAlert>
         }
-        <OmniStack Gap="OmniSpacing.Small" Class="project-deletion-report-deleted">
-            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ProjectDeletionReportDeleted"]</OmniHeading>
-            <OmniDataGrid Items="@report.Deleted" ExportTitle="@ExportContext.Title(L["ProjectDeletionReportDeleted"])" ExportFields="@ExportContext.Fields()" TItem="ProjectDeletionReportRow"
-                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" MaxHeight="@AetheusGrid.ScrollMaxHeight" EmptyText="@L["ProjectDeletionReportNothing"].Value">
-                <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="ProjectDeletionReportRow" Property="Item" Title="@L["ProjectDeletionReportItem"]" Filterable="true" />
-                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Place" Title="@L["ProjectDeletionReportPlace"]" Width="9rem" Filterable="true" />
-                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Detail" Title="@L["ProjectDeletionReportDetail"]" Width="9rem" Filterable="true" />
-                </Columns>
-            </OmniDataGrid>
-        </OmniStack>
+        @* Recette R-6: what was deleted is folded by default, with its count; what was not stays in sight as a compact table. *@
+        <OmniFieldset Collapsible="true" Expanded="false" Class="project-deletion-report-deleted">
+            <Legend>@L["ProjectDeletionReportDeleted"] (@report.Deleted.Count)</Legend>
+            <ChildContent>
+                <OmniDataGrid Items="@report.Deleted" ExportTitle="@ExportContext.Title(L["ProjectDeletionReportDeleted"])" ExportFields="@ExportContext.Fields()" TItem="ProjectDeletionReportRow"
+                              ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" MaxHeight="@AetheusGrid.ScrollMaxHeight" EmptyText="@L["ProjectDeletionReportNothing"].Value">
+                    <Columns>
+                        <OmniDataGridColumn Frozen="true" TItem="ProjectDeletionReportRow" Property="Item" Title="@L["ProjectDeletionReportItem"]" Filterable="true" />
+                        <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Place" Title="@L["ProjectDeletionReportPlace"]" Width="9rem" Filterable="true" />
+                        <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Detail" Title="@L["ProjectDeletionReportDetail"]" Width="9rem" Filterable="true" />
+                    </Columns>
+                </OmniDataGrid>
+            </ChildContent>
+        </OmniFieldset>
         <OmniStack Gap="OmniSpacing.Small" Class="project-deletion-report-kept">
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ProjectDeletionReportNotDeleted"]</OmniHeading>
             <OmniDataGrid Items="@report.NotDeleted" ExportTitle="@ExportContext.Title(L["ProjectDeletionReportNotDeleted"])" ExportFields="@ExportContext.Fields()" TItem="ProjectDeletionReportRow"
-                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" MaxHeight="@AetheusGrid.ScrollMaxHeight" EmptyText="@L["ProjectDeletionReportNothing"].Value">
+                          ScrollMode="OmniDataGridScrollMode.All" MaxHeight="@AetheusGrid.ScrollMaxHeight" EmptyText="@L["ProjectDeletionReportNothing"].Value">
                 <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="ProjectDeletionReportRow" Property="Item" Title="@L["ProjectDeletionReportItem"]" Filterable="true" />
-                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Place" Title="@L["ProjectDeletionReportPlace"]" Width="9rem" Filterable="true" />
-                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Detail" Title="@L["ProjectDeletionReportReason"]" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Item" Title="@L["ProjectDeletionReportItem"]" Wrap="true" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Place" Title="@L["ProjectDeletionReportPlace"]" Width="9rem" Wrap="true" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Detail" Title="@L["ProjectDeletionReportReason"]" Wrap="true" Filterable="true" />
                 </Columns>
             </OmniDataGrid>
         </OmniStack>
@@ -57,6 +65,14 @@
         else
         {
             <OmniAlert Severity="OmniSeverity.Danger" Title="@L["ProjectDeletionIrreversible"]">@L["ProjectDeletionIntro"]</OmniAlert>
+        }
+        @if (_discovering)
+        {
+            @* Recette R-29: the wait of each server sits in the folded "Afficher plus"; it is said here, in sight, in words
+               (R-36: the plane is a veil, never repeated beside the content, so this one is text). *@
+            <OmniStack Gap="OmniSpacing.Small" Class="project-deletion-calculating">
+                <p>@L["ProjectDeletionCalculating"]</p>
+            </OmniStack>
         }
         @if (_preview.Items.Count == 0)
         {
@@ -105,7 +121,7 @@
                                     {
                                         @if (_discovering)
                                         {
-                                            <AetheusLoader />
+                                            <p>@L["ProjectDeletionServerReading"]</p>
                                         }
                                         else
                                         {
@@ -114,10 +130,7 @@
                                     }
                                     else if (task.State == ProjectServerTaskState.Running)
                                     {
-                                        <OmniStack Gap="OmniSpacing.Small">
-                                            <AetheusLoader />
-                                            <p>@L["ProjectDeletionServerReading"]</p>
-                                        </OmniStack>
+                                        <p>@L["ProjectDeletionServerReading"]</p>
                                     }
                                     else
                                     {
@@ -188,10 +201,12 @@
         {
             <OmniFormField Label="@string.Format(L["ProjectDeletionTypeName"], _preview.ProjectName)" For="project-delete-confirm" Required="true"
                            Help="@L["ProjectDeletionTypeNameHelp"]">
-                <OmniTextBox @bind-Value="_confirmation" Id="project-delete-confirm" Autocomplete="off" />
+                <OmniTextBox @bind-Value="_confirmation" Id="project-delete-confirm" />
             </OmniFormField>
         }
     }
+</OmniStack>
+</div>
     @if (_report is not null)
     {
         <Aetheus.Front.Components.Shared.DialogFooter CancelText="@L["Close"]" OnCancel="@Close" />
@@ -199,8 +214,7 @@
     else
     {
         <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
-            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><Icon><OmniIcon Name="@(Resuming ? OmniIconName.Sync : OmniIconName.Delete)" /></Icon><ChildContent><span>@(Resuming ? L["ProjectDeletionRelaunch"] : L["Delete"])</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><Icon><OmniIcon Name="@(Resuming ? OmniIconName.Sync : OmniIconName.Delete)" /></Icon><ChildContent><span>@(Resuming ? L["ProjectDeletionRelaunchDeletion"] : L["Delete"])</span></ChildContent></OmniButton>
         </Aetheus.Front.Components.Shared.DialogFooter>
     }
-</OmniStack>
 </div>

@@ -64,6 +64,24 @@ public class PipelineArtifactServiceTrendTests
     }
 
     [Fact]
+    public async Task R8_TheProjectTrends_CarryThePipelineNameOfEachPoint()
+    {
+        var date = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        _repo.GetProjectCoverageTrendAsync(7, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new CoverageTrendRow(10, date, 0.8, 0.6, 5, "api"), new CoverageTrendRow(11, date, 0.8, 0.6, 5, "web")]);
+        _repo.GetProjectComplexityTrendAsync(7, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new ComplexityTrendRow(11, date, 4.0, 15, 9.1, 5, "web")]);
+        _repo.GetProjectTestTrendAsync(7, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new TestTrendRow(10, date, 40, 2, 1, 5, "api")]);
+
+        var result = await _sut.GetProjectQualityTrendAsync(7, 15, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(["api", "web"], result.Coverage.Select(p => p.PipelineName));
+        Assert.Equal("web", Assert.Single(result.Complexity).PipelineName);
+        Assert.Equal("api", Assert.Single(result.Tests).PipelineName);
+    }
+
+    [Fact]
     public async Task PublishCoverageAsync_RunNotFound_ReturnsNull()
     {
         _repo.GetPipelineIdForRunAsync(9, Arg.Any<CancellationToken>()).Returns((int?)null);

@@ -88,12 +88,6 @@ internal static partial class ProductionVariableClassifier
         ];
     }
 
-    /// <summary>The API has its own host and virtual hosts: a blue-green deployment always has one, a replacement when the
-    /// Compose file publishes a back port.</summary>
-    public static bool DeclaresApi(IEnumerable<ProductionVariablePlan> plans, string strategy) =>
-        string.Equals(strategy, ProductionStrategy.BlueGreen, StringComparison.Ordinal)
-        || plans.Any(plan => plan.Name == BackPort);
-
     public static IReadOnlyList<ProductionVariablePlan> Classify(IEnumerable<ComposeVariable> variables, string slug)
     {
         ArgumentNullException.ThrowIfNull(variables);
@@ -128,7 +122,8 @@ internal static partial class ProductionVariableClassifier
     internal static bool IsOptionalByNature(string name) =>
         name is "ADMIN_EMAIL" or "ADMIN_PASSWORD" or "CERTBOT_EMAIL" || name.StartsWith("SMTP_", StringComparison.Ordinal);
 
-    private static bool IsSecretName(string name) =>
+    /// <summary>R-56: a name made of a secret word (PASSWORD, KEY, TOKEN, SECRET...): its value belongs in a vault, not a library.</summary>
+    internal static bool IsSecretName(string name) =>
         name.Split('_', StringSplitOptions.RemoveEmptyEntries).Any(SecretWords.Contains);
 
     private static bool OwnsItsSecret(string name)

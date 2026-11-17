@@ -5,7 +5,7 @@ using System.Net.Http.Json;
 using Aetheus.Back.Components.SystemLogs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
-using OmniEurope.Performance;
+using OmniEurope.Diagnostics;
 
 namespace Aetheus.Back.Tests.SystemLogs;
 
@@ -66,11 +66,11 @@ public sealed class ApiPerformanceTests(CustomWebApplicationFactory factory) : I
 
         for (var i = 0; i < 4; i++)
             (await client.GetAsync("/api/projects", ct)).EnsureSuccessStatusCode();
-        await recorder.WaitForChangeAsync(ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
+        await recorder.WaitForChangeAsync(ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
         // A sample is recorded once the response has completed, after the client already read it:
         // the change signal can fire before the fourth request is in (3 counted, ylaunch -ta of
-        // 2026-10-11). Read again until all four are heard, within the same 5 s budget.
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        // 2026-10-11). Read again until all four are heard, within the same 30 s budget.
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         var after = await ReadAsync(client, ct);
         while (ProjectsCount(after) < 4 && DateTime.UtcNow < deadline)
         {

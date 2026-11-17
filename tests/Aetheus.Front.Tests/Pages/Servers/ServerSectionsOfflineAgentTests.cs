@@ -173,7 +173,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         Assert.True(cut.Find("button[title='AddDomain']").HasAttribute("disabled"));
 
         var delete = typeof(ServerMailSection).GetMethod("DeleteDomainAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)delete.Invoke(cut.Instance, [1])!);
+        await cut.InvokeAsync(() => (Task)delete.Invoke(cut.Instance, [new MailDomainDto { Id = 1 }])!);
         var add = typeof(ServerMailSection).GetMethod("CreateAccountAsync", Priv)!;
         await cut.InvokeAsync(() => (Task)add.Invoke(cut.Instance, [])!);
 
@@ -190,7 +190,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         Assert.Empty(cut.FindAll(".agent-offline-notice"));
         Assert.False(cut.Find("button[title='AddDomain']").HasAttribute("disabled"));
         var delete = typeof(ServerMailSection).GetMethod("DeleteDomainAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)delete.Invoke(cut.Instance, [1])!);
+        await cut.InvokeAsync(() => (Task)delete.Invoke(cut.Instance, [new MailDomainDto { Id = 1 }])!);
 
         Assert.True(SentAnyRequestTo("api/servers/10/mail/domains/1"));
     }

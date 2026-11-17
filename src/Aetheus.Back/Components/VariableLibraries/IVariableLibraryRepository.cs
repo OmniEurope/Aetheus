@@ -25,6 +25,11 @@ public interface IVariableLibraryRepository
 
     Task<List<VariableLibrary>> FindByNamesWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
 
+    /// <summary>R-25: the libraries a run of the project can read that hold one of these keys, as (library id, library name,
+    /// key). Key names only: no value is read. The project's own libraries come first.</summary>
+    Task<List<(int Id, string Name, string Key)>> FindKeyHoldersWithCrossAccessAsync(
+        IReadOnlyCollection<string> keys, int projectId, CancellationToken ct = default);
+
     Task<List<string>> GetLibraryNamesAsync(int? projectId, List<int>? accessibleIds = null, CancellationToken ct = default);
 
     Task<(List<string> Items, int TotalCount)> GetSuggestionKeysPagedAsync(

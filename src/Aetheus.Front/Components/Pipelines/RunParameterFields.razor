@@ -38,7 +38,7 @@
                 default:
                     <OmniTextBox Value="@stringValue"
                                    ValueChanged="@(value => SetString(p.Name, value))"
-                                   ValueExpression="@(() => stringValue)"
+                                   ValueExpression="@(() => stringValue)" Placeholder="@p.Placeholder"
                                    Id="@p.Name" AriaDescribedBy="@describedBy" Class="run-params-input" />
                     break;
             }

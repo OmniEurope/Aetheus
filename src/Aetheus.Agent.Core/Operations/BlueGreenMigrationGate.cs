@@ -140,8 +140,6 @@ internal static partial class BlueGreenMigrationGate
     /// <summary>Ceiling on how far one statement is followed, so a malformed source cannot walk the file.</summary>
     private const int MaxStatementLines = 40;
 
-    private static int IndexOfFirstMatch(string[] lines, Regex regex) => IndexOfMatchFrom(lines, regex, 0);
-
     private static int IndexOfMatchFrom(string[] lines, Regex regex, int startIndex)
     {
         for (var index = startIndex; index < lines.Length; index++)

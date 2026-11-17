@@ -3,7 +3,7 @@
 @* ADR-021 phases 2-4: OTLP telemetry (metrics/logs/errors/ingestion) for the project's monitored apps. *@
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Small" />
+    <ZoneVeil />
 }
 else if (_apps.Count == 0)
 {
@@ -12,17 +12,35 @@ else if (_apps.Count == 0)
 else
 {
     <OmniStack>
-    <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="telemetry-application">@L["Application"]</OmniLabel>
-        <OmniDropDown Id="telemetry-application" TValue="int?" name="telemetry-application" @bind-Value="_selectedAppId" Options="@(_apps.ToOptions(item => (int?)item.Id, item => item.Name))"
-                        @bind-Value:after="OnAppChanged" Class="w-rem-20" />
-    </OmniStack>
+    @{
+        // R-31: label and picker on one line (the field lays them out in a row), the label naming the picker through For.
+        // R-30: how often the application sends its metrics is the « ? » help of the label, not a permanent line.
+        RenderFragment appPicker = @<OmniFormField Label="@L["Application"]" For="telemetry-application" Help="@_intervalSetting" Class="telemetry-app-field" data-testid="telemetry-app-field">
+            <OmniDropDown Id="telemetry-application" TValue="int?" name="telemetry-application" @bind-Value="_selectedAppId" Options="@(_apps.ToOptions(item => (int?)item.Id, item => item.Name))"
+                            @bind-Value:after="OnAppChangedAsync" Class="w-rem-20" />
+        </OmniFormField>;
+    }
+    @* R-24: the picker on the left and the probe button on the right share one row (wrapping on a narrow screen);
+       the alerts of the button stay under that row. Without the right to write there is no button, so the picker stands alone. *@
+    @if (_canWrite && _selectedApp is not null)
+    {
+        <AppImmediateActions App="_selectedApp" Leading="appPicker" />
+    }
+    else
+    {
+        @appPicker
+    }
 
     @if (_selectedApp is not null)
     {
-        @* How often this application sends its metrics, stated once above its tabs: what one point of its
-           figures and charts stands for. *@
-        <TelemetrySendIntervalNote AppId="_selectedApp.Id" />
+        @* Only what departs from the setting is stated under the picker (an application not following the server's interval). *@
+        @if (_interval is not null)
+        {
+            <TelemetrySendIntervalNote AppId="_selectedApp.Id" Interval="_interval" ShowSetting="false" />
+        }
+        @* R-26: what the setup prepared and what still lacks for each signal, from the saved settings; absent once
+           nothing is missing. *@
+        <AppCollectionChecklist App="_selectedApp" Version="_settingsVersion" />
         @* Plain OmniTabs (local state, listed as an exact exception in UrlSyncedTabsAuditTests): the
            sub-tabs are scoped to the application picked above, which the URL does not carry, so a
            ?tab= slug alone would not name what is shown. *@

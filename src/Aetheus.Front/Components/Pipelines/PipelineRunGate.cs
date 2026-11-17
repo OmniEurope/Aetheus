@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 using System.Net;
 namespace Aetheus.Front.Components.Pipelines;
 
@@ -130,7 +131,7 @@ public sealed class PipelineRunGate(
             .Where(check => check.Severity == PipelineSetupReadinessSeverity.Blocking
                 && check.Kind is not (PipelineSetupReadinessKind.NoRunnerConfigured or PipelineSetupReadinessKind.NoDeployRunnerConfigured))
             .Select(check => check.Items.Count > 0
-                ? $"{localizer[PipelineReadinessText.TitleKey(check.Kind)].Value} : {string.Join(", ", check.Items)}"
+                ? $"{localizer[PipelineReadinessText.TitleKey(check.Kind)].Value} : {string.Join(", ", ItemsOf(check))}"
                 : localizer[PipelineReadinessText.TitleKey(check.Kind)].Value)
             .ToList();
         if (missing.Count == 0) return true;
@@ -141,6 +142,19 @@ public sealed class PipelineRunGate(
             new OmniConfirmOptions { OkButtonText = localizer["RunAnyway"].Value, CancelButtonText = localizer["GoBack"].Value });
         return confirmed == true;
     }
+
+    /// <summary>R-25: a variable that exists in a library or vault of the project but that this pipeline does not declare is
+    /// said so, not listed as missing (it would ask for a creation that is not needed); the others keep their name.</summary>
+    private IEnumerable<string> ItemsOf(PipelineSetupReadinessCheckDto check) =>
+        check.UndefinedVariables.Count == 0
+            ? check.Items
+            : check.UndefinedVariables.Select(row => row.ExistingHolderId is null
+                ? row.Name
+                : string.Format(
+                    CultureInfo.CurrentCulture,
+                    localizer[row.ExistingHolderKind == PipelineSetupReadinessContainerKind.Vault
+                        ? "ReadinessGateExistsInVault" : "ReadinessGateExistsInLibrary"].Value,
+                    row.Name, row.ExistingHolderName));
 }
 
 /// <summary>What the user agreed to before a launch.</summary>

@@ -1,0 +1,12 @@
+# Aetheus Agent - scheduled host reboot (recette R-8). A single EXACT argv (no wildcards): systemctl reboot.
+# The agent runs it only for a reboot order of the Aetheus reboot scheduler, after the order passed its deadline
+# check and the backend confirmed it (schedule enabled and unchanged, nothing else running on the server).
+Cmnd_Alias AETHEUS_REBOOT = \
+    /bin/systemctl reboot
+
+Defaults!AETHEUS_REBOOT noexec
+Defaults!AETHEUS_REBOOT timestamp_timeout=0
+Defaults!AETHEUS_REBOOT env_reset
+Defaults!AETHEUS_REBOOT secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
+
+#{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_REBOOT

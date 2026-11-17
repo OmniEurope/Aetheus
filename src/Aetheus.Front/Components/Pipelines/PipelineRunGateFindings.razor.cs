@@ -15,6 +15,7 @@ public partial class PipelineRunGateFindings : IDisposable
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private QualityChangeNotifier QualityChange { get; set; } = default!;
     [Parameter, EditorRequired] public AnalysisRunGateDto Gate { get; set; } = default!;
 
     /// <summary>The runs whose findings the tab lists (the run and the runs it triggered), read
@@ -35,6 +36,9 @@ public partial class PipelineRunGateFindings : IDisposable
 
     /// <summary>The tests the seal held the candidate back for, each traced to its producing step when known.</summary>
     [Parameter] public IReadOnlyList<PipelineRunAssuranceVerdict.BlockingTest> BlockingTests { get; set; } = [];
+
+    /// <summary>PLAN-006: the suites whose flaky tests the seal graded, findings that never block on their own.</summary>
+    [Parameter] public IReadOnlyList<PipelineRunAssuranceVerdict.FlakySuite> FlakyTests { get; set; } = [];
 
     private AetheusDataGrid<AnalysisFindingDto>? _grid;
     private IReadOnlyList<AnalysisFindingDto> _rows = [];
@@ -58,7 +62,20 @@ public partial class PipelineRunGateFindings : IDisposable
     private int GridCount => _showDecided ? Gate.FindingCount + Gate.DecidedFindingCount : Gate.FindingCount;
 
     /// <summary>R-36: the findings of the list plus the blocking tests of the seal, which are findings of the gate too.</summary>
-    private int ListedCount => GridCount + BlockingTests.Count;
+    private int ListedCount => GridCount + BlockingTests.Count + FlakyCount;
+
+    /// <summary>How many flaky tests the suites named, a "+N more" tail counted as its N tests.</summary>
+    internal int FlakyCount => FlakyTests.Sum(suite => suite.Names.Sum(FlakyEntryCount));
+
+    /// <summary>The grade the seal gives that many flaky tests (AssuranceFlakyGrade on the agent): none A,
+    /// 1 to 10 B, 11 to 20 C, 21 or more F.</summary>
+    internal string FlakyGrade => FlakyCount switch { 0 => "A", <= 10 => "B", <= 20 => "C", _ => "F" };
+
+    private static int FlakyEntryCount(string entry) =>
+        entry.StartsWith('+') && entry.EndsWith(" more", StringComparison.Ordinal)
+        && int.TryParse(entry[1..^" more".Length], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var more)
+            ? more
+            : 1;
 
     /// <summary>Whether the grade block draws anything (it needs a grade or a headline grade). Without it the
     /// two key-figure tiles sit in a row at tile size instead of a column stretched over the whole width.</summary>
@@ -131,8 +148,10 @@ public partial class PipelineRunGateFindings : IDisposable
     private async Task RevertDecisionAsync(AnalysisFindingDto finding)
     {
         if (!await new AnalysisFindingDecisionRevert(Api, Dialog, Toast, L).RevertAsync(finding.Id)) return;
+        QualityChange.Notify();
         await FindingReopened.InvokeAsync(finding.Id);
-        if (_grid is not null) await _grid.Reload();
+        // R-10: the answer hands back no row; the grid reads the findings again quietly, no loader.
+        if (_grid is not null) await _grid.RestoreRowsAsync();
     }
 
     private void OpenFinding(AnalysisFindingDto finding) => Navigation.NavigateTo(AnalysisFindingColumns.FindingHref(finding.Id, Gate.PipelineRunId));

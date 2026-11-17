@@ -44,7 +44,8 @@ public class AlertEvaluatorServiceTests
             services.GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<IHubContext<AlertHub>>(),
             NullLogger<AlertEvaluatorService>.Instance,
-            TimeProvider.System);
+            TimeProvider.System,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await service.EvaluateAlertRulesAsync(TestContext.Current.CancellationToken);
 
@@ -171,7 +172,8 @@ public class AlertEvaluatorServiceTests
             services.GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<IHubContext<AlertHub>>(),
             NullLogger<AlertEvaluatorService>.Instance,
-            new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(Now)));
+            new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(Now)),
+            leaderLease: LeaderLeaseDouble.Leader());
         return (repository, notifications, service);
     }
 

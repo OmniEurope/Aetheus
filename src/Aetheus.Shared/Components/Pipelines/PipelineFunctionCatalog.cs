@@ -28,8 +28,9 @@ public static class PipelineFunctionCatalog
     public static readonly PipelineFunctionDescriptor EnsureDotnetSdk = new(
         "ensure-dotnet-sdk",
         PipelineFunctionAccess.Build,
-        "Resolves the exact .NET SDK pinned by global.json, installs it under $HOME/.aetheus/dotnet (or AETHEUS_DOTNET_ROOT) when the host does not provide it, and publishes the dotnet executable path.",
-        [new PipelineFunctionParameter("global_json", Required: false, "Path of the SDK manifest, relative to the workspace. Defaults to global.json.")],
+        "Resolves the exact .NET SDK pinned by global.json, installs it under $HOME/.aetheus/dotnet (or AETHEUS_DOTNET_ROOT) when the host does not provide it, and publishes the dotnet executable path. Without a pinned version and with project_root given, it provides the SDK channel of the repository TargetFramework (LTS when none is declared).",
+        [new PipelineFunctionParameter("global_json", Required: false, "Path of the SDK manifest, relative to the workspace. Defaults to global.json."),
+         new PipelineFunctionParameter("project_root", Required: false, "Directory, relative to the workspace, whose projects declare the TargetFramework used when global.json pins no SDK. Without it, a missing global.json is a failure.")],
         ["DOTNET"]);
 
     /// <summary>Restores the workspace's JavaScript dependencies from the committed root
@@ -194,13 +195,14 @@ public static class PipelineFunctionCatalog
     public static readonly PipelineFunctionDescriptor GradeCandidateFromGates = new(
         "grade-candidate-from-gates",
         PipelineFunctionAccess.Build,
-        "Publishes the worst grade of the Quality and Security gates that ran as the candidate's assurance grade, and whether it reaches the deployment threshold. A gate that ran without a grade leaves the candidate ungraded (none) and not deployable; with no gate, both are none.",
+        "Publishes the worst grade of the Quality and Security gates that ran, and of the flaky tests the CI and QA named (none A, 1-10 B, 11-20 C, more F), as the candidate's assurance grade, and whether it reaches the deployment threshold. A gate that ran without a grade leaves the candidate ungraded (none) and not deployable; with no gate, both are none.",
         [
             new PipelineFunctionParameter("quality_enabled", Required: false, "false when the project has no Quality pipeline. Defaults to APPLICATION_QUALITY_ENABLED; any other value counts the gate."),
             new PipelineFunctionParameter("security_enabled", Required: false, "false when the project has no Security pipeline. Defaults to APPLICATION_SECURITY_ENABLED; any other value counts the gate."),
             new PipelineFunctionParameter("quality_grade", Required: false, "Grade of the Quality gate, A to F. Defaults to ANALYSIS_QUALITY_GRADE."),
             new PipelineFunctionParameter("security_grade", Required: false, "Grade of the Security gate, A to F. Defaults to ANALYSIS_SECURITY_GRADE."),
-            new PipelineFunctionParameter("minimum_grade", Required: false, "Lowest grade a deployable candidate may have, A to F. Defaults to AETHEUS_DEPLOY_MINIMUM_GRADE, else E.")
+            new PipelineFunctionParameter("minimum_grade", Required: false, "Lowest grade a deployable candidate may have, A to F. Defaults to AETHEUS_DEPLOY_MINIMUM_GRADE, else E."),
+            new PipelineFunctionParameter("flaky_tests", Required: false, "One-line list of the flaky tests to grade (A, B, +N more). Defaults to UNIT_TEST_FLAKY_TESTS and QA_CURRENT_INTEGRATION_FLAKY_TESTS, the lists the generic CI and QA publish; none counts no test.")
         ],
         ["CANDIDATE_ASSURANCE_GRADE", "CANDIDATE_DEPLOYABLE"]);
 
@@ -400,11 +402,10 @@ public static class PipelineFunctionCatalog
     public static readonly PipelineFunctionDescriptor VerifyProductionState = new(
         "verify-production-state",
         PipelineFunctionAccess.Deployment,
-        "Requires the environment file's directory to be a real direct child of /var/lib (and the declared state directory), refuses symbolic environment files, canonical and legacy environments that differ, and a missing environment file while persistent Compose state exists without a dated backup to restore.",
+        "Requires the environment file's directory to be a real direct child of /var/lib (and the declared state directory), refuses a symbolic environment file and a missing environment file while persistent Compose state exists without a dated backup to restore.",
         [
             new PipelineFunctionParameter("env_file", Required: false, "Production environment file. Defaults to ENV_FILE."),
             new PipelineFunctionParameter("state_dir", Required: false, "Declared state directory, which must be the environment file's directory. Defaults to STATE_DIR, else not checked."),
-            new PipelineFunctionParameter("legacy_env_file", Required: false, "Environment file of the former layout. Defaults to LEGACY_ENV_FILE, else none."),
             new PipelineFunctionParameter("compose_project", Required: false, "Compose project whose volumes and containers count as persistent state. Defaults to COMPOSE_PROJECT; required only when the environment file is missing.")
         ],
         []);
@@ -600,7 +601,9 @@ public static class PipelineFunctionCatalog
             new PipelineFunctionParameter("label", Required: true, "Result label ([a-zA-Z0-9_-]), the directory under .qa-test-results."),
             new PipelineFunctionParameter("test_project", Required: true, "Directory of the test project under the source tree, holding <name>.csproj."),
             new PipelineFunctionParameter("static_web_assets_manifest", Required: false, "Static web assets runtime manifest of the prebuilt tests, relative to the source tree; rebased before the run when set."),
-            new PipelineFunctionParameter("static_web_assets_project", Required: false, "Project directory the manifest's content roots belong to, relative to the source tree, for instance src/MyApp. Required with static_web_assets_manifest.")
+            new PipelineFunctionParameter("static_web_assets_project", Required: false, "Project directory the manifest's content roots belong to, relative to the source tree, for instance src/MyApp. Required with static_web_assets_manifest."),
+            new PipelineFunctionParameter("test_filter", Required: false, "Empty (default, every test) or Category=RollbackRelevant; when unset, the run variable QA_INTEGRATION_TEST_FILTER_<LABEL> (label upper-cased, - as _)."),
+            new PipelineFunctionParameter("test_methods", Required: false, "Fully qualified test methods to run, separated by spaces, for a source tree that predates the category; exclusive with test_filter. When unset, the run variable QA_INTEGRATION_TEST_METHODS_<LABEL>.")
         ],
         ["INTEGRATION_SUITE_STATUS"]);
 

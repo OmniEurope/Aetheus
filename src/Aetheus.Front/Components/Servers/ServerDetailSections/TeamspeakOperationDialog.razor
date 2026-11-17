@@ -5,17 +5,21 @@
         @if (Mode == TeamspeakDialogMode.SnapshotDeploy)
         {
             <OmniAlert Severity="OmniSeverity.Warning">@L["SnapshotDeployWarning"]</OmniAlert>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-1"><LabelContent>@L["SnapshotBlob"]</LabelContent><ChildContent><OmniTextArea @bind-Value="_model.SnapshotBlob" Rows="6" MaxLength="5000000" Placeholder="@L["SnapshotBlobPlaceholder"]" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-1" /></ChildContent></OmniFormField>
-            <ValidationMessage For="@(() => _model.SnapshotBlob)" />
-            <OmniFormField Label="@string.Format(L["SnapshotConfirmation"], ServerName)" For="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-1"><OmniTextBox Id="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-1" @bind-Value="_model.Confirmation" maxlength="200" /></OmniFormField>
-            <ValidationMessage For="@(() => _model.Confirmation)" />
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-1"><LabelContent>@L["SnapshotBlob"]</LabelContent><ChildContent><OmniTextArea @bind-Value="_model.SnapshotBlob" Rows="6" MaxLength="5000000" Placeholder="@L["SnapshotBlobPlaceholder"]" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-1" /></ChildContent></OmniFormField>
+                <ValidationMessage For="@(() => _model.SnapshotBlob)" />
+                <OmniFormField Label="@string.Format(L["SnapshotConfirmation"], ServerName)" For="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-1"><OmniTextBox Id="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-1" @bind-Value="_model.Confirmation" maxlength="200" /></OmniFormField>
+                <ValidationMessage For="@(() => _model.Confirmation)" />
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.Setup)
         {
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-3"><LabelContent>@L["InstallPath"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.InstallPath" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-3" /></ChildContent></OmniFormField>
-            <ValidationMessage For="@(() => _model.InstallPath)" />
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-1"><LabelContent>@L["VoicePort"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.VoicePort" Minimum="1024" Maximum="65535" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-1" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-2"><LabelContent>@L["QueryPort"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.QueryPort" Minimum="1024" Maximum="65535" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-2" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-3"><LabelContent>@L["InstallPath"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.InstallPath" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-3" /></ChildContent></OmniFormField>
+                <ValidationMessage For="@(() => _model.InstallPath)" />
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-1"><LabelContent>@L["VoicePort"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.VoicePort" Minimum="1024" Maximum="65535" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-1" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-2"><LabelContent>@L["QueryPort"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.QueryPort" Minimum="1024" Maximum="65535" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-2" /></ChildContent></OmniFormField>
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.Kick)
         {
@@ -25,14 +29,18 @@
         else if (Mode == TeamspeakDialogMode.Move)
         {
             <OmniText Element="OmniTextElement.Paragraph">@string.Format(L["ConfirmMoveClient"], _model.Nickname)</OmniText>
-            <OmniFormField Label="@L["TargetChannel"]" For="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-2"><OmniDropDown Id="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-2" @bind-Value="_model.TargetChannelId" TValue="int" Options="@(Channels.ToOptions(item => (int)item.Id, item => item.Name))" Placeholder="@L["SelectChannel"]" /></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-8"><LabelContent>@L["ChannelPasswordOptional"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-8" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField Label="@L["TargetChannel"]" For="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-2"><OmniDropDown Id="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-2" @bind-Value="_model.TargetChannelId" TValue="int" Options="@(Channels.ToOptions(item => (int)item.Id, item => item.Name))" Placeholder="@L["SelectChannel"]" /></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-8"><LabelContent>@L["ChannelPasswordOptional"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-8" /></ChildContent></OmniFormField>
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.GracefulRestart)
         {
             <OmniText Element="OmniTextElement.Paragraph">@L["GracefulRestartBody"]</OmniText>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-3"><LabelContent>@L["WarningSeconds"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.WarningSeconds" Minimum="0" Maximum="600" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-3" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" Help="@L["WarningMessageHint"]"><LabelContent>@L["WarningMessage"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Message" maxlength="200" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-3"><LabelContent>@L["WarningSeconds"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.WarningSeconds" Minimum="0" Maximum="600" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-3" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" Help="@L["WarningMessageHint"]"><LabelContent>@L["WarningMessage"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Message" maxlength="200" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" /></ChildContent></OmniFormField>
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.Poke)
         {
@@ -43,31 +51,39 @@
         else if (Mode == TeamspeakDialogMode.Ban)
         {
             <OmniText Element="OmniTextElement.Paragraph">@string.Format(L["ConfirmBanClient"], _model.Nickname)</OmniText>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-12"><LabelContent>@L["BanReason"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Reason" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-12" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" Help="@L["BanDurationHint"]"><LabelContent>@L["BanDuration"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.Duration" Minimum="0" Maximum="315360000" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-12"><LabelContent>@L["BanReason"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Reason" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-12" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" Help="@L["BanDurationHint"]"><LabelContent>@L["BanDuration"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.Duration" Minimum="0" Maximum="315360000" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" /></ChildContent></OmniFormField>
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.CreateChannel)
         {
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-14"><LabelContent>@L["ChannelName"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Name" maxlength="40" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-14" /></ChildContent></OmniFormField>
-            <ValidationMessage For="@(() => _model.Name)" />
-            <OmniFormField Label="@L["ParentChannel"]" For="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-3"><OmniDropDown Id="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-3" TValue="int?" @bind-Value="_model.ParentId" Options="@(Channels.ToOptions(item => (int?)item.Id, item => item.Name))" AllowEmpty="true" Placeholder="@L["None"]" /></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-16"><LabelContent>@L["Password"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-16" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-5"><LabelContent>@L["MaxClients"]</LabelContent><ChildContent><OmniNumeric TValue="int?" @bind-Value="_model.MaxClients" Minimum="1" Maximum="32" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-5" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-14"><LabelContent>@L["ChannelName"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Name" maxlength="40" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-14" /></ChildContent></OmniFormField>
+                <ValidationMessage For="@(() => _model.Name)" />
+                <OmniFormField Label="@L["ParentChannel"]" For="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-3"><OmniDropDown Id="oe-formfield-pages-servers-serverdetailsections-teamspeakoperationdialog-3" TValue="int?" @bind-Value="_model.ParentId" Options="@(Channels.ToOptions(item => (int?)item.Id, item => item.Name))" AllowEmpty="true" Placeholder="@L["None"]" /></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-16"><LabelContent>@L["Password"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-16" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-5"><LabelContent>@L["MaxClients"]</LabelContent><ChildContent><OmniNumeric TValue="int?" @bind-Value="_model.MaxClients" Minimum="1" Maximum="32" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-5" /></ChildContent></OmniFormField>
+            </OmniStack>
             <OmniSwitch @bind-Value="_model.IsPermanent">@L["Permanent"]</OmniSwitch>
         }
         else if (Mode == TeamspeakDialogMode.EditChannel)
         {
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-18"><LabelContent>@L["ChannelName"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Name" maxlength="40" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-18" /></ChildContent></OmniFormField>
-            <ValidationMessage For="@(() => _model.Name)" />
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-19"><LabelContent>@L["Password"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-19" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-6"><LabelContent>@L["MaxClients"]</LabelContent><ChildContent><OmniNumeric TValue="int?" @bind-Value="_model.MaxClients" Minimum="1" Maximum="32" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-6" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-18"><LabelContent>@L["ChannelName"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Name" maxlength="40" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-18" /></ChildContent></OmniFormField>
+                <ValidationMessage For="@(() => _model.Name)" />
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-19"><LabelContent>@L["Password"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-19" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-6"><LabelContent>@L["MaxClients"]</LabelContent><ChildContent><OmniNumeric TValue="int?" @bind-Value="_model.MaxClients" Minimum="1" Maximum="32" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-6" /></ChildContent></OmniFormField>
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.EditServer)
         {
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-21"><LabelContent>@L["ServerName"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Name" maxlength="64" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-21" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-22"><LabelContent>@L["Password"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-22" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-7"><LabelContent>@L["MaxClients"]</LabelContent><ChildContent><OmniNumeric TValue="int?" @bind-Value="_model.MaxClients" Minimum="1" Maximum="32" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-7" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-24"><LabelContent>@L["WelcomeMessage"]</LabelContent><ChildContent><OmniTextArea @bind-Value="_model.Message" Rows="3" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-24" /></ChildContent></OmniFormField>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-21"><LabelContent>@L["ServerName"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Name" maxlength="64" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-21" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-22"><LabelContent>@L["Password"]</LabelContent><ChildContent><OmniPassword @bind-Value="_model.Password" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-22" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-7"><LabelContent>@L["MaxClients"]</LabelContent><ChildContent><OmniNumeric TValue="int?" @bind-Value="_model.MaxClients" Minimum="1" Maximum="32" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-7" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-24"><LabelContent>@L["WelcomeMessage"]</LabelContent><ChildContent><OmniTextArea @bind-Value="_model.Message" Rows="3" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-24" /></ChildContent></OmniFormField>
+            </OmniStack>
         }
         else if (Mode == TeamspeakDialogMode.Message)
         {

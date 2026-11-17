@@ -102,6 +102,19 @@ public sealed class UserPreferenceServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AValueOverThePerKeyLimit_IsABadRequest_AndAValueAtTheLimitIsKept()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var atTheLimit = "\"" + new string('x', UserPreferenceRules.MaxValueLength - 2) + "\"";
+        var overTheLimit = "\"" + new string('x', UserPreferenceRules.MaxValueLength - 1) + "\"";
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.SaveAsync(_alice, "aetheus.over", Write(overTheLimit, Now), ct));
+        Assert.Null(await _sut.GetAsync(_alice, "aetheus.over", ct));
+        await _sut.SaveAsync(_alice, "aetheus.at", Write(atTheLimit, Now), ct);
+        Assert.Equal(atTheLimit, (await _sut.GetAsync(_alice, "aetheus.at", ct))!.Value);
+    }
+
+    [Fact]
     public async Task TheBoundsPerUser_Hold()
     {
         var ct = TestContext.Current.CancellationToken;

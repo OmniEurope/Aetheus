@@ -150,17 +150,59 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         Assert.Equal("aetheus_demo", context.DatabaseName);
     }
 
-    // Without these the executor could not name the container it would run psql against.
+    // Without these the migrate step could not name the container it would run psql against.
     [Fact]
-    public void Context_RejectsAnEnvironmentFileMissingTheDatabaseIdentity()
+    public void Context_ForTheMigrateStep_RejectsAnEnvironmentFileMissingTheDatabaseIdentity()
     {
         var env = BaseEnvironment();
-        var incomplete = Path.Combine(_root, ".env-incomplete");
-        File.WriteAllText(incomplete, "APPNAME=aetheus\n");
-        env["AETHEUS_BG_ENV_FILE"] = incomplete;
+        env["AETHEUS_BG_ENV_FILE"] = EnvFileWithoutDatabase();
 
-        Assert.False(BlueGreenContext.TryCreate("aetheus-demo", env, out _, out var error));
+        Assert.False(BlueGreenContext.TryCreate("aetheus-demo", env, out _, out var error, requireDatabase: true));
         Assert.Contains("DB_USER", error, StringComparison.Ordinal);
+        Assert.Contains("DEPLOY_ENV", error, StringComparison.Ordinal);
+    }
+
+    // Run 1594 on the test host: a project without a database failed its Up step on the database identity it
+    // never uses. Every step other than migrate deploys such a project.
+    [Fact]
+    public void Context_ForAStepOtherThanMigrate_AcceptsAProjectWithoutADatabase()
+    {
+        var env = BaseEnvironment();
+        env["AETHEUS_BG_ENV_FILE"] = EnvFileWithoutDatabase();
+
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out var error), error);
+        Assert.Equal(string.Empty, context!.DatabaseContainer);
+        Assert.Equal(string.Empty, context.DatabaseUser);
+    }
+
+    [Fact]
+    public async Task MigrateStep_WithoutADatabaseIdentity_IsRefusedBeforeDockerIsEverContacted()
+    {
+        var shell = Substitute.For<IShellRunner>();
+        var executor = CreateExecutor(shell);
+        var env = BaseEnvironment();
+        env["AETHEUS_BG_ENV_FILE"] = EnvFileWithoutDatabase();
+        var output = new List<string>();
+
+        var result = await executor.ExecuteAsync(
+            OperationKind.BlueGreenMigrate, "aetheus-demo", env, 60,
+            (line, _) =>
+            {
+                output.Add(line);
+                return Task.CompletedTask;
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(output, line => line.Contains("DB_USER", StringComparison.Ordinal));
+        await shell.DidNotReceiveWithAnyArgs().RunExecAsync(default!, default!, CancellationToken.None);
+    }
+
+    private string EnvFileWithoutDatabase()
+    {
+        var path = Path.Combine(_root, ".env-no-database");
+        File.WriteAllText(path, "APPNAME=aetheus\nENV=prod\n");
+        return path;
     }
 
     [Fact]
@@ -316,7 +358,11 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         var env = BaseEnvironment();
         Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out _));
         var journal = new BlueGreenJournal(context!);
-        Assert.True(journal.TryOpen("blue", "green", "rev-1", out _));
+        // A switch always records what served before it (ACORE-007); without that record the rollback
+        // refuses to touch the upstream file, which is not what this test is about.
+        Assert.True(journal.TryOpen(
+            "blue", "green", "rev-1", ownerRun: null,
+            new BlueGreenJournal.UpstreamRecord("server 127.0.0.1:10029;\n"), out _));
         var confPath = Path.Combine(_root, "upstream.conf");
         await File.WriteAllTextAsync(confPath, "server 127.0.0.1:10031;\n", TestContext.Current.CancellationToken);
         env["AETHEUS_BG_UPSTREAM_CONF"] = confPath;
@@ -716,6 +762,150 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         Assert.True(new BlueGreenJournal(context!).Exists, "The journal is the only reconciliation record left.");
     }
 
+    // ---- ACORE-007: the upstream record is in the journal before PREPARED ------------------------
+
+    /// <summary>
+    /// The switch records the configuration that was serving (or that none was) when it opens the
+    /// journal, so a crash right after the journal reads PREPARED can still be undone exactly.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Switch_RecordsWhatServedBeforeInTheJournalItOpens(bool confExisted)
+    {
+        var env = BaseEnvironment();
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out _));
+        var confPath = Path.Combine(_root, "upstream.conf");
+        var templatePath = Path.Combine(_root, "upstream.template");
+        if (confExisted)
+            await File.WriteAllTextAsync(confPath, "server 127.0.0.1:10029;\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            templatePath, "server 127.0.0.1:#{BACK_PORT}#; # #{COLOR}# #{FRONT_PORT}#\n",
+            TestContext.Current.CancellationToken);
+        env["AETHEUS_BG_UPSTREAM_CONF"] = confPath;
+        env["AETHEUS_BG_UPSTREAM_TEMPLATE"] = templatePath;
+        env["AETHEUS_BG_RELOAD_HELPER"] = "/usr/local/bin/reload";
+        env["AETHEUS_BG_REVISION"] = "deadbeef";
+
+        var result = await CreateExecutor(new FakeShell()).ExecuteAsync(
+            OperationKind.BlueGreenSwitch, "aetheus-demo", env, 60,
+            (_, _) => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        var snapshot = Path.Combine(context!.JournalDir, BlueGreenJournal.UpstreamSnapshotFileName);
+        var marker = Path.Combine(context.JournalDir, BlueGreenJournal.NoUpstreamMarkerFileName);
+        if (confExisted)
+        {
+            Assert.Equal("server 127.0.0.1:10029;\n", await File.ReadAllTextAsync(snapshot, TestContext.Current.CancellationToken));
+            Assert.False(File.Exists(marker));
+        }
+        else
+        {
+            Assert.False(File.Exists(snapshot));
+            Assert.True(File.Exists(marker));
+        }
+    }
+
+    /// <summary>The record is complete as soon as TryOpen returns, that is as soon as the state reads PREPARED.</summary>
+    [Theory]
+    [InlineData("server 127.0.0.1:10029;\n")]
+    [InlineData(null)]
+    public void TryOpen_WithAnUpstreamRecord_HasItOnDiskOnceTheStateReadsPrepared(string? previousConf)
+    {
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", BaseEnvironment(), out var context, out _));
+        var journal = new BlueGreenJournal(context!);
+
+        Assert.True(journal.TryOpen("blue", "green", "rev-1", null, new BlueGreenJournal.UpstreamRecord(previousConf), out _));
+
+        Assert.Equal(BlueGreenJournal.Prepared, journal.State);
+        Assert.True(BlueGreenUpstream.HasRecordedUpstream(context!));
+        var snapshot = Path.Combine(context!.JournalDir, BlueGreenJournal.UpstreamSnapshotFileName);
+        if (previousConf is null) Assert.False(File.Exists(snapshot));
+        else Assert.Equal(previousConf, File.ReadAllText(snapshot));
+    }
+
+    /// <summary>
+    /// The old order: PREPARED written, then a crash before the snapshot. "No snapshot" used to be read
+    /// as "nothing was configured" and the live file was deleted. It is now a missing record: the live
+    /// configuration stays, nothing is reloaded, and the undo fails with the reason.
+    /// </summary>
+    [Fact]
+    public async Task Rollback_OnAPreparedJournalWithoutAnUpstreamRecord_LeavesTheLiveConfigurationAndReports()
+    {
+        var env = BaseEnvironment();
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out _));
+        Assert.True(new BlueGreenJournal(context!).TryOpen("blue", "green", "rev-1", out _));
+        var confPath = Path.Combine(_root, "upstream.conf");
+        await File.WriteAllTextAsync(confPath, "server 127.0.0.1:10029;\n", TestContext.Current.CancellationToken);
+        env["AETHEUS_BG_UPSTREAM_CONF"] = confPath;
+        env["AETHEUS_BG_RELOAD_HELPER"] = "/usr/local/bin/reload";
+        var shell = new FakeShell();
+        var log = new List<string>();
+
+        var result = await CreateExecutor(shell, HttpStatusCode.OK).ExecuteAsync(
+            OperationKind.BlueGreenRollback, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal("server 127.0.0.1:10029;\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
+        Assert.Equal(0, shell.Reloads);
+        Assert.Contains(log, line => line.Contains("was left untouched", StringComparison.Ordinal));
+        Assert.True(new BlueGreenJournal(context!).Exists, "The journal stays for the manual reconciliation.");
+    }
+
+    [Fact]
+    public async Task RestoreRecorded_WithoutAnyRecord_NeitherDeletesNorReloads()
+    {
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", BaseEnvironment(), out var context, out _));
+        Assert.True(new BlueGreenJournal(context!).TryOpen("blue", "green", "rev-1", out _));
+        var confPath = Path.Combine(_root, "upstream.conf");
+        await File.WriteAllTextAsync(confPath, "live\n", TestContext.Current.CancellationToken);
+        var shell = new FakeShell();
+
+        var restored = await BlueGreenUpstream.RestoreRecordedAsync(
+            shell, context!, confPath, "/usr/local/bin/reload", 60, TestContext.Current.CancellationToken);
+
+        Assert.False(restored);
+        Assert.Equal("live\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
+        Assert.Equal(0, shell.Reloads);
+    }
+
+    [Fact]
+    public async Task RestoreRecorded_WhenTheRecordSaysNothingServed_RemovesTheFileAndReloads()
+    {
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", BaseEnvironment(), out var context, out _));
+        Assert.True(new BlueGreenJournal(context!).TryOpen(
+            "none", "blue", "rev-1", null, new BlueGreenJournal.UpstreamRecord(null), out _));
+        var confPath = Path.Combine(_root, "upstream.conf");
+        await File.WriteAllTextAsync(confPath, "server 127.0.0.1:10029;\n", TestContext.Current.CancellationToken);
+        var shell = new FakeShell();
+
+        var restored = await BlueGreenUpstream.RestoreRecordedAsync(
+            shell, context!, confPath, "/usr/local/bin/reload", 60, TestContext.Current.CancellationToken);
+
+        Assert.True(restored);
+        Assert.False(File.Exists(confPath));
+        Assert.Equal(1, shell.Reloads);
+    }
+
+    [Fact]
+    public async Task RestoreRecorded_WithASnapshot_PutsItBackAndReloads()
+    {
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", BaseEnvironment(), out var context, out _));
+        Assert.True(new BlueGreenJournal(context!).TryOpen(
+            "blue", "green", "rev-1", null, new BlueGreenJournal.UpstreamRecord("server 127.0.0.1:10029;\n"), out _));
+        var confPath = Path.Combine(_root, "upstream.conf");
+        await File.WriteAllTextAsync(confPath, "server 127.0.0.1:10031;\n", TestContext.Current.CancellationToken);
+        var shell = new FakeShell();
+
+        var restored = await BlueGreenUpstream.RestoreRecordedAsync(
+            shell, context!, confPath, "/usr/local/bin/reload", 60, TestContext.Current.CancellationToken);
+
+        Assert.True(restored);
+        Assert.Equal("server 127.0.0.1:10029;\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
+        Assert.Equal(1, shell.Reloads);
+    }
+
     /// <summary>
     /// The readiness budget is the step's own timeout. A fixed two minutes failed applications whose
     /// cold start legitimately took longer even when the operator had configured an hour.
@@ -799,9 +989,16 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
             string fileName, IReadOnlyList<string> args, CancellationToken ct, TimeSpan? timeout = null)
         {
             if (args.Count > 0 && args[0] == "info") return Task.FromResult(new ShellExecResult(0, "27.0.0", string.Empty));
-            if (fileName == "sudo") return Task.FromResult(new ShellExecResult(reloadExitCode, string.Empty, "rejected"));
+            if (fileName == "sudo")
+            {
+                Reloads++;
+                return Task.FromResult(new ShellExecResult(reloadExitCode, string.Empty, "rejected"));
+            }
             return Task.FromResult(new ShellExecResult(0, string.Empty, string.Empty));
         }
+
+        /// <summary>How many times the reload helper ran through sudo.</summary>
+        internal int Reloads { get; private set; }
 
         /// <summary>Environment handed to each <c>docker</c> invocation, in call order.</summary>
         internal List<IReadOnlyDictionary<string, string>> DockerEnvironments { get; } = [];

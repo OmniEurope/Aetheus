@@ -18,9 +18,19 @@ public partial class AdminSettings : IAsyncDisposable
     private AdminEntitySubscription? _adminRt;
 
     private List<AppSettingDto> _settings = [];
+    // The secrets and the tokens APIs answer the whole list: the page holds it (read by the grid's first request), and
+    // each grid's window (sort, column filters and page cut here, as the grid asks) is what is drawn. A list is
+    // read again only when it is stale (first load, after a change, after a failed read), never for a sort, a filter or a scroll.
     private List<SecretDto> _secrets = [];
+    private List<SecretDto> _secretRows = [];
+    private int _secretCount;
+    private bool _secretsStale = true;
     private List<RegistrationTokenDto> _tokens = [];
-    private OmniDataGrid<RegistrationTokenDto>? _tokensGrid;
+    private List<RegistrationTokenDto> _tokenRows = [];
+    private int _tokenCount;
+    private bool _tokensStale = true;
+    private AetheusDataGrid<SecretDto>? _secretsGrid;
+    private AetheusDataGrid<RegistrationTokenDto>? _tokensGrid;
 
     // The Used filter shows the same words as the cells, built once for a stable delegate.
     private Func<string, string>? _usedText;
@@ -52,14 +62,7 @@ public partial class AdminSettings : IAsyncDisposable
 
         try
         {
-            var settingsTask = Api.Settings.GetSettingsAsync();
-            var secretsTask = Api.Settings.GetSecretsAsync();
-            var tokensTask = Api.Auth.GetRegistrationTokensAsync();
-            await Task.WhenAll(settingsTask, secretsTask, tokensTask);
-
-            _settings = await settingsTask;
-            _secrets = await secretsTask;
-            _tokens = await tokensTask;
+            _settings = await Api.Settings.GetSettingsAsync();
             _editBuffer = _settings.ToDictionary(s => s.Key, s => s.Value);
             _allowRunToEnd = PipelineRunToEndSetting.IsAllowed(
                 _settings.FirstOrDefault(s => s.Key == PipelineRunToEndSetting.Key)?.Value);
@@ -67,8 +70,6 @@ public partial class AdminSettings : IAsyncDisposable
         catch (HttpRequestException)
         {
             _settings = [];
-            _secrets = [];
-            _tokens = [];
         }
 
         await StartHubAsync();
@@ -84,10 +85,10 @@ public partial class AdminSettings : IAsyncDisposable
         {
             try
             {
-                var tokens = await Api.Auth.GetRegistrationTokensAsync();
-                // Told before the new list arrives, the grid marks the tokens it did not hold.
-                if (_tokensGrid is not null) await _tokensGrid.RefreshAsync();
-                _tokens = tokens;
+                _tokens = await Api.Auth.GetRegistrationTokensAsync();
+                _tokensStale = false;
+                // The grid cuts its window from the new list and marks the tokens it did not hold.
+                if (_tokensGrid is not null) await _tokensGrid.Refresh();
             }
             catch (HttpRequestException) { } // hub-triggered reload - silent on auth failure
             StateHasChanged();
@@ -150,7 +151,9 @@ public partial class AdminSettings : IAsyncDisposable
         var created = await Api.Settings.CreateSecretAsync(new CreateSecretRequest { Key = _newSecretKey, Value = _newSecretValue });
         if (created is not null)
         {
-            _secrets = await Api.Settings.GetSecretsAsync();
+            // R-10: the secret shows as the server answered it, the quiet read behind it confirms.
+            _secretsStale = true;
+            if (_secretsGrid is not null) await _secretsGrid.ShowRowAsync(created);
             Toast.Success("Added", "SecretAdded");
             _newSecretKey = string.Empty;
             _newSecretValue = string.Empty;
@@ -161,7 +164,7 @@ public partial class AdminSettings : IAsyncDisposable
         }
     }
 
-    private async Task DeleteSecret(int id)
+    private async Task DeleteSecret(SecretDto secret)
     {
         var confirmed = await Dialog.Confirm(L["DeleteSecretConfirm"].Value, L["DeleteSecret"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
@@ -169,10 +172,12 @@ public partial class AdminSettings : IAsyncDisposable
 
         await Veil.RunAsync(async () =>
         {
-            var success = await Api.Settings.DeleteSecretAsync(id);
+            var success = await Api.Settings.DeleteSecretAsync(secret.Id);
             if (success)
             {
-                _secrets = await Api.Settings.GetSecretsAsync();
+                // R-10: the secret leaves the grid at once, the quiet read behind it confirms.
+                _secretsStale = true;
+                if (_secretsGrid is not null) await _secretsGrid.HideRowAsync(secret);
                 Toast.Success("Deleted", "SecretDeleted");
             }
             else
@@ -187,13 +192,44 @@ public partial class AdminSettings : IAsyncDisposable
         var token = await Api.Auth.CreateRegistrationTokenAsync();
         if (token is not null)
         {
-            _tokens = await Api.Auth.GetRegistrationTokensAsync();
+            // R-10: the token shows as the server answered it, the quiet read behind it confirms.
+            _tokensStale = true;
+            if (_tokensGrid is not null) await _tokensGrid.ShowRowAsync(token);
             Toast.Success("Generated", "TokenGenerated");
         }
         else
         {
             Toast.Error("Error", "SaveFailed");
         }
+    }
+
+    private async Task LoadSecretsAsync(GridLoadArgs args)
+    {
+        if (_secretsStale)
+        {
+            _secrets = await Api.Settings.GetSecretsAsync();
+            _secretsStale = false;
+        }
+        _secretRows = args.ToClientPage(_secrets);
+        _secretCount = args.ClientFilteredCount(_secrets);
+    }
+
+    private async Task LoadTokensAsync(GridLoadArgs args)
+    {
+        if (_tokensStale)
+        {
+            _tokens = await Api.Auth.GetRegistrationTokensAsync();
+            _tokensStale = false;
+        }
+        _tokenRows = args.ToClientPage(_tokens);
+        _tokenCount = args.ClientFilteredCount(_tokens);
+    }
+
+    /// <summary>One page of the export (key and dates, the value is not in the list), cut from a fresh read with the grid's sort and column filters.</summary>
+    private async Task<PaginatedResult<SecretDto>> ReadSecretsExportAsync(GridLoadArgs args)
+    {
+        var all = await Api.Settings.GetSecretsAsync();
+        return new PaginatedResult<SecretDto> { Items = args.ToClientPage(all), TotalCount = args.ClientFilteredCount(all) };
     }
 
     private void ToggleTokenReveal(int tokenId)

@@ -6,11 +6,11 @@
 
 @* Recette R-109 (rule 1 of R-30): the scan, the page's main action, sits in the page header on the title line. *@
 <SectionContent SectionName="@PageHeaderActions.SectionName">
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ObserveAsync" Disabled="@(!CanScan)" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)" title="@ScanTooltip"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["PortScanRefresh"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ObserveAsync" Disabled="@(!CanScan)" Class="@(ScanBusy ? "btn-busy" : null)" Busy="@(ScanBusy)" title="@ScanTooltip"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["PortScanRefresh"]</span></ChildContent></OmniButton>
 </SectionContent>
 
 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
-    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" />
+    <ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="@ServerTaskNames.PortObservation" />
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <OmniIcon Name="OmniIconName.Graph" />
         <div class="flex-spacer"></div>
@@ -26,6 +26,11 @@
 
     @if (CanWrite)
     {
+        @* R-22: the reservation, allocation and range form is folded by default so the registry grid is not pushed
+           below the fold of a phone (OEAPP-08/09); it stays open after an error. *@
+        <OmniFieldset Collapsible="true" @bind-Expanded="_formExpanded" Class="port-registry-form">
+        <Legend>@L["PortFormTitle"]</Legend>
+        <ChildContent>
         <OmniCard>
             <OmniTemplateForm TModel="NewReservationModel" Model="@_form" OnValidSubmit="@((EditContext context) => AddAsync((NewReservationModel)context.Model))">
                 <OmniDataAnnotationsValidator Localizer="@L" />
@@ -62,6 +67,8 @@
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@RangeCaption</OmniText>
             </OmniRow>
         </OmniCard>
+        </ChildContent>
+        </OmniFieldset>
     }
     else
     {
@@ -70,7 +77,7 @@
 
     @if (_loading)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else
     {

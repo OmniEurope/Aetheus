@@ -66,6 +66,15 @@ internal static class BlueGreenUpstream
     {
         if (await RestoreRecordedAsync(shell, context, confPath, reloadCommand, timeoutSeconds, ct).ConfigureAwait(false))
             return true;
+        if (!HasRecordedUpstream(context))
+        {
+            await onOutput(
+                $"The journal holds no record of the upstream configuration that served before this transaction "
+                + $"(neither {BlueGreenJournal.UpstreamSnapshotFileName} nor {BlueGreenJournal.NoUpstreamMarkerFileName}); "
+                + $"{confPath} was left untouched. Manual intervention required. Journal retained at {context.JournalDir}.",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return false;
+        }
         await onOutput(
             $"Restoring the recorded configuration failed; manual intervention required. Journal retained at {context.JournalDir}.",
             TaskLogLevel.Error).ConfigureAwait(false);
@@ -76,20 +85,34 @@ internal static class BlueGreenUpstream
     /// Puts back the configuration snapshotted when the transaction opened, reading the snapshot from
     /// the journal itself. Both undo paths need exactly this, so it lives with the rest of the
     /// upstream handling rather than in the executor that decides which undo to run.
+    /// ACORE-007: <c>upstream.before</c> is put back; <c>upstream.none</c> means nothing was configured
+    /// before, so the file is removed; with neither, the record is missing (a journal opened before
+    /// the record existed, or damaged), which is NOT proof that there was no configuration: the live
+    /// file is left untouched, nothing is reloaded, and false is returned for the caller to report.
     /// </summary>
     internal static async Task<bool> RestoreRecordedAsync(
         IShellRunner shell, BlueGreenContext context, string confPath, string reloadCommand,
         int timeoutSeconds, CancellationToken ct)
     {
-        var snapshot = Path.Combine(context.JournalDir, "upstream.before");
-        var previousConf = File.Exists(snapshot) ? await File.ReadAllTextAsync(snapshot, ct).ConfigureAwait(false) : null;
+        var snapshot = Path.Combine(context.JournalDir, BlueGreenJournal.UpstreamSnapshotFileName);
+        string? previousConf;
+        if (File.Exists(snapshot)) previousConf = await File.ReadAllTextAsync(snapshot, ct).ConfigureAwait(false);
+        else if (File.Exists(Path.Combine(context.JournalDir, BlueGreenJournal.NoUpstreamMarkerFileName))) previousConf = null;
+        else return false;
         return await RestoreAsync(shell, confPath, previousConf, reloadCommand, timeoutSeconds, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Whether the journal says what served before it: a snapshot, or the no-configuration marker.</summary>
+    internal static bool HasRecordedUpstream(BlueGreenContext context) =>
+        File.Exists(Path.Combine(context.JournalDir, BlueGreenJournal.UpstreamSnapshotFileName))
+        || File.Exists(Path.Combine(context.JournalDir, BlueGreenJournal.NoUpstreamMarkerFileName));
+
     /// <summary>
     /// Puts back exactly the configuration that was serving and reloads, reporting whether that
-    /// worked. A missing snapshot means nothing was configured before, so the file is removed rather
-    /// than left pointing at a colour nobody chose.
+    /// worked. <paramref name="previousConf"/> null means the caller KNOWS nothing was configured
+    /// before (it read the file itself, or the journal holds the no-configuration marker), so the
+    /// file is removed rather than left pointing at a colour nobody chose. A missing record never
+    /// reaches here: <see cref="RestoreRecordedAsync"/> refuses it.
     /// </summary>
     internal static async Task<bool> RestoreAsync(
         IShellRunner shell, string confPath, string? previousConf, string reloadCommand,

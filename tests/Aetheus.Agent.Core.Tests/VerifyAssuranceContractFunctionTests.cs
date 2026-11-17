@@ -141,7 +141,12 @@ public sealed class VerifyAssuranceContractFunctionTests : IDisposable
             Assert.Equal(["required", "status", "effectiveGrade", "mode", "tested", "flakyTests"], previousE2E.EnumerateObject().Select(property => property.Name));
             Assert.Equal("Login", previousE2E.GetProperty("flakyTests").GetString());
             Assert.False(tests.GetProperty("currentE2E").TryGetProperty("flakyTests", out _));
-            Assert.Equal("A", contract.RootElement.GetProperty("overallGrade").GetString());
+            // PLAN-006: three distinct flaky tests over the candidate grade every suite that names them B;
+            // a suite without any keeps its A, and the overall grade is B, still deployable at E.
+            Assert.Equal("B", integration.GetProperty("effectiveGrade").GetString());
+            Assert.Equal("B", previousE2E.GetProperty("effectiveGrade").GetString());
+            Assert.Equal("A", tests.GetProperty("currentE2E").GetProperty("effectiveGrade").GetString());
+            Assert.Equal("B", contract.RootElement.GetProperty("overallGrade").GetString());
         }
 
         Assert.Equal(0, (await RunAsync("E", "deployment-readiness")).ExitCode);
@@ -151,6 +156,43 @@ public sealed class VerifyAssuranceContractFunctionTests : IDisposable
         var altered = await RunAsync("E", "deployment-readiness");
 
         Assert.Equal(Prefix + "Assurance contract seal does not match its contents.", altered.FailureReason);
+    }
+
+    /// <summary>PLAN-006, the boundaries end to end: generated, sealed, then verified for deployment at the
+    /// production minimum E. One flaky integration test and one flaky E2E test give B, deployable, the
+    /// evidence of candidate #339; a name two suites share counts once; with the integration one, 10 in all
+    /// is B, 11 and 20 are C, 21 is F and refused; a suite that failed twice stays F and refused.</summary>
+    [Theory]
+    [InlineData("QA_CURRENT_E2E_FLAKY_TESTS", "ResponsiveLayoutTests.AdministrationMobilePages", "0", "B", null)]
+    [InlineData("QA_CURRENT_E2E_FLAKY_TESTS", "Integration.Leader.TwoInstances", "0", "B", null)]
+    [InlineData("UNIT_TEST_FLAKY_TESTS", "Unit.A, +8 more", "0", "B", null)]
+    [InlineData("UNIT_TEST_FLAKY_TESTS", "Unit.A, +9 more", "0", "C", null)]
+    [InlineData("UNIT_TEST_FLAKY_TESTS", "Unit.A, +18 more", "0", "C", null)]
+    [InlineData("UNIT_TEST_FLAKY_TESTS", "Unit.A, +19 more", "0", "F", "unit grade F is below deployment threshold E.")]
+    [InlineData("QA_CURRENT_E2E_FLAKY_TESTS", "Login", "1", "F", "Deployment readiness requires currentE2E to be Passed, not Failed.")]
+    public async Task FlakyTests_GradeTheCandidateOnTheirCount(string variable, string flaky, string e2eStatus, string overall, string? refusal)
+    {
+        var testCase = AssuranceReferenceData.GeneratorCase("light-passing");
+        AssuranceReferenceData.LayOut(testCase.GetProperty("files"), _harness.Workspace);
+        var parameters = AssuranceReferenceData.Strings(testCase.GetProperty("parameters"));
+        var env = new Dictionary<string, string>(AssuranceReferenceData.Strings(testCase.GetProperty("environment")), StringComparer.Ordinal)
+        {
+            [PipelineFunctionVariables.ParametersJson] = JsonSerializer.Serialize(parameters),
+            ["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = "Integration.Leader.TwoInstances",
+            [variable] = flaky,
+            ["QA_CURRENT_E2E_GATE_STATUS"] = e2eStatus
+        };
+        Assert.Equal(0, (await _harness.RunAsync(new GenerateAssuranceContractFunction(), env)).Result.ExitCode);
+        await File.WriteAllTextAsync(_harness.Artifact("source-commit"), parameters["source_sha"] + "\n", TestContext.Current.CancellationToken);
+        using (var contract = JsonDocument.Parse(await File.ReadAllTextAsync(_harness.Artifact("assurance-contract.json"), TestContext.Current.CancellationToken)))
+            Assert.Equal(overall, contract.RootElement.GetProperty("overallGrade").GetString());
+
+        var result = await RunAsync("E", "deployment-readiness");
+
+        if (refusal is null)
+            Assert.Equal(0, result.ExitCode);
+        else
+            Assert.Equal(Prefix + refusal, result.FailureReason);
     }
 
     /// <summary>The candidate runs on after failed unit tests and seals them (UNIT_TEST_GATE_STATUS=1); the

@@ -78,6 +78,26 @@ public sealed class RetiredServersDialogTests : BunitContext
     }
 
     [Fact]
+    public async Task APurgedServer_LeavesTheGridBeforeTheListIsReadAgain_AndTheReadDrawsNoBar()
+    {
+        var cut = RenderDialog(isAdmin: true);
+        _handler.SetResponse(HttpMethod.Delete, "api/servers/4/permanent", System.Net.HttpStatusCode.NoContent);
+        var gate = new TaskCompletionSource<PaginatedResult<RetiredServerDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/servers/retired", _ => gate.Task);
+        var grid = cut.FindComponent<AetheusDataGrid<RetiredServerDto>>().Instance;
+
+        await cut.InvokeAsync(() => cut.Instance.PurgeServerConfirmedAsync(OneRetired().Items[0]));
+
+        cut.WaitForAssertion(() => Assert.DoesNotContain("vps2577917", cut.Markup, StringComparison.Ordinal));
+        Assert.False(grid.BackgroundRefresh.IsCompleted);
+        Assert.Empty(cut.FindAll("thead > tr.omni-data-grid__progress .omni-loading-bar"));
+
+        gate.SetResult(new PaginatedResult<RetiredServerDto>());
+        await cut.InvokeAsync(() => grid.BackgroundRefresh);
+        Assert.DoesNotContain("vps2577917", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RefusedPurge_KeepsTheRow_AndSaysSo()
     {
         var cut = RenderDialog(isAdmin: true);

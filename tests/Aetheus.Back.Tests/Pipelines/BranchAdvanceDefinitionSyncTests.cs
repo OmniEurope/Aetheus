@@ -65,11 +65,14 @@ public sealed class BranchAdvanceDefinitionSyncTests : IDisposable
 
         // The registrations the Pipelines module makes for the two events, built by hand because the
         // module's own wiring needs the whole application.
+        var lightService = Substitute.For<IGitLightService>();
+        lightService.GetAccessibleRepositoriesAsync(Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns([new GitLightRepoDto { Id = 3, ProjectId = ProjectId, Slug = Slug, Name = "Aetheus" }]);
         var services = new ServiceCollection();
         services.AddSingleton(_pushHandler);
         services.AddSingleton<IDomainEventHandler<GitBranchMovedEvent>>(
             new GitBranchMovedPipelineSyncHandler(new PipelineDefinitionSynchronizer(
-                _pipelines, cli,
+                _pipelines, cli, lightService,
                 new PipelineRunNotificationPublisher(Substitute.For<IPipelineRepository>(), _userNotifications),
                 NullLogger<PipelineDefinitionSynchronizer>.Instance)));
         var dispatcher = new DomainEventDispatcher(

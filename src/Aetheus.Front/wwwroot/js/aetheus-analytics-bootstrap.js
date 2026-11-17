@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 const configurationEndpoint = "/aetheus-analytics/v1/configuration";
-const analyticsModule = "/_content/Aetheus.WebAnalytics/1.1.1/aetheus-web-analytics.js";
+const analyticsModule = "/_content/Aetheus.WebAnalytics/1.3.1/aetheus-web-analytics.js";
 
 // Measures only known routes, replacing dynamic segments before they leave the browser. Sign-in
 // pages are excluded to avoid counting one person both anonymously and as an authenticated visitor.
@@ -16,10 +16,10 @@ const topLevelSegments = new Set([
 const staticNestedSegments = new Set([
   "accounts", "add-agent", "ai-profiles", "ai-tasks", "apache", "api-reference", "approvals", "apps", "artifacts", "audit",
   "backups", "board", "branches", "certbot", "change-password", "commits", "configuration",
-  "cron", "dashboards", "docker", "edit", "environments", "external-repo", "extract",
+  "cron", "cve-sources", "cve-watch", "dashboards", "docker", "edit", "environments", "external-repo", "extract",
   "findings", "firewall", "fleet", "libraries", "logs", "mail", "mail-templates", "mailbox", "modules", "monitoring",
   "new", "notifications", "organizations", "overview", "package-feeds", "package-registry",
-  "performance", "pipelines", "plugins", "ports", "portsentry", "projects", "promote",
+  "performance", "pipelines", "plugins", "ports", "portsentry", "projects", "promote", "schedule",
   "properties", "quality", "releases", "rkhunter", "roles", "runs", "servers", "services",
   "settings", "setup", "system-logs", "tasks", "teamspeak", "template", "update", "updates",
   "users", "vaults", "versions"

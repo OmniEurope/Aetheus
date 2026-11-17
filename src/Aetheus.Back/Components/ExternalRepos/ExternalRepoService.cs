@@ -52,6 +52,16 @@ public sealed class ExternalRepoService(
             throw new ConflictException("This project already has an external repository attached.");
         }
         var besideInternalRepository = existing.Any(repo => !repo.IsConfiguration);
+        if (besideInternalRepository && existing.Where(repo => !repo.IsConfiguration).All(IsUnusedInternalRepository))
+        {
+            // Recette R-69: beside a repository that holds no commit, the external one would be an additional source and the
+            // empty repository would stay what the production analysis and the pipelines read. Nothing is deleted here: the
+            // user removes the empty repository himself, then the external one becomes the project's source.
+            var emptyNames = string.Join(", ", existing.Where(repo => !repo.IsConfiguration).Select(repo => $"'{repo.Name}'"));
+            throw new ConflictException(
+                $"This project has an internal repository that holds no commit ({emptyNames}), which would stay its source. "
+                + "Delete it first, then attach the external repository: it becomes the project's source.");
+        }
 
         var credential = BuildCredential(request);
         ValidateCredential(credential);
@@ -136,6 +146,36 @@ public sealed class ExternalRepoService(
         await notifier.BroadcastAsync(ResourceType.Project, request.ProjectId, EntityChangeOps.Updated, ct).ConfigureAwait(false);
 
         return Map(project, connection, mirrorRepo, request.AuthType);
+    }
+
+    public async Task<ExternalRepoDto> MirrorRepositoryAddressAsync(int projectId, CancellationToken ct = default)
+    {
+        var project = await projectRepo.FindProjectAsync(projectId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException($"Project {projectId} not found.");
+        if (project.GitConnectionId is not null || !ExternalRepositoryAddress.IsUnmirrored(project.RepositoryUrl))
+            throw new ConflictException("This project has no external repository address left to mirror.");
+        // The address is the project's source only when the project has no repository of its own; beside one, the mirror
+        // would be an additional source and the address would stay unread, which is what the user must decide himself.
+        if ((await lightRepo.GetByProjectAsync(projectId, ct).ConfigureAwait(false)).Any(repo => !repo.IsConfiguration))
+            throw new ConflictException(
+                "This project already has a repository in Aetheus: its repository address is not its source. "
+                + "Clear the address, or attach the external repository from the project's external repository page.");
+
+        var address = PublicRepositoryAddress.Parse(project.RepositoryUrl!);
+        // An anonymous HTTPS read of a public repository: no credential is stored, and the attach path keeps its
+        // connectivity probe, endpoint guard, initial clone and audit line.
+        return await AttachAsync(new AttachExternalRepoRequest
+        {
+            ProjectId = projectId,
+            ProviderType = address.Provider,
+            BaseUrl = address.BaseUrl,
+            OwnerOrGroup = address.OwnerOrGroup,
+            RepositoryName = address.RepositoryName,
+            DefaultBranch = project.DefaultBranch,
+            AuthType = GitAuthType.HttpsToken,
+            AutoSyncEnabled = true,
+            WriteEnabled = false
+        }, ct).ConfigureAwait(false);
     }
 
     public async Task<ExternalRepoDto?> SyncNowAsync(int projectId, CancellationToken ct = default)
@@ -229,6 +269,12 @@ public sealed class ExternalRepoService(
 
         return (project, connection, await FindMirrorAsync(projectId, connection.Id, ct).ConfigureAwait(false));
     }
+
+    /// <summary>An internal repository nothing was ever pushed to: it holds no commit, so it is no source worth keeping the
+    /// external repository beside.</summary>
+    private static bool IsUnusedInternalRepository(GitInternalRepo repo) =>
+        repo.IsEmpty && repo.LastPushAt is null
+        && (repo.GitConnection is null or { ProviderType: GitProviderType.AetheusGit });
 
     private async Task<GitInternalRepo?> FindMirrorAsync(int projectId, int connectionId, CancellationToken ct)
     {

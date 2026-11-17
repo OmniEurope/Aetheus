@@ -41,6 +41,9 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["FollowEntitiesAsync", "ResourceType.Project", "TrailingReloadCoalescer", "PeriodicTimer"],
             ["Components/Projects/MonitoredAppsList.razor.cs"] =
                 ["EntityChanged", "ResourceType.Project", "RejoinOnReconnect"],
+            // The telemetry panel under it follows the same push: an app added from the header shows without a reload.
+            ["Components/Projects/AppTelemetryPanel.razor.cs"] =
+                ["EntityChanged", "ResourceType.Project", "RejoinOnReconnect", "TrailingReloadCoalescer"],
             ["Components/Analysis/AnalysisPortfolio.razor.cs"] =
                 ["EntityChanged", "ResourceType.Project", "RejoinOnReconnect"],
             ["Components/ServiceConnections/ServiceConnections.razor.cs"] =

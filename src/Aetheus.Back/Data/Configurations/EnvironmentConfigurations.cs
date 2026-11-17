@@ -80,7 +80,14 @@ internal sealed class AgentPoolConfiguration : IEntityTypeConfiguration<AgentPoo
 {
     public void Configure(EntityTypeBuilder<AgentPool> builder)
     {
+        // The name stays unique across the platform: the migration that scoped pools to an organization (R-12)
+        // stays expand-only, and a pipeline names its pool.
         builder.HasIndex(e => e.Name).IsUnique();
+        builder.HasIndex(e => e.OrganizationId);
+        builder.HasOne(e => e.Organization)
+               .WithMany()
+               .HasForeignKey(e => e.OrganizationId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }
 

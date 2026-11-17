@@ -101,7 +101,6 @@ public partial class UserCreate
                         Message = L["WelcomeMailUnknown"].Value
                     }
                 };
-                _busy = false;
                 return;
             }
 
@@ -111,12 +110,15 @@ public partial class UserCreate
                     ? L["SaveFailed"].Value
                     : outcome.Error.Message;
         }
-        catch (HttpRequestException)
+        catch (Exception exception) when (exception is HttpRequestException or Polly.ExecutionRejectedException)
         {
             _error = L["SaveFailed"].Value;
             Toast.Error("Error", "SaveFailed");
         }
-        _busy = false;
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private sealed class UserModel

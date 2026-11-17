@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Aetheus.Agent.Core.Functions;
 
@@ -44,25 +45,27 @@ internal sealed record AgentEvidence(AgentProof Proof, string ArchiveName, strin
 
     public async Task WriteAsync(string status, AgentContractOutcome outcome, CancellationToken cancellationToken)
     {
-        var evidence = new
+        // A JsonObject, not an anonymous type: aetheus-fn is published trimmed, where reflection-based
+        // JsonSerializer.Serialize of an anonymous type is switched off (IL2026) and would throw.
+        var evidence = new JsonObject
         {
-            schema = 1,
-            mode = "NMinusOne",
-            status,
-            previousAgentCommit = Proof.ExpectedCommit,
-            archiveName = ArchiveName,
-            archiveSha256 = ArchiveSha256,
-            proofs = new
+            ["schema"] = 1,
+            ["mode"] = "NMinusOne",
+            ["status"] = status,
+            ["previousAgentCommit"] = Proof.ExpectedCommit,
+            ["archiveName"] = ArchiveName,
+            ["archiveSha256"] = ArchiveSha256,
+            ["proofs"] = new JsonObject
             {
-                enrollmentAndHeartbeat = outcome.Enrollment,
-                taskClaimAndStart = outcome.Claim,
-                taskResultPublication = outcome.Publication
+                ["enrollmentAndHeartbeat"] = outcome.Enrollment,
+                ["taskClaimAndStart"] = outcome.Claim,
+                ["taskResultPublication"] = outcome.Publication
             },
-            serverId = Id(outcome.ServerId),
-            taskId = Id(outcome.TaskId)
+            ["serverId"] = Id(outcome.ServerId),
+            ["taskId"] = Id(outcome.TaskId)
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Proof.EvidencePath)!);
-        await File.WriteAllTextAsync(Proof.EvidencePath, JsonSerializer.Serialize(evidence, Indented) + "\n", cancellationToken)
+        await File.WriteAllTextAsync(Proof.EvidencePath, evidence.ToJsonString(Indented) + "\n", cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -103,7 +106,7 @@ internal sealed class AgentContractSession(FunctionHttp http, string backendUrl,
     {
         var password = (await File.ReadAllTextAsync(passwordFile, cancellationToken).ConfigureAwait(false)).TrimEnd('\n');
         var login = await http.PostJsonAsync(
-            backendUrl + "/api/auth/login", JsonSerializer.Serialize(new { email = QaAdminEmail, password }), null, cancellationToken)
+            backendUrl + "/api/auth/login", new JsonObject { ["email"] = QaAdminEmail, ["password"] = password }.ToJsonString(), null, cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(temporary, "login.json"), login, cancellationToken).ConfigureAwait(false);
         _adminToken = Written(login, "token") ?? string.Empty;

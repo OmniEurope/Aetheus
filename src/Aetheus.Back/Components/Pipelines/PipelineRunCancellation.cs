@@ -14,6 +14,6 @@ public sealed record PipelineRunCancellation(string By, string Reason)
     public static PipelineRunCancellation BySystem(string reason) => new(SystemAuthor, reason);
 
     /// <summary>The cancellation a parent's cancellation carries down to a run it triggered.</summary>
-    public PipelineRunCancellation ForChildOf(int parentRunId) =>
-        this with { Reason = $"Parent run #{parentRunId} was cancelled: {Reason}" };
+    public PipelineRunCancellation ForChildOf(int parentRunNumber) =>
+        this with { Reason = $"Parent run #{parentRunNumber} was cancelled: {Reason}" };
 }

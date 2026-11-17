@@ -13,8 +13,8 @@ namespace Aetheus.Back.Tests.Pipelines;
 /// to all three.</summary>
 public sealed class PipelineSetupControllerProductionAuthorizationTests
 {
-    private static readonly PipelineProductionAnalysisRequest Analysis = new() { ProjectId = 7, ComposeFile = "deploy/compose.yml" };
-    private static readonly PipelineProductionApplyRequest Apply = new() { ProjectId = 7, ComposeFile = "deploy/compose.yml" };
+    private static readonly PipelineProductionAnalysisRequest Analysis = new() { ProjectId = 7, ComposeFile = "deploy/compose.yml", Branch = "develop" };
+    private static readonly PipelineProductionApplyRequest Apply = new() { ProjectId = 7, ComposeFile = "deploy/compose.yml", Branch = "develop" };
 
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IPipelineProductionSetupService _production = Substitute.For<IPipelineProductionSetupService>();
@@ -29,7 +29,7 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         _authz.GetUserOrganizationIdsAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns([3]);
         _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, Permission.Admin, Arg.Any<CancellationToken>())
             .Returns([4]);
-        _production.AnalyzeAsync(7, "deploy/compose.yml", Arg.Any<ProductionServerScope>(), Arg.Any<CancellationToken>())
+        _production.AnalyzeAsync(7, "deploy/compose.yml", "develop", Arg.Any<ProductionServerScope>(), Arg.Any<CancellationToken>())
             .Returns(new PipelineProductionAnalysisDto());
         _production.ApplyAsync(Apply, Arg.Any<ProductionServerScope>(), Arg.Any<CancellationToken>()).Returns(new PipelineProductionApplyResultDto());
         _sut = new PipelineSetupController(
@@ -62,7 +62,7 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         var result = await _sut.AnalyzeProduction(Analysis, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        await _production.Received(1).AnalyzeAsync(7, "deploy/compose.yml", Administered, Arg.Any<CancellationToken>());
+        await _production.Received(1).AnalyzeAsync(7, "deploy/compose.yml", "develop", Administered, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         var result = await _sut.AnalyzeProduction(Analysis, TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(result.Result);
-        await _production.DidNotReceiveWithAnyArgs().AnalyzeAsync(default, default, default!, TestContext.Current.CancellationToken);
+        await _production.DidNotReceiveWithAnyArgs().AnalyzeAsync(default, default, default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -83,6 +83,32 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         await _production.Received(1).ApplyAsync(Apply, Administered, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TheApacheTemplates_WithEveryRight_AreCreated()
+    {
+        var request = new PipelineProductionApacheRequest { ProjectId = 7 };
+        _production.ApplyApacheTemplatesAsync(request, Arg.Any<CancellationToken>()).Returns(new ProjectConfigRepositoryDto());
+
+        var result = await _sut.ApplyProductionApache(request, TestContext.Current.CancellationToken);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await _production.Received(1).ApplyApacheTemplatesAsync(request, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ResourceType.Project, 7)]
+    [InlineData(ResourceType.VariableLibrary, null)]
+    [InlineData(ResourceType.Vault, null)]
+    public async Task TheApacheTemplates_WithoutOneOfTheThreeWrites_AreForbidden_AndWriteNothing(ResourceType type, int? id)
+    {
+        Deny(type, id, Permission.Write);
+
+        var result = await _sut.ApplyProductionApache(new PipelineProductionApacheRequest { ProjectId = 7 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _production.DidNotReceiveWithAnyArgs().ApplyApacheTemplatesAsync(default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

@@ -43,6 +43,26 @@ public sealed class SupervisionTests : BunitContext
     }
 
     [Fact]
+    public void R23_TheOnlineTotal_SaysWaitingForData_WhenEveryApplicationStillWaits()
+    {
+        _handler.SetJsonResponse("api/appmonitoring/summary", new AppMonitoringSummaryDto
+        {
+            TotalCount = 1,
+            UpCount = 1,
+            Applications = [new MonitoredAppStatusDto { Id = 3, Name = "w1", ProjectId = 1, CurrentStatus = AppHealthStatus.Up, OnlineVisitorState = OnlineAudienceState.Waiting }],
+            Audience = new AppAudienceTotalsDto { ApplicationCount = 1, OnlineVisitors = 0, OnlineVisitorState = OnlineAudienceState.Waiting, OnlineVisitorLastEventAt = new DateTime(2026, 11, 5, 10, 0, 0, DateTimeKind.Utc) }
+        });
+
+        var cut = Render<Supervision>();
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='supervision-online-tile']")));
+        var tile = cut.Find("[data-testid='supervision-online-tile']");
+        Assert.Equal("OnlineUsersWaiting", tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
+        Assert.Contains("OnlineUsersWaitingHint", tile.TextContent, StringComparison.Ordinal);
+        Assert.Contains("OnlineUsersWaitingLast", tile.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void R468_TheTotalsOfEveryApplication_SitAboveTheList()
     {
         _handler.SetJsonResponse("api/appmonitoring/summary", new AppMonitoringSummaryDto

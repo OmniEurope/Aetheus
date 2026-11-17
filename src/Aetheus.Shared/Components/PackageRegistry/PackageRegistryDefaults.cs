@@ -8,6 +8,7 @@ public static class PackageRegistryDefaults
     public const string NuGet = "https://api.nuget.org";
     public const string Npm = "https://registry.npmjs.org";
     public const string PyPi = "https://pypi.org";
+    public const string Packagist = "https://repo.packagist.org";
 
     /// <summary>Maven Central. Unlike the other registries a Maven repository lives under a path,
     /// so this value is the repository root, not only an origin.</summary>
@@ -18,6 +19,7 @@ public static class PackageRegistryDefaults
         PackageFeedType.NuGet => NuGet,
         PackageFeedType.Npm => Npm,
         PackageFeedType.PyPI => PyPi,
+        PackageFeedType.Packagist => Packagist,
         PackageFeedType.Maven => Maven,
         _ => string.Empty
     };

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
@@ -55,13 +56,13 @@ public sealed class AppMetricsViewTests : BunitContext
 
         var cut = Render<AppMetricsView>(parameters => parameters.Add(component => component.AppId, 3));
 
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindComponents<AetheusLoader>()));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindComponents<ZoneVeil>()));
         Assert.DoesNotContain("NoMetricsYet", cut.Markup);
 
         names.SetResult([]);
         // Under load the answered list was measured drawn 25 to 1143 ms after bUnit's 1 s default (PLAN-002 B7bis).
         cut.WaitForAssertion(() => Assert.Contains("NoMetricsYet", cut.Markup));
-        Assert.Empty(cut.FindComponents<AetheusLoader>());
+        Assert.Empty(cut.FindComponents<ZoneVeil>());
     }
 
     /// <summary>Recette R-116: changing the period reads the series under OE's busy veil; the chart already on
@@ -88,17 +89,16 @@ public sealed class AppMetricsViewTests : BunitContext
 
         var cut = Render<AppMetricsView>(parameters => parameters.Add(component => component.AppId, 3));
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=app-metrics-zone] svg")));
-        Assert.Empty(cut.FindAll(".omni-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
 
         cut.Find("select#app-metrics-period").Change("1");
 
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=app-metrics-zone]").GetAttribute("aria-busy")));
-        Assert.Contains("omni-busy", cut.Find("[data-testid=app-metrics-zone]").ClassName, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy));
         Assert.NotEmpty(cut.FindAll("[data-testid=app-metrics-zone] svg"));
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
 
         second.SetResult(first);
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".omni-busy")));
+        cut.WaitForAssertion(() => Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy));
     }
 
     [Fact]

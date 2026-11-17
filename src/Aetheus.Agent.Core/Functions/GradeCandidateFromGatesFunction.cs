@@ -15,6 +15,10 @@ namespace Aetheus.Agent.Core.Functions;
 /// that does not publish it) is never read as passed: no grade is claimed (<c>none</c>) and the candidate is not
 /// deployable. With no gate at all neither is claimed (<c>none</c> for both) and the release stays not qualified, as
 /// before this function.</para>
+/// <para>PLAN-006: the flaky tests the generic CI and QA named (<c>UNIT_TEST_FLAKY_TESTS</c>,
+/// <c>QA_CURRENT_INTEGRATION_FLAKY_TESTS</c>) grade the candidate too, as the platform's own seal does
+/// (<see cref="AssuranceFlakyGrade"/>: none A, 1 to 10 B, 11 to 20 C, more F); the candidate takes the worst of that grade
+/// and the gates' ones. Without such a list the verdict is the gates' alone, as before.</para>
 /// </summary>
 public sealed class GradeCandidateFromGatesFunction : IPipelineFunction
 {
@@ -60,9 +64,22 @@ public sealed class GradeCandidateFromGatesFunction : IPipelineFunction
             return PipelineFunctionResult.Success();
         }
 
-        var worst = gates.Select(gate => gate.Grade!).MaxBy(grade => GradeScale.IndexOf(grade, StringComparison.Ordinal))!;
+        var grades = gates.Select(gate => (gate.Name, Grade: gate.Grade!)).ToList();
+        // PLAN-006: the flaky tests the CI and the QA named (failed, then passed on their single rerun) did not fail
+        // their suite; the candidate is graded on how many distinct ones there are, as the platform's own seal does.
+        var flaky = FlakyLists(context);
+        var flakyCount = AssuranceFlakyGrade.Count(flaky.Select(list => list.Value));
+        if (flakyCount > 0)
+        {
+            var flakyGrade = AssuranceFlakyGrade.Grade(flakyCount);
+            foreach (var (suite, list) in flaky)
+                await context.Log($"Flaky tests in {suite} (grade {flakyGrade}): {list}").ConfigureAwait(false);
+            grades.Add(($"flaky tests ({flakyCount})", flakyGrade));
+        }
+
+        var worst = grades.Select(entry => entry.Grade).MaxBy(grade => GradeScale.IndexOf(grade, StringComparison.Ordinal))!;
         var deployable = GradeScale.IndexOf(worst, StringComparison.Ordinal) <= GradeScale.IndexOf(minimum, StringComparison.Ordinal);
-        var detail = string.Join(", ", gates.Select(gate => $"{gate.Name} {gate.Grade}"));
+        var detail = string.Join(", ", grades.Select(entry => $"{entry.Name} {entry.Grade}"));
         await context.Log(deployable
                 ? $"Candidate graded {worst} ({detail}): deployable, the deployment threshold is {minimum}."
                 : $"Candidate graded {worst} ({detail}): NOT deployable, below the deployment threshold {minimum}.")
@@ -78,6 +95,22 @@ public sealed class GradeCandidateFromGatesFunction : IPipelineFunction
         (name,
             FunctionShell.Input(context, enabledParameter, enabledVariable) != "false",
             FunctionShell.Input(context, gradeParameter, gradeVariable));
+
+    /// <summary>The one-line flaky test lists to grade, by suite: the <c>flaky_tests</c> parameter when given, else the
+    /// lists the generic CI (<c>UNIT_TEST_FLAKY_TESTS</c>) and QA (<c>QA_CURRENT_INTEGRATION_FLAKY_TESTS</c>) published,
+    /// handed up by the trigger steps. An absent or empty list counts no test.</summary>
+    private static List<(string Suite, string Value)> FlakyLists(PipelineFunctionContext context)
+    {
+        if (context.Parameters.GetValueOrDefault("flaky_tests") is { Length: > 0 } given)
+            return [("the candidate", given)];
+        return new[] { ("unit", FlakyUnitTests), ("integration", FlakyIntegrationTests) }
+            .Select(entry => (entry.Item1, Value: FunctionShell.Variable(context, entry.Item2)?.Trim() ?? string.Empty))
+            .Where(entry => entry.Value.Length > 0)
+            .ToList();
+    }
+
+    private const string FlakyUnitTests = "UNIT_TEST_FLAKY_TESTS";
+    private const string FlakyIntegrationTests = "QA_CURRENT_INTEGRATION_FLAKY_TESTS";
 
     /// <summary>Exactly one capital letter A to F, as the deployment gate reads a threshold.</summary>
     private static bool IsGrade(string? value) =>

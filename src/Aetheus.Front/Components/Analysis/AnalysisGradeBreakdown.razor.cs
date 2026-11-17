@@ -19,18 +19,64 @@ public partial class AnalysisGradeBreakdown
     /// <summary>The project's latest average CRAP score, shown (advisory) under code quality.</summary>
     [Parameter] public double? CrapScore { get; set; }
 
-    /// <summary>Recette R1-38: draw the run's single grade block (the Gate grade as its first row) instead of
-    /// the two-column domain cards.</summary>
-    [Parameter] public bool GateRow { get; set; }
-
     /// <summary>The grade the run shows (the sealed letter when it is not the analysis one).</summary>
     [Parameter] public AnalysisGrade? GateGrade { get; set; }
 
+    /// <summary>The first row's label when it is not the run's Gate grade (the project's global grade);
+    /// null keeps "Gate grade".</summary>
+    [Parameter] public string? GateLabel { get; set; }
+
+    /// <summary>The first row's tooltip and detail sentence when they are not the run's Gate criterion.</summary>
+    [Parameter] public string? GateCriterion { get; set; }
+
+    /// <summary>The Gate grade is an old, last known letter (R-12, R-20): its badge says so, and no analysis
+    /// measure is named as its cause, since the letter does not come from this analysis.</summary>
+    [Parameter] public bool GateGradeOld { get; set; }
+
     // What sets the Gate grade, in the value column of its row: the blocking tests when the seal is
     // the cause, else the first measure carrying the overall letter.
-    private string? GateCause => SealBlockedByTests
+    private string? GateCause => GateGradeOld ? null
+        : SealBlockedByTests
         ? L["GateFirstCauseBlockingTests"].Value
-        : FirstLimitingMeasure(Grade) is { } cause ? $"{MeasureLabel(cause.Key)} : {MeasureValue(cause)}" : null;
+        : LimitingCause();
+
+    private string? LimitingCause() =>
+        FirstLimitingMeasure(Grade) is { } cause ? $"{MeasureLabel(cause.Key)} : {MeasureValue(cause)}"
+        : Grade?.Findings is { } findings && IsFindingsLimiting(findings)
+            ? $"{L["GateFirstCauseFindings"].Value} : {AnalysisFindingScore.Total(findings.Counts)}"
+        : null;
+
+    // R-7: the Findings line sets the overall grade when no better letter is what the overall one reads.
+    private bool IsFindingsLimiting(AnalysisGradeFindingsDto findings) =>
+        Grade is { OverallGrade: > AnalysisGrade.A } && findings.Grade == Grade.OverallGrade;
+
+    private string FindingsHelp(AnalysisGradeFindingsDto findings) => Lines(
+        L["AnalysisCriterionFindingsLine"].Value,
+        string.Format(L["AnalysisFindingsLineCounts"], findings.Counts.Critical, findings.Counts.High, findings.Counts.Medium,
+            findings.Counts.Low, findings.Counts.Info));
+
+    // Recette R-16: everything a line can say sits in the tooltip of its help mark, one fact per line.
+    private static string Lines(params string?[] facts) => string.Join('\n', facts.Where(fact => !string.IsNullOrWhiteSpace(fact)));
+
+    private string GateHelp() => Lines(
+        GateCriterion ?? L["AnalysisCriterionGate"].Value,
+        Grade?.LimitingDomain is { } limiting ? string.Format(L["AnalysisGradeLimitingDomain"], DomainLabel(L, limiting)) : null,
+        EvaluatedOn(Grade?.EvaluatedAt));
+
+    private string DomainHelp(DomainView domain) => Lines(L[domain.CriterionKey].Value, EvaluatedOn(domain.EvaluatedAt));
+
+    private string MeasureHelp(AnalysisGradeMeasureDto measure) => Lines(
+        MeasureCriterion(measure.Key),
+        IsMissing(measure) ? L["GradeMeasureMissingDetail"].Value : null,
+        ThresholdLine(measure),
+        string.Format(L["AnalysisGradeMeasuredValue"], MeasureValue(measure)));
+
+    private string? ThresholdLine(AnalysisGradeMeasureDto measure) =>
+        ThresholdText(measure) is not { } thresholds ? null
+        : string.Format(L[measure.Direction == AnalysisMetricDirection.LowerIsBetter ? "AnalysisGradeThresholdsLower" : "AnalysisGradeThresholdsHigher"], thresholds);
+
+    private string? EvaluatedOn(DateTime? evaluatedAt) =>
+        evaluatedAt is { } at ? string.Format(L["AnalysisGradeEvaluatedOn"], at.ToLocalTime().ToString("g")) : null;
 
     // The block reads the code and tests first, then the other domains in their usual order.
     private IReadOnlyList<DomainView> BlockDomains => [.. Domains.OrderBy(domain => domain.CodeAndTests ? 0 : 1)];
@@ -119,7 +165,7 @@ public partial class AnalysisGradeBreakdown
     /// at all is not partial, nothing was graded.
     /// </summary>
     internal static bool IsPartialGrade(AnalysisGradeSummaryDto? grade) =>
-        grade is { OverallGrade: not null, Completeness: AnalysisGradeCompleteness.Incomplete };
+        grade is { OverallGrade: not null, Completeness: AnalysisGradeCompleteness.Incomplete, Qualification: null };
 
     /// <summary>A measure the grade requires and that no evidence fed.</summary>
     internal static bool IsMissing(AnalysisGradeMeasureDto measure) => measure is { Required: true, Observed: false };
@@ -130,12 +176,15 @@ public partial class AnalysisGradeBreakdown
         measure.Rejection is not null ? L["GradeMeasureRejected"].Value
         : IsMissing(measure) ? L["GradeMeasureNotMeasured"].Value
         : MeasureText(measure);
+    // R-19: the duplication measure has no producer in the generic template (jscpd is the project's own tool). The
+    // grading block names it grade.duplication, a gate policy quality.duplication.percentage: both are the same line.
+    private static bool IsDuplication(string key) => key is "grade.duplication" or "quality.duplication.percentage";
 
     /// <summary>"Evidence expected from the step X": the pipeline step that publishes the evidence of a missing measure;
     /// null when the pipeline names none (the line still says "not measured").</summary>
     private string? MissingHint(AnalysisGradeMeasureDto measure) =>
         string.IsNullOrWhiteSpace(measure.ProducerStep)
-            ? null
+            ? (IsDuplication(measure.Key) ? L["GradeMeasureDuplicationNoProducer"].Value : null)
             : $"{L["GradeMeasureMissingStep"].Value} {measure.ProducerStep}";
 
     private static bool RepeatsASeverityLine(AnalysisGradeMeasureDto measure, IReadOnlyList<AnalysisGradeMeasureDto> shown)

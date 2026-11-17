@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace Aetheus.Back.Components.PortRegistry;
 
@@ -166,4 +169,25 @@ public class PortRegistryRepository(AppDbContext db) : IPortRegistryRepository
 
     public async Task SaveChangesAsync(CancellationToken ct = default) =>
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+    // The unique index includes Source, so it cannot make a Declared and a Manual claim collide; this lock
+    // serializes the claims of one server instead. Transaction-scoped and taken through the ADR-029 lease class
+    // (audit E4): it holds until the outer transaction a library or allocation write joined commits.
+    public async Task<T> RunUnderServerClaimLockAsync<T>(int serverId, Func<Task<T>> claim, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        if (!db.Database.IsRelational()) return await claim().ConfigureAwait(false);
+
+        await using var transaction = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false)
+            : null;
+        var key = "aetheus:port-claims:" + serverId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await PostgresLeaderLease.LockForTransactionAsync(
+            (NpgsqlConnection)db.Database.GetDbConnection(),
+            (NpgsqlTransaction)db.Database.CurrentTransaction!.GetDbTransaction(),
+            key, ct).ConfigureAwait(false);
+        var result = await claim().ConfigureAwait(false);
+        if (transaction is not null) await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return result;
+    }
 }

@@ -205,7 +205,8 @@ public sealed class DependencyTrackOutboxTests
             provider.GetRequiredService<IServiceScopeFactory>(),
             Microsoft.Extensions.Options.Options.Create(options),
             time,
-            NullLogger<DependencyTrackOutboxWorker>.Instance);
+            NullLogger<DependencyTrackOutboxWorker>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
     private static async Task<int> SeedReportAndOutboxAsync(
         ServiceProvider provider,

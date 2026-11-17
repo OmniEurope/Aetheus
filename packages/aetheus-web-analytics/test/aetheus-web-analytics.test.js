@@ -382,6 +382,79 @@ test("heartbeat refreshes LastSeenAtUtc on a schedule without changing the route
   });
 });
 
+test("a tab that becomes visible again sends a heartbeat at once, never while hidden and never twice in a row", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval", "Date"], now: 1_000_000 });
+  const payloads = [];
+  const documentListeners = new Map();
+  const fakeDocument = {
+    visibilityState: "visible",
+    readyState: "complete",
+    addEventListener: (name, callback) => documentListeners.set(name, callback),
+    removeEventListener: (name) => documentListeners.delete(name)
+  };
+  const setVisibility = (state) => {
+    fakeDocument.visibilityState = state;
+    documentListeners.get("visibilitychange")?.();
+  };
+  Object.defineProperty(globalThis, "document", { configurable: true, value: fakeDocument });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      globalPrivacyControl: false,
+      doNotTrack: "0",
+      sendBeacon: (_endpoint, blob) => {
+        payloads.push(blob);
+        return true;
+      }
+    }
+  });
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { pathname: "/dashboard" },
+      doNotTrack: "0",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined
+    }
+  });
+  Object.defineProperty(globalThis, "history", {
+    configurable: true,
+    value: { pushState: () => undefined, replaceState: () => undefined }
+  });
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: { randomUUID: () => "6b40f4fd-53ac-4f84-8c9e-9fac6feec6e1" }
+  });
+  const kinds = async () => (await Promise.all(payloads.map((payload) => payload.text().then(JSON.parse))))
+    .map((event) => event.kind);
+
+  const analytics = createAetheusAnalytics({ routeResolver: (pathname) => pathname });
+  analytics.install();
+  assert.deepEqual(await kinds(), ["page_view"]);
+
+  // Hidden: the scheduled beat is skipped, and hiding itself sends nothing.
+  setVisibility("hidden");
+  t.mock.timers.tick(75_000);
+  assert.deepEqual(await kinds(), ["page_view"]);
+
+  // Visible again: the beat leaves at once, not up to 75 s later.
+  setVisibility("visible");
+  assert.deepEqual(await kinds(), ["page_view", "heartbeat"]);
+
+  // A flip hidden then visible right after a beat does not send a second one.
+  setVisibility("hidden");
+  setVisibility("visible");
+  assert.deepEqual(await kinds(), ["page_view", "heartbeat"]);
+
+  // The schedule restarted at the visible beat: the next scheduled one comes a full interval later.
+  t.mock.timers.tick(75_000);
+  assert.deepEqual(await kinds(), ["page_view", "heartbeat", "heartbeat"]);
+
+  analytics.stop();
+  assert.equal(documentListeners.has("visibilitychange"), false);
+  Reflect.deleteProperty(globalThis, "document");
+});
+
 function browserWithBeacon(pathname, search = "") {
   const payloads = [];
   const history = { pushState: () => undefined, replaceState: () => undefined };

@@ -121,16 +121,20 @@ public class PipelinesTemplatesTests : BunitContext
     }
 
     [Fact]
-    public void TemplatesPage_LoadFailure_ShowsRetry()
+    public async Task TemplatesPage_LoadFailure_ShowsTheGridAlertWithRetry_AndRetryReadsTheListAgain()
     {
         _handler.SetResponse("api/pipelines/templates", System.Net.HttpStatusCode.ServiceUnavailable);
 
         var cut = Render<PipelineTemplates>();
-        cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup, StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.Contains("GridLoadFailed", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("Deploy", cut.Markup, StringComparison.Ordinal);
 
-        Assert.False((bool)typeof(PipelineTemplates).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
-        Assert.True((bool)typeof(PipelineTemplates).GetField("_loadFailed", Priv)!.GetValue(cut.Instance)!);
-        Assert.Contains("Retry", cut.Markup, StringComparison.Ordinal);
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto> { new() { Id = 2, Name = "Deploy", Version = 1 } });
+        var retry = cut.FindAll("button").Single(button => button.TextContent.Contains("Retry", StringComparison.Ordinal));
+        await retry.ClickAsync(new());
+
+        cut.WaitForAssertion(() => Assert.Contains("Deploy", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("GridLoadFailed", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]

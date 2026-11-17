@@ -34,6 +34,9 @@ public sealed class SudoersHashCollector(
         // ADR-024 4.1 - argv-exact apt-get upgrade grant (patch-manage capability). Its presence
         // is what derives Server.PatchManagementAvailable backend-side.
         "/etc/sudoers.d/aetheus-patch",
+        // Recette R-8 - argv-exact systemctl reboot grant (host-reboot capability): its presence publishes
+        // host.reboot, without which the backend never hands this agent a scheduled reboot order.
+        "/etc/sudoers.d/aetheus-reboot",
         // ADR-024 4.2 - path-only grant for the root-owned aetheus-firewall helper (firewall-manage
         // capability). Its presence is what derives Server.FirewallManagementAvailable backend-side.
         "/etc/sudoers.d/aetheus-firewall",

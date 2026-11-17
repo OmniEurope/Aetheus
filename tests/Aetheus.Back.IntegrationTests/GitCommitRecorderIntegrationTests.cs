@@ -7,7 +7,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>A recorded commit updates the repository's nonempty flag on PostgreSQL without flushing
 /// unrelated tracked changes.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class GitCommitRecorderIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

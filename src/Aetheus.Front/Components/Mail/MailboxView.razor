@@ -39,7 +39,7 @@
     }
     else if (_access is null)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else if (!Unlocked)
     {
@@ -76,7 +76,7 @@
                 <AetheusDataGrid @ref="_grid" TItem="MailboxMessageSummaryDto" Data="@_messages" Count="@_total" IsLoading="@_loading"
                     LoadData="@LoadMessagesAsync" KeyProperty="Uid" PageSize="25" ExportRead="@ReadExportAsync" ExportName="@L["Mailbox"]"
                     EmptyText="@L["MailboxNoMessages"]" RowClick="@OpenAsync" RowRender="@OnMessageRowRender" Class="mailbox-messages"
-                    AllowAlternatingRows="false" ShowHeaderFilterMenu="false"
+                    AllowAlternatingRows="false" FilterPlacement="OmniDataGridFilterPlacement.Row"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailboxMessageSummaryDto>(_messages, _total))">
                     <Columns>

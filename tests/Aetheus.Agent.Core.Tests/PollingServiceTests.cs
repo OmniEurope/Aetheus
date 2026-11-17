@@ -165,7 +165,7 @@ public class PollingServiceTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero));
         var gate = new TaskCompletionSource();
         _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns([new PendingTaskDto { Id = 7, Name = "stage", Command = "echo", Executor = ExecutorType.Shell }], []);
+            .Returns([new PendingTaskDto { Id = 7, Name = "stage", Command = "echo", Executor = ExecutorType.Shell }], new List<PendingTaskDto>());
         _executorMock.ExecuteAsync(Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
                 Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
             .Returns(async _ => { await gate.Task; return new ExecutorResult(0, false); });
@@ -1743,6 +1743,332 @@ public class PollingServiceTests
 
         Assert.False(cts.IsCancellationRequested);
     }
+
+    // A cancelled run: the control plane marks the step Cancelled at once and dispatches the always()/Cleanup
+    // stage, while the agent only cancels the step's token on reconcile and the executor then waits for the
+    // process tree to die. With a second free slot the Cleanup task must not start next to the dying step of
+    // its own run (they share the workspace and the resource locks): the claim goes back to the queue.
+    [Fact]
+    public async Task PollOnceAsync_CancelledTaskOfTheRunStillDying_ReturnsTheClaimOfTheRunsNextTask()
+    {
+        var options = Options.Create(new AetheusAgentOptions
+        {
+            ServerUrl = "http://localhost:5301",
+            PollingIntervalSeconds = 1,
+            MaxConcurrentTasks = 2
+        });
+        var service = CreateService(options: options);
+        var dying = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var dyingCts = new CancellationTokenSource();
+        service._runningTasks[10] = new PollingService.TrackedTask(dying.Task, dyingCts, PipelineRunId: 5);
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [10] = nameof(TaskExecutionStatus.Cancelled) });
+        var cleanup = new PendingTaskDto
+        {
+            Id = 11,
+            PipelineRunId = 5,
+            Name = "cleanup",
+            Command = "echo cleanup",
+            Executor = ExecutorType.Shell,
+            EnvironmentVariables = [],
+            TimeoutSeconds = 30
+        };
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([cleanup]);
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(dyingCts.IsCancellationRequested);
+        await _apiClientMock.Received(1).ReleaseTaskAsync(11, Arg.Any<CancellationToken>());
+        await _executorMock.DidNotReceive().ExecuteAsync(
+            Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+            Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>());
+
+        // Once the tree is dead and the step left the tracking table, the next poll runs the Cleanup task.
+        service._runningTasks.TryRemove(10, out _);
+        _executorMock.ExecuteAsync(
+                cleanup.Command, Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(new ExecutorResult(0, false));
+        await PollAndDrainAsync(service);
+
+        await _apiClientMock.Received(1).ReleaseTaskAsync(11, Arg.Any<CancellationToken>());
+        await _apiClientMock.Received(1).StartTaskAsync(11, Arg.Any<CancellationToken>());
+    }
+
+    // A running task of the same run that nobody cancelled does not hold the run's other tasks back.
+    [Fact]
+    public async Task PollOnceAsync_LiveTaskOfTheRun_DoesNotHoldBackItsParallelTask()
+    {
+        var options = Options.Create(new AetheusAgentOptions
+        {
+            ServerUrl = "http://localhost:5301",
+            PollingIntervalSeconds = 1,
+            MaxConcurrentTasks = 2
+        });
+        var service = CreateService(options: options);
+        using var liveCts = new CancellationTokenSource();
+        service._runningTasks[10] = new PollingService.TrackedTask(new TaskCompletionSource().Task, liveCts, PipelineRunId: 5);
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [10] = nameof(TaskExecutionStatus.Running) });
+        var parallel = new PendingTaskDto
+        {
+            Id = 11,
+            PipelineRunId = 5,
+            Name = "parallel",
+            Command = "echo parallel",
+            Executor = ExecutorType.Shell,
+            EnvironmentVariables = [],
+            TimeoutSeconds = 30
+        };
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([parallel]);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _executorMock.ExecuteAsync(
+                parallel.Command, Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async _ => { await finish.Task; return new ExecutorResult(0, false); });
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(service._runningTasks.TryGetValue(11, out var started));
+        await _apiClientMock.DidNotReceive().ReleaseTaskAsync(11, Arg.Any<CancellationToken>());
+        finish.SetResult();
+        await started.Execution;
+    }
+
+    // R-12: the control plane holds the run's cleanup back until the agent says the cancelled task stopped.
+    // The report is the ordinary completion call with status Cancelled, sent once the task has left the
+    // tracking table (nothing of it remains here), and only when the cancellation came from the server.
+    [Fact]
+    public async Task ServerCancelledPipelineTask_ReportsItStopped_AfterLeavingTheTrackingTable()
+    {
+        var service = CreateService();
+        var pipelineTask = BlockingPipelineTask(id: 21, runId: 5);
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _executorMock.ExecuteAsync(
+                pipelineTask.Command, Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                running.SetResult();
+                await Task.Delay(Timeout.Infinite, call.ArgAt<CancellationToken>(4));
+                return new ExecutorResult(0, false);
+            });
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([pipelineTask], new List<PendingTaskDto>());
+        var stillTrackedWhenReported = (bool?)null;
+        _apiClientMock.CompleteTaskAsync(21, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                stillTrackedWhenReported = service._runningTasks.ContainsKey(21);
+                return Task.CompletedTask;
+            });
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+        await running.Task;
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [21] = nameof(TaskExecutionStatus.Cancelled) });
+        await PollAndDrainAsync(service);
+
+        await _apiClientMock.Received(1).CompleteTaskAsync(
+            21,
+            Arg.Is<TaskResultDto>(result => result.TaskId == 21 && result.Status == TaskExecutionStatus.Cancelled),
+            Arg.Any<CancellationToken>());
+        Assert.False(stillTrackedWhenReported);
+    }
+
+    // The stop report is sent after the task left the tracking table, so a drain that only waited for the
+    // tracked tasks returned while the report was still in flight (an intermittent failure of the test
+    // above: the assertions ran before the report call had finished). The drain must cover the report.
+    [Fact]
+    public async Task DrainRunningTasksAsync_WaitsForTheStopReportOfAServerCancelledTask()
+    {
+        var service = CreateService();
+        var pipelineTask = BlockingPipelineTask(id: 25, runId: 5);
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _executorMock.ExecuteAsync(
+                pipelineTask.Command, Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                running.SetResult();
+                await Task.Delay(Timeout.Infinite, call.ArgAt<CancellationToken>(4));
+                return new ExecutorResult(0, false);
+            });
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([pipelineTask], new List<PendingTaskDto>());
+        var reportStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseReport = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _apiClientMock.CompleteTaskAsync(25, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                reportStarted.SetResult();
+                await releaseReport.Task;
+            });
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+        await running.Task;
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [25] = nameof(TaskExecutionStatus.Cancelled) });
+        await service.ReconcileRunningTasksAsync(TestContext.Current.CancellationToken);
+        await reportStarted.Task;
+
+        // The report is in flight and the task already left the tracking table.
+        Assert.False(service._runningTasks.ContainsKey(25));
+        var drain = service.DrainRunningTasksAsync();
+        await Task.Yield();
+        Assert.False(drain.IsCompleted);
+
+        releaseReport.SetResult();
+        await drain;
+    }
+
+    // R-12: the report claims "nothing of this task remains here". When the executor could not prove the
+    // process tree terminated, that claim would be false: no report, the control plane waits then proceeds.
+    [Fact]
+    public Task ServerCancelledPipelineTask_WhoseProcessTreeIsNotProvenTerminated_IsNotReportedStopped() =>
+        AssertUnconfirmedCancellationIsNotReportedStopped(23, token => new ProcessTreeNotTerminatedException(token));
+
+    // ACORE-002: the same silence for a function that was still running when its stop grace elapsed.
+    [Fact]
+    public Task ServerCancelledPipelineTask_WhoseFunctionDidNotEnd_IsNotReportedStopped() =>
+        AssertUnconfirmedCancellationIsNotReportedStopped(26, token => new PipelineFunctionNotStoppedException("publish-vitrine", token));
+
+    private async Task AssertUnconfirmedCancellationIsNotReportedStopped(
+        int taskId, Func<CancellationToken, OperationCanceledException> unconfirmed)
+    {
+        var service = CreateService();
+        var pipelineTask = BlockingPipelineTask(id: taskId, runId: 5);
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _executorMock.ExecuteAsync(
+                pipelineTask.Command, Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var token = call.ArgAt<CancellationToken>(4);
+                running.SetResult();
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw unconfirmed(token);
+                }
+
+                return new ExecutorResult(0, false);
+            });
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([pipelineTask], new List<PendingTaskDto>());
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+        await running.Task;
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [taskId] = nameof(TaskExecutionStatus.Cancelled) });
+        await PollAndDrainAsync(service);
+
+        await _apiClientMock.DidNotReceive().CompleteTaskAsync(
+            taskId, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>());
+    }
+
+    // ACORE-001: a server operation (a package install, an Apache reload) cancelled from the server is reported
+    // stopped like a pipeline step once its executor proved the stop, and stays unreported without that proof.
+    [Fact]
+    public async Task ServerCancelledOperationTask_ReportsItStopped() =>
+        Assert.True(await CancelBlockingOperationTaskAsync(31, token => new OperationCanceledException(token)));
+
+    [Fact]
+    public async Task ServerCancelledOperationTask_WhoseProcessesAreNotProvenStopped_IsNotReportedStopped() =>
+        Assert.False(await CancelBlockingOperationTaskAsync(32, token => new ProcessTreeNotTerminatedException(token)));
+
+    private async Task<bool> CancelBlockingOperationTaskAsync(
+        int taskId, Func<CancellationToken, OperationCanceledException> stopOutcome)
+    {
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operationExecutor = Substitute.For<IOperationExecutor>();
+        operationExecutor.CanHandle(OperationKind.ServiceInstall).Returns(true);
+        operationExecutor.ExecuteAsync(
+                OperationKind.ServiceInstall, "ufw", Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var token = call.ArgAt<CancellationToken>(5);
+                running.SetResult();
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw stopOutcome(token);
+                }
+
+                return new ExecutorResult(0, false);
+            });
+        var service = CreateService(operationExecutors: [operationExecutor]);
+        var operationTask = new PendingTaskDto
+        {
+            Id = taskId,
+            Name = "install ufw",
+            Command = "ufw",
+            Operation = OperationKind.ServiceInstall,
+            EnvironmentVariables = [],
+            TimeoutSeconds = 600
+        };
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([operationTask], new List<PendingTaskDto>());
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+        await running.Task;
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [taskId] = nameof(TaskExecutionStatus.Cancelled) });
+        await PollAndDrainAsync(service);
+
+        return _apiClientMock.ReceivedCalls().Any(call =>
+            call.GetMethodInfo().Name == nameof(IServerApiClient.CompleteTaskAsync)
+            && call.GetArguments()[0] is int id && id == taskId
+            && call.GetArguments()[1] is TaskResultDto { Status: TaskExecutionStatus.Cancelled });
+    }
+
+    [Fact]
+    public async Task HostShutdown_DoesNotReportARunningPipelineTaskAsStoppedByCancellation()
+    {
+        var service = CreateService();
+        var pipelineTask = BlockingPipelineTask(id: 22, runId: 5);
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _executorMock.ExecuteAsync(
+                pipelineTask.Command, Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                running.SetResult();
+                await Task.Delay(Timeout.Infinite, call.ArgAt<CancellationToken>(4));
+                return new ExecutorResult(0, false);
+            });
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([pipelineTask]);
+        using var hostStopping = new CancellationTokenSource();
+
+        await service.PollOnceAsync(hostStopping.Token);
+        await running.Task;
+        await hostStopping.CancelAsync();
+        await service.DrainRunningTasksAsync();
+
+        await _apiClientMock.DidNotReceive().CompleteTaskAsync(
+            22, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>());
+    }
+
+    private static PendingTaskDto BlockingPipelineTask(int id, int runId) => new()
+    {
+        Id = id,
+        PipelineRunId = runId,
+        Name = $"work-{id}",
+        Command = $"sleep {id}",
+        Executor = ExecutorType.Shell,
+        EnvironmentVariables = [],
+        TimeoutSeconds = 600
+    };
 
     // While a self-update is tracked the agent is about to exit, so it claims nothing.
     [Fact]

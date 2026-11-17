@@ -90,6 +90,48 @@ public sealed class DemoContentSeederTests
     }
 
     [Fact]
+    public async Task SeedAsync_WritesOneCveWatchRunReportOfTheDemoProject_ThenIsIdempotent()
+    {
+        await using var db = CreateContext();
+        db.Organizations.Add(new Organization { Name = "Aetheus", Slug = "aetheus" });
+        await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 14, 12, 0, 0, TimeSpan.Zero));
+        var seed = await DemoDataSeeder.SeedDemoAsync(db, clock);
+        Assert.NotNull(seed);
+        var git = Substitute.For<IGitLightService>();
+        git.GetRepositoriesAsync(seed.TotoProjectId, Arg.Any<CancellationToken>()).Returns([]);
+        git.CreateRepositoryAsync(Arg.Any<CreateGitLightRepoRequest>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var tracked = new GitInternalRepo { ProjectId = seed.TotoProjectId, Name = "toto", Slug = "toto", DefaultBranch = "main", IsEmpty = true };
+            db.GitInternalRepos.Add(tracked);
+            db.SaveChanges();
+            return new GitLightRepoDto { Id = tracked.Id, ProjectId = seed.TotoProjectId, Name = "toto", Slug = "toto", DefaultBranch = "main", IsEmpty = true };
+        });
+        git.GetBranchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        var pipelineGit = Substitute.For<IPipelineGitService>();
+        pipelineGit.WriteProjectPipelineYamlAsync(
+                Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string>(), Arg.Any<int>())
+            .Returns((GitWriteOutcome.Committed, (string?)null));
+        var storage = Substitute.For<IArtifactStorageService>();
+        storage.SaveArtifactAsync(
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>(),
+                Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(call => ($"demo/{call.ArgAt<string>(3)}", "abc123"));
+        var sut = new DemoContentSeeder(
+            db, git, pipelineGit, storage, clock, Substitute.For<ILogger<DemoContentSeeder>>());
+
+        await sut.SeedAsync(seed, ct: TestContext.Current.CancellationToken);
+        await sut.SeedAsync(seed, ct: TestContext.Current.CancellationToken);
+
+        var report = await db.AnalysisReports.SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(seed.TotoProjectId, report.ProjectId);
+        Assert.Null(report.PipelineRunId);
+        Assert.Equal("cve-watch", report.ScannerKey);
+        Assert.NotEqual(0, report.OrganizationId);
+    }
+
+    [Fact]
     public async Task StartupSeeder_ProductionWithoutQaTier_DoesNothing()
     {
         await using var db = CreateContext();

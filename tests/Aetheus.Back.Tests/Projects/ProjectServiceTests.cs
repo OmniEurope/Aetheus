@@ -4,6 +4,7 @@ using Aetheus.Back.Components.Organizations;
 using Aetheus.Back.Components.Projects;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -58,7 +59,7 @@ public class ProjectServiceTests
                 [1] = new(
                     1, 81, "0123456789abcdef", "Ship portfolio view", gitDate,
                     91, "Deploy", PipelineStatus.Success, gitDate.AddMinutes(1),
-                    AnalysisGrade.B, ProjectProductionStatus.Online, 7)
+                    AnalysisGrade.B, ProjectProductionStatus.Online, 7, OnlineUserState: OnlineAudienceState.Measured, OnlineUserLastEventAt: gitDate.AddMinutes(2))
             });
 
         var result = await _sut.GetProjectsAsync(new ProjectPaginationRequest { Page = 1, PageSize = 25 }, ct: TestContext.Current.CancellationToken);
@@ -74,6 +75,9 @@ public class ProjectServiceTests
         Assert.Equal(AnalysisGrade.B, result.Items[0].LatestGateGrade);
         Assert.Equal(ProjectProductionStatus.Online, result.Items[0].ProductionStatus);
         Assert.Equal(7, result.Items[0].OnlineUserCount);
+        Assert.Equal(OnlineAudienceState.Measured, result.Items[0].OnlineUserState);
+        Assert.Equal(gitDate.AddMinutes(2), result.Items[0].OnlineUserLastEventAt);
+        Assert.Equal(OnlineAudienceState.Unavailable, result.Items[1].OnlineUserState);
         Assert.Null(result.Items[1].LastGitUpdateAt);
     }
 
@@ -117,6 +121,61 @@ public class ProjectServiceTests
         Assert.Equal(2, result.Tags.Count);
         Assert.Equal(AnalysisGrade.C, result.LatestGateGrade);
         Assert.Equal(2478, result.LatestGateGradeRunId);
+    }
+
+    [Fact]
+    public async Task GetProjectDetailAsync_NamesThePipelineOfTheRun_WhenThePipelineLowersTheGrade()
+    {
+        _repo.GetProjectDetailAsync(1, TestContext.Current.CancellationToken).Returns(new Project { Id = 1, Name = "Project", Pipelines = [] });
+        _repo.GetLatestGateGradeAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.B, PipelineRunId = 2478, Cause = AnalysisGradeCause.Pipeline });
+        _repo.GetRunPipelineAsync(2478, Arg.Any<CancellationToken>()).Returns(new RunPipelineRef(12, "Candidate"));
+
+        var result = await _sut.GetProjectDetailAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGradeCause.Pipeline, result!.LatestGateGradeCause);
+        Assert.Equal(12, result.LatestGateGradePipelineId);
+        Assert.Equal("Candidate", result.LatestGateGradePipelineName);
+    }
+
+    [Fact]
+    public async Task GetProjectDetailAsync_ReadsNoPipeline_WhenTheProjectItselfLowersTheGrade()
+    {
+        _repo.GetProjectDetailAsync(1, TestContext.Current.CancellationToken).Returns(new Project { Id = 1, Name = "Project", Pipelines = [] });
+        _repo.GetLatestGateGradeAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.D, PipelineRunId = 2478, Cause = AnalysisGradeCause.Project });
+
+        var result = await _sut.GetProjectDetailAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGradeCause.Project, result!.LatestGateGradeCause);
+        Assert.Null(result.LatestGateGradePipelineName);
+        await _repo.DidNotReceive().GetRunPipelineAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetProjectDetailAsync_CarriesTheProductionAddressTheRepositoryReads()
+    {
+        _repo.GetProjectDetailAsync(1, TestContext.Current.CancellationToken)
+            .Returns(new Project { Id = 1, Name = "Project", Pipelines = [] });
+        _repo.GetProductionAddressAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new PipelineRunDeployedAddressDto { AppUrl = "https://app.example.test", ApiUrl = "https://api.example.test" });
+
+        var result = await _sut.GetProjectDetailAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("https://app.example.test", result!.ProductionAddress!.AppUrl);
+        Assert.Equal("https://api.example.test", result.ProductionAddress.ApiUrl);
+    }
+
+    [Fact]
+    public async Task GetProjectDetailAsync_WithoutAProductionDeployment_HasNoProductionAddress()
+    {
+        _repo.GetProjectDetailAsync(1, TestContext.Current.CancellationToken)
+            .Returns(new Project { Id = 1, Name = "Project", Pipelines = [] });
+        _repo.GetProductionAddressAsync(1, Arg.Any<CancellationToken>()).Returns((PipelineRunDeployedAddressDto?)null);
+
+        var result = await _sut.GetProjectDetailAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(result!.ProductionAddress);
     }
 
     [Fact]
@@ -216,6 +275,100 @@ public class ProjectServiceTests
         var result = await _sut.UpdateProjectAsync(99, new UpdateProjectRequest { Name = "X" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
+    }
+
+    /// <summary>R-31: the wizard's branch ("main") becomes the project's DefaultBranch (what the overview card reads),
+    /// trimmed, nothing else changed, and the change is saved, audited and broadcast.</summary>
+    [Fact]
+    public async Task SetDefaultBranchAsync_Found_WritesOnlyTheTrimmedBranch()
+    {
+        var project = new Project { Id = 1, Name = "Wordmorrow", DefaultBranch = "develop", Description = "keep", Pipelines = [] };
+        _repo.FindProjectWithPipelinesAsync(1, TestContext.Current.CancellationToken).Returns(project);
+
+        var result = await _sut.SetDefaultBranchAsync(1, " main ", TestContext.Current.CancellationToken);
+
+        Assert.Equal("main", project.DefaultBranch);
+        Assert.Equal("main", result!.DefaultBranch);
+        Assert.Equal("Wordmorrow", project.Name);
+        Assert.Equal("keep", project.Description);
+        await _repo.Received(1).SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task SetDefaultBranchAsync_NotFound_ReturnsNullAndSavesNothing()
+    {
+        _repo.FindProjectWithPipelinesAsync(99, TestContext.Current.CancellationToken).Returns((Project?)null);
+
+        Assert.Null(await _sut.SetDefaultBranchAsync(99, "main", TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetDefaultBranchAsync_BlankBranch_IsRefusedBeforeAnyRead(string branch)
+    {
+        await Assert.ThrowsAsync<BadRequestException>(
+            () => _sut.SetDefaultBranchAsync(1, branch, TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetDefaultBranchAsync_ProjectWaitingForItsServerCleanup_IsRefused()
+    {
+        var project = new Project { Id = 1, Name = "Deleted", DeletionRequestedAt = DateTime.UtcNow, Pipelines = [] };
+        _repo.FindProjectWithPipelinesAsync(1, TestContext.Current.CancellationToken).Returns(project);
+
+        await Assert.ThrowsAsync<ConflictException>(
+            () => _sut.SetDefaultBranchAsync(1, "main", TestContext.Current.CancellationToken));
+        Assert.Null(project.DefaultBranch);
+    }
+
+    /// <summary>R-13: the expand/contract model of a project (its migration gate) is written alone, saved, and read back by the detail.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SetMigrationGateEnabledAsync_Found_WritesOnlyTheSetting(bool enabled)
+    {
+        var project = new Project { Id = 1, Name = "Atlas", Description = "keep", MigrationGateEnabled = !enabled, Pipelines = [] };
+        _repo.FindProjectWithPipelinesAsync(1, TestContext.Current.CancellationToken).Returns(project);
+
+        Assert.True(await _sut.SetMigrationGateEnabledAsync(1, enabled, TestContext.Current.CancellationToken));
+
+        Assert.Equal(enabled, project.MigrationGateEnabled);
+        Assert.Equal("keep", project.Description);
+        await _repo.Received(1).SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task SetMigrationGateEnabledAsync_NotFound_ReturnsFalseAndSavesNothing()
+    {
+        _repo.FindProjectWithPipelinesAsync(99, TestContext.Current.CancellationToken).Returns((Project?)null);
+
+        Assert.False(await _sut.SetMigrationGateEnabledAsync(99, true, TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetMigrationGateEnabledAsync_ProjectWaitingForItsServerCleanup_IsRefused()
+    {
+        var project = new Project { Id = 1, Name = "Deleted", DeletionRequestedAt = DateTime.UtcNow, Pipelines = [] };
+        _repo.FindProjectWithPipelinesAsync(1, TestContext.Current.CancellationToken).Returns(project);
+
+        await Assert.ThrowsAsync<ConflictException>(
+            () => _sut.SetMigrationGateEnabledAsync(1, true, TestContext.Current.CancellationToken));
+        Assert.False(project.MigrationGateEnabled);
+    }
+
+    [Fact]
+    public async Task GetProjectDetailAsync_ReportsTheMigrationGateSetting()
+    {
+        var project = new Project { Id = 1, Name = "Atlas", MigrationGateEnabled = true, Pipelines = [] };
+        _repo.GetProjectDetailAsync(1, TestContext.Current.CancellationToken).Returns(project);
+
+        var result = await _sut.GetProjectDetailAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.True(result!.MigrationGateEnabled);
     }
 
     [Fact]

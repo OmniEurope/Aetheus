@@ -340,6 +340,11 @@ public sealed class GitApi(HttpClient http) : ApiClientBase(http)
         => PostJsonAsync<AttachExternalRepoRequest, ExternalRepoDto>("api/external-repos/attach", request, ct);
 
 
+    /// <summary>Recette R-4: creates the project mirror of the external address the project names; the refusal (address
+    /// not public, unreachable, project already has a repository) comes back with the server's message.</summary>
+    public Task<ApiOutcome<ExternalRepoDto, ApiError>> MirrorProjectRepositoryAddressAsync(int projectId, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<object?, ExternalRepoDto>($"api/external-repos/project/{projectId}/mirror-address", null, ct);
+
     public async Task<ExternalRepoDto?> SyncExternalRepoNowAsync(int projectId)
     {
         var response = await Http.PostAsync($"api/external-repos/project/{projectId}/sync", null);

@@ -7,6 +7,7 @@ public static class UsersModuleExtensions
     {
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IAccountSetupService, AccountSetupService>();
         services.AddScoped<IUserPreferenceRepository, UserPreferenceRepository>();
         services.AddScoped<IUserPreferenceService, UserPreferenceService>();
         return services;

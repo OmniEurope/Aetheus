@@ -136,10 +136,16 @@ public sealed class MailTemplateService(
     }
 
     public async Task<MailTemplateTestResultDto> SendTestAsync(
-        MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? userId, CancellationToken ct = default)
+        MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? userId, int? organizationId,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        EnsureKnown(kind, language);
+        // An organization's draft is one of the kinds it may customize, of an organization that exists: the same
+        // checks as reading or saving it, so an organization's administrator never tests a platform-only mail.
+        if (organizationId is { } organization)
+            await EnsureOrganizationKindAsync(organization, kind, language, ct).ConfigureAwait(false);
+        else
+            EnsureKnown(kind, language);
         EnsureOfferedVariables(kind, request);
         var to = userId is { } id ? await repository.FindUserEmailAsync(id, ct).ConfigureAwait(false) : null;
         if (string.IsNullOrWhiteSpace(to))
@@ -150,7 +156,8 @@ public sealed class MailTemplateService(
         var mail = MailTemplateRenderer.Render(request.Subject, request.Body, MailTemplateCatalog.Samples(kind, language), style);
         var result = await sender.SendAsync(new EmailMessage(to.Trim(), mail.Subject, mail.Text, mail.Html), ct).ConfigureAwait(false);
         if (result.Status == EmailSendStatus.Sent)
-            await audit.LogAsync("Tested", "MailTemplate", null, $"{kind} ({language})", ct).ConfigureAwait(false);
+            await audit.LogAsync("Tested", "MailTemplate", null,
+                organizationId is { } tested ? $"{kind} ({language}) of organization {tested}" : $"{kind} ({language})", ct).ConfigureAwait(false);
         return new MailTemplateTestResultDto
         {
             Status = result.Status switch

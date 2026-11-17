@@ -1,0 +1,13 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+
+@* Recette R-21: why the Gate is in error, one line per refused producer or report (the tool, the step, the report with its
+   artifact and file, the reason). Nothing is drawn for a Gate that is not in error. *@
+@if (Lines.Count > 0)
+{
+    <OmniAlert Severity="OmniSeverity.Danger" Title="@L["GateErrorTitle"]" data-testid="gate-error-causes">
+        @foreach (var line in Lines)
+        {
+            <div data-testid="gate-error-cause">@line</div>
+        }
+    </OmniAlert>
+}

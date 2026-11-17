@@ -1,0 +1,16 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-005 lot 3: a refused write of a schedule is said in place, never silently. A 403 (the rights changed), a
+   404 (the pipeline is gone) and a 409 (what was read is no longer true: another change, or the repository moved)
+   offer "Reload", which reads the plan again. The backend's own reason follows the sentence. Shown by the page
+   and by the dialog. *@
+<OmniAlert Severity="OmniSeverity.Danger" Live="true" Title="@Title" data-testid="schedule-refusal">
+    <OmniStack Gap="OmniSpacing.Small">
+        <span>@Text</span>
+        @if (OffersReload)
+        {
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(_ => OnReload.InvokeAsync())" data-testid="schedule-refusal-reload"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Reload"]</span></ChildContent></OmniButton>
+            </OmniStack>
+        }
+    </OmniStack>
+</OmniAlert>

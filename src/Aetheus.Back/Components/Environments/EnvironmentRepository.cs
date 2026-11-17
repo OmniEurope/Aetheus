@@ -97,6 +97,8 @@ public class EnvironmentRepository(AppDbContext db) : IEnvironmentRepository
                 e.ProjectId,
                 e.Servers.Select(link => link.ServerId).ToList(),
                 e.LinkedProjectServers.Select(link => link.ProjectServer.ProjectId).Distinct().ToList()))
+            // Two collections of one environment: one query each, not one join repeating a row for every pair.
+            .AsSplitQuery()
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 

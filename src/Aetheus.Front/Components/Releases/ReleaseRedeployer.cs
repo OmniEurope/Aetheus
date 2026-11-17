@@ -21,6 +21,8 @@ internal sealed class ReleaseRedeployer(
     NavigationManager navigation,
     IStringLocalizer<AppStrings> localizer)
 {
+    internal const int MaxConcurrentReads = 4;
+
     public async Task<bool> RedeployAsync(ReleaseDto release)
     {
         ArgumentNullException.ThrowIfNull(release);
@@ -43,7 +45,20 @@ internal sealed class ReleaseRedeployer(
     private async Task<int?> ChooseDeployPipelineAsync(int projectId)
     {
         var pipelines = await api.Pipelines.GetPipelinesAsync(pageSize: 100, projectId: projectId);
-        var takesAVersion = await Task.WhenAll(pipelines.Items.Select(pipeline => TakesAVersionAsync(pipeline.Id)));
+        // One settings read per pipeline, a few at a time: a project with 100 pipelines must not send 100 at once.
+        using var gate = new SemaphoreSlim(MaxConcurrentReads);
+        var takesAVersion = await Task.WhenAll(pipelines.Items.Select(async pipeline =>
+        {
+            await gate.WaitAsync();
+            try
+            {
+                return await TakesAVersionAsync(pipeline.Id);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }));
         var deployments = pipelines.Items.Where((_, index) => takesAVersion[index]).ToList();
         switch (deployments.Count)
         {

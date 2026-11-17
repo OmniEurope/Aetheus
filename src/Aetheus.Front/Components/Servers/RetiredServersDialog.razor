@@ -1,6 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* R-99: OE's veil lies over the dialog while a server is being purged; its content stays mounted under it. *@
-<OmniStack Class="@(_purgingIds.Count > 0 ? "omni-busy" : null)" aria-busy="@(_purgingIds.Count > 0 ? "true" : "false")" data-testid="retired-servers-zone">
+@* R-99, R-1: the page veil is held while a server is being purged; the dialog's content stays mounted. *@
+<VeilHold Busy="@(_purgingIds.Count > 0)" />
+<OmniStack data-testid="retired-servers-zone">
 <OmniAlert Severity="OmniSeverity.Info">
     @L["RetiredServersHint"]
 </OmniAlert>

@@ -55,7 +55,8 @@ public class PipelineDeploymentGradeGateTests
 
         await h.SystemTasks.DidNotReceive().CreateSystemTasksAsync(
             Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>());
         await h.Finalizer.Received(1).FailRunWithUnmatchedStagesAsync(
             RunId, Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
     }
@@ -235,8 +236,8 @@ public class PipelineDeploymentGradeGateTests
                     : [new PipelineStepRun { StageName = "Restore candidate", Status = TaskExecutionStatus.Pending }];
 
             Repo.HasActiveArtifactCollectionAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
-            Repo.GetCompletedStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(completedStages ?? []);
-            Repo.GetTerminalStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(completedStages ?? []);
+            Repo.GetStageProgressAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+                .Returns(new PipelineStageProgress(completedStages ?? [], completedStages ?? []));
             Repo.HasAnyFailedStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
             Repo.HasAnyRunningStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
             Repo.GetActiveStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
@@ -272,7 +273,8 @@ public class PipelineDeploymentGradeGateTests
                 .Returns(true);
             SystemTasks.CreateSystemTasksAsync(
                 Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>())
+                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>())
                 .Returns(true);
             Finalizer.IsRunActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
             Finalizer.When(f => f.MarkStepsAs(Arg.Any<List<PipelineStepRun>>(), Arg.Any<TaskExecutionStatus>()))

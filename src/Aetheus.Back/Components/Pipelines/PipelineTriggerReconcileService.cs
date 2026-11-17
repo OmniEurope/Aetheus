@@ -23,7 +23,7 @@ public sealed class PipelineTriggerReconcileService(
     ILogger<PipelineTriggerReconcileService> logger,
     IOptions<BackgroundServicesOptions> options,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:pipeline-trigger-reconcile")
 {
     /// <summary>How many sweeps may try to re-apply one stranded run's decision before giving up on it.</summary>
     private const int MaxStrandedAttempts = 5;
@@ -37,15 +37,7 @@ public sealed class PipelineTriggerReconcileService(
     private readonly TimeSpan _stuckTimeout = options.Value.TriggerStepStuckTimeout;
     private readonly TimeSpan _runStuckTimeout = options.Value.RunStuckTimeout;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync("aetheus:pipeline-trigger-reconcile", RunLeaderLoopAsync, stoppingToken).ConfigureAwait(false);
-    }
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(_interval);
         // do..while: sweep immediately on startup (recovers events lost across the restart), then per interval.
@@ -348,6 +340,16 @@ public sealed class PipelineTriggerReconcileService(
     // cancellation race, transient exception). Such a run has Pending steps but no work in flight and
     // therefore no future callback. Re-drive the stage machine after a short grace instead of waiting
     // forever. The run-level lock makes this safe if a delayed normal callback arrives concurrently.
+    //
+    // R-44: "pending steps, nothing in flight" is NOT by itself a fault. The scheduler itself leaves a run
+    // in that state, on purpose, whenever it has nothing it may dispatch yet (a throttled group, a locked
+    // resource or environment, a runner offline, an artifact collection or a cancelled task's stop still
+    // to be acknowledged) and, for most of them, records why in PipelineRun.WaitingReason. Nothing wakes
+    // such a run up but this pass, so the re-drive IS the wait's polling and repeats every sweep for as
+    // long as the wait lasts. The grace is also measured from the run's start, not from its last
+    // progress, so a long run caught between two stages (completion saved, next tasks not yet) is picked
+    // up as well; the run lock serializes the re-drive behind the pass in flight, which has then done
+    // the work. Only a run with no recorded wait is worth a warning (lost callback or mid-flight race).
     private async Task ReconcileStalledSchedulingAsync(
         AsyncServiceScope scope, IPipelineRepository repo, DateTime now, CancellationToken ct)
     {
@@ -359,7 +361,7 @@ public sealed class PipelineTriggerReconcileService(
         {
             try
             {
-                logger.LogWarning("Run {RunId} has pending pipeline steps but no in-flight work; re-driving its scheduler", runId);
+                await LogSchedulerRedriveAsync(repo, runId, ct).ConfigureAwait(false);
                 await runService.ReconcileRunAsync(runId, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -376,6 +378,24 @@ public sealed class PipelineTriggerReconcileService(
                     ex.Message);
             }
         }
+    }
+
+    // A recorded wait is the scheduler working as designed (see pass 2): Information, naming the wait.
+    // No recorded wait means a completion callback was lost or is still mid-flight: Warning.
+    private async Task LogSchedulerRedriveAsync(IPipelineRepository repo, int runId, CancellationToken ct)
+    {
+        var waitingReason = (await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false))?.WaitingReason;
+        if (string.IsNullOrWhiteSpace(waitingReason))
+        {
+            logger.LogWarning(
+                "Run {RunId} has pending pipeline steps, nothing in flight and no recorded wait (a completion callback was lost or is mid-flight); re-driving its scheduler",
+                runId);
+            return;
+        }
+
+        logger.LogInformation(
+            "Run {RunId} is waiting with nothing in flight ({WaitingReason}); re-checking whether its next stage can be dispatched",
+            runId, waitingReason);
     }
 
     // Pass 3: run-level backstop. A run wedged in Running with no in-flight task and no trigger step

@@ -14,7 +14,13 @@ namespace Aetheus.Agent.Core.Tests;
 /// The contract being pinned: findings travel as a PUBLISHED STATUS on a green step, never as a red
 /// one. A red step would tell the gate nothing about whether the suite ran, and that distinction is
 /// the entire reason the step exists.
+///
+/// It runs in the process-spawning collection, alone, like every test that starts a real process. The runner is a
+/// script written then executed at once: a process another test forks at that moment can hold a copy of the script's
+/// write handle until it execs, and Linux then refuses to run the script ("Text file busy", exit 126), so the step has
+/// no TRX to grade and fails (the failure a full parallel run showed, not reproduced alone).
 /// </summary>
+[Collection(ProcessSpawningTestCollection.Name)]
 public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
 {
     private readonly string _workspace = Path.Combine(
@@ -382,6 +388,119 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("0", PublishedStatus());
         Assert.True(File.Exists(Path.Combine(results, "20260912101500123", "coverage.cobertura.xml")));
+    }
+
+    // --- rerun_failed_tests (PLAN-006) ---
+
+    /// <summary>A VSTest runner for two attempts: the first (no <c>--filter</c>) publishes <c>staged</c>
+    /// into the results directory and exits <paramref name="firstExit"/>; the rerun (with <c>--filter</c>)
+    /// records its argv, publishes <c>staged-rerun</c> into <c>rerun</c> and exits <paramref name="rerunExit"/>.</summary>
+    private string RerunningRunner(int firstExit, int rerunExit)
+    {
+        var path = Path.Combine(_workspace, OperatingSystem.IsWindows() ? "rerunner.cmd" : "rerunner.sh");
+        File.WriteAllText(
+            path,
+            OperatingSystem.IsWindows()
+                ? "@echo off\r\necho %* | findstr /c:\"--filter\" >nul && goto rerun\r\n" + WindowsPublishStaged + $"exit /b {firstExit}\r\n"
+                  + ":rerun\r\necho %* > \"%~dp0rerun-args.txt\"\r\n"
+                  + "if not exist \"%~dp0coverage\\backend\\rerun\" mkdir \"%~dp0coverage\\backend\\rerun\"\r\n"
+                  + "if exist \"%~dp0staged-rerun\\*\" copy /y \"%~dp0staged-rerun\\*\" \"%~dp0coverage\\backend\\rerun\\\" >nul\r\n"
+                  + $"exit /b {rerunExit}\r\n"
+                : "#!/bin/sh\nd=\"$(dirname \"$0\")\"\ncase \" $* \" in *\" --filter \"*)\n"
+                  + "  printf '%s\\n' \"$@\" > \"$d/rerun-args.txt\"; mkdir -p \"$d/coverage/backend/rerun\"\n"
+                  + $"  cp \"$d\"/staged-rerun/* \"$d/coverage/backend/rerun/\" 2>/dev/null; exit {rerunExit};;\nesac\n"
+                  + PosixPublishStaged + $"exit {firstExit}\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return path;
+    }
+
+    private async Task<ExecutorResult> RunWithRerunAsync(string firstTrx, string? rerunTrx, int rerunExit, bool rerun = true)
+    {
+        _ = ResultsDirectory;
+        Stage("backend.trx", firstTrx);
+        if (rerunTrx is not null)
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(_workspace, "staged-rerun")).FullName, "backend.trx"), rerunTrx);
+        var executor = new PipelineDotnetTestOperationExecutor(
+            NullLogger<PipelineDotnetTestOperationExecutor>.Instance, new PhysicalFileSystemReader());
+        var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["WORKSPACE"] = _workspace,
+            [PipelineDotnetTestVariables.ResultsDirectory] = "coverage/backend",
+            [PipelineDotnetTestVariables.StatusVariable] = "BACKEND_STATUS",
+            [PipelineDotnetTestVariables.TrxName] = "backend.trx",
+            [PipelineDotnetTestVariables.DotnetPath] = RerunningRunner(firstExit: 1, rerunExit)
+        };
+        if (rerun)
+            variables[PipelineDotnetTestVariables.RerunFailedTests] = "true";
+        return await executor.ExecuteAsync(
+            OperationKind.PipelineDotnetTest, "tests/Sample.Tests", variables, timeoutSeconds: 60,
+            onOutput: (line, _) =>
+            {
+                _output.Add(line);
+                return Task.CompletedTask;
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
+    }
+
+    private static readonly (string, string, string, string) Stable = ("S.C", "Stable", "S.C.Stable", "Passed");
+
+    [Fact]
+    public async Task WithRerun_ATestThatPassesOnItsRerunIsFlaky_NamedAndNotCountedInTheStatus()
+    {
+        var result = await RunWithRerunAsync(
+            FailedTestRerunTests.Trx(Stable, ("S.C", "Lease", "S.C.Lease", "Failed")),
+            FailedTestRerunTests.Trx(("S.C", "Lease", "S.C.Lease", "Passed")), rerunExit: 0);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("0", PublishedStatus());
+        var results = ResultsDirectory;
+        Assert.Equal("S.C.Lease\n", File.ReadAllText(Path.Combine(results, "flaky-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(results, "failed-tests.txt")));
+        // One argument per line on POSIX, the raw command line on Windows: compared space-joined.
+        // The results directory is the workspace joined with the step's "coverage/backend": slashes compared alike.
+        var rerunArguments = string.Join(' ', File.ReadAllLines(Path.Combine(_workspace, "rerun-args.txt")).Select(line => line.Trim()))
+            .Replace('\\', '/');
+        Assert.Contains("--filter FullyQualifiedName=S.C.Lease", rerunArguments, StringComparison.Ordinal);
+        Assert.Contains("--results-directory " + Path.Combine(results, "rerun").Replace('\\', '/'), rerunArguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("--collect", rerunArguments, StringComparison.Ordinal);
+        Assert.Contains(_output, line => line == "Flaky test in tests/Sample.Tests: S.C.Lease failed, then passed on its rerun.");
+    }
+
+    [Fact]
+    public async Task WithRerun_ATestThatFailsTwiceStaysAFailure()
+    {
+        var result = await RunWithRerunAsync(
+            FailedTestRerunTests.Trx(Stable, ("S.C", "Broken", "S.C.Broken", "Failed")),
+            FailedTestRerunTests.Trx(("S.C", "Broken", "S.C.Broken", "Failed")), rerunExit: 1);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", PublishedStatus());
+        Assert.Equal("S.C.Broken\n", File.ReadAllText(Path.Combine(ResultsDirectory, "failed-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(ResultsDirectory, "flaky-tests.txt")));
+    }
+
+    [Fact]
+    public async Task WithRerun_ARerunWithoutEvidenceLeavesTheFirstFailuresStanding()
+    {
+        var result = await RunWithRerunAsync(
+            FailedTestRerunTests.Trx(Stable, ("S.C", "Lease", "S.C.Lease", "Failed")), rerunTrx: null, rerunExit: 0);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", PublishedStatus());
+        Assert.False(File.Exists(Path.Combine(ResultsDirectory, "flaky-tests.txt")));
+    }
+
+    [Fact]
+    public async Task WithoutRerun_TheFailedTestsAreNotRunAgain()
+    {
+        var result = await RunWithRerunAsync(
+            FailedTestRerunTests.Trx(Stable, ("S.C", "Lease", "S.C.Lease", "Failed")),
+            FailedTestRerunTests.Trx(("S.C", "Lease", "S.C.Lease", "Passed")), rerunExit: 0, rerun: false);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", PublishedStatus());
+        Assert.False(File.Exists(Path.Combine(_workspace, "rerun-args.txt")));
     }
 
     public void Dispose()

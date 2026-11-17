@@ -52,6 +52,26 @@ public sealed class AnalysisProjectSummaryLinksTests : IDisposable
         Assert.Equal("1.4.2", summary.LatestReleaseVersion);
     }
 
+    /// <summary>R-25: the latest release's short application version is the series and the release number
+    /// of the run that published it ("1.5.24"), not the long candidate identifier.</summary>
+    [Fact]
+    public async Task Summary_CarriesTheApplicationVersionOfTheRunThatPublishedTheLatestRelease()
+    {
+        _db.Projects.Add(new Project { Id = 7, Name = "Versioned", Description = "d" });
+        _db.PipelineRuns.AddRange(
+            new PipelineRun { Id = 300, ReleaseSeries = "1.5", ReleaseNumber = 23 },
+            new PipelineRun { Id = 301, ReleaseSeries = "1.5", ReleaseNumber = 24 });
+        _db.Releases.AddRange(
+            new Release { Id = 20, ProjectId = 7, Version = "c-1111111111111111", PublishedAt = _now.AddDays(-2), DetectedAt = _now.AddDays(-2), CreatedByPipelineRunId = 300 },
+            new Release { Id = 21, ProjectId = 7, Version = "c-4dafab96a5d19d9b957bb7", PublishedAt = _now.AddDays(-1), DetectedAt = _now.AddDays(-1), CreatedByPipelineRunId = 301, PipelineRunId = 999 });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var summary = await new AnalysisProjectSummaryRepository(_db).GetAsync(7, TestContext.Current.CancellationToken);
+
+        Assert.Equal("c-4dafab96a5d19d9b957bb7", summary.LatestReleaseVersion);
+        Assert.Equal("1.5.24", summary.LatestReleaseApplicationVersion);
+    }
+
     [Fact]
     public async Task Summary_WithoutHistory_LeavesTheLinksEmpty()
     {
@@ -64,6 +84,7 @@ public sealed class AnalysisProjectSummaryLinksTests : IDisposable
         Assert.Null(summary.LastAnalysisRunId);
         Assert.Null(summary.LatestReleaseId);
         Assert.Null(summary.LatestReleaseVersion);
+        Assert.Null(summary.LatestReleaseApplicationVersion);
     }
 
     private AnalysisEvaluation Evaluation(int id, int runId, DateTime evaluatedAt)

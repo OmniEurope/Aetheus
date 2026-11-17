@@ -1,0 +1,60 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-28: the exclusion rules of the organization. A rule moves the log lines it matches to the page's second tab;
+   it filters the view only, nothing is removed. Opened from the page's menu (all the rules) or from a log line
+   (the new rule is pre-filled from that line). No field takes the focus on open. *@
+<OmniStack Gap="OmniSpacing.Medium">
+    @if (_organizationId is null)
+    {
+        @* R-34: the organization is chosen in the dialog itself; the rules load once it is. *@
+        <OrganizationRequiredPrompt Message="@L["SystemLogRulesNoOrganization"]" />
+    }
+    else
+    {
+        <OmniTemplateForm TModel="SystemLogRuleModel" Model="@_model" OnValidSubmit="@AddAsync">
+            <OmniDataAnnotationsValidator Localizer="@L" />
+            <OmniFormField Label="@L["SystemLogRulePattern"]" Help="@L["SystemLogRulePatternHelp"]" For="system-log-rule-pattern" Required="true">
+                <OmniTextBox Id="system-log-rule-pattern" @bind-Value="_model.Pattern" />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.Pattern)" />
+            <OmniFormField Label="@L["SystemLogRuleCategory"]" Help="@L["SystemLogRuleCategoryHelp"]" For="system-log-rule-category">
+                <OmniTextBox Id="system-log-rule-category" @bind-Value="_model.Category" />
+            </OmniFormField>
+            <ValidationMessage For="@(() => _model.Category)" />
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["SystemLogRuleAdd"]</span></ChildContent></OmniButton>
+        </OmniTemplateForm>
+
+        @if (_error is not null)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger">@_error</OmniAlert>
+        }
+
+        @if (_loadFailed)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+        }
+        else if (_rules.Count == 0)
+        {
+            <EmptyState Icon="filter_list" Title="@L["SystemLogRulesEmpty"]" />
+        }
+        else
+        {
+            <OmniStack Gap="OmniSpacing.Small" Class="system-log-rules">
+                @foreach (var rule in _rules)
+                {
+                    var current = rule;
+                    <OmniRow Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Small" Class="system-log-rule">
+                        <OmniSwitch TValue="bool" Value="@current.Enabled" ValueChanged="@(enabled => SetEnabledAsync(current, enabled))" Id="@($"system-log-rule-{current.Id}")">
+                            <span title="@current.Pattern">@current.Pattern</span>
+                            @if (current.Category.Length > 0)
+                            {
+                                <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@current.Category</OmniBadge>
+                            }
+                        </OmniSwitch>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(current))" title="@L["SystemLogRuleDelete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                    </OmniRow>
+                }
+            </OmniStack>
+        }
+    }
+    <DialogFooter CancelText="@L["Close"]" OnCancel="@(() => Dialog.Close())" />
+</OmniStack>

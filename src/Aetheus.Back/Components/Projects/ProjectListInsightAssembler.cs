@@ -16,7 +16,8 @@ internal sealed record ProjectListRun(
     string PipelineName,
     PipelineStatus Status,
     DateTime StartedAt,
-    ProjectListCurrentStep? CurrentStep);
+    ProjectListCurrentStep? CurrentStep,
+    int BuildNumber = 0);
 
 /// <summary>An enabled monitored application of a project, with its live analytics sessions.</summary>
 internal sealed record ProjectListApp(
@@ -24,7 +25,8 @@ internal sealed record ProjectListApp(
     AppHealthStatus CurrentStatus,
     bool AnalyticsEnabled,
     EnvironmentType? EnvironmentType,
-    int ActiveSessionCount);
+    int ActiveSessionCount,
+    DateTime? AnalyticsLastIngestAt = null);
 
 /// <summary>Assembles one project list insight from the rows <see cref="ProjectRepository"/> reads; no
 /// query of its own.</summary>
@@ -67,7 +69,9 @@ internal static class ProjectListInsightAssembler
         ProjectLatestCommit? commit,
         ProjectListRun? run,
         AnalysisGrade? grade,
-        IReadOnlyCollection<ProjectListApp> productionApps)
+        IReadOnlyCollection<ProjectListApp> productionApps,
+        AnalysisQualificationDto? gradeQualification = null,
+        DateTime activeWindowStartUtc = default)
     {
         var analyticsAvailable = productionApps.Any(app => app.AnalyticsEnabled);
         return new ProjectListInsight(
@@ -88,6 +92,11 @@ internal static class ProjectListInsightAssembler
             run?.Status == PipelineStatus.Running,
             run is { Status: PipelineStatus.Running, CurrentStep: { } step }
                 ? $"{NormalizeStageName(step.StageName)} · {step.StepName}"
-                : null);
+                : null,
+            run?.BuildNumber,
+            gradeQualification,
+            OnlineAudience.Combine(productionApps.Select(app => OnlineAudience.Resolve(
+                app.AnalyticsEnabled, app.ActiveSessionCount, app.AnalyticsLastIngestAt, activeWindowStartUtc))),
+            productionApps.Where(app => app.AnalyticsEnabled).Max(app => app.AnalyticsLastIngestAt));
     }
 }

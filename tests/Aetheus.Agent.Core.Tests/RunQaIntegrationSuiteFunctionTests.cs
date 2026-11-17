@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Aetheus.Agent.Core.Functions;
+using Aetheus.Agent.Core.Operations;
 using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Agent.Core.Tests;
@@ -181,7 +182,7 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
     }
 
     [Fact]
-    public async Task AFailureThatPassesOnItsRerun_IsFlakyNamedAndStillFailsTheSuite()
+    public async Task AFailureThatPassesOnItsRerun_IsFlakyNamedAndDoesNotFailTheSuite()
     {
         _harness.Executable("bin/docker");
         _trx = FailedTestRerunTests.Trx(
@@ -193,7 +194,7 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         var (result, variables) = await RunAsync();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        Assert.Equal("0", variables["INTEGRATION_SUITE_STATUS"]);
         Assert.Equal(2, Tests.Length);
         Assert.Equal(
             ["test", "--project", Project, "--configuration", "Release", "--no-build", "--no-restore", "--no-progress",
@@ -204,12 +205,12 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         Assert.True(File.Exists(Path.Combine(Results, "integration-rerun.trx")));
         Assert.Equal(_testProcesses[0].Environment["AETHEUS_TESTCONTAINERS_RUN"], _testProcesses[1].Environment["AETHEUS_TESTCONTAINERS_RUN"]);
         Assert.Equal("Integration.Api.Login\n", File.ReadAllText(Path.Combine(Results, "flaky-tests.txt")));
-        Assert.Equal("Integration.Api.Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
-        Assert.Contains(_harness.Log, entry => entry.Line == "Failed tests (1): Integration.Api.Login");
+        Assert.False(File.Exists(Path.Combine(Results, "failed-tests.txt")));
+        Assert.DoesNotContain(_harness.Log, entry => entry.Line.StartsWith("Failed tests (", StringComparison.Ordinal));
         Assert.Contains(_harness.Log, entry =>
             entry.Line == "Flaky test in Integration suite current: Integration.Api.Login failed, then passed on its rerun." && entry.Level == TaskLogLevel.Warning);
         Assert.Contains(_harness.Log, entry => entry.Line == "Flaky tests (1): Integration.Api.Login");
-        Assert.Contains(_harness.Log, entry => entry.Line == "Integration suite current produced an executed-test proof with findings status 1.");
+        Assert.Contains(_harness.Log, entry => entry.Line == "Integration suite current produced an executed-test proof with findings status 0.");
     }
 
     [Fact]
@@ -249,7 +250,7 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         Assert.Equal(FailedTestRerun.MaxFailures + 1, File.ReadAllLines(Path.Combine(Results, "failed-tests.txt")).Length);
         Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
         Assert.Contains(_harness.Log, entry =>
-            entry.Line == "Integration suite current: 11 tests failed, more than the rerun cap of 10; nothing is rerun, so many failures are a break rather than flakiness.");
+            entry.Line == "Integration suite current: 21 tests failed, more than the rerun cap of 20; nothing is rerun, so many failures are a break rather than flakiness.");
     }
 
     [Fact]
@@ -286,7 +287,8 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         var (result, variables) = await RunAsync();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        // Login failed, then passed: flaky, which does not fail the suite (PLAN-006).
+        Assert.Equal("0", variables["INTEGRATION_SUITE_STATUS"]);
         var rerun = Tests[1];
         Assert.Equal("trx;LogFileName=integration-rerun.trx", rerun[Array.LastIndexOf(rerun, "--logger") + 1]);
         Assert.Equal(["--filter", "FullyQualifiedName=Integration.Api.Login"], rerun[^2..]);
@@ -452,6 +454,155 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         var (result, _) = await RunAsync();
 
         Assert.Contains("Unexpected static web assets content root: /tmp/unexpected/content/", result.FailureReason, StringComparison.Ordinal);
+        Assert.Empty(_dotnet);
+    }
+
+    /// <summary>The V-1 tree of a release whose global.json selects no testing platform: VSTest.</summary>
+    private void AV1OnVSTest()
+    {
+        _parameters["source_root"] = ".nminus1-source";
+        _parameters["label"] = "previous";
+        Source(".nminus1-source");
+        _harness.Write("ws/.nminus1-source/global.json", """{ "sdk": { "version": "10.0.100" } }""");
+    }
+
+    [Fact]
+    public async Task TheRollbackRelevantFilter_SelectsItsTraitOnTheTestingPlatform_AndOnlyTheFailedMethodsOnItsRerun()
+    {
+        _parameters["test_filter"] = "Category=RollbackRelevant";
+        _trx = Result("Login", "Failed");
+        _testExit = 2;
+        _rerunTrx = Result("Login", "Passed");
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["--filter-trait", "Category=RollbackRelevant"], Tests[0][^2..]);
+        Assert.Equal(["--filter-method", "Integration.Api.Login"], Tests[1][^2..]);
+        Assert.DoesNotContain("--filter-trait", Tests[1]);
+        Assert.Contains(_harness.Log, entry => entry.Line == "Integration suite current test filter: Category=RollbackRelevant.");
+    }
+
+    [Fact]
+    public async Task ASelection_DropsTheTransitionMSBuildProperty_SoTheRerunKeepsOnlyItsMethods()
+    {
+        // The property through which the pipeline selects the same tests on an agent that predates
+        // test_filter; kept, it would widen the rerun's --filter-method back to the whole selection.
+        _env["TestingPlatformCommandLineArguments"] = "--filter-method Integration.Api.Login Integration.Api.Read";
+        _env["QA_INTEGRATION_TEST_METHODS_CURRENT"] = "Integration.Api.Login Integration.Api.Read";
+        _trx = Result("Login", "Failed");
+        _testExit = 2;
+        _rerunTrx = Result("Login", "Passed");
+
+        await RunAsync();
+
+        Assert.Equal(2, _testProcesses.Count);
+        Assert.All(_testProcesses, process => Assert.False(process.Environment.ContainsKey("TestingPlatformCommandLineArguments")));
+        Assert.Equal(["--filter-method", "Integration.Api.Login"], Tests[1][^2..]);
+    }
+
+    [Fact]
+    public async Task WithoutASelection_TheTransitionMSBuildPropertyReachesDotnetTest()
+    {
+        // An agent of this release run by a pipeline that still selects through the property alone.
+        _env["TestingPlatformCommandLineArguments"] = "--filter-trait Category=RollbackRelevant";
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        await RunAsync();
+
+        Assert.Equal("--filter-trait Category=RollbackRelevant", Assert.Single(_testProcesses).Environment["TestingPlatformCommandLineArguments"]);
+    }
+
+    [Fact]
+    public async Task TheRollbackRelevantFilter_IsACategoryExpressionOnVSTest()
+    {
+        AV1OnVSTest();
+        _parameters["test_filter"] = "Category=RollbackRelevant";
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["--filter", "Category=RollbackRelevant"], Assert.Single(Tests)[^2..]);
+    }
+
+    [Fact]
+    public async Task TheLabelsRunVariable_StandsInForTheParameter_AndAnotherLabelsVariableIsIgnored()
+    {
+        // A control plane whose catalog predates test_filter refuses it in with:, so the pipeline sets the
+        // variable of the V-1 label; the suite of another label must not read it.
+        _env["QA_INTEGRATION_TEST_FILTER_CURRENT"] = "Category=RollbackRelevant";
+        _env["QA_INTEGRATION_TEST_METHODS_PREVIOUS"] = "Integration.Api.Other";
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["--filter-trait", "Category=RollbackRelevant"], Assert.Single(Tests)[^2..]);
+    }
+
+    [Fact]
+    public async Task NamedMethods_RunThroughTheMethodFilterOnTheTestingPlatform()
+    {
+        _env["QA_INTEGRATION_TEST_METHODS_CURRENT"] = "Integration.Api.Login\nIntegration.Api.Read  Integration.Api.Write";
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["--filter-method", "Integration.Api.Login", "Integration.Api.Read", "Integration.Api.Write"], Assert.Single(Tests)[^4..]);
+        Assert.Contains(_harness.Log, entry => entry.Line
+            == "Integration suite current test filter: 3 named test method(s): Integration.Api.Login, Integration.Api.Read, Integration.Api.Write.");
+    }
+
+    [Fact]
+    public async Task NamedMethods_RunThroughAFullyQualifiedNameFilterOnVSTest()
+    {
+        AV1OnVSTest();
+        _env["QA_INTEGRATION_TEST_METHODS_PREVIOUS"] = "Integration.Api.Login Integration.Api.Read Integration.Api.Write";
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["--filter", "FullyQualifiedName=Integration.Api.Login|FullyQualifiedName=Integration.Api.Read|FullyQualifiedName=Integration.Api.Write"],
+            Assert.Single(Tests)[^2..]);
+    }
+
+    [Fact]
+    public async Task WithoutASelection_EveryTestRunsAndTheLogSaysSo()
+    {
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        await RunAsync();
+
+        Assert.DoesNotContain(Assert.Single(Tests), argument => argument.StartsWith("--filter", StringComparison.Ordinal));
+        Assert.Contains(_harness.Log, entry => entry.Line == "Integration suite current test filter: none, every test runs.");
+    }
+
+    [Theory]
+    [InlineData("test_filter", "Category=Slow", "test_filter must be empty or Category=RollbackRelevant.")]
+    [InlineData("test_filter", "FullyQualifiedName~Login", "test_filter must be empty or Category=RollbackRelevant.")]
+    [InlineData("test_methods", "Integration.Api.Login Integration.Api.Read(x)", "test_methods names a method a filter cannot carry: 'Integration.Api.Read(x)'.")]
+    public async Task ASelectionOutsideTheContract_IsRefusedBeforeAnyRun(string parameter, string value, string reason)
+    {
+        _parameters[parameter] = value;
+
+        var (result, _) = await RunAsync();
+
+        Assert.Contains(reason, result.FailureReason, StringComparison.Ordinal);
+        Assert.Empty(_dotnet);
+    }
+
+    [Fact]
+    public async Task AFilterAndNamedMethods_AreExclusive()
+    {
+        _parameters["test_filter"] = "Category=RollbackRelevant";
+        _env["QA_INTEGRATION_TEST_METHODS_CURRENT"] = "Integration.Api.Login";
+
+        var (result, _) = await RunAsync();
+
+        Assert.Contains("test_filter and test_methods are exclusive.", result.FailureReason, StringComparison.Ordinal);
         Assert.Empty(_dotnet);
     }
 

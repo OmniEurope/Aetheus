@@ -2,24 +2,19 @@
   "_comment": "Recette R-535 (2026-10-01): package references the launcher's outdated-NuGet guard does not count, each with its reason and its end condition. An exception is never permanent: once the solution targets untilTargetFramework or later, the guard reports it as expired and counts the package again, so the pin is revisited instead of forgotten.",
   "exceptions": [
     {
-      "package": "Microsoft.CodeAnalysis.CSharp",
-      "reason": "Pinned to the compiler of the first .NET 10 SDK so the in-house analyzers load in the pinned SDK's compiler (Directory.Packages.props).",
-      "untilTargetFramework": "net11.0"
+      "package": "Microsoft.EntityFrameworkCore.Design",
+      "reason": "EF Core stays on 10.x on the net11.0 target (ADR-048): the Npgsql EF Core provider 11 is only 11.0.0-rc.3 and no prerelease ships. Ends when Npgsql.EntityFrameworkCore.PostgreSQL 11 is stable, then EF, the dotnet-ef tool and this exception move to 11.",
+      "untilTargetFramework": "net12.0"
     },
     {
-      "package": "Microsoft.CodeAnalysis.CSharp.Workspaces",
-      "reason": "Same pin as Microsoft.CodeAnalysis.CSharp.",
-      "untilTargetFramework": "net11.0"
+      "package": "Microsoft.EntityFrameworkCore.InMemory",
+      "reason": "Same pin as Microsoft.EntityFrameworkCore.Design.",
+      "untilTargetFramework": "net12.0"
     },
     {
-      "package": "Microsoft.CodeAnalysis.Workspaces.Common",
-      "reason": "Same pin as Microsoft.CodeAnalysis.CSharp.",
-      "untilTargetFramework": "net11.0"
-    },
-    {
-      "package": "Microsoft.OpenApi",
-      "reason": "Microsoft.AspNetCore.OpenApi 10.0.x accepts only Microsoft.OpenApi [2.12.0, 3.0.0); 3.x breaks its source generator (CS0200). Only ASP.NET Core 11 accepts 3.x.",
-      "untilTargetFramework": "net11.0"
+      "package": "Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore",
+      "reason": "Same pin as Microsoft.EntityFrameworkCore.Design: its 11.0.0 depends on EF Core 11.",
+      "untilTargetFramework": "net12.0"
     }
   ]
 }

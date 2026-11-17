@@ -37,7 +37,8 @@ public sealed class PipelineEnvTemplateReadinessTests
 
     private PipelineSetupReadinessService Sut() => new(
         Substitute.For<IPipelineTemplateService>(), _pipelines, _git, Substitute.For<IGitLightRepository>(),
-        Substitute.For<IPipelineTemplateResolver>(), _requirements, _config, NullLogger<PipelineSetupReadinessService>.Instance);
+        Substitute.For<IPipelineTemplateResolver>(), _requirements, _config, ReadinessVariableResolver.Create(),
+        Substitute.For<IPipelineSetupServerRepository>(), NullLogger<PipelineSetupReadinessService>.Instance);
 
     private void Project(params PipelineEmptyValue[] empty)
     {

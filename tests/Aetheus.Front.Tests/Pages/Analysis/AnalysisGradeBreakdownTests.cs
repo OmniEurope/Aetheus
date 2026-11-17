@@ -18,7 +18,7 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
             component => component.Grade,
             Summary(AnalysisGrade.C, new AnalysisGradeFindingCountsDto { Medium = 1, Low = 6 }, 9, weighted: true)));
 
-        var measure = Assert.Single(cut.FindAll(".analysis-grade-measure"));
+        var measure = Assert.Single(cut.FindAll("[data-testid='grade-row-measure']"));
         Assert.Contains("AnalysisOpenFindingCount", measure.TextContent, StringComparison.Ordinal);
         Assert.Equal("7", measure.QuerySelector(".analysis-grade-value")!.TextContent.Trim());
         Assert.DoesNotContain("×", measure.TextContent, StringComparison.Ordinal);
@@ -34,7 +34,7 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
             component => component.Grade,
             Summary(AnalysisGrade.C, new AnalysisGradeFindingCountsDto { Medium = 1, Low = 6 }, 7)));
 
-        var measure = Assert.Single(cut.FindAll(".analysis-grade-measure"));
+        var measure = Assert.Single(cut.FindAll("[data-testid='grade-row-measure']"));
         Assert.Equal("7", measure.QuerySelector(".analysis-grade-value")!.TextContent.Trim());
         Assert.Contains("AnalysisDistanceToGrade", measure.TextContent, StringComparison.Ordinal);
     }
@@ -73,13 +73,58 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
             hint => hint.TextContent.Contains("AnalysisCriticalFindingNotDeliverable", StringComparison.Ordinal));
     }
 
+    // Recette R-7: the project grade carries a general Findings line right under the Gate grade, with its own letter, its
+    // open-findings count, and a help tooltip like the other lines; a line that sets the overall grade is bold.
+    [Fact]
+    public void TheFindingsLine_ShowsItsGradeCountAndHelp_BoldWhenItSetsTheOverallGrade()
+    {
+        var grade = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = AnalysisGrade.D,
+            Findings = AnalysisFindingsGrade.For(new AnalysisGradeFindingCountsDto { High = 2, Low = 1 })
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, grade)
+            .Add(component => component.GateGrade, AnalysisGrade.D));
+
+        var line = cut.Find("[data-testid='grade-row-findings']");
+        Assert.Contains("AnalysisFindingsLineLabel", line.TextContent, StringComparison.Ordinal);
+        Assert.Equal("3", line.QuerySelector(".analysis-grade-value")!.TextContent.Trim());
+        Assert.Equal("D", line.QuerySelector(".grade-badge")!.TextContent.Trim());
+        Assert.NotNull(line.QuerySelector("[data-testid='grade-row-help']"));
+        Assert.NotNull(line.QuerySelector(".analysis-grade-domain-limiting"));
+        // It comes right after the Gate grade row, and names itself as the cause of the Gate grade.
+        var rows = cut.FindAll(".analysis-grade-row");
+        Assert.Equal("grade-row-gate", rows[0].GetAttribute("data-testid"));
+        Assert.Equal("grade-row-findings", rows[1].GetAttribute("data-testid"));
+        Assert.Contains("GateFirstCauseFindings", cut.Find("[data-testid='grade-row-gate-cause']").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFindingsLine_IsNotBold_WhenAWorseLetterSetsTheOverallGrade_AndAbsentOnARunGrade()
+    {
+        var worse = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = AnalysisGrade.F,
+            Findings = AnalysisFindingsGrade.For(new AnalysisGradeFindingCountsDto { Medium = 1 })
+        };
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, worse)
+            .Add(component => component.GateGrade, AnalysisGrade.F));
+        Assert.Null(cut.Find("[data-testid='grade-row-findings']").QuerySelector(".analysis-grade-domain-limiting"));
+
+        // A run's own grade (a pipeline run's Gate tab) has no Findings line.
+        var run = Render<AnalysisGradeBreakdown>(parameters => parameters.Add(
+            component => component.Grade, new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.A }));
+        Assert.Empty(run.FindAll("[data-testid='grade-row-findings']"));
+    }
+
     // Recette R-73: run #2920, an A beside a B line. The generic templates now require every rule; a pipeline that
     // marks one as not required (or a run made before) keeps the line saying it is not counted, the required line
     // beside it does not.
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void AMeasureNotRequiredForTheGrade_SaysItIsNotCounted(bool gateRow)
+    [Fact]
+    public void AMeasureNotRequiredForTheGrade_SaysItIsNotCounted()
     {
         var grade = new AnalysisGradeSummaryDto
         {
@@ -102,14 +147,13 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
 
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, grade)
-            .Add(component => component.GateRow, gateRow)
             .Add(component => component.GateGrade, AnalysisGrade.A));
 
         // Only the medium line (not required) carries the hint, the high line (required) does not.
         Assert.Equal(1, CountOf(cut.Markup, "GradeMeasureNotCounted"));
         var notCounted = Assert.Single(cut.FindAll(".analysis-grade-measure-hint"),
             hint => hint.TextContent.Contains("GradeMeasureNotCounted", StringComparison.Ordinal));
-        var line = notCounted.Closest(gateRow ? "[data-testid='grade-row-measure']" : ".analysis-grade-measure")!;
+        var line = notCounted.Closest("[data-testid='grade-row-measure']")!;
         Assert.Contains("AnalysisMediumVulnerabilities", line.TextContent, StringComparison.Ordinal);
     }
 
@@ -148,19 +192,16 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
         ]
     };
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void AMissingRequiredMeasure_SaysNotMeasuredAndNamesItsStep_NeverIncomplete(bool gateRow)
+    [Fact]
+    public void AMissingRequiredMeasure_SaysNotMeasuredAndNamesItsStep_NeverIncomplete()
     {
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, GradeWithAMissingCoverage())
-            .Add(component => component.GateRow, gateRow)
             .Add(component => component.GateGrade, AnalysisGrade.B));
 
         Assert.DoesNotContain("Incomplete", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("NotEvaluated", cut.Markup, StringComparison.Ordinal);
-        var line = cut.FindAll(gateRow ? "[data-testid='grade-row-measure']" : ".analysis-grade-measure")
+        var line = cut.FindAll("[data-testid='grade-row-measure']")
             .Single(element => element.TextContent.Contains("AnalysisTestedLines", StringComparison.Ordinal));
         Assert.Contains("GradeMeasureNotMeasured", line.TextContent, StringComparison.Ordinal);
         var hint = line.QuerySelector("[data-testid='grade-row-measure-missing']")!;
@@ -170,10 +211,8 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
     }
 
     // Run #2958: a grading rule the validator rejected is an F; its line says it was rejected and why.
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ARejectedRule_SaysItWasRejectedAndWhy(bool gateRow)
+    [Fact]
+    public void ARejectedRule_SaysItWasRejectedAndWhy()
     {
         var grade = new AnalysisGradeSummaryDto
         {
@@ -200,24 +239,20 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
 
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, grade)
-            .Add(component => component.GateRow, gateRow)
             .Add(component => component.GateGrade, AnalysisGrade.F));
 
-        var line = cut.FindAll(gateRow ? "[data-testid='grade-row-measure']" : ".analysis-grade-measure")
+        var line = cut.FindAll("[data-testid='grade-row-measure']")
             .Single(element => element.TextContent.Contains("AnalysisDuplicatedCode", StringComparison.Ordinal));
         Assert.Contains("GradeMeasureRejected", line.TextContent, StringComparison.Ordinal);
         var hint = line.QuerySelector("[data-testid='grade-row-measure-rejected']")!;
         Assert.Contains("must define finite A, B, C, D and E thresholds", hint.TextContent, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void AGradeOnPartOfItsMeasures_KeepsItsLimitingDomain(bool gateRow)
+    [Fact]
+    public void AGradeOnPartOfItsMeasures_KeepsItsLimitingDomain()
     {
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, GradeWithAMissingCoverage())
-            .Add(component => component.GateRow, gateRow)
             .Add(component => component.GateGrade, AnalysisGrade.B));
 
         var limiting = Assert.Single(cut.FindAll(".analysis-grade-domain-limiting"));
@@ -253,7 +288,6 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
     {
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, GradeWithAMissingCoverage())
-            .Add(component => component.GateRow, true)
             .Add(component => component.GateGrade, AnalysisGrade.B));
 
         var sentence = Assert.Single(cut.FindAll("[data-testid='grade-row-gate-partial']"));
@@ -269,7 +303,6 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
 
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, complete)
-            .Add(component => component.GateRow, true)
             .Add(component => component.GateGrade, AnalysisGrade.B));
 
         Assert.Empty(cut.FindAll("[data-testid='grade-row-gate-partial']"));
@@ -290,7 +323,6 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
 
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, nothing)
-            .Add(component => component.GateRow, true)
             .Add(component => component.GateGrade, AnalysisGrade.A));
 
         Assert.Empty(cut.FindAll("[data-testid='grade-row-gate-partial']"));
@@ -298,10 +330,8 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
         Assert.False(AnalysisGradeBreakdown.IsPartialGrade(null));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ARequiredDomainNobodyMeasured_SaysNoMeasure_NotIncomplete(bool gateRow)
+    [Fact]
+    public void ARequiredDomainNobodyMeasured_SaysNoMeasure_NotIncomplete()
     {
         var grade = new AnalysisGradeSummaryDto
         {
@@ -312,17 +342,14 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
 
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, grade)
-            .Add(component => component.GateRow, gateRow)
             .Add(component => component.GateGrade, AnalysisGrade.A));
 
         Assert.Equal(1, CountOf(cut.Markup, ">AnalysisGradeNoMeasure<"));
         Assert.DoesNotContain("Incomplete", cut.Markup, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ADomainNotRequiredAndWithNothingToShow_IsNotListed(bool gateRow)
+    [Fact]
+    public void ADomainNotRequiredAndWithNothingToShow_IsNotListed()
     {
         var grade = new AnalysisGradeSummaryDto
         {
@@ -337,7 +364,6 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
 
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, grade)
-            .Add(component => component.GateRow, gateRow)
             .Add(component => component.GateGrade, AnalysisGrade.A));
 
         Assert.Contains("AnalysisApplicationSecurity", cut.Markup, StringComparison.Ordinal);
@@ -609,7 +635,7 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
             component => component.Grade,
             Summary(AnalysisGrade.C, new AnalysisGradeFindingCountsDto { High = 1, Medium = 2, Low = 3, Info = 1 }, 7)));
 
-        Assert.Empty(cut.FindAll(".analysis-grade-domain-state"));
+        Assert.Empty(cut.Find("[data-testid='grade-row-domain']").QuerySelectorAll(".analysis-grade-value:not(:empty)"));
         foreach (var removed in new[] { "AnalysisRequired", "AnalysisAdvisory", "AnalysisFreshness", "Complete", "Enum_AnalysisSeverity" })
             Assert.DoesNotContain(removed, cut.Markup, StringComparison.Ordinal);
     }
@@ -663,35 +689,72 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
         ]
     };
 
+    // Recette R-16: the block has no accordion any more (no chevron, no row that unfolds). Everything a line used to
+    // show when opened sits in the tooltip of its help mark, one fact per line, never shortened.
     [Fact]
-    public void R1_38_EveryRowOfTheBlock_ExplainsItsCriterionInATooltip_AndOpensItsDetailOnAClick()
+    public void R16_TheBlock_HasNoAccordion_NoChevronAndNothingUnfolds()
     {
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
             .Add(component => component.Grade, CoverageGrade())
-            .Add(component => component.GateRow, true)
             .Add(component => component.GateGrade, AnalysisGrade.B));
 
-        // The block is one OE accordion; the Gate row, the domain and the measure each carry an OE help mark
-        // (a tooltip) that explains the criterion.
-        Assert.Single(cut.FindAll("[data-testid='analysis-grade-block'].omni-accordion"));
-        Assert.Equal(3, cut.FindAll(".analysis-grade-row .omni-accordion__help.omni-tooltip").Count);
-        Assert.Contains("AnalysisCriterionGate", cut.Find("[data-testid='grade-row-gate']").InnerHtml, StringComparison.Ordinal);
-        Assert.Contains("AnalysisCriterionCoverageLine", cut.Find("[data-testid='grade-row-measure']").InnerHtml, StringComparison.Ordinal);
-        // An OE accordion row per line, folded by default (no detail rendered); a click on a row opens it and the
-        // detail names the thresholds and the measure. Rows open independently of each other (Multiple).
-        var toggles = cut.FindAll(".analysis-grade-row .omni-accordion__toggle");
-        Assert.Equal(3, toggles.Count);
-        Assert.All(toggles, toggle => Assert.Equal("false", toggle.GetAttribute("aria-expanded")));
+        var block = cut.Find("[data-testid='analysis-grade-block']");
+        Assert.Empty(cut.FindAll(".omni-accordion, .omni-accordion__toggle, .omni-accordion__chevron"));
+        Assert.Empty(block.QuerySelectorAll("button, [aria-expanded]"));
         Assert.Empty(cut.FindAll(".analysis-grade-row-detail"));
-        cut.Find("[data-testid='grade-row-gate'] .omni-accordion__toggle").Click();
-        cut.Find("[data-testid='grade-row-measure'] .omni-accordion__toggle").Click();
-        Assert.Equal("true", cut.Find("[data-testid='grade-row-gate'] .omni-accordion__toggle").GetAttribute("aria-expanded"));
-        Assert.Equal("true", cut.Find("[data-testid='grade-row-measure'] .omni-accordion__toggle").GetAttribute("aria-expanded"));
-        var detail = cut.Find("[data-testid='grade-row-measure'] .analysis-grade-row-detail");
-        Assert.Contains("AnalysisGradeThresholdsHigher", detail.TextContent, StringComparison.Ordinal);
-        Assert.Contains("AnalysisGradeMeasuredValue", detail.TextContent, StringComparison.Ordinal);
+        Assert.Equal(3, cut.FindAll(".analysis-grade-row").Count);
     }
 
+    [Fact]
+    public void R16_EveryRow_CarriesItsWholeDetailInTheTooltipOfItsHelpMark()
+    {
+        var evaluatedAt = new DateTime(2026, 11, 8, 10, 0, 0, DateTimeKind.Utc);
+        var coverage = CoverageGrade();
+        var grade = coverage with
+        {
+            LimitingDomain = AnalysisGradeDomain.CodeQuality,
+            EvaluatedAt = evaluatedAt,
+            Domains = [coverage.Domains[0] with { EvaluatedAt = evaluatedAt }]
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, grade)
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        // One OE help mark (an OmniTooltip on the question mark) per row, reached by Tab.
+        Assert.Equal(3, cut.FindAll(".analysis-grade-row .analysis-grade-row-help.omni-tooltip").Count);
+        Assert.All(cut.FindAll(".analysis-grade-row-help .omni-tooltip__trigger"), trigger => Assert.Equal("0", trigger.GetAttribute("tabindex")));
+        // Never shortened to a preview with "Show more": the whole detail is the tooltip.
+        Assert.Empty(cut.FindAll(".omni-tooltip--expandable"));
+
+        // The Gate grade: criterion, what sets the grade, evaluation date.
+        Assert.Equal(
+            string.Join('\n', "AnalysisCriterionGate", "AnalysisGradeLimitingDomain", "AnalysisGradeEvaluatedOn"),
+            HelpOf(cut, "grade-row-gate"));
+        // The domain: criterion, evaluation date.
+        Assert.Equal(
+            string.Join('\n', "AnalysisCriterionCodeQualityAndTests", "AnalysisGradeEvaluatedOn"),
+            HelpOf(cut, "grade-row-domain"));
+        // The measure: criterion, thresholds, measured value.
+        Assert.Equal(
+            string.Join('\n', "AnalysisCriterionCoverageLine", "AnalysisGradeThresholdsHigher", "AnalysisGradeMeasuredValue"),
+            HelpOf(cut, "grade-row-measure"));
+    }
+
+    private static string HelpOf(IRenderedComponent<AnalysisGradeBreakdown> cut, string testId) =>
+        cut.Find($"[data-testid='{testId}'] .omni-tooltip__content").TextContent;
+
+    [Fact]
+    public void R17_TheLettersOfTheBlock_AreTheLargeBadge()
+    {
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, CoverageGrade())
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        var badges = cut.FindAll(".analysis-grade-row .grade-badge");
+        Assert.Equal(3, badges.Count);
+        Assert.All(badges, badge => Assert.Contains("omni-badge--large", badge.ClassList));
+    }
     [Fact]
     public void R1_38_ThresholdText_ListsTheLettersInTheDirectionThatIsBetter_WithThePercentUnit()
     {

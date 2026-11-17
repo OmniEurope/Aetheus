@@ -44,6 +44,15 @@ public sealed class BreadcrumbRouteCoverageTests
         Assert.True(server[1].IsLoading);
     }
 
+    /// <summary>R-36: the planner is a global menu entry, so its trail is the planner alone.</summary>
+    [Fact]
+    public void Planner_Trail_Is_The_Planner_Alone()
+    {
+        var items = BreadcrumbRouteResolver.Resolve("/pipelines/schedule", key => key);
+
+        Assert.Equal(["PipelineSchedule"], items.Select(item => item.Text));
+    }
+
     [Fact]
     public void Pipeline_Run_Fallback_Identifies_The_Run()
     {

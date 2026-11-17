@@ -7,7 +7,7 @@
 
 @* Recette R-29: the page's main action sits in the page header, on the title line. *@
 <SectionContent SectionName="@PageHeaderActions.SectionName">
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenCreateDialog())" Disabled="@(AgentOffline || !Cron.IsInstalled || _actionRunning)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenCreateDialog())" Disabled="@(AgentOffline || !Cron.IsInstalled || ActionBusy)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
 </SectionContent>
 
 @* --- Status bar --- *@
@@ -16,7 +16,7 @@
     <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@string.Format(L["CronJobCount"], Cron.Jobs.Count)</NumberBadge>
 </OmniRow>
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Cron" />
+<ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="Cron" />
 
 <OmniTabs>
         <OmniTabsItem Title="@L["CronJobs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("schedule")" /></Icon><ChildContent>

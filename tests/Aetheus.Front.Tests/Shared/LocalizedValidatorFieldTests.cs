@@ -65,39 +65,39 @@ public class LocalizedValidatorFieldTests : BunitContext
     // ── ValidateAll triggered by Validate() ────────────────────────────────────
 
     [Fact]
-    public void ValidateAll_Required_AddsMessage()
+    public async Task ValidateAll_Required_AddsMessage()
     {
         var model = new RequiredModel { Name = string.Empty };
         var editContext = new EditContext(model);
 
         var instance = CreateValidator(editContext);
-        editContext.Validate();
+        await editContext.ValidateAsync(Xunit.TestContext.Current.CancellationToken);
 
         var msgs = editContext.GetValidationMessages(editContext.Field(nameof(RequiredModel.Name))).ToList();
         Assert.NotEmpty(msgs);
     }
 
     [Fact]
-    public void ValidateAll_Valid_NoMessages()
+    public async Task ValidateAll_Valid_NoMessages()
     {
         var model = new RequiredModel { Name = "Alice" };
         var editContext = new EditContext(model);
 
         CreateValidator(editContext);
-        editContext.Validate();
+        await editContext.ValidateAsync(Xunit.TestContext.Current.CancellationToken);
 
         var msgs = editContext.GetValidationMessages(editContext.Field(nameof(RequiredModel.Name))).ToList();
         Assert.Empty(msgs);
     }
 
     [Fact]
-    public void ValidateAll_ModelLevelError_IsPreservedInValidationSummary()
+    public async Task ValidateAll_ModelLevelError_IsPreservedInValidationSummary()
     {
         var model = new ModelLevelValidation();
         var editContext = new EditContext(model);
         CreateValidator(editContext);
 
-        editContext.Validate();
+        await editContext.ValidateAsync(Xunit.TestContext.Current.CancellationToken);
 
         Assert.Contains("Model-level failure", editContext.GetValidationMessages());
     }

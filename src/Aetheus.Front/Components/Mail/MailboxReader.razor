@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* One message. The HTML arrives sanitized by the backend (no script, no event handler, no remote
-   resource unless "Show images" fetched it through the backend); the page's own Content Security
-   Policy still refuses any remote image or script that would slip through. *@
+   resource unless "Show images" fetched it through the backend); the document's own Content Security
+   Policy, sent by the API with it, still refuses any remote resource or script that would slip through. *@
 <OmniCard Class="mailbox-reader">
     <HeaderContent>
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 mailbox-reader-subject">@Subject</OmniText>
@@ -47,13 +47,16 @@
                     }
                 </OmniStack>
             }
-            @if (Message.Html is not null)
+            @if (DocumentUrl is { } documentUrl)
             {
                 @* Custom Aetheus, no OE equivalent: a sandboxed frame without script, form or same-origin
                    right, so the message can neither run code nor reach the page, its styles stay inside it,
-                   and Blazor never re-creates a script from it (no MarkupString). Links open in a new tab. *@
+                   and Blazor never re-creates a script from it (no MarkupString). The document comes from the
+                   API by a single-use URL, under its own policy that applies the message's inline styles (a
+                   srcdoc frame inherited the page's, which forbids them). The two sandbox rights only let a
+                   link open in a new tab, outside the sandbox, as a normal page. *@
                 <iframe class="mailbox-html" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"
-                    title="@Subject" srcdoc="@Document"></iframe>
+                    title="@Subject" src="@documentUrl"></iframe>
             }
             else
             {

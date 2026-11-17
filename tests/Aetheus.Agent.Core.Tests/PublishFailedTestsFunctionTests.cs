@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
 using Aetheus.Agent.Core.Functions;
+using Aetheus.Agent.Core.Operations;
 using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Agent.Core.Tests;

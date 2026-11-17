@@ -17,7 +17,7 @@ public sealed class AetheusGridPresetsTests : BunitContext
         Assert.True(grid.AllowSorting);
         Assert.True(grid.Filterable);
         Assert.Equal(OmniDataGridFilterMode.Simple, grid.FilterMode);
-        Assert.True(grid.ShowHeaderFilterMenu);
+        Assert.Equal(OmniDataGridFilterPlacement.HeaderMenu, grid.FilterPlacement);
         Assert.True(grid.AllowColumnResize);
         Assert.True(grid.AllowAlternatingRows);
         Assert.Equal(OmniDensity.Compact, grid.Density);

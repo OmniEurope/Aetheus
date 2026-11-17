@@ -10,7 +10,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>On PostgreSQL, Light and Standard projects retain telemetry, logs and analysis for
 /// their distinct configured windows; Light ingestion reports its longer send interval.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ProjectDataRetentionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime Now = new(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);

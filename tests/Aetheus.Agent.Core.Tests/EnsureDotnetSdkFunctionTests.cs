@@ -301,4 +301,161 @@ public sealed class EnsureDotnetSdkFunctionTests : IDisposable
         Assert.Empty(variables);
     }
 
+    private void WriteProject(string path, string targetFramework) =>
+        _harness.Write(path, $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>{targetFramework}</PropertyGroup></Project>");
+
+    private string UseProjectRoot()
+    {
+        _env[PipelineFunctionVariables.ParametersJson] = "{\"project_root\":\".\"}";
+        return _harness.Executable("bin/bash");
+    }
+
+    private string ChannelInstallDirectory(string channel) =>
+        Path.Combine(_harness.Root, "home", ".aetheus", "dotnet", $"channel-{channel}");
+
+    [Fact]
+    public async Task R30_WithoutGlobalJson_InstallsTheChannelOfTheTargetFramework_AndSaysWhy()
+    {
+        WriteProject("ws/src/App/App.csproj", "<TargetFramework>net10.0</TargetFramework>");
+        var bash = UseProjectRoot();
+        var installDirectory = ChannelInstallDirectory("10.0");
+        var installed = Path.Combine(installDirectory, DotnetName);
+        _tools.DownloadContent = InstallerBytes;
+        AnswerVersions(new() { [installed] = "10.0.203" }, onInstall: () =>
+        {
+            File.WriteAllText(installed, string.Empty);
+            FunctionTestHarness.MakeExecutable(installed);
+        });
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(installed, variables["DOTNET"]);
+        var install = _tools.Runs.Single(run => run.FileName == bash);
+        Assert.Equal(["--channel", "10.0", "--install-dir", installDirectory, "--no-path"], install.ArgumentList.Skip(1));
+        Assert.Contains(_harness.Log, entry => entry.Line ==
+            "No pinned SDK (global.json is missing or pins no version): .NET SDK channel 10.0 (net10.0 declared in src/App/App.csproj)");
+        Assert.Contains(_harness.Log, entry => entry.Line == $"Installing .NET SDK channel 10.0 in {installDirectory}");
+    }
+
+    [Fact]
+    public async Task R30_HostSdkOfTheTargetFrameworkChannel_IsKeptWithoutInstalling()
+    {
+        WriteProject("ws/App.csproj", "<TargetFramework>net10.0</TargetFramework>");
+        UseProjectRoot();
+        var system = _harness.Executable("bin/dotnet");
+        AnswerVersions(new() { [system] = "10.0.101" });
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(system, variables["DOTNET"]);
+        Assert.Empty(_tools.Downloads);
+    }
+
+    [Fact]
+    public async Task R30_HostSdkOfAnotherChannel_IsNotKept_AndTheMatchingChannelIsInstalled()
+    {
+        WriteProject("ws/App.csproj", "<TargetFramework>net10.0</TargetFramework>");
+        var bash = UseProjectRoot();
+        var system = _harness.Executable("bin/dotnet");
+        var installed = Path.Combine(ChannelInstallDirectory("10.0"), DotnetName);
+        _tools.DownloadContent = InstallerBytes;
+        AnswerVersions(new() { [system] = "9.0.300", [installed] = "10.0.100" }, onInstall: () =>
+        {
+            File.WriteAllText(installed, string.Empty);
+            FunctionTestHarness.MakeExecutable(installed);
+        });
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(installed, variables["DOTNET"]);
+        Assert.Contains("10.0", _tools.Runs.Single(run => run.FileName == bash).ArgumentList);
+    }
+
+    [Fact]
+    public async Task R30_NoTargetFramework_FallsBackToTheLtsChannel()
+    {
+        _harness.Write("ws/readme.txt", "no project here");
+        var bash = UseProjectRoot();
+        var installDirectory = ChannelInstallDirectory("LTS");
+        var installed = Path.Combine(installDirectory, DotnetName);
+        _tools.DownloadContent = InstallerBytes;
+        AnswerVersions(new() { [installed] = "10.0.203" }, onInstall: () =>
+        {
+            File.WriteAllText(installed, string.Empty);
+            FunctionTestHarness.MakeExecutable(installed);
+        });
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(installed, variables["DOTNET"]);
+        var install = _tools.Runs.Single(run => run.FileName == bash);
+        Assert.Equal(["--channel", "LTS", "--install-dir", installDirectory, "--no-path"], install.ArgumentList.Skip(1));
+        Assert.Contains(_harness.Log, entry => entry.Line.Contains("no TargetFramework found in the repository, so the LTS channel", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task R30_GlobalJsonWithoutVersion_IsTreatedAsNoPin_WhenAProjectRootIsGiven()
+    {
+        _harness.Write("ws/global.json", "{ \"sdk\": { \"rollForward\": \"latestFeature\" } }");
+        WriteProject("ws/App.csproj", "<TargetFramework>net10.0</TargetFramework>");
+        UseProjectRoot();
+        var system = _harness.Executable("bin/dotnet");
+        AnswerVersions(new() { [system] = "10.0.101" });
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(system, variables["DOTNET"]);
+    }
+
+    [Fact]
+    public async Task R30_APinnedVersion_StillWinsOverTheProjectRoot()
+    {
+        WriteGlobalJson(Pinned);
+        WriteProject("ws/App.csproj", "<TargetFramework>net10.0</TargetFramework>");
+        var bash = UseProjectRoot();
+        var installDirectory = Path.Combine(_harness.Root, "home", ".aetheus", "dotnet", Pinned);
+        var installed = Path.Combine(installDirectory, DotnetName);
+        _tools.DownloadContent = InstallerBytes;
+        AnswerVersions(new() { [installed] = Pinned }, onInstall: () =>
+        {
+            File.WriteAllText(installed, string.Empty);
+            FunctionTestHarness.MakeExecutable(installed);
+        });
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["--version", Pinned, "--install-dir", installDirectory, "--no-path"], _tools.Runs.Single(run => run.FileName == bash).ArgumentList.Skip(1));
+    }
+
+    [Fact]
+    public void R30_TargetFrameworkProbe_KeepsTheHighestModernMoniker_AndIgnoresTheOthers()
+    {
+        _harness.Write("ws/Directory.Build.props", "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+        WriteProject("ws/src/Lib/Lib.csproj", "<TargetFrameworks>netstandard2.0;net48;net9.0-windows</TargetFrameworks>");
+        WriteProject("ws/src/Old/Old.csproj", "<TargetFramework>netcoreapp3.1</TargetFramework>");
+        WriteProject("ws/src/Props/Props.csproj", "<TargetFramework>$(AppTfm)</TargetFramework>");
+        WriteProject("ws/bin/Ignored/Ignored.csproj", "<TargetFramework>net99.0</TargetFramework>");
+
+        var found = DotnetTargetFrameworkProbe.Find(_harness.Workspace);
+
+        Assert.NotNull(found);
+        Assert.Equal("net9.0", found.Moniker);
+        Assert.Equal("9.0", found.Channel);
+        Assert.Equal("src/Lib/Lib.csproj", found.File);
+    }
+
+    [Fact]
+    public void R30_TargetFrameworkProbe_FindsNothingInARepositoryWithoutLiteralFrameworks()
+    {
+        WriteProject("ws/Old.csproj", "<TargetFramework>net48</TargetFramework>");
+
+        Assert.Null(DotnetTargetFrameworkProbe.Find(_harness.Workspace));
+        Assert.Null(DotnetTargetFrameworkProbe.Find(Path.Combine(_harness.Root, "absent")));
+    }
 }

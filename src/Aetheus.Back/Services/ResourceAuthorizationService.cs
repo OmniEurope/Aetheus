@@ -8,7 +8,7 @@ namespace Aetheus.Back.Services;
 /// Resource authorization under the organization model of ADR-059 (R-46): a site-wide Admin reaches
 /// everything; every other right comes from a role the user holds for one organization, and reaches
 /// only the resources that organization owns. Membership alone grants nothing (R-45 gives every member
-/// a role instead), and a resource no organization owns (an agent pool, a resource without a project)
+/// a role instead), and a resource no organization owns (the Docker platform, a resource without a project)
 /// is reachable by a site-wide Admin only.
 /// </summary>
 public sealed class ResourceAuthorizationService(IPermissionRepository permissionRepo, IMemoryCache cache, AuthzCacheEvictor evictor) : IResourceAuthorizationService
@@ -68,7 +68,11 @@ public sealed class ResourceAuthorizationService(IPermissionRepository permissio
         if (user.IsInRole(RoleNames.Admin))
             return null;
 
-        var username = user.Identity?.Name;
+        return await GetAccessibleResourceIdsForUsernameAsync(user.Identity?.Name ?? string.Empty, resourceType, required, ct).ConfigureAwait(false);
+    }
+
+    public async Task<List<int>?> GetAccessibleResourceIdsForUsernameAsync(string username, ResourceType resourceType, Permission required, CancellationToken ct = default)
+    {
         if (string.IsNullOrEmpty(username))
             return [];
 
@@ -299,7 +303,7 @@ public sealed class ResourceAuthorizationService(IPermissionRepository permissio
 
     /// <summary>The resource types an organization owns, directly or through a project.</summary>
     private static bool IsOrganizationOwned(ResourceType type) =>
-        type is not (ResourceType.AgentPool or ResourceType.Docker);
+        type is not ResourceType.Docker;
 
     private static List<int> RoleIds(IEnumerable<OrganizationRoleGrant> grants) =>
         grants.Select(grant => grant.RoleId).Distinct().ToList();

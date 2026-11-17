@@ -11,27 +11,75 @@
                 <OmniDescriptionItem Term="@L["Project"]"><strong>@ProjectName</strong></OmniDescriptionItem>
                 <OmniDescriptionItem Term="@L["PipelineArchitectureTitle"]">@ArchitectureSummary</OmniDescriptionItem>
                 <OmniDescriptionItem Term="@L["Pipelines"]">
-                    <OmniFieldset Collapsible="true" Expanded="false" data-testid="setup-pipelines-list">
-                        <Legend>@string.Format(L["PipelineSetupRecapPipelineCount"], SummaryItems.Count)</Legend>
-                        <ChildContent>
-                            <div class="pipeline-setup-summary">
-                                @foreach (var item in SummaryItems)
-                                {
-                                    <div><OmniIcon Name="OmniIconName.Graph" /><strong>@item.Name</strong><span>@item.TemplateName</span></div>
-                                }
-                            </div>
-                        </ChildContent>
-                    </OmniFieldset>
+                    <OmniStack Gap="OmniSpacing.Medium">
+                        <OmniFieldset Collapsible="true" Expanded="false" data-testid="setup-pipelines-list">
+                            <Legend>@string.Format(L["PipelineSetupRecapPipelineCount"], SummaryItems.Count)</Legend>
+                            <ChildContent>
+                                <div class="pipeline-setup-summary">
+                                    @foreach (var item in SummaryItems)
+                                    {
+                                        <div><OmniIcon Name="OmniIconName.Graph" /><strong>@item.Name</strong><span>@item.TemplateName</span></div>
+                                    }
+                                </div>
+                            </ChildContent>
+                        </OmniFieldset>
+                        @* R-60: said in the summary, so nobody finds out at the first deployment whether production waits for them. *@
+                        @if (ApprovalOffered)
+                        {
+                            <span data-testid="setup-recap-approval">@L[ApprovalAsked ? "PipelineSetupRecapApprovalAsked" : "PipelineSetupRecapApprovalNotAsked"]</span>
+                        }
+                        @* R-47: said in the summary, with what the repository still has to hold when it is configured. *@
+                        @if (TelemetryOffered)
+                        {
+                            <span data-testid="setup-recap-telemetry">@L[TelemetryChosen ? "PipelineSetupRecapTelemetryOn" : "PipelineSetupRecapTelemetryOff"]</span>
+                        }
+                        @* R-26: the audience, with what is prepared for it and for the technical signals when either is chosen. *@
+                        @if (AudienceOffered)
+                        {
+                            <span data-testid="setup-recap-audience">@L[AudienceChosen ? "PipelineSetupRecapAudienceOn" : "PipelineSetupRecapAudienceOff"]</span>
+                        }
+                        @if (TelemetryOffered && (TelemetryChosen || AudienceChosen))
+                        {
+                            <span data-testid="setup-recap-supervision-prepared">@L[AudienceChosen ? "PipelineSetupRecapSupervisionPreparedAudience" : "PipelineSetupRecapSupervisionPrepared"]</span>
+                        }
+                        @* R-17: plain information (not an alert) when the repository could not be read to the end. *@
+                        @if (QualityLanguagesUncertain)
+                        {
+                            <span data-testid="setup-quality-languages-uncertain">@L["PipelineQualityLanguagesUncertain"]</span>
+                        }
+                        @* R-38: a pipeline of the same name already in the project is kept, never recreated; said by name. *@
+                        @if (ExistingNames.Count > 0)
+                        {
+                            <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-existing-pipelines">
+                                @string.Format(L[SummaryItems.All(item => item.Exists) ? "PipelineSetupExistingAll" : "PipelineSetupExistingSome"], string.Join(", ", ExistingNames))
+                            </OmniAlert>
+                        }
+                        <PipelineSetupTemplateUpdates ProjectId="@ProjectId" />
+                    </OmniStack>
                 </OmniDescriptionItem>
             </OmniDescriptionList>
         </ChildContent>
     </OmniCard>
 
-    @* R2-24: what will be created and what is left to do before creating it are two blocks, told apart by a rule. *@
-    <OmniDivider />
+    @* R-18: no rule between the summary and what is left to do (replaces R2-24). *@
     <PipelineSetupReadinessPanel ProjectId="@ProjectId" Readiness="@Readiness" Loading="@ReadinessLoading"
                                  TemplateNames="@TemplateNames" ReturnUrl="@ReturnUrl" GateCreation="true"
-                                 OnChanged="@OnReadinessChanged" />
+                                 AskedElsewhere="@PipelineProductionPanel.ToFillNames(ProductionSetup?.Analysis)"
+                                 OnChanged="@OnReadinessChanged" FirstPush="@FirstPush" ExternalApplication="@ExternalApplication" />
+    @* R-69: an external repository that gave no Compose file: production and QA are not created, and the cause is told. *@
+    @if (ExternalDeployBlocked is { } blocked)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ExternalDeployNotCreated"]" data-testid="setup-external-deploy-blocked">
+            <OmniStack Gap="OmniSpacing.Small">
+                <span>@L[blocked.ExternalCauseKey]</span>
+                <span>@L["ExternalDeployNotCreatedDetail"]</span>
+                <div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" Busy="@blocked.Loading" OnClick="@(() => blocked.ReloadAsync())"
+                                data-testid="setup-external-deploy-retry"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+                </div>
+            </OmniStack>
+        </OmniAlert>
+    }
     @* ADR-057: the production deployment read from the Compose file, only when its pipeline is selected. *@
     @if (ProductionSetup is not null)
     {

@@ -126,17 +126,28 @@ public sealed class PortRegistryService(
 
     public async Task DeclareAsync(
         int serverId, IReadOnlyCollection<int> ports, string ownerKey, string ownerLabel,
-        int? projectId, CancellationToken ct = default)
+        int? projectId, CancellationToken ct = default, IReadOnlyCollection<int>? alsoKeep = null)
     {
         ArgumentNullException.ThrowIfNull(ports);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerKey);
         var wanted = Normalize(ports);
         if (wanted.Count == 0) return;
 
+        await UnderClaimLockAsync(serverId, () => DeclareLockedAsync(
+            serverId, wanted, ownerKey, ownerLabel, projectId, alsoKeep, ct), ct).ConfigureAwait(false);
+    }
+
+    private async Task DeclareLockedAsync(
+        int serverId, List<int> wanted, string ownerKey, string ownerLabel,
+        int? projectId, IReadOnlyCollection<int>? alsoKeep, CancellationToken ct)
+    {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var label = Truncate(ownerLabel, PortRegistryLimits.MaxOwnerLabelLength);
         var key = Truncate(ownerKey, PortRegistryLimits.MaxOwnerKeyLength);
 
+        // BACK-008: a manual reservation of another owner refuses the declaration here too, under the lock,
+        // not only in the launch preflight that a concurrent reservation can overtake.
+        await RefuseOtherManualHolderAsync(serverId, wanted, key, label, ct).ConfigureAwait(false);
         var existing = await repo
             .GetTrackedReservationsForPortsAsync(serverId, wanted, PortReservationSource.Declared, ct)
             .ConfigureAwait(false);
@@ -174,7 +185,8 @@ public sealed class PortRegistryService(
             row.UpdatedAt = now;
         }
 
-        await ReleaseAbandonedAsync(serverId, key, wanted, ct).ConfigureAwait(false);
+        // A port another source of truth still names for this owner (a library entry) is not abandoned.
+        await ReleaseAbandonedAsync(serverId, key, alsoKeep is { Count: > 0 } ? [.. wanted, .. alsoKeep] : wanted, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
@@ -185,6 +197,13 @@ public sealed class PortRegistryService(
         if (!await repo.ServerExistsAsync(serverId, ct).ConfigureAwait(false))
             throw new NotFoundException($"Server {serverId} was not found.");
 
+        return await UnderClaimLockAsync(serverId, () => AddManualReservationLockedAsync(serverId, request, ct), ct)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<PortReservationDto> AddManualReservationLockedAsync(
+        int serverId, CreatePortReservationRequest request, CancellationToken ct)
+    {
         // Only a declared or manual claim blocks: turning an observed listener into a reservation is the
         // whole point of the "Reserve" action, so its own sighting must not refuse it.
         var claims = await repo
@@ -230,8 +249,9 @@ public sealed class PortRegistryService(
 
     public Task ReplaceObservedAsync(
         int serverId, IReadOnlyCollection<ObservedPortDto> ports, DateTime observedAt,
-        CancellationToken ct = default) =>
-        _observations.ReplaceAsync(serverId, ports, observedAt, ct);
+        CancellationToken ct = default,
+        IReadOnlyCollection<ObservedProtocolScanDto>? protocols = null) =>
+        _observations.ReplaceAsync(serverId, ports, observedAt, protocols, ct);
 
     public async Task<bool> ReleaseOwnedAsync(
         int serverId, int port, string ownerKey, CancellationToken ct = default)
@@ -263,7 +283,17 @@ public sealed class PortRegistryService(
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerKey);
+        // Locked on the server the port is claimed on; a sync that only releases claims writes no new one.
+        if (serverId is { } lockedServer)
+            await UnderClaimLockAsync(lockedServer, () => SyncOwnedPortLockedAsync(
+                serverId, port, ownerKey, ownerLabel, projectId, ct), ct).ConfigureAwait(false);
+        else
+            await SyncOwnedPortLockedAsync(serverId, port, ownerKey, ownerLabel, projectId, ct).ConfigureAwait(false);
+    }
 
+    private async Task SyncOwnedPortLockedAsync(
+        int? serverId, int? port, string ownerKey, string ownerLabel, int? projectId, CancellationToken ct)
+    {
         var key = Truncate(ownerKey, PortRegistryLimits.MaxOwnerKeyLength);
         var wanted = serverId is { } server && port is > 0 and <= 65535 ? (server, port.Value) : ((int, int)?)null;
 
@@ -312,6 +342,71 @@ public sealed class PortRegistryService(
             UpdatedAt = now
         });
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<string?> ClaimPortAsync(
+        int serverId, int port, string ownerKey, string ownerLabel, int? projectId,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerKey);
+        if (port is <= 0 or > 65535)
+            throw new BadRequestException($"{port} is not a port number.");
+
+        return await UnderClaimLockAsync(serverId, () => ClaimPortLockedAsync(
+            serverId, port, ownerKey, ownerLabel, projectId, ct), ct).ConfigureAwait(false);
+    }
+
+    private async Task<string?> ClaimPortLockedAsync(
+        int serverId, int port, string ownerKey, string ownerLabel, int? projectId, CancellationToken ct)
+    {
+        var key = Truncate(ownerKey, PortRegistryLimits.MaxOwnerKeyLength);
+        var label = Truncate(ownerLabel, PortRegistryLimits.MaxOwnerLabelLength);
+
+        // Same gate as every other claim: a declared or manual holder refuses, an observation only informs.
+        var conflicts = await FindConflictsAsync(serverId, [port], key, ct).ConfigureAwait(false);
+        var blocking = conflicts.Find(conflict => conflict.Source != PortReservationSource.Observed);
+        if (blocking is not null)
+            throw new ConflictException(
+                $"Port {port} on this server is already registered to '{blocking.OwnerLabel}', so '{label}' "
+                + "cannot take it.");
+        var listener = conflicts.Find(conflict => conflict.Source == PortReservationSource.Observed)?.OwnerLabel;
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var existing = await repo
+            .GetTrackedReservationsForPortsAsync(serverId, [port], PortReservationSource.Declared, ct)
+            .ConfigureAwait(false);
+        var row = existing.Find(reservation => string.Equals(reservation.OwnerKey, key, StringComparison.Ordinal));
+        if (row is not null)
+        {
+            row.UpdatedAt = now;
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            return listener;
+        }
+
+        repo.TrackReservation(new ServerPortReservation
+        {
+            ServerId = serverId,
+            Port = port,
+            OwnerKey = key,
+            OwnerLabel = label,
+            ProjectId = projectId,
+            Source = PortReservationSource.Declared,
+            DeclaredAt = now,
+            UpdatedAt = now
+        });
+        try
+        {
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+        {
+            // The unique index on (server, port, source) lost a race against a concurrent claim.
+            logger.LogInformation(ex, "Claim of port {Port} on server {ServerId} lost a race.", port, serverId);
+            throw new ConflictException(
+                $"Port {port} on this server was just registered by somebody else, so '{label}' cannot take it.");
+        }
+
+        return listener;
     }
 
     /// <summary>The identity a server app's port is recorded under.</summary>
@@ -388,11 +483,8 @@ public sealed class PortRegistryService(
         return new PortRangeDto { From = range.From, To = range.To, IsExplicit = true };
     }
 
-    public async Task<List<int>> AllocateAsync(
-        int serverId, int count, string ownerKey, string ownerLabel, int? projectId,
-        CancellationToken ct = default)
+    public async Task<List<int>> PeekFreePortsAsync(int serverId, int count, CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ownerKey);
         if (count is < 1 or > PortRegistryLimits.MaxPortsPerAllocation)
             throw new BadRequestException(
                 $"Ask for between 1 and {PortRegistryLimits.MaxPortsPerAllocation} ports.");
@@ -413,6 +505,22 @@ public sealed class PortRegistryService(
             throw new ConflictException(
                 $"The allocation window {window.From}-{window.To} has only {free.Count} free port(s) "
                 + $"left, and {count} were requested.");
+        return free;
+    }
+
+    public async Task<List<int>> AllocateAsync(
+        int serverId, int count, string ownerKey, string ownerLabel, int? projectId,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerKey);
+        return await UnderClaimLockAsync(serverId, () => AllocateLockedAsync(
+            serverId, count, ownerKey, ownerLabel, projectId, ct), ct).ConfigureAwait(false);
+    }
+
+    private async Task<List<int>> AllocateLockedAsync(
+        int serverId, int count, string ownerKey, string ownerLabel, int? projectId, CancellationToken ct)
+    {
+        var free = await PeekFreePortsAsync(serverId, count, ct).ConfigureAwait(false);
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var key = Truncate(ownerKey, PortRegistryLimits.MaxOwnerKeyLength);
@@ -474,6 +582,34 @@ public sealed class PortRegistryService(
             .ConfigureAwait(false);
         foreach (var reservation in owned.Where(reservation => !keep.Contains(reservation.Port)))
             repo.RemoveReservation(reservation);
+    }
+
+    /// <summary>
+    /// BACK-008: every claim that writes a Declared or Manual row reads the holders and writes under one lock
+    /// per server, so a declaration and a manual reservation (which the unique index, keyed on Source, lets
+    /// coexist) can no longer both take the same port. Observations stay outside: they record what a scan saw.
+    /// </summary>
+    private Task<T> UnderClaimLockAsync<T>(int serverId, Func<Task<T>> claim, CancellationToken ct) =>
+        repo.RunUnderServerClaimLockAsync(serverId, claim, ct);
+
+    private Task UnderClaimLockAsync(int serverId, Func<Task> claim, CancellationToken ct) =>
+        repo.RunUnderServerClaimLockAsync(serverId, async () =>
+        {
+            await claim().ConfigureAwait(false);
+            return true;
+        }, ct);
+
+    private async Task RefuseOtherManualHolderAsync(
+        int serverId, IReadOnlyCollection<int> ports, string ownerKey, string label, CancellationToken ct)
+    {
+        var claims = await repo.GetReservationsForPortsAsync(serverId, ports, ct).ConfigureAwait(false);
+        var holder = claims.Find(reservation =>
+            reservation.Source == PortReservationSource.Manual
+            && NormalizeProtocol(reservation.Protocol) == PortRegistryLimits.TcpProtocol
+            && !string.Equals(reservation.OwnerKey, ownerKey, StringComparison.Ordinal));
+        if (holder is not null)
+            throw new ConflictException(
+                $"Port {holder.Port} on this server is registered to '{holder.OwnerLabel}', so '{label}' cannot take it.");
     }
 
     /// <summary>

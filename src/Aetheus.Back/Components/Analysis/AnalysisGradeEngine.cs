@@ -11,11 +11,16 @@ internal static class AnalysisGradeEngine
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <param name="fingerprintsCountedByEarlierReports">The fingerprints of the findings the earlier reports of the same
+    /// run already hold: the run counts a finding once, so this report's contribution to the run
+    /// (<see cref="AnalysisGradeMeasureDto.RunFindingCounts"/>) leaves them out, while its own counts stay complete.</param>
     public static AnalysisGradeEvaluation Evaluate(
         AnalysisReport report,
         AnalysisRunContext context,
-        DateTime now)
+        DateTime now,
+        IReadOnlySet<string>? fingerprintsCountedByEarlierReports = null)
     {
+        var alreadyCounted = fingerprintsCountedByEarlierReports ?? new HashSet<string>();
         var resolved = Resolve(context.PipelineYaml, report.Category);
         if (resolved is null)
             return AnalysisGradeEvaluation.Empty;
@@ -40,7 +45,7 @@ internal static class AnalysisGradeEngine
             .Select((rule, index) => (Rule: rule, Errors: diagnosis.RuleErrors[index]))
             .OrderBy(item => item.Rule.Key, StringComparer.OrdinalIgnoreCase)
             .Select(item => item.Errors.Count == 0
-                ? WithProducerStep(EvaluateRule(item.Rule, report, evidenceAvailable), stages, item.Rule)
+                ? WithProducerStep(EvaluateRule(item.Rule, report, evidenceAvailable, alreadyCounted), stages, item.Rule)
                 : AnalysisGradeRejections.Rule(item.Rule, item.Errors, scope))
             .ToList();
         if (diagnosis.GradingErrors.Count > 0)
@@ -156,7 +161,8 @@ internal static class AnalysisGradeEngine
     private static AnalysisGradeMeasureDto EvaluateRule(
         PipelineAnalysisGradeRuleDefinition rule,
         AnalysisReport report,
-        bool evidenceAvailable)
+        bool evidenceAvailable,
+        IReadOnlySet<string> alreadyCounted)
     {
         PipelineAnalysisGradingValidator.TryParseDomain(rule.Domain, out var domain);
         PipelineAnalysisGradingValidator.TryParseDirection(rule.Direction, out var direction);
@@ -169,13 +175,18 @@ internal static class AnalysisGradeEngine
             var counts = applies
                 ? AnalysisFindingScore.Count(OpenFindings(report, rule).Select(finding => finding.Severity))
                 : null;
+            var runCounts = applies
+                ? AnalysisFindingScore.Count(NotYetCounted(OpenFindings(report, rule), alreadyCounted).Select(finding => finding.Severity))
+                : null;
             return BuildMeasure(rule, domain!.Value, direction!.Value, category, null,
                 counts is null
                     ? null
                     : AnalysisFindingScore.Value(counts, PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule)),
-                null, counts);
+                null, counts) with
+            { RunFindingCounts = runCounts };
         }
         var values = new List<double>();
+        double? runValue = null;
         string? unit = null;
 
         if (applies && !string.IsNullOrWhiteSpace(rule.Metric))
@@ -192,6 +203,7 @@ internal static class AnalysisGradeEngine
         else if (applies && severity.HasValue)
         {
             values.Add(OpenFindings(report, rule).Count(finding => finding.Severity == severity.Value));
+            runValue = NotYetCounted(OpenFindings(report, rule), alreadyCounted).Count(finding => finding.Severity == severity.Value);
         }
 
         var observed = values.Count > 0;
@@ -202,8 +214,17 @@ internal static class AnalysisGradeEngine
                     ? values.Min()
                     : values.Max()
             : null;
-        return BuildMeasure(rule, domain!.Value, direction!.Value, category, severity, observedValue, unit, null);
+        return BuildMeasure(rule, domain!.Value, direction!.Value, category, severity, observedValue, unit, null)
+            with
+        { RunObservedValue = runValue };
     }
+
+    /// <summary>The findings no earlier report of the run already holds (matched by fingerprint, which is how the
+    /// project tells one finding from another across scanners and reports).</summary>
+    private static IEnumerable<AnalysisFinding> NotYetCounted(
+        IEnumerable<AnalysisFinding> findings,
+        IReadOnlySet<string> alreadyCounted) =>
+        findings.Where(finding => !alreadyCounted.Contains(finding.Fingerprint));
 
     /// <summary> The findings a grading rule counts, one per fingerprint, and only the open ones. A
     /// finding someone accepted, marked as a false positive or mitigated is decided, not left to
@@ -229,15 +250,20 @@ internal static class AnalysisGradeEngine
             .ToList();
         if (first.WeightedFindingScore || first.CountedFindingScore)
         {
-            // The reports of one run each counted their own findings; the score follows the summed counts.
+            // The reports of one run each counted their own findings; the score follows the summed counts, each report
+            // contributing what it adds to the run (a finding two reports hold is one finding of the run, R-21). A
+            // snapshot without that figure counts all its findings.
             var counts = observed.Count == 0
                 ? null
-                : AnalysisFindingScore.Sum(observed.Select(measure => measure.FindingCounts ?? new AnalysisGradeFindingCountsDto()));
+                : AnalysisFindingScore.Sum(observed.Select(
+                    measure => measure.RunFindingCounts ?? measure.FindingCounts ?? new AnalysisGradeFindingCountsDto()));
             return BuildMeasure(
-                first with { FindingCounts = counts },
+                first with { FindingCounts = counts, RunFindingCounts = null },
                 counts is null ? null : AnalysisFindingScore.Value(counts, first.WeightedFindingScore));
         }
-        var values = observed.Select(measure => measure.ObservedValue!.Value).ToList();
+        var values = observed.Select(measure => first.Severity.HasValue
+            ? measure.RunObservedValue ?? measure.ObservedValue!.Value
+            : measure.ObservedValue!.Value).ToList();
         double? value = values.Count == 0
             ? null
             : first.Severity.HasValue
@@ -248,7 +274,7 @@ internal static class AnalysisGradeEngine
         // Every report of the run evaluates every rule, so the first measure of the group may come from a
         // report that holds no such metric (no value, no unit). The unit is the observed measure's own.
         var unit = observed.Select(measure => measure.Unit).FirstOrDefault(item => !string.IsNullOrWhiteSpace(item)) ?? first.Unit;
-        return BuildMeasure(first with { Unit = unit }, value);
+        return BuildMeasure(first with { Unit = unit, RunObservedValue = null }, value);
     }
 
     private static AnalysisGradeMeasureDto BuildMeasure(

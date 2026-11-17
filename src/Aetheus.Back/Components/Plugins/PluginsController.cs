@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Back.Components.Plugins;
 
@@ -9,9 +10,11 @@ public class PluginsController(IPluginService pluginService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<PluginRegistrationDto>>> GetPlugins(
-        [FromQuery] PaginationRequest request, CancellationToken ct)
+        [FromQuery] PaginationRequest request, CancellationToken ct,
+        [FromQuery, Range(1, int.MaxValue)] int? organizationId = null)
     {
-        return Ok(await pluginService.GetPluginsPageAsync(request, ct));
+        // R-12: the Administration organization switcher narrows the list to one organization's plugins.
+        return Ok(await pluginService.GetPluginsPageAsync(request, ct, organizationId));
     }
 
     /// <summary>The authors the plugins list's Author column filter offers.</summary>

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Aetheus.Agent.Core.Functions;
+using Aetheus.Agent.Core.Operations;
 using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Agent.Core.Tests;
@@ -166,7 +167,7 @@ public sealed class RunQaE2eSuiteFunctionTests : IDisposable
     }
 
     [Fact]
-    public async Task AFailureThatPassesOnItsRerun_IsFlakyNamedAndStillFailsTheSuite()
+    public async Task AFailureThatPassesOnItsRerun_IsFlakyNamedAndDoesNotFailTheSuite()
     {
         _trx = FailedTestRerunTests.Trx(
             ("Aetheus.E2E.HomeTests", "Loads", "Loads", "Passed"),
@@ -179,7 +180,7 @@ public sealed class RunQaE2eSuiteFunctionTests : IDisposable
         var (result, variables) = await RunAsync();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal("1", variables["E2E_SUITE_STATUS"]);
+        Assert.Equal("0", variables["E2E_SUITE_STATUS"]);
         // The rerun is the same suite container (image, network, environment) with only the filter changed.
         Assert.Equal(2, Runners.Length);
         Assert.Contains("E2E_TEST_FILTER=Category=RollbackRelevant", Runners[0]);
@@ -193,9 +194,9 @@ public sealed class RunQaE2eSuiteFunctionTests : IDisposable
         Assert.Equal(_trx, File.ReadAllText(Path.Combine(Results, "e2e.trx")));
         Assert.Equal(_rerunTrx, File.ReadAllText(Path.Combine(Results, "rerun", "e2e.trx")));
         Assert.Equal("Login\n", File.ReadAllText(Path.Combine(Results, "flaky-tests.txt")));
-        Assert.Equal("Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(Results, "failed-tests.txt")));
         Assert.Contains(_harness.Log, entry => entry.Line == "Flaky test in E2E suite qa-42-current: Login failed, then passed on its rerun.");
-        Assert.Contains(_harness.Log, entry => entry.Line.EndsWith("with findings status 1, 0 test(s) skipped.", StringComparison.Ordinal));
+        Assert.Contains(_harness.Log, entry => entry.Line.EndsWith("with findings status 0, 0 test(s) skipped.", StringComparison.Ordinal));
         Assert.True(ContainersRemoved);
     }
 

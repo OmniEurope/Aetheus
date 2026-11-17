@@ -61,7 +61,6 @@ public partial class ProjectExternalRepoSection : ProjectWritableSectionBase
     private async Task SyncNowAsync()
     {
         _syncing = true;
-        StateHasChanged();
         try
         {
             var result = await Api.Git.SyncExternalRepoNowAsync(ProjectId);
@@ -69,7 +68,7 @@ public partial class ProjectExternalRepoSection : ProjectWritableSectionBase
             else Toast.Error("Error", "SaveFailed");
         }
         catch (HttpRequestException) { Toast.Error("Error", "SaveFailed"); }
-        finally { _syncing = false; StateHasChanged(); }
+        finally { _syncing = false; }
     }
 
     private async Task DetachAsync()

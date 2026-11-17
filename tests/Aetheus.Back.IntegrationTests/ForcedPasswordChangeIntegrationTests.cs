@@ -11,12 +11,12 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>Exercises forced password change through real HTTP and PostgreSQL: the persisted flag
 /// and JWT claim restrict access until the password changes. A subsequent login must clear both
 /// restrictions.</summary>
-[Collection(PostgresCollection.Name)]
-public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture)
+public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string AdminPassword = AetheusWebApplicationFactory.AdminPassword;
 
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task FirstLogin_WithForcedChange_FlagsToken_ThenClearsAfterChange()
     {
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);

@@ -20,6 +20,10 @@ public interface ITaskRepository
         string? search, int page, int pageSize, List<TaskExecutionStatus> statuses, List<int>? accessibleServerIds = null, CancellationToken ct = default);
 
     Task<ServerTask?> GetTaskWithServerAsync(int id, CancellationToken ct = default);
+    Task<int?> GetTaskIdByUidAsync(Guid uid, CancellationToken ct = default);
+    Task<TaskIdentityBackfillDto> GetIdentityBackfillProgressAsync(CancellationToken ct = default);
+    /// <summary>R-8: the number a person reads for each run, by technical key.</summary>
+    Task<IReadOnlyDictionary<int, int>> GetRunNumbersAsync(IEnumerable<int> runIds, CancellationToken ct = default);
 
     Task<ServerTask?> FindTaskAsync(int id, CancellationToken ct = default);
     Task<string?> GetServerAgentVersionAsync(int serverId, CancellationToken ct = default);
@@ -66,6 +70,15 @@ public interface ITaskRepository
         long fencingToken,
         DateTime startedAt,
         CancellationToken ct = default);
+    /// <summary>
+    /// When the task already runs under exactly this live agent lease, the instant it started; otherwise null.
+    /// It tells a start the agent repeats (its first response was lost) from a start claimed by someone else.
+    /// </summary>
+    Task<DateTime?> GetStartedAtUnderLeaseAsync(
+        int taskId,
+        string agentSessionId,
+        long fencingToken,
+        CancellationToken ct = default);
     Task<bool> TryReleaseAssignedTaskWithLeaseAsync(
         ServerTask task,
         string agentSessionId,
@@ -83,6 +96,7 @@ public interface ITaskRepository
         int exitCode,
         DateTime completedAt,
         string environmentVariables,
+        string? stepOutputVariablesJson,
         CancellationToken ct = default);
 
     Task<ServerTask> AddTaskAsync(ServerTask task, CancellationToken ct = default);

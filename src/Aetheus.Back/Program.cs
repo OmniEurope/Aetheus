@@ -14,7 +14,6 @@ using Aetheus.Back.Services.Email;
 using Aetheus.Telemetry;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -39,6 +38,8 @@ builder.Services.AddAetheusTelemetry(builder.Configuration, options =>
 builder.Services.AddSingleton(TimeProvider.System);
 // RequestErrorLoggingMiddleware counts the refused requests that match no route.
 builder.Services.AddSingleton<UnmatchedRequestCounter>();
+// The restart cause an agent reports with its first heartbeat, read by the sweep that fails the replaced session's tasks.
+builder.Services.AddSingleton<Aetheus.Back.Services.AgentRestartRegistry>();
 // R1-40: a request past the threshold logs what the process was doing meanwhile (GC, pool, background work).
 builder.Services.AddSlowRequestDiagnostics(builder.Configuration);
 
@@ -63,6 +64,8 @@ var jwtKey = StartupSecrets.ResolveJwtSigningKey(builder.Configuration, builder.
 // re-resolve Auth:JwtKey from configuration.
 var jwtOptions = new JwtOptions { SigningKey = jwtKey };
 builder.Services.AddSingleton(jwtOptions);
+// R-53: per-purpose HMAC keys derived from the signing key material (never the signing key itself).
+builder.Services.AddSingleton<TokenHashKeys>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -155,7 +158,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddScheme<AuthenticationSchemeOptions, PatAuthenticationHandler>(
         PatAuthenticationHandler.SchemeName, _ => { })
     .AddScheme<AuthenticationSchemeOptions, PackageRegistryAuthenticationHandler>(
-        PackageRegistryAuthenticationHandler.SchemeName, _ => { });
+        PackageRegistryAuthenticationHandler.SchemeName, _ => { })
+    // The mailbox reading frame cannot send the JWT: its single-use message ticket authenticates it.
+    .AddScheme<AuthenticationSchemeOptions, Aetheus.Back.Components.Mail.Mailbox.MailboxDocumentAuthenticationHandler>(
+        Aetheus.Back.Components.Mail.Mailbox.MailboxDocumentAuthenticationHandler.SchemeName, _ => { });
 
 builder.Services.AddAuthorization(options =>
 {
@@ -199,7 +205,12 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
 // --- SignalR ---
 // SITE-SEC-002: every hub connection is tracked by user so a permission change can close them.
 builder.Services.AddSingleton<Aetheus.Back.Hubs.HubConnectionRegistry>();
-builder.Services.AddSignalR(options => Microsoft.AspNetCore.SignalR.HubOptionsExtensions.AddFilter<Aetheus.Back.Hubs.HubConnectionRegistryFilter>(options));
+builder.Services.AddSignalR(options =>
+{
+    Microsoft.AspNetCore.SignalR.HubOptionsExtensions.AddFilter<Aetheus.Back.Hubs.HubConnectionRegistryFilter>(options);
+    // A deliberate HubException refusal is logged at Information, not as the dispatcher's Error.
+    Microsoft.AspNetCore.SignalR.HubOptionsExtensions.AddFilter<Aetheus.Back.Hubs.HubRefusalLogFilter>(options);
+});
 
 // --- Controllers ---
 builder.Services.AddControllers(options =>
@@ -260,6 +271,8 @@ builder.Services.AddApiVersioning(options =>
 
 // --- CORS ---
 var corsOrigins = builder.ResolveCorsOrigins();
+// A message document may be framed by the interface origins only (frame-ancestors of its own CSP).
+builder.Services.AddSingleton(new Aetheus.Back.Components.Mail.Mailbox.MailboxDocumentPolicy(corsOrigins));
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -274,7 +287,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddAetheusRateLimiting(builder.Configuration);
+builder.Services.AddAetheusRateLimiting(builder.Configuration, builder.Environment.IsDevelopment());
 
 // --- OpenAPI ---
 // R-28: the generated OpenAPI document is kept for the process lifetime (see OpenApiDocumentCachePolicy).
@@ -319,17 +332,12 @@ await app.InitializeDatabaseAsync();
 // http://. That is what made `dotnet nuget push` read an http:// publish endpoint from the v3 index
 // and refuse to publish, because NuGet requires HTTPS sources.
 //
-// Clearing both lists is safe HERE and only here: Compose binds the backend to 127.0.0.1:<port> on
-// the host, so nothing but the local Apache vhost can open a connection to it, and that vhost sets
-// X-Forwarded-Proto itself. If the port is ever published on a public interface these headers become
-// spoofable and this must be revisited.
-var forwardedHeadersOptions = new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-};
-forwardedHeadersOptions.KnownIPNetworks.Clear();
-forwardedHeadersOptions.KnownProxies.Clear();
-app.UseForwardedHeaders(forwardedHeadersOptions);
+// R-52: the headers are honoured only from loopback and the declared proxy networks
+// (ForwardedHeaders:KnownNetworks, default the Docker private range 172.16.0.0/12 that holds the
+// Compose bridge gateway, plus the subnets the container itself is attached to, since the production
+// host allocates its bridges from 10.0.x.0/24). Any other source keeps its socket address, so it cannot
+// pick the address every per-address rate limiter partitions on, even if the port is ever exposed.
+app.UseForwardedHeaders(ForwardedHeadersConfiguration.CreateOptions(app.Configuration));
 
 // Use HTTPS redirection only when an HTTPS port is available, with forwarded headers supporting
 // Apache termination. Apache owns the public redirect while local development retains HTTP for

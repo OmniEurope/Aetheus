@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.PackageRegistry;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
 using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
@@ -15,6 +17,9 @@ public sealed class PipelineAnalysisGateTaskTests
     private readonly PipelineStepRun _stepRun = new() { Id = 8, StepName = "gate" };
     private readonly PipelineStageDefinition _stage = new() { Name = "Quality" };
 
+    private PipelineAnalysisTaskFactory NewFactory() => new(
+        _builder, Substitute.For<IPackageRunTokenIssuer>(), Substitute.For<ISecretMaskingService>());
+
     [Theory]
     [InlineData("security", "security")]
     [InlineData("QUALITY", "quality")]
@@ -23,7 +28,7 @@ public sealed class PipelineAnalysisGateTaskTests
         var step = new PipelineStepDefinition { Name = "gate", Type = "analysis-gate", AnalysisScope = scope };
         var legVars = new Dictionary<string, string> { ["WORKSPACE"] = "/w", ["aetheus_run_id"] = "stale" };
 
-        var error = new PipelineAnalysisTaskFactory(_builder).CreateAnalysisGateTask(42, _server, _stepRun, step, legVars, _stage);
+        var error = NewFactory().CreateAnalysisGateTask(42, _server, _stepRun, step, legVars, _stage);
 
         Assert.Null(error);
         _builder.Received(1).TrackTypedTask(
@@ -44,7 +49,7 @@ public sealed class PipelineAnalysisGateTaskTests
     {
         var step = new PipelineStepDefinition { Name = "gate", Type = "analysis-gate", AnalysisScope = scope };
 
-        var error = new PipelineAnalysisTaskFactory(_builder).CreateAnalysisGateTask(42, _server, _stepRun, step, [], _stage);
+        var error = NewFactory().CreateAnalysisGateTask(42, _server, _stepRun, step, [], _stage);
 
         Assert.Equal("Step 'gate': analysis_scope must be security or quality.", error);
         _builder.DidNotReceiveWithAnyArgs().TrackTypedTask(default, default!, default!, default!, default!, default!, default);

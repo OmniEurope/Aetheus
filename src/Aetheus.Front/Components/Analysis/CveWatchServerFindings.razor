@@ -1,0 +1,30 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@using Aetheus.Front.Components.Servers.ServerDetailSections
+@* R-41: the CVE of the servers' host systems in the CVE watch tab, under the same severity, organization and switches
+   as the projects' list. Only the servers the caller may read are in it. *@
+<OmniCard Class="cve-watch-servers-card" data-testid="cve-watch-servers">
+    <HeaderContent><OmniHeading Level="OmniHeadingLevel.H5">@L["CveWatchServersTitle"]</OmniHeading></HeaderContent>
+    <ChildContent>
+        @if (_loadFailed)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger">
+                @L["LoadFailed"]
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync())"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+            </OmniAlert>
+        }
+        <VeilHold Busy="@_busy" />
+        <ServerHostFindingsGrid Items="@_items" ShowServer="true">
+            <EmptyContent>
+                @if (!_busy && !_loadFailed && _loaded)
+                {
+                    <EmptyState Icon="verified_user" Title="@L["CveWatchServersNoneTitle"]" Description="@L["CveWatchServersNoneDescription"]" />
+                }
+            </EmptyContent>
+        </ServerHostFindingsGrid>
+        @if (_total > PageSize)
+        {
+            <OmniPager Page="@_page" PageCount="@Math.Max(1, (int)Math.Ceiling(_total / (double)PageSize))"
+                       PageChanged="@OnPageChangedAsync" PageSize="@PageSize" Class="omni-u-mt-md" />
+        }
+    </ChildContent>
+</OmniCard>

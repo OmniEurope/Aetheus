@@ -51,7 +51,8 @@ public sealed class StorageAlertProvisioningServiceTests
         var service = new StorageAlertProvisioningService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             configuration,
-            NullLogger<StorageAlertProvisioningService>.Instance);
+            NullLogger<StorageAlertProvisioningService>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await service.ProvisionAsync(TestContext.Current.CancellationToken);
         await using (var verifyFirstProvisionScope = provider.CreateAsyncScope())
@@ -104,7 +105,8 @@ public sealed class StorageAlertProvisioningServiceTests
             }).Build();
         var service = new StorageAlertProvisioningService(
             provider.GetRequiredService<IServiceScopeFactory>(), configuration,
-            NullLogger<StorageAlertProvisioningService>.Instance);
+            NullLogger<StorageAlertProvisioningService>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await service.ProvisionAsync(TestContext.Current.CancellationToken);
         await using (var customizeScope = provider.CreateAsyncScope())

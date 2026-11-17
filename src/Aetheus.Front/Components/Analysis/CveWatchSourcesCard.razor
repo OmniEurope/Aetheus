@@ -1,0 +1,26 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-15 and R-22: how fresh each source of the vulnerability watch is, as the server reads it now. A handful of lines
+   beside the page's own list, so a list and not a grid. *@
+<OmniCard Class="cve-watch-sources-card" data-testid="cve-sources">
+    <HeaderContent><OmniHeading Level="OmniHeadingLevel.H5">@(Title ?? L["CveWatchSources"])</OmniHeading></HeaderContent>
+    <ChildContent>
+        <OmniDataList TItem="CveWatchSourceDto" Items="@Sources" Class="cve-watch-source-list">
+            <ItemTemplate Context="source">
+                <div class="cve-watch-source">
+                    <span class="cve-watch-source-name">@source.Source</span>
+                    <span class="cve-watch-source-date">@(source.LastSuccessAt is { } success ? success.ToString("g", System.Globalization.CultureInfo.CurrentCulture) : "-")</span>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(source.IsStale ? OmniTone.Warning : OmniTone.Success))" Fill="OmniFill.Tonal"
+                               Tone="@(source.IsStale ? OmniTone.Warning : OmniTone.Success)">@(source.IsStale ? L["CveWatchStale"] : L["CveWatchUpToDate"])</OmniBadge>
+                </div>
+            </ItemTemplate>
+            <EmptyContent>
+                @* While the answer is awaited the list says nothing: "no source" would be a conclusion drawn before the read. *@
+                @if (!Pending)
+                {
+                    <OmniText Tone="OmniTextTone.Muted">@L["CveWatchNoSource"]</OmniText>
+                }
+            </EmptyContent>
+        </OmniDataList>
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-md">@L["CveWatchSourcesAttribution"]</OmniText>
+    </ChildContent>
+</OmniCard>

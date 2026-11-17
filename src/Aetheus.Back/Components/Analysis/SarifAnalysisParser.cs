@@ -104,12 +104,14 @@ public static class SarifAnalysisParser
         var confidence = ReadConfidence(result);
         var title = Truncate(rule?.Title ?? message, 500);
         var suppliedFingerprint = ReadSuppliedFingerprint(result, rawMessage);
-        var fingerprint = ComputeHash(string.Join('|',
+        var legacyFingerprint = ComputeHash(string.Join('|',
             "v2",
             ((int)category).ToString(CultureInfo.InvariantCulture),
             (cwe ?? ruleId).Trim().ToLowerInvariant(),
             (location.Symbol ?? string.Empty).Trim().ToLowerInvariant(),
             suppliedFingerprint ?? NormalizeIdentityText(rawMessage)));
+        var (fingerprint, storedLegacyFingerprint, alternateFingerprints) =
+            Fingerprints(category, ruleId, result, rule?.Raw, rawMessage, legacyFingerprint);
         var locationHash = ComputeHash(string.Join('|',
             fingerprint,
             tool.Trim().ToLowerInvariant(),
@@ -133,9 +135,37 @@ public static class SarifAnalysisParser
             FilePath = NormalizePath(location.FilePath),
             StartLine = location.StartLine,
             EndLine = location.EndLine,
-            Symbol = TruncateNullable(location.Symbol, 500)
+            Symbol = TruncateNullable(location.Symbol, 500),
+            LegacyFingerprint = storedLegacyFingerprint,
+            AlternateFingerprints = alternateFingerprints
         };
     }
+
+    /// <summary>A vulnerability of a named package is the same finding whichever scanner reports it (R-2): its
+    /// fingerprint comes from the vulnerability and the package, the former one is kept to adopt a finding stored
+    /// under it, and the alias identifiers give the fingerprints another scanner may have stored. Any other result
+    /// keeps <paramref name="legacyFingerprint"/>, with no former or alias fingerprint.</summary>
+    private static (string Fingerprint, string LegacyFingerprint, IReadOnlyList<string> AlternateFingerprints) Fingerprints(
+        AnalysisCategory category,
+        string ruleId,
+        JsonElement result,
+        JsonElement? rule,
+        string rawMessage,
+        string legacyFingerprint)
+    {
+        var vulnerability = VulnerabilityIdentity.TryRead(category, ruleId, result, rule, rawMessage);
+        if (vulnerability is null)
+            return (legacyFingerprint, string.Empty, []);
+        var alternates = vulnerability.AllIds
+            .Where(id => !string.Equals(id, vulnerability.CanonicalId, StringComparison.Ordinal))
+            .Select(id => VulnerabilityFingerprint(category, vulnerability.IdentityFor(id)))
+            .ToList();
+        return (VulnerabilityFingerprint(category, vulnerability.IdentityFor(vulnerability.CanonicalId)),
+            legacyFingerprint, alternates);
+    }
+
+    private static string VulnerabilityFingerprint(AnalysisCategory category, string identity) =>
+        ComputeHash(string.Join('|', "v2-vulnerability", ((int)category).ToString(CultureInfo.InvariantCulture), identity));
 
     private static string ReadTool(JsonElement run)
     {
@@ -156,7 +186,8 @@ public static class SarifAnalysisParser
                 ReadNestedString(rule, "shortDescription", "text") ?? ReadNestedString(rule, "fullDescription", "text"),
                 ReadString(rule, "helpUri"),
                 ReadCwe(rule),
-                ReadSecuritySeverity(rule));
+                ReadSecuritySeverity(rule),
+                rule);
         }
 
         return result;
@@ -348,6 +379,6 @@ public static class SarifAnalysisParser
     private static string Truncate(string value, int maxLength) => value.Length <= maxLength ? value : value[..maxLength];
     private static string? TruncateNullable(string? value, int maxLength) => value is null ? null : Truncate(value, maxLength);
 
-    private sealed record RuleMetadata(string? Title, string? HelpUri, string? Cwe, double? SecuritySeverity);
+    private sealed record RuleMetadata(string? Title, string? HelpUri, string? Cwe, double? SecuritySeverity, JsonElement Raw);
     private sealed record FindingLocation(string? FilePath, int? StartLine, int? EndLine, string? Symbol);
 }

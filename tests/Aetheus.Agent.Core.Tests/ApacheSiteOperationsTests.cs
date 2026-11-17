@@ -303,4 +303,120 @@ public sealed class ApacheSiteOperationsTests : IDisposable
         Assert.Equal("# included elsewhere\n", File.ReadAllText(available));
         Assert.True(log.Has("the file was written back", TaskLogLevel.Error));
     }
+
+    // --- Remove several sites (R-26) ---------------------------------------------------------------------
+
+    private static Task<IReadOnlyDictionary<string, string?>> RemoveSites(ApacheOperationExecutor executor, OutputLog log, params string[] sites) =>
+        executor.RemoveSitesAsync(sites, 30, log.Write, TestContext.Current.CancellationToken);
+
+    [Fact]
+    public async Task RemoveSites_TakesTwoSitesOutTogether_WithOneConfigtestAndOneReload_WhenTheSecondOneIsAlreadyBroken()
+    {
+        var first = Available("first-ssl.conf");
+        var second = Available("second-ssl.conf", "SSLCertificateFile /etc/letsencrypt/live/second/fullchain.pem\n");
+        var firstLink = Link("first-ssl.conf", first);
+        var secondLink = Link("second-ssl.conf", second);
+        // Apache stands in here: its certificate is gone for "second", so the test fails while that site is enabled.
+        var calls = new ProcessRunCalls(index => new ExecutorResult(index == 0 && File.Exists(secondLink) ? 1 : 0, false));
+        var log = new OutputLog();
+
+        var results = await RemoveSites(Build(calls), log, "first-ssl.conf", "second-ssl.conf");
+
+        Assert.All(results.Values, reason => Assert.Null(reason));
+        Assert.False(File.Exists(firstLink));
+        Assert.False(File.Exists(secondLink));
+        Assert.False(File.Exists(first));
+        Assert.False(File.Exists(second));
+        Assert.Equal([ConfigTestArgv, ReloadArgv], calls.Runs.Select(run => run.Argv));
+    }
+
+    [Fact]
+    public async Task RemoveSites_PutsEverythingBack_AndNamesTheOtherSiteApacheBlames()
+    {
+        var first = Available("first-ssl.conf", "first\n");
+        var second = Available("second-ssl.conf", "second\n");
+        var firstLink = Link("first-ssl.conf", first);
+        var secondLink = Link("second-ssl.conf", second);
+        // A site that is not being removed breaks the configuration whatever happens to the others.
+        var other = Available("other-ssl.conf");
+        Link("other-ssl.conf", other);
+        var calls = new ProcessRunCalls(_ => new ExecutorResult(1, false),
+            [$"AH00526: Syntax error on line 12 of {_enabled}/other-ssl.conf:", "SSLCertificateFile: file '/etc/letsencrypt/live/other/fullchain.pem' does not exist or is empty"]);
+        var log = new OutputLog();
+
+        var results = await RemoveSites(Build(calls), log, "first-ssl.conf", "second-ssl.conf");
+
+        Assert.Equal(["first-ssl.conf", "second-ssl.conf"], results.Keys.Order());
+        Assert.All(results.Values, reason =>
+        {
+            Assert.Contains("other-ssl.conf", reason, StringComparison.Ordinal);
+            Assert.Contains("not one of the sites being removed", reason, StringComparison.Ordinal);
+            Assert.Contains("Fix or disable other-ssl.conf", reason, StringComparison.Ordinal);
+        });
+        Assert.Equal("first\n", File.ReadAllText(first));
+        Assert.Equal("second\n", File.ReadAllText(second));
+        Assert.Equal(LinkPrefix + first, File.ReadAllText(firstLink));
+        Assert.Equal(LinkPrefix + second, File.ReadAllText(secondLink));
+        Assert.Equal([ConfigTestArgv], calls.Runs.Select(run => run.Argv));
+    }
+
+    [Fact]
+    public async Task RemoveSites_PutsEverythingBack_WhenTheConfigurationFailsWithoutNamingAnotherSite()
+    {
+        var first = Available("first.conf", "first\n");
+        var firstLink = Link("first.conf", first);
+        var calls = new ProcessRunCalls(_ => new ExecutorResult(1, false));
+
+        var results = await RemoveSites(Build(calls), new OutputLog(), "first.conf");
+
+        Assert.Contains("put back", results["first.conf"], StringComparison.Ordinal);
+        Assert.Equal("first\n", File.ReadAllText(first));
+        Assert.Equal(LinkPrefix + first, File.ReadAllText(firstLink));
+    }
+
+    [Fact]
+    public async Task RemoveSites_PutsTheSitesBack_AndReloadsThePreviousConfiguration_WhenTheReloadFails()
+    {
+        var first = Available("first.conf", "first\n");
+        var firstLink = Link("first.conf", first);
+        var calls = new ProcessRunCalls(index => new ExecutorResult(index == 1 ? 1 : 0, false));
+
+        var results = await RemoveSites(Build(calls), new OutputLog(), "first.conf");
+
+        Assert.Contains("could not reload", results["first.conf"], StringComparison.Ordinal);
+        Assert.Equal("first\n", File.ReadAllText(first));
+        Assert.Equal(LinkPrefix + first, File.ReadAllText(firstLink));
+        Assert.Equal([ConfigTestArgv, ReloadArgv, ReloadArgv], calls.Runs.Select(run => run.Argv));
+    }
+
+    [Fact]
+    public async Task RemoveSites_LeavesASiteWhosePreconditionFails_AndRemovesTheOthers()
+    {
+        var kept = Available("kept.conf");
+        var foreignEntry = Path.Combine(_enabled, "kept.conf");
+        File.WriteAllText(foreignEntry, "<VirtualHost *:80>\n</VirtualHost>\n");
+        var gone = Available("gone.conf");
+        Link("gone.conf", gone);
+        var calls = new ProcessRunCalls();
+
+        var results = await RemoveSites(Build(calls), new OutputLog(), "kept.conf", "gone.conf");
+
+        Assert.Contains("is not a link to", results["kept.conf"], StringComparison.Ordinal);
+        Assert.Null(results.GetValueOrDefault("gone.conf"));
+        Assert.True(File.Exists(kept));
+        Assert.True(File.Exists(foreignEntry));
+        Assert.False(File.Exists(gone));
+        Assert.Equal([ConfigTestArgv, ReloadArgv], calls.Runs.Select(run => run.Argv));
+    }
+
+    [Fact]
+    public async Task RemoveSites_RunsNothing_WhenNoSiteCouldBeTakenOut()
+    {
+        var calls = new ProcessRunCalls();
+
+        var results = await RemoveSites(Build(calls), new OutputLog(), "missing.conf");
+
+        Assert.Contains("is not a regular file of sites-available", results["missing.conf"], StringComparison.Ordinal);
+        Assert.Empty(calls.Runs);
+    }
 }

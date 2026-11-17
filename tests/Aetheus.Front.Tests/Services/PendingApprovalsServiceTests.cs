@@ -56,11 +56,15 @@ public class PendingApprovalsServiceTests
 
         factory.AnnounceBackendReplaced();
         var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (factory.Connection!.Starts < 2 && DateTime.UtcNow < deadline)
+        // The refusal after the restart is logged at debug, as the first one was: wait for that line, the end of the
+        // restart, instead of a fixed pause after the second start.
+        while ((factory.Connection!.Starts < 2 || logger.Entries.Count(entry => entry.Level == LogLevel.Debug) < 2)
+            && DateTime.UtcNow < deadline)
             await Task.Delay(20, TestContext.Current.CancellationToken);
-        await Task.Delay(200, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, factory.Connection!.Starts);
+        Assert.True(logger.Entries.Count(entry => entry.Level == LogLevel.Debug) >= 2,
+            "The refused join after the restart was never logged at debug.");
         Assert.DoesNotContain(logger.Entries, entry => entry.Level >= LogLevel.Warning);
     }
 

@@ -285,6 +285,18 @@ public class NotificationService(
 
         foreach (var rule in rules)
         {
+            // The rule's optional filter narrows which events reach its channel: an empty one keeps the rule
+            // matching every event of its type, an unreadable one skips only this rule.
+            switch (NotificationRuleFilter.Evaluate(rule.FilterJson, jsonPayload))
+            {
+                case NotificationRuleFilterVerdict.NoMatch:
+                    continue;
+                case NotificationRuleFilterVerdict.Invalid:
+                    logger.LogWarning(
+                        "Notification rule {RuleId} for event {EventType} on channel {ChannelName} skipped: its filter is not a JSON object of conditions",
+                        rule.Id, eventType, rule.Channel.Name);
+                    continue;
+            }
             try
             {
                 await DispatchNotificationAsync(rule.Channel, eventType, jsonPayload, ct).ConfigureAwait(false);

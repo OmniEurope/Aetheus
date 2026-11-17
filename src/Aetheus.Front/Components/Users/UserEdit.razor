@@ -21,7 +21,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" Class="omni-u-mt-lg" />
+    <VeilHold Busy="true" />
 }
 else
 {
@@ -31,7 +31,7 @@ else
                 <OmniCard Class="iam-detail-card">
                 <div class="form-narrow"><OmniTemplateForm TModel="UserModel" Model="@_model" OnValidSubmit="@OnSubmit">
                     <OmniDataAnnotationsValidator Localizer="@L" />
-                    <OmniStack Gap="OmniSpacing.Large">
+                    <OmniStack Gap="OmniSpacing.Small">
                         <OmniFormField For="oe-pages-users-useredit-4"><LabelContent>@L["Username"]</LabelContent><ChildContent>
                             <OmniTextBox @bind-Value="_model.Username" Id="oe-pages-users-useredit-4" />
                             <ValidationMessage For="@(() => _model.Username)" />
@@ -103,7 +103,7 @@ else
                 <OmniCard Class="iam-detail-card">
                 @if (_loadingOrgs)
                 {
-                    <AetheusLoader />
+                    <ZoneVeil />
                 }
                 else
                 {
@@ -119,14 +119,11 @@ else
                         </OmniFormField>
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddOrg" Disabled="@(_selectedOrgId is null)" Class="@(_addingOrg ? "btn-busy" : null)" Busy="@(_addingOrg)"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["AddToOrganization"]</span></ChildContent></OmniButton>
                     </OmniStack>
-                    @if (_userOrgs.Count == 0)
-                    {
-                        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoOrganizations"]</OmniText>
-                    }
-                    else
-                    {
-                        <OmniDataGrid FillAvailableHeight="true" TItem="UserOrganizationDto" ExportTitle="@ExportContext.Title(L["Organizations"])" ExportFields="@ExportContext.Fields()" Items="@_userOrgs"
-                            OnRowClick="@(args => Nav.NavigateTo($"/admin/organizations/{args.Item.OrganizationId}"))" Class="aetheus-clickable-rows" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                    @* R-10: the grid is always mounted, so a membership added, changed or removed draws at once from the answer. *@
+                        <AetheusDataGrid @ref="_orgsGrid" FullHeight="true" TItem="UserOrganizationDto" KeyProperty="MemberId" ExportName="@L["Organizations"]"
+                            Data="@_orgRows" Count="@_orgRowCount" LoadData="@LoadOrgRowsAsync" ExportRead="@ReadOrgsExportAsync" EmptyText="@L["NoOrganizations"]"
+                            VirtualData="@(() => new OmniDataGridResult<UserOrganizationDto>(_orgRows, _orgRowCount))" Virtualize="@AetheusGrid.RemoteVirtualization"
+                            RowClick="@(org => Nav.NavigateTo($"/admin/organizations/{org.OrganizationId}"))" class="aetheus-clickable-rows">
                             <Columns>
                                 <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="UserOrganizationDto" Property="Name" Title="@L["Organization"]" Filterable="true">
                                     <Template Context="o">
@@ -146,8 +143,7 @@ else
                                     </Template>
                                 </OmniDataGridColumn>
                             </Columns>
-                        </OmniDataGrid>
-                    }
+                        </AetheusDataGrid>
                     </OmniStack>
                 }
                 </OmniCard>

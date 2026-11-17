@@ -65,6 +65,26 @@ public sealed class AssuranceContractGradeChecksTests
     public void ExpectedTestGrade_RefusesAnInvalidStatusOrAnInconsistentGrade(string test, string reason) =>
         Assert.Equal(reason, Refusal(() => AssuranceContractVerifier.ExpectedTestGrade("unit", JsJson.Parse(test))));
 
+    /// <summary>PLAN-006: a passed suite naming flaky tests carries the candidate's flaky grade; a failed one
+    /// stays F whatever its flaky tests; a passed one without flaky tests stays A.</summary>
+    [Theory]
+    [InlineData("""{"status":"Passed","effectiveGrade":"B","flakyTests":"Login"}""", "B", "Passed", "B")]
+    [InlineData("""{"status":"Passed","effectiveGrade":"C","flakyTests":"Login"}""", "C", "Passed", "C")]
+    [InlineData("""{"status":"Passed","effectiveGrade":"A"}""", "C", "Passed", "A")]
+    [InlineData("""{"status":"Failed","effectiveGrade":"F","flakyTests":"Login"}""", "B", "Failed", "F")]
+    public void ExpectedTestGrade_GradesAPassedSuiteOnTheCandidateFlakyTests(string test, string flakyGrade, string status, string expected) =>
+        Assert.Equal((status, expected), AssuranceContractVerifier.ExpectedTestGrade("unit", JsJson.Parse(test), flakyGrade));
+
+    /// <summary>A grade that does not match the flaky count is refused: flaky tests graded A, a failure
+    /// passed off as flaky, or a B with its flaky tests stripped.</summary>
+    [Theory]
+    [InlineData("""{"status":"Passed","effectiveGrade":"A","flakyTests":"Login"}""", "B")]
+    [InlineData("""{"status":"Failed","effectiveGrade":"B","flakyTests":"Login"}""", "B")]
+    [InlineData("""{"status":"Passed","effectiveGrade":"B"}""", "B")]
+    public void ExpectedTestGrade_RefusesAGradeTheFlakyTestsDoNotGive(string test, string flakyGrade) =>
+        Assert.Equal("unit effective grade is inconsistent.",
+            Refusal(() => AssuranceContractVerifier.ExpectedTestGrade("unit", JsJson.Parse(test), flakyGrade)));
+
     [Fact]
     public void CheckTestReadiness_APassedTestAboveTheThreshold_IsAccepted() =>
         Verifier(evidence: true, readiness: true).CheckTestReadiness("unit", "Passed", "A");

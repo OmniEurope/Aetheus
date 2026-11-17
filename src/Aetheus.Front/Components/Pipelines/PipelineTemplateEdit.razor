@@ -29,7 +29,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader />
+    <VeilHold Busy="true" />
 }
 else if (_notFound)
 {
@@ -53,7 +53,7 @@ else
         }
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField Label="@L["Name"]" Class="omni-u-w-100" For="Name">
                         <OmniTextBox @bind-Value="_model.Name"
                             Id="Name" Disabled="@(!_isNew)" Class="omni-u-w-100" />
@@ -67,7 +67,7 @@ else
                 </OmniStack>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField Label="@L["Description"]" Class="omni-u-w-100" For="Description">
                         <OmniTextArea @bind-Value="_model.Description"
                             Id="Description" Rows="3" Disabled="@_readOnly" Class="omni-u-w-100" />

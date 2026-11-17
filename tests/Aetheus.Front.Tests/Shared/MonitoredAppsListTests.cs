@@ -32,13 +32,16 @@ public class MonitoredAppsListTests : BunitContext
     public void RendersApps_AndShowsAddButton_WhenCanWrite()
     {
         SeedApps();
-        // The add button sits in the project header (R-109), so the list is rendered next to the header outlet.
-        var cut = this.RenderWithPageHeader<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
+        // R-32: Add sits in the project header menu, which the list fills through the section menu the layout cascades.
+        var menu = new ProjectSectionMenu();
+        var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1).AddCascadingValue(menu));
         cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
 
         Assert.Contains("toto-qa", cut.Markup);
         Assert.Contains("AppHealthDown", cut.Markup);   // status badge (stub localizer echoes the key)
-        Assert.Contains("AddMonitoredApp", cut.Find(".test-outlet").TextContent);  // create button visible with write permission
+        // Create is a header menu action with write permission, and the header's Settings becomes the main action.
+        Assert.Equal("AddMonitoredApp", Assert.Single(menu.Actions).Text);
+        Assert.True(menu.SettingsPrimary);
     }
 
     [Fact]
@@ -52,10 +55,12 @@ public class MonitoredAppsListTests : BunitContext
         Services.AddSingleton(readOnly);
 
         SeedApps();
-        var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
+        var menu = new ProjectSectionMenu();
+        var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1).AddCascadingValue(menu));
         cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
 
         Assert.DoesNotContain("AddMonitoredApp", cut.Markup);
+        Assert.Empty(menu.Actions);
     }
 
     [Fact]

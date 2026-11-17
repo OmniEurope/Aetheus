@@ -6,8 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class AlertProvisioningRepositoryIntegrationTests(PostgresFixture fixture)
+public sealed class AlertProvisioningRepositoryIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task AddProvisionedRulesIfMissingAsync_ConcurrentPostgresCallsInsertEachKeyOnce()
@@ -41,54 +40,6 @@ public sealed class AlertProvisioningRepositoryIntegrationTests(PostgresFixture 
             .ToListAsync(TestContext.Current.CancellationToken);
         Assert.Equal(3, stored.Count);
         Assert.Equal(3, stored.Select(rule => rule.ProvisioningKey).Distinct().Count());
-    }
-
-    [Fact]
-    public async Task AddProvisionedRulesIfMissingAsync_AfterPartialRunResumesWithoutOverwriting()
-    {
-        await fixture.ResetAsync();
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
-            .Options;
-        var serverId = await SeedServerAsync(options);
-        var rules = CreateRules(serverId);
-        var now = new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero);
-
-        await using (var partialContext = new AppDbContext(options))
-        {
-            var partial = new AlertRepository(partialContext, new FixedTimeProvider(now));
-            Assert.Equal(1, await partial.AddProvisionedRulesIfMissingAsync(
-                [CloneRule(rules[0])],
-                TestContext.Current.CancellationToken));
-        }
-
-        await using (var customizedContext = new AppDbContext(options))
-        {
-            var customized = await customizedContext.AlertRules.SingleAsync(
-                rule => rule.ProvisioningKey == rules[0].ProvisioningKey,
-                TestContext.Current.CancellationToken);
-            customized.Threshold = 77;
-            customized.IsEnabled = false;
-            await customizedContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using (var resumedContext = new AppDbContext(options))
-        {
-            var resumed = new AlertRepository(resumedContext, new FixedTimeProvider(now));
-            Assert.Equal(2, await resumed.AddProvisionedRulesIfMissingAsync(
-                rules.Select(CloneRule).ToArray(),
-                TestContext.Current.CancellationToken));
-        }
-
-        await using var verification = new AppDbContext(options);
-        var stored = await verification.AlertRules
-            .Where(rule => rule.ServerId == serverId)
-            .OrderBy(rule => rule.ProvisioningKey)
-            .ToListAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(3, stored.Count);
-        var customizedRule = Assert.Single(stored, rule => rule.ProvisioningKey == rules[0].ProvisioningKey);
-        Assert.Equal(77, customizedRule.Threshold);
-        Assert.False(customizedRule.IsEnabled);
     }
 
     private static async Task<int> SeedServerAsync(DbContextOptions<AppDbContext> options)

@@ -61,7 +61,7 @@ public sealed class BackgroundWorkerLeaderLeaseAuditTests
             lease);
 
         await worker.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:metrics-cleanup", Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());

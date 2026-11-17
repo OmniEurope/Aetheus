@@ -28,7 +28,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var clock = new FakeTimeProvider(
             new DateTimeOffset(2026, 7, 27, 12, 0, 0, TimeSpan.Zero));
-        var seeder = new DeliveryPipelineTemplateSeeder(db, clock);
+        var seeder = new DeliveryPipelineTemplateSeeder(db, clock, lease: LeaderLeaseDouble.Leader());
 
         await seeder.SeedAsync(TestContext.Current.CancellationToken);
         await seeder.SeedAsync(TestContext.Current.CancellationToken);
@@ -58,7 +58,9 @@ public sealed class DeliveryPipelineTemplateSeederTests
             Assert.Equal(Enumerable.Range(1, shippedFiles), template.Versions.Select(version => version.Version).Order());
         });
         var candidate = Assert.Single(templates, template => template.Name == "application-candidate");
-        Assert.Equal(4, candidate.LatestVersion);
+        Assert.Equal(5, candidate.LatestVersion);
+        Assert.Contains("R-33", candidate.Versions.Single(version => version.Version == 5).ChangelogEntry,
+            StringComparison.Ordinal);
         Assert.Contains("R-23", candidate.Versions.Single(version => version.Version == 4).ChangelogEntry,
             StringComparison.Ordinal);
         Assert.Contains("R2-1", candidate.Versions.Single(version => version.Version == 3).ChangelogEntry,
@@ -110,7 +112,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
         // A lone v1 that differs is not something the reset renumbers: immutability refuses it.
         db.PipelineTemplates.Add(CreateHistoricalCandidate(organizationId, "stages: []", versions: 1));
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var seeder = new DeliveryPipelineTemplateSeeder(db, TimeProvider.System);
+        var seeder = new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader());
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => seeder.SeedAsync(TestContext.Current.CancellationToken));
@@ -172,10 +174,15 @@ public sealed class DeliveryPipelineTemplateSeederTests
             var errors = new List<string>();
             var warnings = new List<string>();
             Assert.NotNull(definition);
-            PipelineDefinitionValidator.ValidateDefinitionBasics(definition, errors, warnings);
-            PipelineDefinitionValidator.ValidateStages(definition, errors, warnings);
-            Assert.Empty(errors);
-            Assert.NotEmpty(definition.Stages);
+            // A template that extends another (the deployment templates extend their core) holds the stages of its base: it
+            // is validated resolved, with its base, by GenericTemplatesWithoutProjectFilesTests.
+            if (string.IsNullOrWhiteSpace(definition.Extends))
+            {
+                PipelineDefinitionValidator.ValidateDefinitionBasics(definition, errors, warnings);
+                PipelineDefinitionValidator.ValidateStages(definition, errors, warnings);
+                Assert.Empty(errors);
+                Assert.NotEmpty(definition.Stages);
+            }
             // The platform's own interface (its output-variable marker, its checkout-depth variable)
             // is not an implementation detail of the Aetheus product; anything else named Aetheus is.
             var withoutPlatformInterface = yaml
@@ -295,58 +302,6 @@ public sealed class DeliveryPipelineTemplateSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_ArchivesAndRemovesAnUnreferencedLegacyTemplate()
-    {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-            .Options;
-        await using var db = new AppDbContext(options);
-        var organization = new Organization
-        {
-            Name = "Aetheus",
-            Slug = "aetheus",
-            CreatedAt = DateTime.UnixEpoch,
-            UpdatedAt = DateTime.UnixEpoch
-        };
-        db.Organizations.Add(organization);
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        db.PipelineTemplates.Add(new PipelineTemplate
-        {
-            Name = "Build=VPS, Deploy=VPS",
-            Description = "Old platform matrix",
-            Category = "CI/CD",
-            OrganizationId = organization.Id,
-            LatestVersion = 1,
-            CreatedAt = DateTime.UnixEpoch,
-            UpdatedAt = DateTime.UnixEpoch,
-            Versions =
-            [
-                new PipelineTemplateVersion
-                {
-                    Version = 1,
-                    YamlContent = "name: old\nstages: []",
-                    ChangelogEntry = "Initial version",
-                    CreatedAt = DateTime.UnixEpoch,
-                    CreatedByUsername = "system"
-                }
-            ]
-        });
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System)
-            .SeedAsync(TestContext.Current.CancellationToken);
-
-        Assert.False(await db.PipelineTemplates.AnyAsync(
-            template => template.Name == "Build=VPS, Deploy=VPS",
-            TestContext.Current.CancellationToken));
-        var legacy = await db.PipelineTemplates.Include(template => template.Versions)
-            .SingleAsync(template => template.Name == "legacy-build-vps-deploy-vps",
-                TestContext.Current.CancellationToken);
-        Assert.Equal("Legacy", legacy.Category);
-        Assert.Equal("name: old\nstages: []", Assert.Single(legacy.Versions).YamlContent);
-    }
-
-    [Fact]
     public async Task SeedAsync_AppendsInsteadOfMutatingWhenAReferencePipelineEvolves()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -385,7 +340,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         var template = await db.PipelineTemplates.Include(item => item.Versions)
@@ -399,6 +354,109 @@ public sealed class DeliveryPipelineTemplateSeederTests
         Assert.Contains("artifact_name: ApplicationPayload-artifacts",
             template.Versions.Single(item => item.Version == 2).YamlContent, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task SeedAsync_OnAFreshCatalog_StoresTheExtendingTemplatesAsShipped()
+    {
+        await using var db = await CatalogWithPlatformOrganizationAsync();
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader()).SeedAsync(TestContext.Current.CancellationToken);
+
+        foreach (var name in new[] { "application-deploy-prod", "application-deploy-prod-front-back" })
+        {
+            var template = await db.PipelineTemplates.Include(item => item.Versions)
+                .SingleAsync(item => item.Name == name, TestContext.Current.CancellationToken);
+            var only = Assert.Single(template.Versions);
+            Assert.Equal(ShippedYaml(name), only.YamlContent);
+            Assert.Contains("extends: application-deploy-prod-core@1", only.YamlContent, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task SeedAsync_WhenTheCoreGainsAVersion_PublishesTheExtendingTemplatesOnItWithoutMovingTheirPinnedVersions()
+    {
+        // R-13: an instance seeded before a change of the core holds it at v1 with its former content. The new core is
+        // appended as v2; the templates extending it get a new version pinned on core@2 (what the fleet update offers
+        // the projects), while their v1, which the pinned pipelines still resolve, keeps extending core@1.
+        await using var db = await CatalogWithPlatformOrganizationAsync();
+        var organizationId = await db.Organizations.Select(item => item.Id).SingleAsync(TestContext.Current.CancellationToken);
+        const string formerCore = "name: application-deploy-prod-core\nstages: []";
+        db.PipelineTemplates.AddRange(
+            SingleVersionTemplate(organizationId, "application-deploy-prod-core", formerCore),
+            SingleVersionTemplate(organizationId, "application-deploy-prod", ShippedYaml("application-deploy-prod")),
+            SingleVersionTemplate(organizationId, "application-deploy-prod-front-back", ShippedYaml("application-deploy-prod-front-back")));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var seeder = new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader());
+
+        await seeder.SeedAsync(TestContext.Current.CancellationToken);
+        await seeder.SeedAsync(TestContext.Current.CancellationToken);
+
+        var core = await LoadTemplateAsync(db, "application-deploy-prod-core");
+        Assert.Equal(2, core.LatestVersion);
+        Assert.Equal(formerCore, core.Versions.Single(item => item.Version == 1).YamlContent);
+        Assert.Equal(ShippedYaml("application-deploy-prod-core"), core.Versions.Single(item => item.Version == 2).YamlContent);
+        foreach (var name in new[] { "application-deploy-prod", "application-deploy-prod-front-back" })
+        {
+            var template = await LoadTemplateAsync(db, name);
+            // Seeded twice, published once: the second start finds the pinned content already stored.
+            Assert.Equal(2, template.LatestVersion);
+            Assert.Equal(2, template.Versions.Count);
+            var v1 = template.Versions.Single(item => item.Version == 1);
+            var v2 = template.Versions.Single(item => item.Version == 2);
+            Assert.Equal(ShippedYaml(name), v1.YamlContent);
+            Assert.Equal(
+                ShippedYaml(name).Replace("extends: application-deploy-prod-core@1", "extends: application-deploy-prod-core@2",
+                    StringComparison.Ordinal),
+                v2.YamlContent);
+            Assert.Contains("Extends application-deploy-prod-core@2", v2.ChangelogEntry, StringComparison.Ordinal);
+        }
+    }
+
+    private static async Task<AppDbContext> CatalogWithPlatformOrganizationAsync()
+    {
+        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options);
+        db.Organizations.Add(new Organization
+        {
+            Name = "Aetheus",
+            Slug = "aetheus",
+            CreatedAt = DateTime.UnixEpoch,
+            UpdatedAt = DateTime.UnixEpoch
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return db;
+    }
+
+    private static Task<PipelineTemplate> LoadTemplateAsync(AppDbContext db, string name) =>
+        db.PipelineTemplates.Include(item => item.Versions)
+            .SingleAsync(item => item.Name == name, TestContext.Current.CancellationToken);
+
+    private static string ShippedYaml(string name) =>
+        DeliveryTemplateCatalog.ReadResource(DeliveryTemplateCatalog.Definitions[name].Resources.Single());
+
+    private static PipelineTemplate SingleVersionTemplate(int organizationId, string name, string yamlContent) =>
+        new()
+        {
+            Name = name,
+            Description = "Seeded before the change",
+            Category = "Application Delivery",
+            OrganizationId = organizationId,
+            LatestVersion = 1,
+            CreatedAt = DateTime.UnixEpoch,
+            UpdatedAt = DateTime.UnixEpoch,
+            Versions =
+            [
+                new PipelineTemplateVersion
+                {
+                    Version = 1,
+                    YamlContent = yamlContent,
+                    ChangelogEntry = "Published before the change",
+                    CreatedAt = DateTime.UnixEpoch,
+                    CreatedByUsername = "system"
+                }
+            ]
+        };
 
     private static PipelineTemplate CreateHistoricalCandidate(int organizationId, string yamlContent, int versions) =>
         new()

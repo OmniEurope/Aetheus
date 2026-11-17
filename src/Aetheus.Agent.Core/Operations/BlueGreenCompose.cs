@@ -31,6 +31,23 @@ internal sealed class BlueGreenCompose(IShellRunner shell)
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Same invocation as <see cref="RunAsync"/>, but every output line reaches <paramref name="onLine"/>
+    /// (second argument: true for stderr) as soon as Compose writes it. For steps that can run for
+    /// minutes and must not leave the run log silent meanwhile.
+    /// </summary>
+    internal async Task<ShellExecResult> RunStreamingAsync(
+        BlueGreenContext context, IReadOnlyList<string> extra, int timeoutSeconds,
+        Func<string, bool, Task> onLine, CancellationToken ct)
+    {
+        var args = context.ComposeArgs();
+        args.AddRange(extra);
+        return await shell.RunExecStreamingAsync(
+            "docker", [.. args], context.ComposeEnvironment, string.Empty,
+            inheritEnvironment: true, MaxCapturedOutputBytes, onLine, ct, TimeSpan.FromSeconds(timeoutSeconds))
+            .ConfigureAwait(false);
+    }
+
     internal async Task<int> StopColourAsync(
         BlueGreenContext context, string colour, int timeoutSeconds, CancellationToken ct)
     {

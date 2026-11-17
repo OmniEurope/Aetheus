@@ -38,6 +38,8 @@
             <div>@string.Format(L["GateSealedGradeDetail"], Gate.Grade?.OverallGrade?.ToString() ?? "-")</div>
         </OmniAlert>
     }
+    @* Recette R-21: why the gate is in error, one line per refused producer or report. *@
+    <PipelineRunGateErrorAlert Gate="@Gate" />
     @* Recette R-17: why the gate is rejected, in one sentence (the rules it crossed), and why the letter can still
        be good. *@
     @if (PipelineRunGatePresentation.RejectionReason(Gate, L) is { } rejection)
@@ -57,16 +59,16 @@
         @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
            duplication, complexity, a cycle) the tab did not show. *@
         @* Recette R1-38: the Gate grade is the first row of the single grade block (it was a wide frame of its own). *@
-        <AnalysisGradeBreakdown Grade="@Gate.Grade" GateRow="true" GateGrade="@PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade)"
+        <AnalysisGradeBreakdown Grade="@Gate.Grade" GateGrade="@PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade)"
                                 SealBlockedByTests="@(PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)" />
         @* The OE key-figure tile: value over its label, the label wraps, so a narrow column keeps
            both inside the tile (a side-by-side nowrap pair spilled out of it at 375 px). *@
         @* Recette R1-36 / ADR-056: no rule-alert tile. A threshold the analysis crosses is a finding, counted
            and listed with the others. *@
-        <OmniTileGrid Columns="@(HasGradeBlock ? 1 : 4)" Gap="OmniSpacing.Small" Class="analysis-run-gate-metrics">
+        <OmniTileGrid Columns="@(HasGradeBlock ? 1 : 4)" Gap="OmniSpacing.Small" Class="analysis-run-gate-metrics tiles-above-grid">
             @* Recette R-74: the total covers every domain; the detail splits it by domain, so it adds up with the grade lines. *@
-            <OmniStatTile Value="@($"{Gate.FindingCount + BlockingTests.Count}")" Title="@L["AnalysisGateFindings"]" Detail="@ByDomainDetail" />
-            <OmniStatTile Value="@($"{Gate.NewFindingCount}")" Title="@L["AnalysisGateNewFindings"]" />
+            <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Value="@($"{Gate.FindingCount + BlockingTests.Count + FlakyCount}")" Title="@L["AnalysisGateFindings"]" Detail="@ByDomainDetail" />
+            <OmniStatTile Size="OmniControlSize.Large" WrapTitle="true" Value="@($"{Gate.NewFindingCount}")" Title="@L["AnalysisGateNewFindings"]" />
         </OmniTileGrid>
     </div>
     @* The findings section: its title with the count of the list, and on the right the switch that adds
@@ -86,6 +88,18 @@
         <div class="analysis-run-gate-blocking" data-testid="gate-blocking-tests">
             <PipelineRunBlockingTests Tests="BlockingTests" ViewingRunId="@Gate.PipelineRunId" />
         </div>
+    }
+    @* PLAN-006: the flaky tests (failed, then passed on their single rerun) are findings to fix; the seal
+       grades the candidate on their count and they never hold it back on their own. *@
+    @if (FlakyTests.Count > 0)
+    {
+        <OmniAlert Severity="OmniSeverity.Info" Title="@string.Format(L["GateFlakyTestsTitle"], FlakyCount, FlakyGrade)" data-testid="gate-flaky-tests">
+            <div>@L["GateFlakyTestsDetail"]</div>
+            @foreach (var suite in FlakyTests)
+            {
+                <div class="omni-u-mt-xs" data-testid="gate-flaky-suite">@suite.Key : <strong>@string.Join(", ", suite.Names)</strong></div>
+            }
+        </OmniAlert>
     }
     @if (ListedCount == 0)
     {

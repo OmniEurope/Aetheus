@@ -1,0 +1,50 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-8 (option B): the server's daily reboot, scheduled by Aetheus and run by the agent. One main action is
+   visible (schedule, or change the schedule); switching the schedule on or off and deleting it sit in its menu. *@
+<OmniCard>
+    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
+        <OmniText Element="OmniTextElement.Title">@L["ServerRebootCardTitle"]</OmniText>
+        <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted">@L["ServerRebootCardDescription"]</OmniText>
+        @if (_loading)
+        {
+            <OmniText Tone="OmniTextTone.Muted">@L["Loading"]</OmniText>
+        }
+        else if (_loadFailed)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger" data-testid="server-reboot-load-failed">@L["ServerRebootLoadFailed"]</OmniAlert>
+        }
+        else if (_schedule is not { } schedule)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" data-testid="server-reboot-none">@L["ServerRebootNone"]</OmniText>
+            @if (CanManage)
+            {
+                <OmniRow Gap="OmniSpacing.Small">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => EditAsync(null))" Busy="@_busy" data-testid="server-reboot-schedule"><Icon><OmniIcon Name="OmniIconName.CalendarCheck" /></Icon><ChildContent><span>@L["ServerRebootScheduleAction"]</span></ChildContent></OmniButton>
+                </OmniRow>
+            }
+        }
+        else
+        {
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+                <OmniBadge Tone="@(schedule.Enabled ? OmniTone.Success : OmniTone.Neutral)" Icon="@(BadgeIcon.ForState(schedule.Enabled ? OmniTone.Success : OmniTone.Neutral))" data-testid="server-reboot-state">@L[schedule.Enabled ? "Enabled" : "Disabled"]</OmniBadge>
+                <OmniText Element="OmniTextElement.Strong" data-testid="server-reboot-when">@ServerRebootStatusText.When(L, schedule)</OmniText>
+            </OmniStack>
+            <OmniText Element="OmniTextElement.Paragraph" data-testid="server-reboot-outcome">@ServerRebootStatusText.Outcome(L, schedule)</OmniText>
+            @if (!schedule.AgentCanReboot)
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" data-testid="server-reboot-no-capability">@L["ServerRebootNoCapability"]</OmniAlert>
+            }
+            @if (CanManage)
+            {
+                @* STD-BTN detection 11: the change is visible, the other actions are in the menu. *@
+                <OmniRow Gap="OmniSpacing.Small">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => EditAsync(schedule))" Busy="@_busy" data-testid="server-reboot-edit"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent><span>@L["ServerRebootEditAction"]</span></ChildContent></OmniButton>
+                    <OmniOverflowMenu Label="@L["MoreActions"]" Disabled="@_busy">
+                        <OmniMenuItem OnClick="@(() => ToggleAsync(schedule))"><Icon><OmniIcon Name="@(schedule.Enabled ? OmniIconName.Pause : OmniIconName.Play)" /></Icon><ChildContent>@L[schedule.Enabled ? "ServerRebootDisableAction" : "ServerRebootEnableAction"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => DeleteAsync(schedule))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["ServerRebootDeleteAction"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
+                </OmniRow>
+            }
+        }
+    </OmniStack>
+</OmniCard>

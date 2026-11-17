@@ -1,5 +1,8 @@
 const DEFAULT_ENDPOINT = "/aetheus-analytics/v1/events";
 const HEARTBEAT_INTERVAL_MS = 75_000;
+// A tab that becomes visible again beats at once (its next scheduled beat could be 75 s away), unless a page view
+// or a heartbeat already left within this gap.
+const VISIBLE_BEAT_MIN_GAP_MS = 10_000;
 // Most events kept while waiting for the identity (holdUntilIdentified); later ones are dropped.
 const MAX_HELD_EVENTS = 50;
 
@@ -80,6 +83,7 @@ export function createAetheusAnalytics(configuration = {}) {
   let pushStateWrapper;
   let replaceStateWrapper;
   let heartbeatIntervalId;
+  let lastBeatAt = 0;
   let authenticatedUserId = typeof window !== "undefined"
     && typeof window.__AETHEUS_ANALYTICS_USER__ === "string"
     && window.__AETHEUS_ANALYTICS_USER__.length > 0
@@ -131,6 +135,10 @@ export function createAetheusAnalytics(configuration = {}) {
     const route = currentRoute();
     if (!route) {
       return;
+    }
+
+    if (kind === "page_view" || kind === "heartbeat") {
+      lastBeatAt = Date.now();
     }
 
     // The route and the time are those of the moment; the identity is added when the event leaves.
@@ -226,6 +234,18 @@ export function createAetheusAnalytics(configuration = {}) {
     emit("heartbeat");
   }
 
+  function onVisibilityChange() {
+    if (document.visibilityState !== "visible" || Date.now() - lastBeatAt < VISIBLE_BEAT_MIN_GAP_MS) {
+      return;
+    }
+    emitHeartbeat();
+    // Restart the schedule so the next scheduled beat is a full interval after this one, not seconds after.
+    if (heartbeatIntervalId !== undefined) {
+      clearInterval(heartbeatIntervalId);
+      heartbeatIntervalId = setInterval(emitHeartbeat, HEARTBEAT_INTERVAL_MS);
+    }
+  }
+
   function emitNavigationPerformance() {
     if (!capturePerformance || typeof performance === "undefined") {
       return;
@@ -265,6 +285,9 @@ export function createAetheusAnalytics(configuration = {}) {
         window.addEventListener("load", emitNavigationPerformance);
       }
     }
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
     heartbeatIntervalId = setInterval(emitHeartbeat, HEARTBEAT_INTERVAL_MS);
     emitPageView();
   }
@@ -277,6 +300,9 @@ export function createAetheusAnalytics(configuration = {}) {
     window.removeEventListener("error", emitScriptError);
     window.removeEventListener("unhandledrejection", emitUnhandledRejection);
     window.removeEventListener("load", emitNavigationPerformance);
+    if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
     if (heartbeatIntervalId !== undefined) {
       clearInterval(heartbeatIntervalId);
       heartbeatIntervalId = undefined;

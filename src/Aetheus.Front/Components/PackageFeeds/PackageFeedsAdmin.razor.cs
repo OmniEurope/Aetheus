@@ -43,11 +43,14 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
         finally { _loading = false; }
     }
 
+    private Task ReadBehindRowsAsync() => _grid is not null ? _grid.RestoreRowsAsync() : ReloadAsync();
+
     private async Task OpenCreateAsync()
     {
         var result = await Dialog.OpenAsync<PackageFeedEditDialog>(L["Create"],
             [], new OmniDialogOptions { Width = "620px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        if (result is true) await ReloadAsync();
+        // The dialog answers no row: the list is read again behind the rows, quietly (R-10, no bar).
+        if (result is true) await ReadBehindRowsAsync();
     }
 
     private async Task ManagePackagesAsync(PackageFeedDto feed)
@@ -55,7 +58,7 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
         await Dialog.OpenAsync<PackageFeedPackagesDialog>(feed.Name,
             new Dictionary<string, object?> { ["FeedId"] = feed.Id },
             new OmniDialogOptions { Width = "760px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        await ReloadAsync(); // package count may have changed
+        await ReadBehindRowsAsync(); // package count may have changed: read again behind the rows, quietly
     }
 
     private async Task DeleteAsync(PackageFeedDto feed)
@@ -68,7 +71,8 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
         await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Packages.DeletePackageFeedAsync(feed.Id),
             "Deleted",
-            ReloadAsync,
+            // R-10: the feed leaves the grid at once, the quiet read behind it confirms.
+            () => _grid is not null ? _grid.HideRowAsync(feed) : ReloadAsync(),
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
     }

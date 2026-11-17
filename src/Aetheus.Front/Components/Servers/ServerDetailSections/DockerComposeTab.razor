@@ -7,7 +7,7 @@
     <CountBadge Value="@FilteredCompose.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterStacks"]" @bind-Value="_composeSearch" Placeholder="@L["FilterStacks"]" Class="docker-search" />
 </OmniStack>
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" AdoptRunning="false" />
 <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerCompose"])" ExportFields="@ExportContext.Fields()" Items="@FilteredCompose" TItem="DockerComposeStackDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
     OnRowClick="@(args => OpenComposeEditorAsync(args.Item.Name))">
     @* Recette R3-35: clicking a stack opens its compose file; the buttons of the row keep their own action. *@
@@ -56,8 +56,8 @@
                     <ChildContent><OmniText Element="OmniTextElement.Strong">@L["TaskFailed"]</OmniText><OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@_composeError</OmniText></ChildContent>
                 </OmniAlert>
             }
-            <div class="@(_composeFileLoading ? "omni-busy" : null)" aria-busy="@(_composeFileLoading ? "true" : "false")"
-                 title="@(_composeFileLoading ? L["RequestingCompose"].Value : null)">
+            <VeilHold Busy="@_composeFileLoading" />
+            <div title="@(_composeFileLoading ? L["RequestingCompose"].Value : null)">
                 <OmniCodeEditor @bind-Value="_composeEditorContent" Language="yaml" Height="24rem"
                                 InteropModulePath="@EditorModules.Frame"
                                 Label="@L["DockerCompose"]" Disabled="@_composeFileLoading" />

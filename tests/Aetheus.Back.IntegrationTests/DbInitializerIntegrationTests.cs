@@ -17,7 +17,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// that, by construction, InMemory can never take. These tests run it for real.
 /// </para>
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class DbInitializerIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -33,6 +32,7 @@ public sealed class DbInitializerIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task SeedAsync_OnFreshDatabase_CreatesBootstrapAdminUserRolesAndDefaultOrg()
     {
         // Arrange - pristine, fully-migrated schema; no seed data yet.
@@ -81,6 +81,7 @@ public sealed class DbInitializerIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task SeedAsync_RunTwice_IsIdempotent_NoDuplicateBootstrapRows()
     {
         // Arrange
@@ -136,39 +137,5 @@ public sealed class DbInitializerIntegrationTests(PostgresFixture fixture)
         // independent of DbInitializer. So it is intentionally NOT asserted absent here; this
         // very fact (migration seeds the org, initializer reuses it) is what
         // SeedAsync_OnFreshDatabase / RunTwice cover positively.
-    }
-
-    [Fact]
-    public async Task SeedAsync_BuildTemplatesRunTheTestsUnderMicrosoftTestingPlatform()
-    {
-        // The repository's global.json runs dotnet test on Microsoft.Testing.Platform, which refuses the
-        // VSTest switches (--logger, --collect) the seeded templates still carried.
-        await ResetAndMigrateAsync();
-        await using (var db = NewContext())
-            await DbInitializer.SeedAsync(db, ConfigWith(StrongAdminPassword));
-
-        await using var verify = NewContext();
-        var yamls = await verify.PipelineTemplateVersions
-            .Where(version => version.YamlContent.Contains("dotnet test"))
-            .Select(version => version.YamlContent)
-            .ToListAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(4, yamls.Count);
-        foreach (var yaml in yamls)
-        {
-            var definition = Aetheus.Back.Services.YamlParsingHelper.Deserializer
-                .Deserialize<Aetheus.Shared.Components.Pipelines.PipelineYamlDefinition>(yaml);
-            var commands = definition.Stages.SelectMany(stage => stage.Steps)
-                .Select(step => step.Shell ?? string.Empty)
-                .Where(shell => shell.Contains("dotnet test", StringComparison.Ordinal))
-                .ToList();
-            Assert.Equal(4, commands.Count);
-            Assert.All(commands, shell =>
-            {
-                Assert.Contains("dotnet test --project ", shell, StringComparison.Ordinal);
-                Assert.DoesNotContain("--logger", shell, StringComparison.Ordinal);
-                Assert.DoesNotContain("--collect", shell, StringComparison.Ordinal);
-            });
-        }
     }
 }

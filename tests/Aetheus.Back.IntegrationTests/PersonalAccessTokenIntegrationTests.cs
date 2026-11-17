@@ -11,8 +11,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// RBAC, and revocation - none of which the InMemory unit suite can prove (no real forwarding,
 /// middleware ordering, or relational revocation).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PersonalAccessTokenIntegrationTests(PostgresFixture fixture)
+public sealed class PersonalAccessTokenIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static async Task<(string Plaintext, int Id)> CreatePatAsync(HttpClient jwtClient, PatScope scope)
     {
@@ -52,22 +51,6 @@ public sealed class PersonalAccessTokenIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task ReadWritePat_PassesScopeGateOnWrite()
-    {
-        var (factory, jwt) = await LoggedInAsync();
-        await using var _ = factory;
-
-        var (pat, _) = await CreatePatAsync(jwt, PatScope.ReadWrite);
-        using var patClient = factory.CreateClient();
-        IntegrationAuth.SetBearer(patClient, pat);
-
-        // A read-write PAT is NOT scope-blocked; the delete reaches the action, which 404s (no such server).
-        var write = await patClient.DeleteAsync("/api/servers/2147483647", cancellationToken: TestContext.Current.CancellationToken);
-        Assert.NotEqual(HttpStatusCode.Forbidden, write.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, write.StatusCode);
-    }
-
-    [Fact]
     public async Task Pat_CannotMintTokens_NoLaundering()
     {
         var (factory, jwt) = await LoggedInAsync();
@@ -80,6 +63,28 @@ public sealed class PersonalAccessTokenIntegrationTests(PostgresFixture fixture)
         var resp = await patClient.PostAsJsonAsync("/api/personal-access-tokens",
             new CreatePersonalAccessTokenRequest { Name = "laundered", Scope = PatScope.ReadWrite, ExpirationDays = 30 }, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    /// <summary>BACK-006: a PAT cannot be renewed into an interactive JWT and refresh token, which would
+    /// outlive its expiry and revocation. The interactive session itself still renews.</summary>
+    [Fact]
+    public async Task Pat_CannotRenewIntoAnInteractiveSession()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (factory, jwt) = await LoggedInAsync();
+        await using var _ = factory;
+
+        var (pat, _) = await CreatePatAsync(jwt, PatScope.ReadWrite);
+        using var patClient = factory.CreateClient();
+        IntegrationAuth.SetBearer(patClient, pat);
+
+        var renew = await patClient.PostAsync("/api/auth/renew", null, ct);
+        Assert.Equal(HttpStatusCode.Unauthorized, renew.StatusCode);
+        var error = await renew.Content.ReadFromJsonAsync<ApiError>(IntegrationJsonOptions.Default, ct);
+        Assert.Equal("Token not eligible for renewal.", error!.Message);
+
+        var interactive = await jwt.PostAsync("/api/auth/renew", null, ct);
+        Assert.Equal(HttpStatusCode.OK, interactive.StatusCode);
     }
 
     [Fact]

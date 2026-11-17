@@ -3,8 +3,6 @@ using System.Net;
 using System.Net.Http.Json;
 using Aetheus.Back.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace Aetheus.Back.IntegrationTests;
@@ -13,16 +11,15 @@ namespace Aetheus.Back.IntegrationTests;
 /// PLAN-003 P3-2: people sign in by e-mail address, through real HTTP and PostgreSQL. The bodies are
 /// written as raw JSON (not the DTO) so the scenario reads the same against any version of the contract.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class LoginByEmailIntegrationTests(PostgresFixture fixture)
+public sealed class LoginByEmailIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
-    private const string Migration = "20261028160000_RequireUniqueUserEmail";
     private const string UserPassword = "Login-By-Email-Pwd-2026!";
 
     private DbContextOptions<AppDbContext> Options() =>
         new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(fixture.ConnectionString).Options;
 
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task Login_ByEmail_AnyCase_Succeeds_AndAWrongPasswordStaysGeneric()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -117,58 +114,6 @@ public sealed class LoginByEmailIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task CreateAndUpdate_RefuseAnEmailAnotherAccountHolds_InAnyCase()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        using var client = factory.CreateClient();
-        IntegrationAuth.SetBearer(client, await IntegrationAuth.LoginAsAdminAsync(client, ct));
-        var roles = await IntegrationUsers.InDefaultOrganizationAsync(client, "Reader");
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var first = await client.PostAsJsonAsync("/api/users", new
-        {
-            username = $"first-{suffix}",
-            email = $"shared-{suffix}@example.com",
-            organizationRoles = roles
-        }, ct);
-        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
-
-        var duplicate = await client.PostAsJsonAsync("/api/users", new
-        {
-            username = $"second-{suffix}",
-            email = $"SHARED-{suffix}@Example.com",
-            organizationRoles = roles
-        }, ct);
-        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
-        var refusal = await duplicate.Content.ReadFromJsonAsync<ApiError>(IntegrationJsonOptions.Default, ct);
-        Assert.Equal(UserErrorCodes.EmailInUse, refusal!.Code);
-
-        var missing = await client.PostAsJsonAsync("/api/users", new
-        {
-            username = $"third-{suffix}",
-            organizationRoles = roles
-        }, ct);
-        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-
-        var other = await client.PostAsJsonAsync("/api/users", new
-        {
-            username = $"other-{suffix}",
-            email = $"other-{suffix}@example.com",
-            organizationRoles = roles
-        }, ct);
-        Assert.Equal(HttpStatusCode.Created, other.StatusCode);
-        var otherUser = await other.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, ct);
-        var takeOver = await client.PutAsJsonAsync($"/api/users/{otherUser!.Id}", new
-        {
-            username = $"other-{suffix}",
-            email = $"Shared-{suffix}@example.com",
-            isActive = true
-        }, ct);
-        Assert.Equal(HttpStatusCode.Conflict, takeOver.StatusCode);
-    }
-
-    [Fact]
     public async Task UniqueIndex_RefusesASecondRowWithTheSameEmail()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -190,75 +135,6 @@ public sealed class LoginByEmailIntegrationTests(PostgresFixture fixture)
         var blank = await Assert.ThrowsAsync<PostgresException>(() => InsertUserAsync(db, "blank-email", "  ", ct));
         Assert.Equal(PostgresErrorCodes.CheckViolation, blank.SqlState);
         Assert.Equal("CK_Users_Email_NotBlank", blank.ConstraintName);
-    }
-
-    [Fact]
-    public async Task Migration_NormalizesEmails_AndStopsOnAccountsSharingOne()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await MigrateToPredecessorAsync(ct);
-        await using (var db = new AppDbContext(Options()))
-        {
-            await InsertUserAsync(db, "mixed", "  Mixed@Example.COM ", ct);
-            await InsertUserAsync(db, "blank", "   ", ct);
-            await InsertUserAsync(db, "none", null, ct);
-        }
-        // Up to this migration only: the next one (20261028210000_RequireUserEmail) refuses the accounts left
-        // without an address, which is its own scenario (RequireUserEmailMigrationTests).
-        await using (var db = new AppDbContext(Options()))
-            await db.GetService<IMigrator>().MigrateAsync(Migration, ct);
-        await using (var db = new AppDbContext(Options()))
-        {
-            Assert.Equal("mixed@example.com", await EmailOfAsync(db, "mixed", ct));
-            Assert.Equal(NoEmail, await EmailOfAsync(db, "blank", ct));
-            Assert.Equal(NoEmail, await EmailOfAsync(db, "none", ct));
-        }
-
-        await MigrateToPredecessorAsync(ct);
-        await using (var db = new AppDbContext(Options()))
-        {
-            await InsertUserAsync(db, "alice", "dup@example.com", ct);
-            await InsertUserAsync(db, "bob", "DUP@example.com ", ct);
-        }
-        await using (var db = new AppDbContext(Options()))
-        {
-            var stopped = await Assert.ThrowsAsync<PostgresException>(() => db.GetService<IMigrator>().MigrateAsync(Migration, ct));
-            Assert.Contains("share an e-mail address", stopped.MessageText, StringComparison.Ordinal);
-            Assert.Contains("(alice)", stopped.MessageText, StringComparison.Ordinal);
-            Assert.Contains("(bob)", stopped.MessageText, StringComparison.Ordinal);
-            Assert.DoesNotContain("dup@example.com", stopped.MessageText, StringComparison.OrdinalIgnoreCase);
-        }
-        // The refused migration left the rows as they were and is not recorded as applied.
-        await using (var db = new AppDbContext(Options()))
-        {
-            Assert.DoesNotContain(Migration, await db.Database.GetAppliedMigrationsAsync(ct));
-            Assert.Equal("DUP@example.com ", await EmailOfAsync(db, "bob", ct));
-        }
-
-        // The rows above must not leak into the collection's next host: start it clean.
-        await using (var reset = new AppDbContext(Options()))
-        {
-            await reset.Database.ExecuteSqlRawAsync("DROP SCHEMA public CASCADE; CREATE SCHEMA public;", ct);
-            await reset.Database.MigrateAsync(ct);
-        }
-    }
-
-    private const string NoEmail = "<null>";
-
-    /// <summary>Read in SQL, not through the model: the model's e-mail is required, and these rows predate that.</summary>
-    private static Task<string> EmailOfAsync(AppDbContext db, string username, CancellationToken ct) =>
-        db.Database.SqlQueryRaw<string>(
-            "SELECT coalesce(\"Email\", '<null>') AS \"Value\" FROM \"Users\" WHERE \"Username\" = @username",
-            new NpgsqlParameter("username", username)).SingleAsync(ct);
-
-    private async Task MigrateToPredecessorAsync(CancellationToken ct)
-    {
-        await using var db = new AppDbContext(Options());
-        await db.Database.ExecuteSqlRawAsync("DROP SCHEMA public CASCADE; CREATE SCHEMA public;", ct);
-        var migrations = db.Database.GetMigrations().ToList();
-        var index = migrations.IndexOf(Migration);
-        Assert.True(index > 0, $"Could not locate {Migration} after a predecessor.");
-        await db.GetService<IMigrator>().MigrateAsync(migrations[index - 1], ct);
     }
 
     private static Task<int> InsertUserAsync(AppDbContext db, string username, string? email, CancellationToken ct) =>

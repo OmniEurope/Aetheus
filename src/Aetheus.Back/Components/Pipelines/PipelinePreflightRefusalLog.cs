@@ -12,7 +12,7 @@ internal static class PipelinePreflightRefusalLog
 
     public static void Write(ILogger logger, string pipelineName, IReadOnlyList<string> problems)
     {
-        logger.LogWarning(
+        logger.LogInformation(
             "Preflight refused a launch of pipeline {PipelineName} with {ProblemCount} unmet requirement(s)",
             pipelineName, problems.Count);
         for (var index = 0; index < problems.Count; index++)
@@ -20,7 +20,7 @@ internal static class PipelinePreflightRefusalLog
             var problem = problems[index];
             if (problem.Length > MaxLoggedProblemLength)
                 problem = string.Concat(problem.AsSpan(0, MaxLoggedProblemLength), " [...]");
-            logger.LogWarning(
+            logger.LogInformation(
                 "Preflight unmet requirement {ProblemNumber}/{ProblemCount} of pipeline {PipelineName}: {Problem}",
                 index + 1, problems.Count, pipelineName, problem);
         }

@@ -1,0 +1,38 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* Recette R-22: the daily visitors with the time of their first visit and their entry page, so the hours of
+   the visits can be compared with pipeline runs and with the owner's own accesses. No IP, no browser. *@
+
+<OmniCard>
+    <OmniHeading Level="OmniHeadingLevel.H5">@L["VisitorsListTitle"]</OmniHeading>
+    <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm omni-u-text-muted">
+        @L["VisitorsListCaption"]
+    </OmniText>
+    @if (_loadFailed)
+    {
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium" Align="OmniAlignment.Start">
+            <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+        </OmniStack>
+    }
+    else
+    {
+        <AetheusDataGrid Data="@_visitors" TItem="AppWebAnalyticsVisitorDto" KeyProperty="Visitor"
+                         Virtualize="true" FullHeight="true" PageSize="50" VirtualizationOverscanCount="3"
+                         IsLoading="@_loading" EmptyText="@L["NoVisitorsYet"]">
+            <Columns>
+                <OmniDataGridColumn TItem="AppWebAnalyticsVisitorDto" Property="FirstSeenAtUtc" Title="@L["VisitorFirstVisit"]"
+                                    Width="12rem" SortOrder="OmniDataGridSortOrder.Descending" Filterable="true"
+                                    FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
+                    <Template Context="item">@item.FirstSeenAtUtc.ToLocalTime().ToString("g")</Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="AppWebAnalyticsVisitorDto" Property="EntryRoute" Title="@L["VisitorEntryPage"]"
+                                    Filterable="true">
+                    <Template Context="item">@(item.EntryRoute ?? L["VisitorEntryPageUnknown"].Value)</Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="AppWebAnalyticsVisitorDto" Property="Visitor" Title="@L["VisitorRef"]"
+                                    Width="10rem" Filterable="true" />
+            </Columns>
+        </AetheusDataGrid>
+    }
+</OmniCard>

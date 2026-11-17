@@ -18,7 +18,7 @@ public class PersonalAccessTokenServiceTests
     private readonly PersonalAccessTokenService _sut;
 
     public PersonalAccessTokenServiceTests()
-        => _sut = new PersonalAccessTokenService(_repo, new JwtOptions { SigningKey = Key }, _time, _audit);
+        => _sut = new PersonalAccessTokenService(_repo, new TokenHashKeys(new JwtOptions { SigningKey = Key }), _time, _audit);
 
     private static PersonalAccessToken WithUser(PatScope scope, params string[] roles)
         => new()
@@ -86,13 +86,15 @@ public class PersonalAccessTokenServiceTests
         var created = await _sut.CreateAsync(7, new CreatePersonalAccessTokenRequest { Name = "x", Scope = PatScope.ReadWrite }, ct: TestContext.Current.CancellationToken);
 
         // Validate the same plaintext and capture the hash the repo is queried with - it must equal the stored hash.
-        string? lookupHash = null;
-        _repo.FindActiveByHashWithUserAsync(Arg.Do<string>(h => lookupHash = h), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+        IReadOnlyCollection<string>? lookupHashes = null;
+        _repo.FindActiveByHashWithUserAsync(Arg.Do<IReadOnlyCollection<string>>(h => lookupHashes = h), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns((PersonalAccessToken?)null);
 
         await _sut.ValidateAsync(created.PlaintextToken, ct: TestContext.Current.CancellationToken);
 
-        Assert.Equal(captured!.TokenHash, lookupHash);
+        // R-53: the stored hash is the per-purpose one, tried first; the legacy hash follows it.
+        Assert.Equal(captured!.TokenHash, lookupHashes!.First());
+        Assert.Equal(2, lookupHashes!.Count);
     }
 
     [Fact]
@@ -135,13 +137,13 @@ public class PersonalAccessTokenServiceTests
         var result = await _sut.ValidateAsync("eyJ.jwt.looking.token", ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
-        await _repo.DidNotReceive().FindActiveByHashWithUserAsync(Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().FindActiveByHashWithUserAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Validate_Unknown_ReturnsNull()
     {
-        _repo.FindActiveByHashWithUserAsync(Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+        _repo.FindActiveByHashWithUserAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns((PersonalAccessToken?)null);
 
         Assert.Null(await _sut.ValidateAsync(PatConstants.TokenPrefix + "abc", ct: TestContext.Current.CancellationToken));
@@ -150,7 +152,7 @@ public class PersonalAccessTokenServiceTests
     [Fact]
     public async Task Validate_Active_ReturnsPrincipalWithCurrentRolesAndScope()
     {
-        _repo.FindActiveByHashWithUserAsync(Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+        _repo.FindActiveByHashWithUserAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(WithUser(PatScope.ReadOnly, "Admin", "Ops"));
 
         var principal = await _sut.ValidateAsync(PatConstants.TokenPrefix + "abc", ct: TestContext.Current.CancellationToken);
@@ -165,7 +167,7 @@ public class PersonalAccessTokenServiceTests
     [Fact]
     public async Task Validate_TouchesLastUsed_WhenStale()
     {
-        _repo.FindActiveByHashWithUserAsync(Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+        _repo.FindActiveByHashWithUserAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(WithUser(PatScope.ReadWrite, "Admin")); // LastUsedAt null => stale
 
         await _sut.ValidateAsync(PatConstants.TokenPrefix + "abc", ct: TestContext.Current.CancellationToken);
@@ -178,7 +180,7 @@ public class PersonalAccessTokenServiceTests
     {
         var token = WithUser(PatScope.ReadWrite, "Admin");
         token.LastUsedAt = _time.GetUtcNow().UtcDateTime.AddSeconds(-5); // within throttle window
-        _repo.FindActiveByHashWithUserAsync(Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+        _repo.FindActiveByHashWithUserAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(token);
 
         await _sut.ValidateAsync(PatConstants.TokenPrefix + "abc", ct: TestContext.Current.CancellationToken);

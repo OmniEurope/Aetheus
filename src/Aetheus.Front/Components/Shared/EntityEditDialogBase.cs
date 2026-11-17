@@ -40,5 +40,13 @@ public abstract class EntityEditDialogBase : ComponentBase
         return Task.CompletedTask;
     }
 
+    /// <summary>Closes the dialog with the saved entity the server answered, so the list that opened it can
+    /// draw that row at once instead of reading everything again (R-10).</summary>
+    protected Task CloseAfterSuccessAsync<T>(T saved)
+    {
+        Dialog.Close(saved);
+        return Task.CompletedTask;
+    }
+
     protected void Cancel() => Dialog.Close(false);
 }

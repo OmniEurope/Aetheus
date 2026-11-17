@@ -164,6 +164,55 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
         return [.. emailed];
     }
 
+    public async Task<PipelineMailInfo?> GetPipelineMailInfoAsync(int pipelineId, CancellationToken ct = default) =>
+        await db.Pipelines.AsNoTracking()
+            .Where(pipeline => pipeline.Id == pipelineId)
+            .Select(pipeline => new PipelineMailInfo(pipeline.Id, pipeline.Name, pipeline.TriggerType == PipelineTriggerType.Schedule))
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+
+    public async Task<Dictionary<int, bool>> GetSavedPipelineChoicesAsync(
+        string eventType, int pipelineId, IReadOnlyCollection<int> userIds, CancellationToken ct = default)
+    {
+        var ids = userIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.UserPipelineNotificationPreferences.AsNoTracking()
+            .Where(preference => preference.PipelineId == pipelineId && preference.EventType == eventType && ids.Contains(preference.UserId))
+            .ToDictionaryAsync(preference => preference.UserId, preference => preference.IsEnabled, ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SavePipelineChoiceAsync(
+        int userId, string eventType, int pipelineId, bool isEnabled, CancellationToken ct = default)
+    {
+        var row = await db.UserPipelineNotificationPreferences
+            .FirstOrDefaultAsync(preference => preference.UserId == userId && preference.PipelineId == pipelineId
+                && preference.EventType == eventType, ct).ConfigureAwait(false);
+        if (row is null)
+            db.UserPipelineNotificationPreferences.Add(new UserPipelineNotificationPreference
+            {
+                UserId = userId,
+                PipelineId = pipelineId,
+                EventType = eventType,
+                IsEnabled = isEnabled
+            });
+        else
+            row.IsEnabled = isEnabled;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public Task<List<PipelineChoiceRow>> GetPipelineChoicesAsync(
+        int userId, string eventType, CancellationToken ct = default) =>
+        db.UserPipelineNotificationPreferences.AsNoTracking()
+            .Where(preference => preference.UserId == userId && preference.EventType == eventType)
+            .OrderBy(preference => preference.Pipeline.Name)
+            .ThenBy(preference => preference.PipelineId)
+            .Select(preference => new PipelineChoiceRow(
+                preference.PipelineId,
+                preference.Pipeline.Name,
+                preference.IsEnabled,
+                preference.Pipeline.TriggerType == PipelineTriggerType.Schedule))
+            .ToListAsync(ct);
+
     public async Task SavePreferencesAsync(
         int userId, IReadOnlyDictionary<string, bool> preferences, CancellationToken ct = default)
     {

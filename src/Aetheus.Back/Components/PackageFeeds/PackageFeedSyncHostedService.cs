@@ -12,15 +12,9 @@ public sealed class PackageFeedSyncHostedService(
     IServiceProvider services,
     IConfiguration configuration,
     ILogger<PackageFeedSyncHostedService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:package-feed-sync")
 {
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:package-feed-sync", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         var intervalMinutes = configuration.GetValue("PackageFeeds:SyncIntervalMinutes", 0);
         if (intervalMinutes <= 0)

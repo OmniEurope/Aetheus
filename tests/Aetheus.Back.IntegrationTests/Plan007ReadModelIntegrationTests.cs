@@ -9,7 +9,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Verifies PostgreSQL translation for recent-run grades, redeployment targets and
 /// cross-pipeline pending approvals.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class Plan007ReadModelIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

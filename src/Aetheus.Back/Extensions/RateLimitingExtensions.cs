@@ -9,23 +9,40 @@ namespace Aetheus.Back.Extensions;
 
 internal static class RateLimitingExtensions
 {
+    internal const string DisabledKey = "RateLimiting:Disabled";
+
     /// <summary>
     /// Registers the named ingress policies and the authenticated global ceiling.
-    /// Integration fixtures can disable the named policies without changing production defaults.
+    /// Development hosts (integration fixtures, the E2E backend, the ephemeral QA stack) can disable
+    /// the named policies; any other environment refuses to start with the switch on (R-51).
     /// </summary>
     public static IServiceCollection AddAetheusRateLimiting(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        bool isDevelopment)
     {
+        EnsureDisableSwitchAllowed(configuration, isDevelopment);
         services.AddRateLimiter(options => ConfigureRateLimiter(options, configuration));
         return services;
+    }
+
+    /// <summary>Throws when RateLimiting:Disabled is true outside Development: a stray variable in a
+    /// production environment would otherwise silently remove the password-guessing protection.</summary>
+    internal static void EnsureDisableSwitchAllowed(IConfiguration configuration, bool isDevelopment)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (!isDevelopment && configuration.GetValue(DisabledKey, false))
+            throw new InvalidOperationException(
+                "RateLimiting:Disabled=true is only allowed in the Development environment (test hosts, the E2E " +
+                "backend and the ephemeral QA stack). Remove RateLimiting__Disabled / RATE_LIMITING_DISABLED " +
+                "from this environment: it would turn off every rate-limiting policy, login included.");
     }
 
     private static void ConfigureRateLimiter(RateLimiterOptions options, IConfiguration configuration)
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.OnRejected = WriteRejectionAsync;
-        if (configuration.GetValue("RateLimiting:Disabled", false))
+        if (configuration.GetValue(DisabledKey, false))
         {
             AddDisabledPolicies(options);
             return;

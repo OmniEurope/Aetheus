@@ -1,0 +1,14 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Servers.ServerDetailSections
+@inject IStringLocalizer<AppStrings> L
+
+@* Recette R-14: one site file named under its domain, with the ports it serves. A file Aetheus cannot delete (its
+   owner is another account, root or certbot) also carries that owner in a badge; a file the agent owns, or whose
+   owner is not known, carries none. *@
+<OmniRow Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+    <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-m-0 apache-site-file" data-testid="apache-site-file">@FileName (@Ports)</OmniText>
+    @if (!string.IsNullOrWhiteSpace(Owner))
+    {
+        <OmniBadge Icon="@BadgeIcon.Of(OmniIconName.Lock)" Fill="OmniFill.Tonal" Tone="OmniTone.Warning" title="@string.Format(L["ApacheFileOwnerTooltip"], Owner)" data-testid="apache-site-file-owner">@Owner</OmniBadge>
+    }
+</OmniRow>

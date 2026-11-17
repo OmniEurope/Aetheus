@@ -4,6 +4,7 @@ using Aetheus.Back.Components.VariableLibraries;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
+using Aetheus.Back.Services.DomainEvents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -16,11 +17,12 @@ public class VariableLibraryServiceTests
     private readonly IVariableLibraryRepository _repoMock = Substitute.For<IVariableLibraryRepository>();
     private readonly IDbTransactionScope _transactionMock = Substitute.For<IDbTransactionScope>();
     private readonly IAuditService _auditMock = Substitute.For<IAuditService>();
+    private readonly IDomainEventDispatcher _eventsMock = Substitute.For<IDomainEventDispatcher>();
     private readonly VariableLibraryService _sut;
 
     public VariableLibraryServiceTests()
     {
-        _sut = new VariableLibraryService(_repoMock, _transactionMock, _auditMock, Substitute.For<IEntityChangeNotifier>(), TimeProvider.System, Substitute.For<IMemoryCache>());
+        _sut = new VariableLibraryService(_repoMock, _transactionMock, _auditMock, Substitute.For<IEntityChangeNotifier>(), TimeProvider.System, Substitute.For<IMemoryCache>(), _eventsMock);
     }
 
     [Fact]
@@ -261,6 +263,88 @@ public class VariableLibraryServiceTests
             Arg.Any<CancellationToken>());
         await _transactionMock.Received(1).BeginTransactionAsync(Arg.Any<CancellationToken>());
         await _transactionMock.Received(1).CommitAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R30_CreateEntryAsync_APortEntry_AnnouncesItsPort_BeforeTheTransactionCommits()
+    {
+        _repoMock.FindLibraryAsync(8, Arg.Any<CancellationToken>())
+            .Returns(new VariableLibrary { Id = 8, Name = "aetheus.qa", EnvironmentId = 3 });
+        var committed = false;
+        _transactionMock.CommitAsync(Arg.Any<CancellationToken>()).Returns(_ => { committed = true; return Task.CompletedTask; });
+        var announcedBeforeCommit = false;
+        _eventsMock.DispatchStrictAsync(Arg.Any<Aetheus.Back.Components.VariableLibraries.Events.VariableLibraryPortsChangedEvent>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { announcedBeforeCommit = !committed; return Task.CompletedTask; });
+
+        await _sut.CreateEntryAsync(8, new CreateVariableEntryRequest { Key = "PORT_FRONT_BLUE", Value = "10000" }, TestContext.Current.CancellationToken);
+
+        await _eventsMock.Received(1).DispatchStrictAsync(
+            Arg.Is<Aetheus.Back.Components.VariableLibraries.Events.VariableLibraryPortsChangedEvent>(change =>
+                change.LibraryId == 8
+                && change.OldEntries.Count == 0
+                && change.NewEntries.Count == 1
+                && change.NewEntries[0].Key == "PORT_FRONT_BLUE"
+                && change.NewEntries[0].Port == 10000
+                && change.NewScope.EnvironmentId == 3),
+            Arg.Any<CancellationToken>());
+        Assert.True(announcedBeforeCommit, "a refusal of the registry must be able to roll the entry back");
+    }
+
+    [Theory]
+    [InlineData("DB_HOST", "10000")]
+    [InlineData("PORT_FRONT", "")]
+    [InlineData("PORT_FRONT", "abc")]
+    [InlineData("PORT_FRONT", "70000")]
+    public async Task R30_CreateEntryAsync_AnEntryThatClaimsNoPort_AnnouncesNothing(string key, string value)
+    {
+        _repoMock.FindLibraryAsync(8, Arg.Any<CancellationToken>()).Returns(new VariableLibrary { Id = 8, Name = "Lib", ProjectId = 1 });
+
+        await _sut.CreateEntryAsync(8, new CreateVariableEntryRequest { Key = key, Value = value }, TestContext.Current.CancellationToken);
+
+        await _eventsMock.DidNotReceive().DispatchStrictAsync(
+            Arg.Any<Aetheus.Back.Components.VariableLibraries.Events.VariableLibraryPortsChangedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R30_UpdateEntryAsync_ANewPortValue_AnnouncesTheOldAndTheNewPort()
+    {
+        _repoMock.FindEntryAsync(10, Arg.Any<CancellationToken>())
+            .Returns(new VariableLibraryEntry { Id = 10, VariableLibraryId = 8, Key = "PORT_BACK_BLUE", Value = "10001" });
+        _repoMock.FindLibraryAsync(8, Arg.Any<CancellationToken>()).Returns(new VariableLibrary { Id = 8, Name = "aetheus.qa", ProjectId = 1 });
+
+        await _sut.UpdateEntryAsync(8, 10, new UpdateVariableEntryRequest { Key = "PORT_BACK_BLUE", Value = "10011" }, TestContext.Current.CancellationToken);
+
+        await _eventsMock.Received(1).DispatchStrictAsync(
+            Arg.Is<Aetheus.Back.Components.VariableLibraries.Events.VariableLibraryPortsChangedEvent>(change =>
+                change.OldEntries.Single().Port == 10001 && change.NewEntries.Single().Port == 10011),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R30_UpdateEntryAsync_ANonPortChangeToAPortEntry_AnnouncesNothing()
+    {
+        _repoMock.FindEntryAsync(10, Arg.Any<CancellationToken>())
+            .Returns(new VariableLibraryEntry { Id = 10, VariableLibraryId = 8, Key = "OTHER", Value = "x" });
+
+        await _sut.UpdateEntryAsync(8, 10, new UpdateVariableEntryRequest { Key = "OTHER", Value = "y" }, TestContext.Current.CancellationToken);
+
+        await _eventsMock.DidNotReceive().DispatchStrictAsync(
+            Arg.Any<Aetheus.Back.Components.VariableLibraries.Events.VariableLibraryPortsChangedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R30_DeleteEntryAsync_APortEntry_AnnouncesItsRelease()
+    {
+        _repoMock.FindEntryAsync(10, Arg.Any<CancellationToken>())
+            .Returns(new VariableLibraryEntry { Id = 10, VariableLibraryId = 8, Key = "PORT_BACK_BLUE", Value = "10001" });
+        _repoMock.FindLibraryAsync(8, Arg.Any<CancellationToken>()).Returns(new VariableLibrary { Id = 8, Name = "aetheus.qa", ProjectId = 1 });
+
+        Assert.True(await _sut.DeleteEntryAsync(8, 10, TestContext.Current.CancellationToken));
+
+        await _eventsMock.Received(1).DispatchStrictAsync(
+            Arg.Is<Aetheus.Back.Components.VariableLibraries.Events.VariableLibraryPortsChangedEvent>(change =>
+                change.OldEntries.Single().Port == 10001 && change.NewEntries.Count == 0),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

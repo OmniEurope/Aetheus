@@ -51,7 +51,7 @@ public sealed class PipelineSetupDetectionTests
 
     private PipelineSetupReadinessService BuildSut() => new(
         _templates, _repo, _git, _gitRepositories, _resolver, _requirements, Substitute.For<IProjectConfigRepositoryService>(),
-        Substitute.For<ILogger<PipelineSetupReadinessService>>());
+        ReadinessVariableResolver.Create(), Substitute.For<IPipelineSetupServerRepository>(), Substitute.For<ILogger<PipelineSetupReadinessService>>());
 
     private void Templates(params (int Id, string Name, string Variable)[] templates)
     {
@@ -106,7 +106,7 @@ public sealed class PipelineSetupDetectionTests
     public async Task SolutionAtTheRoot_IsFound()
     {
         Templates((1, "application-ci", "APPLICATION_CI_COMMANDS"));
-        Dir(null, "app.slnx");
+        Dir(null, "app.slnx", "global.json");
 
         var readiness = await RunAsync("application-ci");
 
@@ -115,10 +115,62 @@ public sealed class PipelineSetupDetectionTests
     }
 
     [Fact]
+    public async Task R30_DotNetRepositoryWithoutGlobalJson_IsWarnedAbout_WithoutBlocking()
+    {
+        Templates((1, "application-ci", "APPLICATION_CI_COMMANDS"));
+        Dir(null, "app.slnx", "src/");
+
+        var readiness = await RunAsync("application-ci");
+
+        var check = Assert.Single(readiness.Checks);
+        Assert.Equal(PipelineSetupReadinessKind.NoGlobalJson, check.Kind);
+        Assert.Equal(PipelineSetupReadinessSeverity.Warning, check.Severity);
+        Assert.Equal(["global.json"], check.Items);
+        Assert.False(readiness.HasBlocking);
+        Assert.False(readiness.Detection.HasGlobalJson);
+    }
+
+    [Fact]
+    public async Task R30_DotNetRepositoryWithGlobalJson_IsNotWarnedAbout()
+    {
+        Templates((1, "application-ci", "APPLICATION_CI_COMMANDS"));
+        Dir(null, "app.slnx", "global.json");
+
+        var readiness = await RunAsync("application-ci");
+
+        Assert.Empty(readiness.Checks);
+        Assert.True(readiness.Detection.HasGlobalJson);
+    }
+
+    [Fact]
+    public async Task R30_RepositoryWithoutDotNet_IsNeverAskedForGlobalJson()
+    {
+        Templates((1, "application-ci", "APPLICATION_CI_COMMANDS"));
+        Dir(null, "package.json");
+
+        var readiness = await RunAsync("application-ci");
+
+        Assert.DoesNotContain(readiness.Checks, check => check.Kind == PipelineSetupReadinessKind.NoGlobalJson);
+        Assert.Null(readiness.Detection.HasGlobalJson);
+    }
+
+    [Fact]
+    public async Task R30_QaOnARepositoryWithATestProjectAndNoGlobalJson_IsWarnedAbout()
+    {
+        Templates((3, "application-qa", "APPLICATION_QA_COMMANDS"));
+        Dir(null, "App.Tests.csproj");
+        Blob("App.Tests.csproj", "<Project><ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" /></ItemGroup></Project>");
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Equal(PipelineSetupReadinessKind.NoGlobalJson, Assert.Single(readiness.Checks).Kind);
+    }
+
+    [Fact]
     public async Task SolutionTwoDirectoriesDown_IsFound()
     {
         Templates((1, "application-ci", "APPLICATION_CI_COMMANDS"));
-        Dir(null, "src/");
+        Dir(null, "src/", "global.json");
         Dir("src", "app/");
         Dir("src/app", "app.sln");
 
@@ -146,7 +198,7 @@ public sealed class PipelineSetupDetectionTests
     public async Task QaWithoutAnyTestProject_IsReported_AndAnXunitProjectClearsIt()
     {
         Templates((3, "application-qa", "APPLICATION_QA_COMMANDS"));
-        Dir(null, "app.sln", "src/", "tests/");
+        Dir(null, "app.sln", "src/", "tests/", "global.json");
         Dir("src", "App.csproj");
         Dir("tests", "App.Tests/");
         Dir("tests/App.Tests", "App.Tests.csproj");
@@ -273,6 +325,177 @@ public sealed class PipelineSetupDetectionTests
         Assert.Null(readiness.Detection.HasComposeFile);
         Assert.DoesNotContain(readiness.Checks, check => check.Kind is PipelineSetupReadinessKind.NoDotNetTestProject
             or PipelineSetupReadinessKind.NoComposeFile);
+    }
+
+    private const string E2eVariable = "APPLICATION_QA_E2E_COMMANDS";
+
+    /// <summary>Recette R-59: the browser tests the QA pipeline runs against its deployed stack are found in the repository,
+    /// so the setup wizard writes their command itself: Playwright or Cypress in a <c>package.json</c>, the directory of the
+    /// one found, and what was read to the end and holds none.</summary>
+    [Theory]
+    [InlineData("", "@playwright/test", "playwright")]
+    [InlineData("web", "cypress", "cypress")]
+    [InlineData("tests/e2e", "playwright", "playwright")]
+    public async Task BrowserTests_APlaywrightOrCypressPackage_IsFoundWithItsDirectory(string directory, string dependency, string tool)
+    {
+        Templates((3, "application-qa", E2eVariable));
+        // The chain of directories from the root down to the one that holds the package file.
+        var segments = directory.Length == 0 ? [] : directory.Split('/');
+        if (segments.Length == 0) Dir(null, "package.json");
+        else Dir(null, segments[0] + "/");
+        for (var level = 1; level < segments.Length; level++)
+            Dir(string.Join('/', segments[..level]), segments[level] + "/");
+        if (segments.Length > 0) Dir(directory, "package.json");
+        var path = directory.Length == 0 ? "package.json" : $"{directory}/package.json";
+        Blob(path, $"{{\"devDependencies\": {{\"{dependency}\": \"^1.0.0\"}}}}");
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Empty(readiness.Checks);
+        Assert.True(readiness.Detection.HasBrowserTests);
+        Assert.Equal(tool, readiness.Detection.BrowserTestTool);
+        Assert.Equal(directory, readiness.Detection.BrowserTestDirectory);
+    }
+
+    [Fact]
+    public async Task BrowserTests_ARepositoryReadToTheEndWithNone_IsToldAsNone_NeverAsAFinding()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "app.sln", "package.json", "node_modules/");
+        Blob("package.json", "{\"dependencies\": {\"express\": \"4\"}, \"devDependencies\": {\"vitest\": \"1\"}}");
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Empty(readiness.Checks);
+        Assert.False(readiness.Detection.HasBrowserTests);
+        Assert.Null(readiness.Detection.BrowserTestTool);
+    }
+
+    [Fact]
+    public async Task BrowserTests_APackageFileThatCannotBeRead_IsNotToldRatherThanNone()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "package.json");
+        _git.GetBlobAsync(RepositoryId, Arg.Any<string>(), "package.json", Arg.Any<CancellationToken>())
+            .Returns((GitLightBlobDto?)null);
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Null(readiness.Detection.HasBrowserTests);
+    }
+
+    [Fact]
+    public async Task BrowserTests_AreNotLookedFor_WhenNoSelectedPipelineReadsThem()
+    {
+        Templates((1, "application-ci", "APPLICATION_CI_COMMANDS"));
+        Dir(null, "app.sln", "package.json");
+
+        var readiness = await RunAsync("application-ci");
+
+        Assert.Null(readiness.Detection.HasBrowserTests);
+    }
+
+    private const string PlaywrightProject =
+        "<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><PackageReference Include=\"Microsoft.Playwright.NUnit\" />"
+        + "<PackageReference Include=\"NUnit\" /></ItemGroup></Project>";
+
+    /// <summary>A .NET project that references Microsoft.Playwright (its version central, in Directory.Packages.props) is the
+    /// repository's browser test, found with its project file, the framework its build folder is named after (here from the
+    /// Directory.Build.props above it) and the runner <c>global.json</c> selects, so the wizard writes a real command.</summary>
+    [Fact]
+    public async Task BrowserTests_ADotNetPlaywrightProject_IsFound_WithItsFrameworkAndRunner()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "app.slnx", "tests/", "Directory.Build.props", "Directory.Packages.props", "global.json");
+        Dir("tests", "App.E2E/", "App.Tests/");
+        Dir("tests/App.E2E", "App.E2E.csproj", "Tests.cs");
+        Dir("tests/App.Tests", "App.Tests.csproj");
+        Blob("tests/App.E2E/App.E2E.csproj", PlaywrightProject);
+        Blob("tests/App.Tests/App.Tests.csproj", "<Project><ItemGroup><PackageReference Include=\"xunit\" /></ItemGroup></Project>");
+        Blob("Directory.Build.props", "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        Blob("Directory.Packages.props", "<Project><ItemGroup><PackageVersion Include=\"Microsoft.Playwright.NUnit\" Version=\"1.64.1\" /></ItemGroup></Project>");
+        Blob("global.json", "{ \"test\": { \"runner\": \"Microsoft.Testing.Platform\" } }");
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Empty(readiness.Checks);
+        Assert.True(readiness.Detection.HasBrowserTests);
+        Assert.Equal("playwright-dotnet", readiness.Detection.BrowserTestTool);
+        Assert.Equal("tests/App.E2E", readiness.Detection.BrowserTestDirectory);
+        Assert.Equal("tests/App.E2E/App.E2E.csproj", readiness.Detection.BrowserTestProject);
+        Assert.Equal("net10.0", readiness.Detection.BrowserTestFramework);
+        Assert.True(readiness.Detection.BrowserTestUsesTestingPlatform);
+    }
+
+    [Fact]
+    public async Task BrowserTests_ADotNetPlaywrightProject_TakesItsOwnFramework_AndTheVsTestRunnerWithoutGlobalJson()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "E2E.csproj", "Directory.Build.props");
+        Blob("E2E.csproj", PlaywrightProject.Replace("<ItemGroup>", "<PropertyGroup><TargetFrameworks>net9.0;net10.0</TargetFrameworks></PropertyGroup><ItemGroup>", StringComparison.Ordinal));
+        Blob("Directory.Build.props", "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.True(readiness.Detection.HasBrowserTests);
+        Assert.Equal(string.Empty, readiness.Detection.BrowserTestDirectory);
+        Assert.Equal("E2E.csproj", readiness.Detection.BrowserTestProject);
+        Assert.Equal("net9.0", readiness.Detection.BrowserTestFramework);
+        Assert.Null(readiness.Detection.BrowserTestUsesTestingPlatform);
+    }
+
+    [Fact]
+    public async Task BrowserTests_ADotNetPlaywrightProject_WithNoFrameworkAnywhere_IsFoundWithoutOne()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "E2E.csproj");
+        Blob("E2E.csproj", PlaywrightProject);
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.True(readiness.Detection.HasBrowserTests);
+        Assert.Equal("playwright-dotnet", readiness.Detection.BrowserTestTool);
+        Assert.Null(readiness.Detection.BrowserTestFramework);
+    }
+
+    [Fact]
+    public async Task BrowserTests_APlaywrightVersionOnlyInTheCentralFile_IsNoBrowserTest()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "App.csproj", "Directory.Packages.props");
+        Blob("App.csproj", "<Project><ItemGroup><PackageReference Include=\"xunit\" /></ItemGroup></Project>");
+        Blob("Directory.Packages.props", "<Project><ItemGroup><PackageVersion Include=\"Microsoft.Playwright\" Version=\"1.64.1\" /></ItemGroup></Project>");
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.False(readiness.Detection.HasBrowserTests);
+        Assert.Null(readiness.Detection.BrowserTestTool);
+    }
+
+    [Fact]
+    public async Task BrowserTests_AProjectFileThatCannotBeRead_IsNotToldRatherThanNone()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "App.csproj");
+        _git.GetBlobAsync(RepositoryId, Arg.Any<string>(), "App.csproj", Arg.Any<CancellationToken>())
+            .Returns((GitLightBlobDto?)null);
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Null(readiness.Detection.HasBrowserTests);
+    }
+
+    [Fact]
+    public async Task BrowserTests_APackageJsonPlaywright_StillComesBeforeADotNetOne()
+    {
+        Templates((3, "application-qa", E2eVariable));
+        Dir(null, "package.json", "E2E.csproj");
+        Blob("package.json", "{\"devDependencies\": {\"@playwright/test\": \"^1.0.0\"}}");
+        Blob("E2E.csproj", PlaywrightProject);
+
+        var readiness = await RunAsync("application-qa");
+
+        Assert.Equal("playwright", readiness.Detection.BrowserTestTool);
     }
 
     private static PipelineTemplateResolution Resolution(string yaml) => new(

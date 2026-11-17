@@ -25,6 +25,18 @@ internal interface IDailyRecapRepository
     Task<List<RecapExpiring>> GetSecretsExpiringBeforeAsync(DateTime limitUtc, CancellationToken ct = default);
     Task<RecapFindings> GetFindingChangesAsync(DateTime startUtc, DateTime endUtc, CancellationToken ct = default);
     Task<List<RecapMailServer>> GetMailServersAsync(CancellationToken ct = default);
+
+    /// <summary>The open matches of the vulnerability watch as they stand now, and those that appeared or closed in the window.</summary>
+    Task<RecapCveWatch> GetCveWatchAsync(DateTime startUtc, DateTime endUtc, CancellationToken ct = default);
+
+    /// <summary>The open affected matches of each project that has any, by project (recette R-25).</summary>
+    Task<List<RecapProjectCve>> GetOpenCvesByProjectAsync(CancellationToken ct = default);
+
+    /// <summary>R-41: the affected findings of the host system of each server that has any, by server.</summary>
+    Task<List<RecapServerCve>> GetOpenCvesByServerAsync(CancellationToken ct = default);
+
+    /// <summary>The login of the active user with this address (compared without case), or null: an address with no account reads no project.</summary>
+    Task<string?> FindActiveUsernameByEmailAsync(string email, CancellationToken ct = default);
 }
 
 /// <summary>A server as stored, before its agent verdict and disk level are worked out.</summary>

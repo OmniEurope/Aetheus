@@ -52,6 +52,7 @@ public sealed record PortConflictReport(
 public sealed class PipelinePortRegistryGuard(
     IPipelineDispatchServerResolver dispatchServers,
     IPortRegistryService portRegistry,
+    ILibraryHeldPortSource heldPorts,
     ILogger<PipelinePortRegistryGuard> logger) : IPipelinePortRegistryGuard
 {
     /// <summary>
@@ -156,8 +157,13 @@ public sealed class PipelinePortRegistryGuard(
             definition, resolvedVariables, organizationId, projectId, ct).ConfigureAwait(false);
         foreach (var claim in claims)
         {
+            // The ports this project's libraries still write for that server are not "abandoned" by a run that
+            // does not use them: the deploy-prod run would otherwise release the nightly's (R-30).
+            IReadOnlyCollection<int> libraryPorts = projectId is { } owner
+                ? await heldPorts.GetHeldPortsAsync(owner, claim.ServerId, ct).ConfigureAwait(false)
+                : [];
             await portRegistry
-                .DeclareAsync(claim.ServerId, claim.Ports, ownerKey, ownerLabel, projectId, ct)
+                .DeclareAsync(claim.ServerId, claim.Ports, ownerKey, ownerLabel, projectId, ct, libraryPorts)
                 .ConfigureAwait(false);
             logger.LogInformation(
                 "Registered ports {Ports} on server {ServerId} for '{Owner}'.",

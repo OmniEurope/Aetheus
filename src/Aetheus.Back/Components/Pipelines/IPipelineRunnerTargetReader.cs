@@ -36,6 +36,13 @@ public interface IPipelineRunnerTargetReader
     /// organization, OS and deploy-capability rules as execution.</summary>
     Task<List<int>> FindCandidateTargetServerIdsAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, bool deploymentStage, int? projectId, CancellationToken ct = default);
     Task<Server?> FindOnlineServerByIdAsync(int serverId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default);
+    /// <summary>R-11: whether the run belongs to a pipeline imported from an external repository mirror, which runs
+    /// only on the servers linked to its project.</summary>
+    Task<bool> IsExternalImportRunAsync(int runId, CancellationToken ct = default);
+    /// <summary>R-11: the servers linked to the project (its project-server rows that name a server).</summary>
+    Task<List<int>> GetProjectLinkedServerIdsAsync(int projectId, CancellationToken ct = default);
+    /// <summary>R-11: <see cref="FindAnyOnlineRunnerAsync"/> restricted to the servers linked to the project.</summary>
+    Task<Server?> FindAnyOnlineProjectRunnerAsync(int projectId, int? organizationId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default);
     /// <summary>The last reported agent facts of the named servers, for the launch preflight.</summary>
     Task<List<PipelineRunnerFacts>> GetRunnerFactsAsync(IReadOnlyCollection<int> serverIds, CancellationToken ct = default);
 }

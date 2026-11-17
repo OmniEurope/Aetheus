@@ -109,6 +109,15 @@ public sealed record UpdateBackupPolicyRequest : BackupPolicyRequest
 
 }
 
+/// <summary>Replaces only the backup schedule of a policy (recette R-8, a move in the planner): the five-field cron
+/// expression (minutes first, UTC). Neither the restore-check cadence nor what the agent reads or connects to changes.</summary>
+public sealed record SetBackupScheduleRequest
+{
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
+    public string ScheduleCron { get; init; } = string.Empty;
+}
+
 /// <summary>Agent-&gt;backend result of a backup execution (ADR-024 4.3).</summary>
 public sealed record BackupExecuteResultDto
 {

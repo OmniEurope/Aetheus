@@ -23,13 +23,18 @@ public sealed class GitBranchMovedPipelineSyncHandlerTests
     private readonly IPipelineService _pipelineService = Substitute.For<IPipelineService>();
     private readonly IGitLightCliService _cli = Substitute.For<IGitLightCliService>();
     private readonly IUserNotificationService _userNotifications = Substitute.For<IUserNotificationService>();
+    private readonly IGitLightService _repositories = Substitute.For<IGitLightService>();
     private readonly GitBranchMovedPipelineSyncHandler _sut;
 
-    public GitBranchMovedPipelineSyncHandlerTests() =>
+    public GitBranchMovedPipelineSyncHandlerTests()
+    {
+        _repositories.GetAccessibleRepositoriesAsync(Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns([new GitLightRepoDto { Id = 3, ProjectId = 7, Slug = "repo", Name = "Repo" }]);
         _sut = new GitBranchMovedPipelineSyncHandler(new PipelineDefinitionSynchronizer(
-            _pipelineService, _cli,
+            _pipelineService, _cli, _repositories,
             new PipelineRunNotificationPublisher(Substitute.For<IPipelineRepository>(), _userNotifications),
             NullLogger<PipelineDefinitionSynchronizer>.Instance));
+    }
 
     private static GitBranchMovedEvent Moved(string branch, string? defaultBranch = "main") =>
         new(7, 3, "repo", "Repo", defaultBranch, DiskPath,
@@ -66,6 +71,23 @@ public sealed class GitBranchMovedPipelineSyncHandlerTests
 
         await _pipelineService.Received(1).UpsertPipelineFromYamlAsync(
             "aetheus-demo", Yaml, 7, "schedule", Arg.Any<CancellationToken>(), "release", "develop", 3);
+    }
+
+    /// <summary>Decision 2026-11-10: a branch that moves on the mirror of an external repository never creates or
+    /// updates a stored definition, even when its tip holds a valid <c>.pipeline/</c> file.</summary>
+    [Fact]
+    public async Task Handle_ABranchOfAnExternalMirror_NeverReadsNorUpsertsItsDefinitions()
+    {
+        GivenDefinition("aetheus-demo.yaml", Yaml);
+        _repositories.GetAccessibleRepositoriesAsync(Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns([new GitLightRepoDto { Id = 3, ProjectId = 7, Slug = "repo", Name = "Repo", IsExternalMirror = true }]);
+
+        await _sut.HandleAsync(Moved("main"), TestContext.Current.CancellationToken);
+
+        await _cli.DidNotReceive().GetTreeAsync(DiskPath, Commit, ".pipeline", Arg.Any<CancellationToken>());
+        await _pipelineService.DidNotReceiveWithAnyArgs().UpsertPipelineFromYamlAsync(
+            default!, default!, default, default!, TestContext.Current.CancellationToken, default, default, default);
+        await _userNotifications.DidNotReceiveWithAnyArgs().RecordProjectEventAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

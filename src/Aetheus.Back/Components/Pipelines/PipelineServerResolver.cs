@@ -104,7 +104,7 @@ internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerT
     public async Task<Server?> FindOnlineServerInPoolInOrganizationAsync(
         string poolName, OsType requiredOs, int organizationId, CancellationToken ct = default)
         => await FindOnlineServerAsync(
-            db.AgentPoolServers.Where(item => item.AgentPool.Name == poolName).Select(item => item.Server),
+            db.AgentPoolServers.Where(item => item.AgentPool.Name == poolName && item.AgentPool.OrganizationId == organizationId).Select(item => item.Server),
             requiredOs,
             organizationId,
             ct).ConfigureAwait(false);
@@ -239,7 +239,8 @@ internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerT
     private async Task<List<int>> FindPoolCandidateIdsAsync(
         string pool, OsType requiredOs, int? organizationId, bool deploymentStage, CancellationToken ct)
         => await FindCandidateIdsAsync(
-            db.AgentPoolServers.Where(item => item.AgentPool.Name == pool).Select(item => item.Server),
+            db.AgentPoolServers.Where(item => item.AgentPool.Name == pool
+                && (organizationId == null || item.AgentPool.OrganizationId == organizationId.Value)).Select(item => item.Server),
             requiredOs,
             organizationId,
             deploymentStage,
@@ -333,7 +334,8 @@ internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerT
                 .Where(aps => aps.AgentPool.Name == pool
                               && aps.Server.Status == ServerStatus.Online
                               && aps.Server.DeploymentTargetAvailable)
-                .Where(aps => organizationId == null || aps.Server.OrganizationId == organizationId.Value)
+                .Where(aps => organizationId == null || (aps.Server.OrganizationId == organizationId.Value
+                                                         && aps.AgentPool.OrganizationId == organizationId.Value))
                 .Where(aps => requiredOs == OsType.Unknown || aps.Server.OsType == requiredOs)
                 .Select(aps => aps.Server)
                 .WhereAgentCan(AgentCapabilities.Deployment)
@@ -374,6 +376,33 @@ internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerT
         var query = db.Servers
             .WhereAgentCan(AgentCapabilities.PipelineBuild)
             .Where(s => s.Status == ServerStatus.Online && s.PipelineRunnerEnabled);
+        if (organizationId is { } orgId)
+            query = query.Where(s => s.OrganizationId == orgId);
+        if (requiredOs != OsType.Unknown)
+            query = query.Where(s => s.OsType == requiredOs);
+        return await query
+            .OrderBy(s => db.Tasks.Count(t => t.ServerId == s.Id && t.Status == TaskExecutionStatus.Running))
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> IsExternalImportRunAsync(int runId, CancellationToken ct = default) =>
+        await db.PipelineRuns.AsNoTracking()
+            .AnyAsync(run => run.Id == runId && run.Pipeline.ExternalImportCommit != null, ct).ConfigureAwait(false);
+
+    public async Task<List<int>> GetProjectLinkedServerIdsAsync(int projectId, CancellationToken ct = default) =>
+        await db.ProjectServers.AsNoTracking()
+            .Where(link => link.ProjectId == projectId && link.ServerId != null)
+            .Select(link => link.ServerId!.Value)
+            .Distinct()
+            .ToListAsync(ct).ConfigureAwait(false);
+
+    public async Task<Server?> FindAnyOnlineProjectRunnerAsync(
+        int projectId, int? organizationId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
+    {
+        var query = db.Servers
+            .WhereAgentCan(AgentCapabilities.PipelineBuild)
+            .Where(s => s.Status == ServerStatus.Online && s.PipelineRunnerEnabled)
+            .Where(s => db.ProjectServers.Any(link => link.ProjectId == projectId && link.ServerId == s.Id));
         if (organizationId is { } orgId)
             query = query.Where(s => s.OrganizationId == orgId);
         if (requiredOs != OsType.Unknown)

@@ -36,6 +36,20 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         return await Http.GetFromJsonAsync<ServerTaskDto>($"api/tasks/{taskId}", JsonOptions.Web, ct);
     }
 
+    /// <summary>ADR-060: the same read by public identifier.</summary>
+    public async Task<ServerTaskDto?> GetTaskAsync(Guid taskUid, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<ServerTaskDto>($"api/tasks/{taskUid}", JsonOptions.Web, ct);
+    }
+
+    /// <summary>ADR-060: how many tasks the backfill still has to reach (administrators).</summary>
+    public Task<TaskIdentityBackfillDto?> GetTaskIdentityBackfillAsync(CancellationToken ct = default) =>
+        GetJsonAsync<TaskIdentityBackfillDto>("api/admin/task-identity-backfill", ct);
+
+    /// <summary>ADR-060 lot 2: how many runs the backfill still has to reach (administrators).</summary>
+    public Task<PipelineRunIdentityBackfillDto?> GetPipelineRunIdentityBackfillAsync(CancellationToken ct = default) =>
+        GetJsonAsync<PipelineRunIdentityBackfillDto>("api/admin/pipeline-run-identity-backfill", ct);
+
 
     public async Task<ServerTaskDto?> CreateTaskAsync(CreateTaskRequest request)
     {
@@ -104,13 +118,18 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
             ct);
 
 
-    public async Task<List<PipelineRunDto>> GetActivePipelineRunsAsync(int? projectId = null, CancellationToken ct = default)
+    public async Task<List<PipelineRunDto>> GetActivePipelineRunsAsync(
+        int? projectId = null, int? serverId = null, CancellationToken ct = default)
     {
-        var uri = projectId.HasValue
-            ? $"api/pipelines/runs/active?projectId={projectId.Value}"
-            : "api/pipelines/runs/active";
+        var query = new Dictionary<string, string?>();
+        if (projectId.HasValue) query["projectId"] = projectId.Value.ToString();
+        if (serverId.HasValue) query["serverId"] = serverId.Value.ToString();
+        var uri = QueryHelpers.AddQueryString("api/pipelines/runs/active", query);
         return await Http.GetFromJsonAsync<List<PipelineRunDto>>(uri, JsonOptions.Web, ct) ?? [];
     }
+
+    public Task<List<PipelineRunDto>> GetActivePipelineRunsAsync(int? projectId, CancellationToken ct) =>
+        GetActivePipelineRunsAsync(projectId, serverId: null, ct);
 
 
     public async Task<List<PipelineRunDto>> GetRecentPipelineRunsAsync(
@@ -228,7 +247,8 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
 
     public Task<ApiOutcome<PipelineDto, YamlValidationResultDto>> CreatePipelineAsync(
         CreatePipelineRequest request, CancellationToken ct = default)
-        => PostForOutcomeAsync<PipelineDto, YamlValidationResultDto>("api/pipelines", request, ct);
+        => SendForOutcomeAsync<PipelineDto, YamlValidationResultDto>(
+            HttpMethod.Post, "api/pipelines", request, ct, callerHandlesConflict: true);
 
 
     /// <summary>What would stop the wizard's pipelines from running, checked before they are created.</summary>
@@ -239,12 +259,19 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
             new PipelineSetupReadinessRequest { ProjectId = projectId, TemplateNames = [.. templateNames] },
             ct);
 
-    /// <summary>What the production deployment of the project needs, read from its Compose file (ADR-057).</summary>
+    /// <summary>R-26: prepares the telemetry and the audience of the project's monitored application, item by item; null when
+    /// the server refused or failed.</summary>
+    public Task<PipelineSetupCollectionResultDto?> PrepareSetupCollectionAsync(
+        PipelineSetupCollectionRequest request, CancellationToken ct = default)
+        => PostJsonAsync<PipelineSetupCollectionRequest, PipelineSetupCollectionResultDto>("api/pipelines/setup/collection", request, ct);
+
+    /// <summary>What the production deployment of the project needs, read from its Compose file (ADR-057), on
+    /// <paramref name="branch"/> when given (R-9: the branch the pipelines are created on).</summary>
     public Task<PipelineProductionAnalysisDto?> AnalyzeProductionAsync(
-        int projectId, string? composeFile, CancellationToken ct = default)
+        int projectId, string? composeFile, string? branch = null, CancellationToken ct = default)
         => PostJsonAsync<PipelineProductionAnalysisRequest, PipelineProductionAnalysisDto>(
             "api/pipelines/setup/production-analysis",
-            new PipelineProductionAnalysisRequest { ProjectId = projectId, ComposeFile = composeFile }, ct);
+            new PipelineProductionAnalysisRequest { ProjectId = projectId, ComposeFile = composeFile, Branch = branch }, ct);
 
     /// <summary>Creates the variables, secrets, ports and configuration repository of the production setup; the
     /// error payload is kept so the wizard can say why it failed.</summary>
@@ -252,6 +279,13 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         PipelineProductionApplyRequest request, CancellationToken ct = default)
         => PostForApiErrorOutcomeAsync<PipelineProductionApplyRequest, PipelineProductionApplyResultDto>(
             "api/pipelines/setup/production-apply", request, ct);
+
+    /// <summary>R-38: creates the generic Apache templates in the project's configuration repository without the Compose file; the
+    /// error payload is kept so the wizard can say why it failed.</summary>
+    public Task<ApiOutcome<ProjectConfigRepositoryDto, ApiError>> ApplyProductionApacheAsync(
+        PipelineProductionApacheRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<PipelineProductionApacheRequest, ProjectConfigRepositoryDto>(
+            "api/pipelines/setup/production-apache", request, ct);
 
     /// <summary>Mends the environment sample the project's configuration repository already holds (recette R-5): a variable
     /// name the agent refuses becomes its scoped name there and in the production library; the error payload is kept so
@@ -313,6 +347,14 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         => PutForOutcomeAsync<PipelineDto, YamlValidationResultDto>($"api/pipelines/{id}", request, ct);
 
 
+    /// <summary>R-24: declares a vault or library of the project in the pipeline's definition. The caller says every
+    /// refusal itself (a validation reason, a repository change not seen, a missing right), so the global notifier stays out.</summary>
+    public Task<ApiOutcome<PipelineDto, ApiError>> DeclarePipelineHolderAsync(
+        int pipelineId, DeclarePipelineHolderRequest request, CancellationToken ct = default)
+        => SendForOutcomeAsync<PipelineDto, ApiError>(
+            HttpMethod.Post, $"api/pipelines/{pipelineId}/declared-holders", request, ct,
+            callerHandlesEveryError: true, callerHandlesConflict: true);
+
     public Task<ApiStatus> DeletePipelineAsync(int id, CancellationToken ct = default)
         => DeleteAsync($"api/pipelines/{id}", ct);
 
@@ -329,7 +371,8 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
             : new Dictionary<string, string>(parameters, StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(sourceBranch))
             body["AETHEUS_RUN_BRANCH"] = sourceBranch;
-        body["AETHEUS_RUN_IDEMPOTENCY_KEY"] = Guid.NewGuid().ToString("N");
+        var idempotencyKey = Guid.NewGuid().ToString("N");
+        body["AETHEUS_RUN_IDEMPOTENCY_KEY"] = idempotencyKey;
         // Sent only when chosen, and only offered when GetRunOptionsAsync said the backend accepts it.
         if (runToEnd)
             body["AETHEUS_RUN_TO_END"] = "true";
@@ -337,7 +380,7 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         if (gateOverride)
             body[PipelineRunRequestJsonConverter.GateOverrideVariable] = "true";
         return PostForOutcomeAsync<PipelineRunDto, YamlValidationResultDto>(
-            $"api/pipelines/{id}/run", body, ct);
+            $"api/pipelines/{id}/run", body, ct, idempotencyKey);
     }
 
 
@@ -450,6 +493,13 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         PostJsonAsync<PipelineFleetUpdateRequest, PipelineDto>(
             $"api/pipelines/{pipelineId}/fleet-update", request, ct);
 
+    /// <summary>R-8: moves every pipeline of the project (or of the caller's fleet) pinned on an older version of a
+    /// shipped template (generic or versioned, R-45) to its latest version; the result says what happened to each one.</summary>
+    public Task<PipelineFleetBulkUpdateResultDto?> UpdateAllGenericTemplatePipelinesAsync(
+        int? projectId, CancellationToken ct = default) =>
+        PostJsonAsync<PipelineFleetBulkUpdateRequest, PipelineFleetBulkUpdateResultDto>(
+            "api/pipelines/fleet-update/generic-templates", new PipelineFleetBulkUpdateRequest { ProjectId = projectId }, ct);
+
 
     public Task<PipelinePromotePreviewDto?> GetPipelinePromotePreviewAsync(
         int pipelineId, CancellationToken ct = default) =>
@@ -500,6 +550,12 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
     public async Task<PipelineRunLineageDto?> GetPipelineRunLineageAsync(int runId, CancellationToken ct = default)
     {
         return await Http.GetFromJsonAsync<PipelineRunLineageDto>($"api/pipelines/runs/{runId}/lineage", JsonOptions.Web, ct);
+    }
+
+    /// <summary>R-37: each variable the run read from a library or a vault, with its source (never a secret's value).</summary>
+    public async Task<List<PipelineRunUsedVariableDto>?> GetPipelineRunUsedVariablesAsync(int runId, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<List<PipelineRunUsedVariableDto>>($"api/pipelines/runs/{runId}/used-variables", JsonOptions.Web, ct);
     }
 
     /// <summary>The run's expand/contract gate verdicts (recette R1-43), its migrations classified expand or contract, and the contractions still due (R-18).</summary>

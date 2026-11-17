@@ -23,7 +23,7 @@ public class GitLightMaintenanceServiceTests
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var options = Options.Create(new GitLightOptions { MaintenanceIntervalHours = 1 });
         var logger = Substitute.For<ILogger<GitLightMaintenanceService>>();
-        return (new GitLightMaintenanceService(scopeFactory, options, logger), lightRepo, cli, lightService);
+        return (new GitLightMaintenanceService(scopeFactory, options, logger, leaderLease: LeaderLeaseDouble.Leader()), lightRepo, cli, lightService);
     }
 
     [Fact]

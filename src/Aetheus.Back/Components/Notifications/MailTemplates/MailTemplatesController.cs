@@ -66,7 +66,7 @@ public sealed class MailTemplatesController(IMailTemplateService service, IResou
         if (!await MayEditAsync(organizationId, ct)) return Forbid();
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userId = int.TryParse(claim, out var parsed) ? parsed : (int?)null;
-        return Ok(await service.SendTestAsync(kind, language, request, userId, ct));
+        return Ok(await service.SendTestAsync(kind, language, request, userId, organizationId, ct));
     }
 
     /// <summary>The platform's templates are a site Admin's; an organization's, a holder of

@@ -194,8 +194,8 @@ public sealed class ServerMailReinstallTests : BunitContext
         // While the stack is erased, one banner and no button.
         Assert.Null(HeaderButton("MailReinstall"));
         Assert.Contains("MailReinstallRunning", cut.Find(".mail-reinstall-running").TextContent, StringComparison.Ordinal);
-        // Recette R-116: the banner wears the busy veil, no loader sits inside it.
-        Assert.Contains("omni-busy", cut.Find(".mail-reinstall-running").ClassName, StringComparison.Ordinal);
+        // Recette R-116, R-37: the banner veils nothing (reinstall is not a blocking task), no loader sits inside it.
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Empty(cut.FindAll(".mail-reinstall-running .aetheus-loader-logo"));
 
         var section = cut.Instance;
@@ -254,13 +254,13 @@ public sealed class ServerMailReinstallTests : BunitContext
         var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, 10));
 
         Assert.DoesNotContain("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal);
-        Assert.NotEmpty(cut.FindAll(".mail-counts-loading"));
+        Assert.NotEmpty(cut.FindAll(".zone-veil-host"));
 
         domains.SetResult(new PaginatedResult<MailDomainDto>());
         accounts.SetResult(new PaginatedResult<MailAccountDto>());
 
         cut.WaitForAssertion(() => Assert.Contains("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal));
-        Assert.Empty(cut.FindAll(".mail-counts-loading"));
+        Assert.Empty(cut.FindAll(".zone-veil-host"));
     }
 
     [Fact]

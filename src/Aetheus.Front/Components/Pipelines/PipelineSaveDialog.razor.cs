@@ -31,6 +31,10 @@ public partial class PipelineSaveDialog
     /// the definition and nothing is committed.</summary>
     private bool AdoptsRepositoryFile => !Edited && RepositoryHoldsAFile;
 
+    /// <summary>R-12: nothing was edited, the repository holds no file and the project has no internal repository to place one
+    /// in (an external source typed as a branch name): the save only stores the settings, so no commit is announced.</summary>
+    private bool SettingsOnly => !Edited && !RepositoryHoldsAFile && Branches.Count == 0;
+
     /// <summary>The edit would replace lines of the repository file Aetheus has not seen.</summary>
     private bool OverwritesRepositoryChange => Edited && RepositoryChangedSinceSync && !Same(_repository!.Yaml, DraftYaml);
 

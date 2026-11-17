@@ -13,7 +13,7 @@
         <OmniMenuItem OnClick="@ExportEntries"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["Export"]</ChildContent></OmniMenuItem>
         <OmniMenuItem OnClick="@ImportEntries"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
         <OmniMenuItem OnClick="@CheckPortsAsync"><Icon><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /></Icon><ChildContent>@L["CheckPorts"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem OnClick="@AllocatePortsAsync"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["PortAllocate"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@AllocatePortsAsync"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["PortAllocatePage"]</ChildContent></OmniMenuItem>
     </text>;
 }
 <OmniPageHeader Title="@(_isNew ? L["NewVariableLibrary"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@(_isNew || _detail is null ? null : libraryMenu)">
@@ -23,7 +23,7 @@
 <OmniStack Class="page-fill-body">
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else if (_loadFailed || (!_isNew && _detail is null))
 {
@@ -43,7 +43,7 @@ else
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small">
                     <OmniFormField Label="@L["Name"]" For="Name">
                         <OmniTextBox @bind-Value="_model.Name"
 
@@ -90,17 +90,30 @@ else
            vanished as the key field lost focus, which moved "Add" sideways between the mouse press and
            its release, so the click landed next to the button. *@
         <OmniRow Gap="OmniSpacing.Small" Class="omni-u-mb-xs">
-            <OmniTextBox aria-label="@L["Key"]" @bind-Value="_newEntry.Key"
+            <OmniTextBox Id="library-new-entry-key" aria-label="@L["Key"]" @bind-Value="_newEntry.Key" @bind-Value:after="ClearPortKeyAlert"
 
                 Placeholder="@L["Key"]" />
-            <OmniTextBox aria-label="@L["Value"]" @bind-Value="_newEntry.Value"
+            <OmniTextBox Id="library-new-entry-value" aria-label="@L["Value"]" @bind-Value="_newEntry.Value"
 
                 Placeholder="@L["Value"]" />
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
+            @* R-12: creates the entry with a free port as its value. Never disabled: OE's disabled item
+               ignores the click, and the click is what explains why a name without PORT_ gets no port. *@
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem Class="@(HasPortKey || HasNoKey ? null : "menu-item-unavailable")" OnClick="@FillFreePortAsync"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["PortFree"]</ChildContent></OmniMenuItem>
+            </OmniOverflowMenu>
         </OmniRow>
         <div class="library-entry-validation">
             <ValidationMessage For="@(() => _newEntry.Key)" />
         </div>
+        @if (_portKeyHint)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["PortTypeKeyFirst"]</OmniText>
+        }
+        @if (_portKeyAlert)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>@L["PortKeyMustStartWithPrefix", _newEntry.Key.Trim()]</ChildContent></OmniAlert>
+        }
         </OmniTemplateForm>
 
         @if (_entriesLoadFailed)

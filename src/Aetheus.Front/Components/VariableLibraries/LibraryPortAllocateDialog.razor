@@ -10,18 +10,20 @@
     }
     else
     {
-        <OmniFormField Label="@L["Server"]" For="alloc-server" Required="true" Class="omni-u-w-100">
-            <OmniDropDown Id="alloc-server" name="alloc-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.ServerId, item => item.ServerName))" @bind-Value="_serverId" AllowEmpty="true" Placeholder="@L["Server"]" Class="w-100" />
-        </OmniFormField>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniFormField Label="@L["Server"]" For="alloc-server" Required="true" Class="omni-u-w-100">
+                <OmniDropDown Id="alloc-server" name="alloc-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.ServerId, item => item.ServerName))" @bind-Value="_serverId" AllowEmpty="true" Placeholder="@L["Server"]" Class="w-100" />
+            </OmniFormField>
 
-        <OmniFormField Label="@L["PortAllocatePreset"]" For="alloc-preset" Class="omni-u-w-100">
-            <OmniDropDown Id="alloc-preset" name="alloc-preset" TValue="string" Options="@(Presets.ToOptions(item => item, item => PresetLabel(item)))" @bind-Value="_preset"
-                @bind-Value:after="ApplyPreset" Class="w-100" />
-        </OmniFormField>
+            <OmniFormField Label="@L["PortAllocatePreset"]" For="alloc-preset" Class="omni-u-w-100">
+                <OmniDropDown Id="alloc-preset" name="alloc-preset" TValue="string" Options="@(Presets.ToOptions(item => item, item => PresetLabel(item)))" @bind-Value="_preset"
+                    @bind-Value:after="ApplyPreset" Class="w-100" />
+            </OmniFormField>
 
-        <OmniFormField Label="@L["PortAllocateKeys"]" For="alloc-keys" Required="true" Class="omni-u-w-100">
-            <OmniTextArea Id="alloc-keys" @bind-Value="_keysInput" Rows="4" Class="w-100" />
-        </OmniFormField>
+            <OmniFormField Label="@L["PortAllocateKeys"]" For="alloc-keys" Required="true" Class="omni-u-w-100">
+                <OmniTextArea Id="alloc-keys" @bind-Value="_keysInput" Rows="4" Class="w-100" />
+            </OmniFormField>
+        </OmniStack>
 
         @if (_created.Count == 0)
         {

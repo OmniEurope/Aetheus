@@ -53,7 +53,8 @@ public sealed class AiTaskSchedulerServiceTests
         var services = new ServiceCollection().AddSingleton(repo).AddSingleton(service).BuildServiceProvider();
         var sut = new AiTaskSchedulerService(
             services.GetRequiredService<IServiceScopeFactory>(), new FakeTimeProvider(new DateTimeOffset(Now)),
-            NullLogger<AiTaskSchedulerService>.Instance);
+            NullLogger<AiTaskSchedulerService>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await sut.TickAsync(TestContext.Current.CancellationToken);
 

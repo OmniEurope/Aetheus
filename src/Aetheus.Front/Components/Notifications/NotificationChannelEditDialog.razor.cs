@@ -44,6 +44,13 @@ public partial class NotificationChannelEditDialog : EntityEditDialogBase
         finally { _loading = false; }
     }
 
+    // The list draws the saved channel at once (R-10): the dialog closes with what the server answered.
+    private Task CloseWithSavedChannelAsync(NotificationChannelDto saved)
+    {
+        Dialog.Close(saved);
+        return Task.CompletedTask;
+    }
+
     private async Task SubmitAsync()
     {
         if (!CanSubmit) return;
@@ -60,7 +67,7 @@ public partial class NotificationChannelEditDialog : EntityEditDialogBase
                         IsEnabled = _model.IsEnabled
                     }),
                     "Updated",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedChannelAsync,
                     successTitleKey: "Updated");
             }
             else
@@ -73,7 +80,7 @@ public partial class NotificationChannelEditDialog : EntityEditDialogBase
                         ConfigurationJson = config
                     }),
                     "Created",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedChannelAsync,
                     successTitleKey: "Created");
             }
         });

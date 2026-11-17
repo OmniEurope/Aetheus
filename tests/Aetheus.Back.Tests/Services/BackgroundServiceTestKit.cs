@@ -66,3 +66,4 @@ internal static class BackgroundServiceTestKit
     public static async Task AwaitAsync(this SemaphoreSlim signal, CancellationToken ct) =>
         Assert.True(await signal.WaitAsync(Bound, ct), "the background service did not reach the awaited point");
 }
+

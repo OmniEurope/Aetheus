@@ -23,7 +23,13 @@ public sealed class ClientErrorsController(ILogger<ClientErrorsController> logge
         var message = SingleLine(request.Message);
         var correlation = SingleLine(request.CorrelationId);
         var stack = SingleLine(request.StackTrace) ?? "(none)";
-        if (request.Level == ClientErrorLogLevels.Warning)
+        if (request.Level == ClientErrorLogLevels.Information)
+        {
+            logger.LogInformation(
+                "Client notice at {ClientPath}: {Summary} - {ClientMessage}; correlation {CorrelationId}; stack {ClientStackTrace}",
+                path, summary, message, correlation, stack);
+        }
+        else if (request.Level == ClientErrorLogLevels.Warning)
         {
             logger.LogWarning(
                 "Client warning at {ClientPath}: {Summary} - {ClientMessage}; correlation {CorrelationId}; stack {ClientStackTrace}",

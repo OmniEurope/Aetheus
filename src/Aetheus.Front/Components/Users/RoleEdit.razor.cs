@@ -284,19 +284,43 @@ public partial class RoleEdit
         return (parts[0], parts.Length > 1 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task RefreshUserCollectionsAsync()
+    // R-10: the members grid changes from the action's answer and reads again quietly behind it. The grid keys
+    // its rows by UserId, so a user already on screen for another organization cannot be told from the row that
+    // changed: that case lets the quiet read alone bring the list up to date.
+    private async Task ShowMemberAsync(RoleUserDto member)
     {
-        if (_usersGrid is not null)
-            await _usersGrid.Reload();
-        else
-            await LoadRoleUsersAsync(new GridLoadArgs { Skip = 0, Top = 25 });
+        if (_usersGrid is null) return;
+        if (HasMemberRow(member.UserId)) await _usersGrid.RestoreRowsAsync();
+        else await _usersGrid.ShowRowAsync(member);
+    }
 
-        await LoadAvailableUsersAsync(new GridLoadArgs
+    private async Task HideMemberAsync(RoleUserDto member)
+    {
+        if (_usersGrid is null) return;
+        if (_roleUsers.Count(row => row.UserId == member.UserId) > 1) await _usersGrid.RestoreRowsAsync();
+        else await _usersGrid.HideRowAsync(member);
+    }
+
+    private bool HasMemberRow(int userId) => _roleUsers.Any(row => row.UserId == userId);
+
+    // The users offered for the role are read again, as the picker last searched them.
+    private Task RefreshAvailableUsersAsync() => LoadAvailableUsersAsync(new GridLoadArgs
+    {
+        Skip = 0,
+        Top = 25,
+        Filter = _availableUsersSearch
+    });
+
+    /// <summary>The row the added user takes: the user as offered by the picker, with the organization the role is given for.</summary>
+    private RoleUserDto? MemberToShow(int userId)
+    {
+        var offered = _availableUsers.FirstOrDefault(user => user.UserId == userId);
+        if (offered is null || !RoleIsOrganizationScoped) return offered;
+        return offered with
         {
-            Skip = 0,
-            Top = 25,
-            Filter = _availableUsersSearch
-        });
+            OrganizationId = _organizationId,
+            OrganizationName = _organizations.FirstOrDefault(organization => organization.Id == _organizationId)?.Name
+        };
     }
 
     private async Task OnAddUser()
@@ -305,13 +329,17 @@ public partial class RoleEdit
         _addingUser = true;
         try
         {
+            var userId = _selectedUserId!.Value;
+            var member = MemberToShow(userId);
             var status = await Api.Auth.AddUserToRoleAsync(
-                Id, _selectedUserId!.Value, RoleIsOrganizationScoped ? _organizationId : null);
+                Id, userId, RoleIsOrganizationScoped ? _organizationId : null);
             if (status.Success)
             {
                 Toast.Success("Saved");
                 _selectedUserId = null;
-                await RefreshUserCollectionsAsync();
+                if (member is not null) await ShowMemberAsync(member);
+                else if (_usersGrid is not null) await _usersGrid.RestoreRowsAsync();
+                await RefreshAvailableUsersAsync();
             }
             else
             {
@@ -336,7 +364,8 @@ public partial class RoleEdit
             if (status.Success)
             {
                 Toast.Success("Saved");
-                await RefreshUserCollectionsAsync();
+                await HideMemberAsync(user);
+                await RefreshAvailableUsersAsync();
             }
         });
     }
@@ -358,9 +387,9 @@ public partial class RoleEdit
                 Permission = p.Permission
             })
             .ToList();
-        // An organization's role grants nothing on what belongs to no organization (agent pools, Docker).
+        // An organization's role grants nothing on what belongs to no organization (Docker); agent pools have one (R-12).
         _permissionRows = Enum.GetValues<ResourceType>()
-            .Where(rt => _roleOrganizationId is null || rt is not (ResourceType.AgentPool or ResourceType.Docker))
+            .Where(rt => _roleOrganizationId is null || rt is not ResourceType.Docker)
             .Select(rt =>
         {
             var perms = permissions.Where(p => p.ResourceType == rt && p.ResourceId is null).ToList();

@@ -15,5 +15,5 @@ public partial class PipelineRunHistory
     private string RunHref(int runId) => PipelineRunPresentation.Href(runId, ProjectId, ServerId);
 
     private string RunTitle(PipelineRunSummaryDto run) =>
-        $"#{run.Id} - {L.Localize(run.Status)} - {run.StartedAt:g}";
+        $"#{run.BuildNumber} - {L.Localize(run.Status)} - {run.StartedAt:g}";
 }

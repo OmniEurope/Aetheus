@@ -20,6 +20,9 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     // renewal/refresh so the forced change-password gate holds across a full-page reload.
     private const string MustChangePasswordClaim = "aetheus:mcp";
 
+    // R-1 (AetheusClaimTypes.MustSetUpAccount): the seeded administrator still to turn into its holder's own account.
+    private const string MustSetUpAccountClaim = "aetheus:setup";
+
     // The opaque audience identifier minted by the backend (AetheusClaimTypes.AnalyticsVisitor).
     private const string AnalyticsVisitorClaim = "aetheus:avid";
 
@@ -50,6 +53,10 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     /// issued after the change. <c>MainLayout</c> gates all navigation onto the change-password screen.
     /// </summary>
     public bool MustChangePassword { get; private set; }
+
+    /// <summary>R-1: true (with <see cref="MustChangePassword"/>) while the signed-in account is the seeded administrator
+    /// of a fresh install that must first become its holder's own account; <c>MainLayout</c> holds it on that page.</summary>
+    public bool MustSetUpAccount { get; private set; }
 
     public event Action? OnAuthStateChanged;
 
@@ -92,15 +99,27 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
 
     /// <summary>Reread browser storage before renewing because another tab may have rotated the
     /// refresh token; adopt that refresh token and a newer valid access token to avoid triggering
-    /// replay revocation with a stale copy.</summary>
+    /// replay revocation with a stale copy. A storage that held this tab's refresh token and now holds
+    /// neither token means another tab logged out, and its logout revoked the refresh token this tab
+    /// shares: that copy is dropped, never sent (the server would read it as a replay and end every
+    /// session of the user). The tab is not signed out by this alone (D50); it ends when its access
+    /// token is refused.</summary>
     public async Task ReloadFromStorageAsync()
     {
         try
         {
             var storedRefresh = await js.InvokeAsync<string?>("localStorage.getItem", RefreshTokenKey);
-            if (!string.IsNullOrEmpty(storedRefresh))
-                RefreshToken = storedRefresh;
             var storedToken = await js.InvokeAsync<string?>("localStorage.getItem", TokenKey);
+            if (!string.IsNullOrEmpty(storedRefresh))
+            {
+                RefreshToken = storedRefresh;
+                _storageHeldRefreshToken = true;
+            }
+            else if (string.IsNullOrEmpty(storedToken) && _storageHeldRefreshToken)
+            {
+                RefreshToken = null;
+                _storageHeldRefreshToken = false;
+            }
             if (!string.IsNullOrEmpty(storedToken) && !string.Equals(storedToken, Token, StringComparison.Ordinal)
                 && !IsTokenExpired(storedToken))
                 AdoptToken(storedToken);
@@ -111,6 +130,14 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         }
     }
 
+    /// <summary>The refresh token a logout hands the server to revoke: the newest one, which another
+    /// tab may have rotated since this one last read the storage.</summary>
+    public async Task<string?> CurrentRefreshTokenAsync()
+    {
+        await ReloadFromStorageAsync();
+        return RefreshToken;
+    }
+
     /// <summary>
     /// D50: the <c>storage</c> event of another tab. Only a new value is adopted; a removal is not
     /// (another tab's sign-out is its own business, and this tab's tokens fail on their own if revoked).
@@ -118,6 +145,9 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     [JSInvokable]
     public void OnStorageChanged(string key, string? newValue)
     {
+        // A removal still logs nothing out, but it proves the storage held the refresh token: the next
+        // re-read before a renewal then drops this tab's revoked copy (ReloadFromStorageAsync).
+        if (key == RefreshTokenKey) _storageHeldRefreshToken = true;
         if (string.IsNullOrEmpty(newValue)) return;
         if (key == RefreshTokenKey)
             RefreshToken = newValue;
@@ -179,14 +209,30 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
 
     private void AdoptToken(string token)
     {
+        ApplyToken(token);
+        NotifyAnalyticsIdentity();
+    }
+
+    /// <summary>The one place a token becomes session state (token, roles, account, gates, analytics visitor), shared
+    /// by adoption (sign-in, renewal, another tab) and the restore after a reload so they cannot drift apart.</summary>
+    private void ApplyToken(string token)
+    {
         Token = token;
         Roles = ParseRoles(token);
         Username = ParseClaim(token, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "unique_name");
         UserId = ParseUserId(token);
         MustChangePassword = ParseClaim(token, MustChangePasswordClaim) == "true";
+        MustSetUpAccount = ParseClaim(token, MustSetUpAccountClaim) == "true";
         _analyticsVisitor = ParseClaim(token, AnalyticsVisitorClaim);
-        NotifyAnalyticsIdentity();
     }
+
+    /// <summary>
+    /// Who holds the session right now: the account the token names, or null when signed out. A renewal
+    /// compares it before and after its round trip so an answer for a session that has since ended or
+    /// changed hands (another tab signed in as someone else) is never applied to the new one.
+    /// </summary>
+    internal string? SessionIdentity =>
+        string.IsNullOrEmpty(Token) ? null : $"{UserId?.ToString(System.Globalization.CultureInfo.InvariantCulture)}|{Username}";
 
     /// <summary>
     /// True when the current token expires within <see cref="RenewalThreshold"/>
@@ -212,6 +258,7 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         {
             Token = await js.InvokeAsync<string?>("localStorage.getItem", TokenKey);
             RefreshToken = await js.InvokeAsync<string?>("localStorage.getItem", RefreshTokenKey);
+            _storageHeldRefreshToken = !string.IsNullOrEmpty(RefreshToken);
             if (Token is not null && IsTokenExpired(Token))
             {
                 // Don't logout immediately - the refresh token may still be valid.
@@ -219,13 +266,10 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
                 if (string.IsNullOrEmpty(RefreshToken))
                     await EndSessionAsync(SessionEndReasons.NoRefreshTokenAtStartup);
             }
+            // The identity of the layout's watch (WatchStorageAsync) is announced once the tab listens, so
+            // restoring applies the state without telling the measurement a second time.
             if (Token is not null)
-            {
-                Roles = ParseRoles(Token);
-                Username = ParseClaim(Token, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "unique_name");
-                UserId = ParseUserId(Token);
-                MustChangePassword = ParseClaim(Token, MustChangePasswordClaim) == "true";
-            }
+                ApplyToken(Token);
         }
         catch (Exception ex)
         {
@@ -245,18 +289,28 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         {
             RefreshToken = refreshToken;
             await js.InvokeVoidAsync("localStorage.setItem", RefreshTokenKey, refreshToken);
+            // Read back, so a later empty storage is known to be a removal by another tab, not a write
+            // that never landed.
+            _storageHeldRefreshToken = string.Equals(
+                await js.InvokeAsync<string?>("localStorage.getItem", RefreshTokenKey), refreshToken, StringComparison.Ordinal);
         }
         OnAuthStateChanged?.Invoke();
     }
+
+    /// <summary>True once the storage was seen holding this tab's refresh token (read, read back after a
+    /// write, or removed by another tab): only then does an empty storage mean another tab's logout.</summary>
+    private bool _storageHeldRefreshToken;
 
     public async Task LogoutAsync()
     {
         Token = null;
         RefreshToken = null;
+        _storageHeldRefreshToken = false;
         Username = null;
         UserId = null;
         Roles = [];
         MustChangePassword = false;
+        MustSetUpAccount = false;
         _analyticsVisitor = null;
         await js.InvokeVoidAsync("localStorage.removeItem", TokenKey);
         await js.InvokeVoidAsync("localStorage.removeItem", RefreshTokenKey);

@@ -139,6 +139,66 @@ public sealed class AppLogsViewTests : BunitContext
         Assert.DoesNotContain("LoadFailed", cut.Markup, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void R34_ATimedOutRead_SaysTheReadFailed_NeverNoLogsYet()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        // HttpClient reports its timeout as a TaskCanceledException; the grid ignores a cancellation as a
+        // superseded load, so the panel used to settle on the "no logs yet" empty state.
+        handler.SetAsyncJsonResponse<PaginatedResult<AppLogEntryDto>>(HttpMethod.Get, LogsUrl,
+            _ => throw new TaskCanceledException("timeout", new TimeoutException()));
+
+        var cut = Render<AppLogsView>(parameters => parameters.Add(component => component.AppId, 3));
+
+        cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("NoLogsYet", cut.Markup, StringComparison.Ordinal);
+        // The grid stays on screen under the alert, with its Retry.
+        Assert.NotEmpty(cut.FindAll("table.omni-data-grid__table"));
+        Assert.Single(cut.FindAll("button"), b => b.TextContent.Contains("Retry", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R34_ABodyThatIsNotJson_SaysTheReadFailedOnce_NeverNoLogsYet()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        // A proxy or an HTML fallback page answering 200: not a failure of the transport, a failure of the read.
+        handler.SetRawResponse(LogsUrl, "<html>not json</html>");
+
+        var cut = Render<AppLogsView>(parameters => parameters.Add(component => component.AppId, 3));
+
+        cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("NoLogsYet", cut.Markup, StringComparison.Ordinal);
+        // One alert, the view's: the grid's own load alert is not drawn on top of it.
+        Assert.DoesNotContain("GridLoadFailed", cut.Markup, StringComparison.Ordinal);
+        Assert.NotEmpty(cut.FindAll("table.omni-data-grid__table"));
+    }
+
+    [Fact]
+    public void R34_WhileTheReadIsPending_TheBodyOfTheGridSaysItLoads_ThenGivesWayToTheLines()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.SetAsyncJsonResponse(HttpMethod.Get, LogsUrl, async _ =>
+        {
+            await release.Task;
+            return new PaginatedResult<AppLogEntryDto> { Items = Lines(1, 1), TotalCount = 1 };
+        });
+
+        var cut = Render<AppLogsView>(parameters => parameters.Add(component => component.AppId, 3));
+
+        // Neither the failure nor the empty state: the grid is there, headers included, and says it loads.
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid='app-logs-loading']")));
+        Assert.Contains("LogsLoading", cut.Find("[data-testid='app-logs-loading']").TextContent, StringComparison.Ordinal);
+        Assert.NotEmpty(cut.FindAll("table.omni-data-grid__table"));
+        Assert.DoesNotContain("NoLogsYet", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadFailed", cut.Markup, StringComparison.Ordinal);
+
+        release.SetResult();
+
+        cut.WaitForAssertion(() => Assert.Contains("line 1", cut.Markup, StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid='app-logs-loading']")));
+    }
+
     private static List<AppLogEntryDto> Lines(int firstId, int count) =>
         [.. Enumerable.Range(firstId, count).Select(id => new AppLogEntryDto
         {
@@ -206,7 +266,9 @@ public sealed class AppLogsViewTests : BunitContext
         cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));
         var download = module.Invocations["download"].Single();
         var fileName = Assert.IsType<string>(download.Arguments[0]);
-        var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        var raw = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        // OE 1.14 writes the data inert; assert what a Markdown viewer shows.
+        var markdown = Aetheus.Front.Tests.Shared.MarkdownExportText.AsRead(raw);
         // The application's name, then the content; OE appends its generation time once.
         Assert.Matches(@"^aetheus-logs-\d{4}-\d{2}-\d{2}-\d{4}\.md$", fileName);
         // Both pages, with the grid's sort, and every line once.

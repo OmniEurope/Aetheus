@@ -20,7 +20,7 @@
                 {
                     <span class="pipeline-run-tree-leaf" aria-hidden="true"></span>
                 }
-                <a href="@RunHref(run)" class="pipeline-run-tree-id" @onclick:stopPropagation="true">@run.RunId</a>
+                <a href="@RunHref(run)" class="pipeline-run-tree-id" @onclick:stopPropagation="true">#@run.BuildNumber</a>
                 <a href="@PipelineHref(run)" class="pipeline-name-link pipeline-run-tree-name" @onclick:stopPropagation="true">@run.PipelineName</a>
                 @if (GroupByProject)
                 {

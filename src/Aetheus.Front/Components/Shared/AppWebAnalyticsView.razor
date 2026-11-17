@@ -6,7 +6,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Small" />
+    <ZoneVeil />
 }
 else if (_loadFailed)
 {
@@ -66,5 +66,8 @@ else
                 </OmniChart>
             </OmniCard>
         }
+
+        @* R-22: when each daily visitor first came and on which page. *@
+        <AppWebAnalyticsVisitorsList AppId="AppId" RefreshToken="_visitorsRefresh" />
     </OmniStack>
 }

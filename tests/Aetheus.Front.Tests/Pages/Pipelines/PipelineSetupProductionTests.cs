@@ -80,7 +80,7 @@ public sealed class PipelineSetupProductionTests : BunitContext
 
         var deploy = Assert.Single(created, request => request.Name == "atlas-deploy-prod");
         var yaml = Parse(deploy.YamlDefinition);
-        Assert.Equal("application-deploy-prod@1", yaml["extends"]);
+        Assert.Equal("application-deploy-prod-front-back@1", yaml["extends"]);
         Assert.False(yaml.ContainsKey("parameters"));
         Assert.DoesNotContain("deployServer", deploy.YamlDefinition, StringComparison.Ordinal);
         // The command is the template's own default: the wizard writes none, and above all never an empty one
@@ -258,7 +258,7 @@ public sealed class PipelineSetupProductionTests : BunitContext
         string pipeline, string template)
     {
         var yaml = PipelineSetupYamlBuilder.Build(pipeline, template, 1, Input(),
-            new PipelineSetupProductionInput("compose.yml", "replace", false, "vpssim", ["backup", "vpssim"]));
+            new PipelineSetupProductionInput("compose.yml", "replace", "vpssim", ["backup", "vpssim"]));
 
         var parameter = (Dictionary<object, object>)((List<object>)Parse(yaml)["parameters"]).Single();
         Assert.Equal("deployServer", parameter["name"]);
@@ -274,7 +274,7 @@ public sealed class PipelineSetupProductionTests : BunitContext
     public void TheDeploymentYaml_WithServersButNoDefault_OffersTheChoiceWithoutGuessingOne()
     {
         var yaml = PipelineSetupYamlBuilder.Build("atlas-deploy-prod", "application-deploy-prod", 1, Input(),
-            new PipelineSetupProductionInput("compose.yml", "replace", false, null, ["a", "b"]));
+            new PipelineSetupProductionInput("compose.yml", "replace", null, ["a", "b"]));
 
         var parameter = (Dictionary<object, object>)((List<object>)Parse(yaml)["parameters"]).Single();
         Assert.False(parameter.ContainsKey("default"));
@@ -286,7 +286,7 @@ public sealed class PipelineSetupProductionTests : BunitContext
     public void TheQaYaml_GetsTheComposeFileOnly()
     {
         var yaml = PipelineSetupYamlBuilder.Build("atlas-qa", "application-qa", 1, Input(),
-            new PipelineSetupProductionInput("deploy/compose/remote.compose.yml", "replace", true, "vpssim", ["vpssim"]));
+            new PipelineSetupProductionInput("deploy/compose/remote.compose.yml", "replace", "vpssim", ["vpssim"]));
 
         var parsed = Parse(yaml);
         var variables = (Dictionary<object, object>)parsed["variables"];
@@ -316,11 +316,73 @@ public sealed class PipelineSetupProductionTests : BunitContext
         Assert.Empty(PipelineSetupProduction.PendingValues(new PipelineProductionApplyResultDto()));
     }
 
+    // Recette R-37: the fast release deploys to the host of the production pipeline, so it is given the Compose file and the
+    // strategy the setup read, like that pipeline. Without them it looked for a Compose file at the root of the repository
+    // (run 3124 of w1-release-fast) and, for a blue-green project, ran the replacement instead of the cutover.
+    [Theory]
+    [InlineData("replace")]
+    [InlineData("bluegreen")]
+    public void TheFastReleaseYaml_GetsTheComposeFileAndTheStrategyOfTheProductionSetup(string strategy)
+    {
+        var yaml = PipelineSetupYamlBuilder.Build("atlas-release-fast", "application-release-fast", 1, Input(),
+            new PipelineSetupProductionInput("deploy/compose/remote.compose.yml", strategy, "vpssim", ["vpssim"]));
+
+        var variables = (Dictionary<object, object>)Parse(yaml)["variables"];
+        Assert.Equal("deploy/compose/remote.compose.yml", variables["COMPOSE_FILE"]);
+        Assert.Equal(strategy, variables["DEPLOY_STRATEGY"]);
+        Assert.DoesNotContain(variables.Keys, key => key.ToString()!.EndsWith("_COMMANDS", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheFastReleaseYaml_WithNoComposeFileRead_ClaimsNeitherTheFileNorTheStrategy()
+    {
+        var yaml = PipelineSetupYamlBuilder.Build("atlas-release-fast", "application-release-fast", 1, Input(),
+            new PipelineSetupProductionInput(null, null, "vpssim", ["vpssim"]));
+
+        Assert.DoesNotContain("COMPOSE_FILE", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("DEPLOY_STRATEGY", yaml, StringComparison.Ordinal);
+    }
+
+    // Recette R-36: what the wizard writes for the chain "run the deployment after the candidate". The candidate names the
+    // deployment pipeline and the release it published; the deployment pipeline carries the server as its default, the
+    // only value a chained run is given (a chained run supplies no parameter but the release). With a server known, the
+    // chain needs no re-entry; the refusal seen on oe1 (run 3119, "deployServer is required") is the case below, where
+    // none was known when the pipelines were written.
+    [Fact]
+    public void TheCandidateChain_AndTheDeployDefaultServer_AreBothWritten_WhenAServerIsKnown()
+    {
+        var input = Input() with { External = true, CreatedSuffixes = ["ci", "candidate", "deploy-prod"] };
+        var production = new PipelineSetupProductionInput("compose.yml", "replace", "vpssim", ["vpssim"]);
+
+        var candidate = Parse(PipelineSetupYamlBuilder.Build("atlas-candidate", "application-candidate", 4, input, production));
+        var deploy = Parse(PipelineSetupYamlBuilder.Build("atlas-deploy-prod", "application-deploy-prod", 1, input, production));
+
+        var chain = Assert.Single((List<object>)candidate["on_success"]);
+        Assert.Equal("atlas-deploy-prod", ((Dictionary<object, object>)chain)["pipeline"]);
+        Assert.Equal("latest", ((Dictionary<object, object>)chain)["release"]);
+        var server = (Dictionary<object, object>)Assert.Single((List<object>)deploy["parameters"]);
+        Assert.Equal("vpssim", server["default"]);
+    }
+
+    [Fact]
+    public void TheCandidateChain_IsWrittenEvenWhenNoServerIsKnown_SoTheDeployRunWillAskForIt()
+    {
+        var input = Input() with { CreatedSuffixes = ["ci", "candidate", "deploy-prod"] };
+
+        var candidate = Parse(PipelineSetupYamlBuilder.Build("atlas-candidate", "application-candidate", 4, input,
+            new PipelineSetupProductionInput(null, null, null, [])));
+        var deploy = Parse(PipelineSetupYamlBuilder.Build("atlas-deploy-prod", "application-deploy-prod", 1, input,
+            new PipelineSetupProductionInput(null, null, null, [])));
+
+        Assert.True(candidate.ContainsKey("on_success"));
+        Assert.False(deploy.ContainsKey("parameters"));
+    }
+
     [Fact]
     public void TheCiYaml_GetsNothingOfTheProductionSetup()
     {
         var yaml = PipelineSetupYamlBuilder.Build("atlas-ci", "application-ci", 1, Input(),
-            new PipelineSetupProductionInput("compose.yml", "replace", true, "vpssim", ["vpssim"]));
+            new PipelineSetupProductionInput("compose.yml", "replace", "vpssim", ["vpssim"]));
 
         Assert.DoesNotContain("COMPOSE_FILE", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("deployServer", yaml, StringComparison.Ordinal);
@@ -331,7 +393,7 @@ public sealed class PipelineSetupProductionTests : BunitContext
         .. new[]
         {
             "application-ci", "application-quality", "application-security", "application-qa",
-            "application-candidate", "application-nightly", "application-deploy-prod"
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
         }.Select(name => new PipelineTemplateSummaryDto
         {
             Id = name.GetHashCode(StringComparison.Ordinal),

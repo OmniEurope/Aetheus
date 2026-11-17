@@ -15,8 +15,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// own; the shipped delivery templates live in the platform organization (slug <c>aetheus</c>) and are
 /// extended from every organization.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class MultiOrganizationIsolationAuditIntegrationTests(PostgresFixture fixture)
+public sealed class MultiOrganizationIsolationAuditIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string PlatformSlug = "aetheus";
     private const string SharedTemplate = "application-light";

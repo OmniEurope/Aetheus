@@ -1,0 +1,87 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/analysis/cve-watch/runs/{Id:int}"
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
+@inject IStringLocalizer<AppStrings> L
+
+@* R-22: one run of the CVE watch, a report it wrote for one project: what it found, what is new in it, and how
+   fresh the sources are now. *@
+<PageTitle>@Title - Aetheus</PageTitle>
+
+@if (_loading)
+{
+    <VeilHold Busy="true" />
+}
+else if (_run is null)
+{
+    <OmniPageHeader Title="@Title" ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()">
+        <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
+    </OmniPageHeader>
+    <EmptyState Icon="search_off" Title="@L["NotFound"]" Description="@L["CveWatchRunNotFound"]" />
+}
+else
+{
+    <OmniPageHeader Title="@Title" ShowBack="true" BackHref="@BackHref" Subtitle="@Subtitle">
+        <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
+        <Badges>
+            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.ShieldCheck))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral">@L.Localize(AnalysisScanSource.CveWatch)</OmniBadge>
+        </Badges>
+        <MenuContent>
+            <OmniMenuItem Href="@($"projects/{_run.ProjectId}/quality")"><Icon><OmniIcon Name="OmniIconName.Folder" /></Icon><ChildContent>@L["CveWatchOpenProjectQuality"]</ChildContent></OmniMenuItem>
+        </MenuContent>
+    </OmniPageHeader>
+
+    <OmniTileGrid Columns="3" MinColumnWidth="9rem" Class="cve-watch-tiles" role="group" aria-label="@Title">
+        <OmniStatTile Value="@_run.FindingCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["CveWatchRunFound"]" data-testid="cve-run-found">
+            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@_run.NewFindingCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["CveWatchRunNew"]" data-testid="cve-run-new">
+            <Icon><OmniIcon Name="OmniIconName.Lightning" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@_run.PackageCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["CveWatchRunPackages"]" data-testid="cve-run-packages">
+            <Icon><OmniIcon Name="OmniIconName.Package" /></Icon>
+        </OmniStatTile>
+    </OmniTileGrid>
+
+    <OmniCard Class="cve-watch-run-findings">
+        <HeaderContent><OmniHeading Level="OmniHeadingLevel.H5">@L["CveWatchRunFindings"]</OmniHeading></HeaderContent>
+        <ChildContent>
+            <OmniDataGrid TItem="CveWatchRunFindingDto" Items="@_run.Findings" KeyOf="@(finding => finding.FindingId)"
+                          ExportTitle="@ExportContext.Title(L["CveWatchRunFindings"])" ExportFields="@ExportContext.Fields()"
+                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" Density="OmniDensity.Compact" Class="cve-watch-grid">
+                <EmptyContent>
+                    <EmptyState Icon="verified_user" Title="@L["CveWatchRunNoFinding"]" />
+                </EmptyContent>
+                <Columns>
+                    <OmniDataGridColumn TItem="CveWatchRunFindingDto" Title="@L["Severity"]" Width="9rem" Sortable="false" ExportValue="@SeverityExport">
+                        <Template Context="finding">
+                            <OmniBadge Icon="@(BadgeIcon.ForSeverity(SeverityTone(finding.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityTone(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchRunFindingDto" Property="Title" Title="@L["CveWatchRunFinding"]" Filterable="false">
+                        <Template Context="finding"><OmniLink Href="@($"analysis/findings/{finding.FindingId}")">@finding.Title</OmniLink></Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchRunFindingDto" Title="@L["Package"]" Sortable="false" ExportValue="@PackagesExport">
+                        <Template Context="finding">@string.Join(", ", finding.Packages)</Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchRunFindingDto" Title="@L["Status"]" Width="10rem" Sortable="false" ExportValue="@StatusExport">
+                        <Template Context="finding">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                @if (finding.IsNew)
+                                {
+                                    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["New"]</OmniBadge>
+                                }
+                                <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral">@L.Localize(finding.Status)</OmniBadge>
+                            </OmniStack>
+                        </Template>
+                    </OmniDataGridColumn>
+                </Columns>
+            </OmniDataGrid>
+            @if (_run.FindingCount > _run.Findings.Count)
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-md">@string.Format(L["CveWatchRunTruncated"], _run.Findings.Count, _run.FindingCount)</OmniText>
+            }
+        </ChildContent>
+    </OmniCard>
+
+    <CveWatchSourcesCard Sources="@_run.Sources" Title="@L["CveWatchSourcesNow"]" />
+}

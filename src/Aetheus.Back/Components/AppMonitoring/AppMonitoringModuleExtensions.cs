@@ -25,6 +25,8 @@ public static class AppMonitoringModuleExtensions
         services.AddScoped<IAppTelemetryService, AppTelemetryService>();
         services.AddScoped<IAppTelemetrySendIntervalService, AppTelemetrySendIntervalService>();
         services.AddScoped<IAppDeployEnvProvider, AppDeployEnvProvider>();
+        services.AddScoped<IAppImmediateActionService, AppImmediateActionService>();
+        services.AddSingleton<AppHttpProber>();
         services.AddSingleton<IngestKeyHasher>();
         // Singleton so a refused key is reported once per period across request scopes.
         services.AddSingleton<IngestKeyRejectionLog>();
@@ -47,7 +49,7 @@ public static class AppMonitoringModuleExtensions
             {
                 var addresses = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct).ConfigureAwait(false);
                 var safe = addresses.FirstOrDefault(a => !WebhookSsrfGuard.IsForbiddenAddress(a))
-                    ?? throw new HttpRequestException("Probe target resolved to a forbidden (private/loopback) address.");
+                    ?? throw new ProbeTargetForbiddenException();
 
                 var socket = new Socket(safe.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
                 try

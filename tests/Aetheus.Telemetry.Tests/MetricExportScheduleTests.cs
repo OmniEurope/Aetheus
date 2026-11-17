@@ -100,6 +100,78 @@ public sealed class MetricExportScheduleTests
     }
 
     [Fact]
+    public async Task TheClient_AsksForTheExportRequestNextToTheConfiguration_WithTheIngestKey()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, """{"requestId":"2026-11-06T09:00:00.0000000Z"}""");
+
+        var requestId = await Client(handler).ReadExportRequestAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("2026-11-06T09:00:00.0000000Z", requestId);
+        Assert.Equal(new Uri("https://aetheus.test/api/ingest/otlp/v1/configuration/export-request"), handler.Request!.RequestUri);
+        Assert.Equal("secret-key", Assert.Single(handler.Request.Headers.GetValues(ServerConfigurationClient.KeyHeader)));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NoContent, "")]
+    [InlineData(HttpStatusCode.NotFound, "")]
+    [InlineData(HttpStatusCode.Unauthorized, "")]
+    [InlineData(HttpStatusCode.OK, "not json")]
+    [InlineData(HttpStatusCode.OK, """{"requestId":""}""")]
+    public async Task NoPendingRequestOrAnOlderAetheus_GivesNoExportRequest(HttpStatusCode status, string body)
+    {
+        Assert.Null(await Client(new StubHandler(status, body)).ReadExportRequestAsync(TestContext.Current.CancellationToken));
+        Assert.Null(await Client(new StubHandler(new HttpRequestException("refused")))
+            .ReadExportRequestAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TheScheduler_ExportsAtOnce_OnlyWhenAetheusHoldsARequest()
+    {
+        using var meter = new Meter($"aetheus.test.{Guid.NewGuid():N}");
+        var exporter = new CountingExporter();
+        var reader = new BaseExportingMetricReader(exporter);
+        using var provider = Sdk.CreateMeterProviderBuilder().AddMeter(meter.Name).AddReader(reader).Build();
+        meter.CreateCounter<long>("requests").Add(1);
+        var schedule = new MetricExportSchedule(MetricExportSchedule.DefaultInterval);
+
+        var idle = new MetricExportScheduler(reader, schedule, Client(new StubHandler(HttpStatusCode.NoContent, "")), TimeProvider.System);
+        Assert.False(await idle.ExportIfRequestedAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0, exporter.Exports);
+
+        var asked = new MetricExportScheduler(reader, schedule,
+            Client(new StubHandler(HttpStatusCode.OK, """{"requestId":"r-1"}""")), TimeProvider.System);
+        Assert.True(await asked.ExportIfRequestedAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, exporter.Exports);
+    }
+
+    [Fact]
+    public async Task TheScheduler_SendsTheFirstExportAtStartup_NotOneFullIntervalLater()
+    {
+        // R-23: after a restart or a deployment the first metrics must not wait for a whole interval (up to 15 minutes).
+        using var meter = new Meter($"aetheus.test.{Guid.NewGuid():N}");
+        var exporter = new CountingExporter();
+        var reader = new BaseExportingMetricReader(exporter);
+        using var provider = Sdk.CreateMeterProviderBuilder().AddMeter(meter.Name).AddReader(reader).Build();
+        meter.CreateCounter<long>("requests").Add(1);
+        var schedule = new MetricExportSchedule(TimeSpan.FromMinutes(15));
+        using var scheduler = new MetricExportScheduler(
+            reader, schedule, Client(new StubHandler(HttpStatusCode.NoContent, "")), TimeProvider.System);
+
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (exporter.Exports == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            Assert.Equal(1, exporter.Exports);
+        }
+        finally
+        {
+            await scheduler.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
     public void TheReader_ExportsOnlyWhenTheSchedulerCollects()
     {
         using var meter = new Meter($"aetheus.test.{Guid.NewGuid():N}");

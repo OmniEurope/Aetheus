@@ -58,10 +58,10 @@ public class OrganizationDetailRenderTests : BunitContext
     }
 
     [Fact]
-    public void NonAdmin_Redirects()
+    public async Task NonAdmin_Redirects()
     {
         // Create a non-admin context
-        using var ctx = new BunitContext();
+        await using var ctx = new BunitContext();
         BunitTestHelper.RegisterServices(ctx, isAdmin: false);
         var cut = ctx.Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
         // A non-admin is redirected to the app root before any organization is fetched.

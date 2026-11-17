@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineCancellationIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -124,6 +123,7 @@ public sealed class PipelineCancellationIntegrationTests(PostgresFixture fixture
                     0,
                     DateTime.SpecifyKind(new DateTime(2026, 7, 28, 12, 1, 0), DateTimeKind.Utc),
                     "{}",
+                    null,
                     TestContext.Current.CancellationToken);
             }
             return await taskRepository.TryStartTaskAsync(
@@ -152,10 +152,10 @@ public sealed class PipelineCancellationIntegrationTests(PostgresFixture fixture
         }
         else
         {
-            Assert.True(
-                persistedTask.Status is TaskExecutionStatus.Running or TaskExecutionStatus.Cancelled,
-                $"Unexpected task status {persistedTask.Status}.");
-            Assert.Equal(persistedTask.Status == TaskExecutionStatus.Running, startResult);
+            // A cancellation reaches a task that started a moment earlier too (the agent stops what it
+            // tracks once the task is Cancelled), so whichever of the two wins the race the task ends
+            // Cancelled, never Running with its run cancelled.
+            Assert.Equal(TaskExecutionStatus.Cancelled, persistedTask.Status);
             var persistedRun = await verification.PipelineRuns.AsNoTracking()
                 .SingleAsync(item => item.Id == runId, TestContext.Current.CancellationToken);
             var variables = PipelineRunHelpers.DeserializeResolvedVariables(

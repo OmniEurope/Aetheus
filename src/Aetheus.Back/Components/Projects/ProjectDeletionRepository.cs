@@ -152,11 +152,13 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
     /// <summary>The analysis tables that grow with every scan; the rest cascades from the project.</summary>
     private async Task DeleteAnalysisLeavesAsync(int projectId, CancellationToken ct)
     {
+        await DeleteInBatchesAsync(db.VulnerabilityMatches.Where(item => item.ProjectId == projectId), item => item.Id, ct).ConfigureAwait(false);
         await DeleteInBatchesAsync(db.AnalysisVulnerabilityObservations.Where(item => item.ProjectId == projectId), item => item.Id, ct).ConfigureAwait(false);
         var findingIds = db.AnalysisFindings.Where(item => item.ProjectId == projectId).Select(item => item.Id);
         await DeleteInBatchesAsync(db.AnalysisFindingOccurrences.Where(item => findingIds.Contains(item.AnalysisFindingId)), item => item.Id, ct).ConfigureAwait(false);
         await DeleteInBatchesAsync(db.AnalysisComponents.Where(item => item.ProjectId == projectId), item => item.Id, ct).ConfigureAwait(false);
         await DeleteInBatchesAsync(db.AnalysisMetrics.Where(item => item.ProjectId == projectId), item => item.Id, ct).ConfigureAwait(false);
+        await DeleteInBatchesAsync(db.ProjectInventoryItems.Where(item => item.ProjectId == projectId), item => item.Id, ct).ConfigureAwait(false);
     }
 
     /// <summary>Vaults, libraries, environments, project servers, connections and feeds: vaults first

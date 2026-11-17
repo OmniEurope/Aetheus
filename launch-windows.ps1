@@ -105,10 +105,73 @@
     (their provisioned state is lost). Without it, -vps keeps them and only reports
     how many there are.
 .PARAMETER Net10
-    Only meaningful with -vps: pre-bake the .NET SDK 10.0 into the VPS-sim image
+    Only meaningful with -vps: pre-bake the .NET SDK 11.0 into the VPS-sim image
     so the box can `dotnet build/test/run` out of the box. Works with either
-    flavor (blank or -full). Pinned to the same channel the agent's pipeline-runner
-    installs (10.0). Off by default - the blank box stays bare without it.
+    flavor (blank or -full). The exact SDK version 11.0.100 (the global.json floor)
+    is installed with dotnet-install.sh (INSTALL_DOTNET build arg). The switch name
+    is historical: it no longer installs .NET 10. Off by default - the blank box
+    stays bare without it.
+.PARAMETER TestLinux
+    The Linux suite, run by the agent before a candidate (never by the pre-push hook; -ta is unchanged): the full test
+    set (analyzers, agent core, observability packages, front, back, integration) in ONE Linux container of the pinned
+    SDK image of deploy/docker/Dockerfile.back, built in Release with the analyzers like the CI, limited to half the CPUs
+    of the Docker VM and 8 GB. The integration suite starts its PostgreSQL through Testcontainers on the host Docker
+    engine (socket mounted). E2E is not part of it (-vb -BenchLevel 2 runs it in limited containers). Never run on the
+    host: without a Linux Docker engine it fails. Everything it creates is named aetheus-linux-suite-*; evidence lands
+    in TestResults\LinuxSuite.
+.PARAMETER LinuxSuites
+    With -tl: only these suites, comma separated (Analyzers, Agent, Telemetry, WebAnalytics, Front, Back, Integration);
+    default all.
+.PARAMETER LinuxTestArgs
+    With -tl: extra dotnet test arguments for every selected suite (for example "--filter-class *ReleaseBuildDirectoryTests*");
+    a suite in which nothing matches is not a failure then.
+.PARAMETER VpsBench
+    The "VPS bench", used occasionally (not on every candidate): runs the integration suite
+    (level 1, default) or the E2E suite (level 2) inside Docker containers whose CPU and
+    memory are limited, to reproduce failures a candidate shows on the production VPS and
+    never on a fast PC. Only the containers are limited, never the host or the dev instance;
+    the tests use no host port. A single pass. Everything it creates is named aetheus-bench-*
+    and removed at the end. Evidence lands in TestResults\VpsBench.
+.PARAMETER BenchLevel
+    1 = Release integration suite (SDK container + PostgreSQL container, as the QA stage);
+    2 = E2E suite against a front + back + database stack built and run as QA does (compose).
+.PARAMETER BenchCpus
+    CPUs of the simulated VPS, default 4. The default is an ESTIMATE: the VPS core count is not
+    measured. Every bench container is pinned to the same N cores of the Docker VM, so they share
+    N cores as the processes of one VPS do (and each also carries --cpus N).
+.PARAMETER BenchMemoryGb
+    Memory of the simulated VPS in GB, default 8 (the VPS has 15.6 GB: the default is an
+    ESTIMATE, lower on purpose). Split between the containers (PostgreSQL gets a quarter).
+.PARAMETER BenchFilter
+    Level 1: extra arguments of `dotnet test` (for example `--filter-class *PostgresLeaderLease*`).
+    Level 2: a VSTest filter expression (for example `FullyQualifiedName~ResponsiveLayoutTests`).
+    Default: the whole suite.
+.PARAMETER BenchKeepCache
+    Keep the aetheus-bench-nuget volume (the packages cache) after the run; removed by default.
+.PARAMETER BenchKeepStack
+    Level 2: leave the front + back + database stack (and its images) up after the run, to run the E2E
+    suite on it again with -BenchReuse; the removal command is printed. Everything stays named aetheus-bench-*.
+.PARAMETER BenchReuse
+    Level 2: the run id of a stack kept with -BenchKeepStack (the number in aetheus-bench-<id>-back). Skips the
+    publish, the images and the start (about 12 minutes), rebuilds only the E2E suite and runs it, with this
+    call's CPU limits applied to the stack. Without -BenchKeepStack the stack is removed at the end.
+.PARAMETER PipelineRehearsal
+    The pipeline rehearsal (recette R-29), run before announcing a generated pipeline fixed: an isolated stack (database,
+    back, front built from this checkout) and a simulated VPS with the real agent, all in CPU/memory-limited containers;
+    a project holding tests/fixtures/rehearsal-blazor, its pipelines created through the real setup wizard (browser),
+    then candidate + deployment, nightly, a commit moving a file, candidate + deployment again and the fast release, all
+    run for real and checked (every run Success, https://<host>/health and /version through Apache). Only the
+    certificate authority is stubbed (a self-signed certificate). Non-zero exit with the failing run and step.
+    Evidence lands in TestResults\PipelineRehearsal; everything is named aetheus-rehearsal-* and removed at the end.
+.PARAMETER RehearsalKeep
+    Keep the rehearsal stack (and its agent) after the run, to rerun the scenario on it with -RehearsalReuse.
+.PARAMETER RehearsalReuse
+    The id of a stack kept with -RehearsalKeep: skips the images, the stack and the agent install, runs the scenario
+    again on a new project of that stack.
+.PARAMETER RehearsalCpus
+    CPUs of the whole rehearsal (one cpuset shared by every container), default 4.
+.PARAMETER RehearsalMemoryGb
+    Memory of the whole rehearsal in GB, default 12 (back 2 GB, database 1 GB, browser 2 GB, the simulated VPS the rest).
 .PARAMETER Help
     Show available options and exit.
 .PARAMETER HelpLong
@@ -120,6 +183,8 @@
     .\launch-windows.ps1 -tb         Build + run backend tests + exit
     .\launch-windows.ps1 -tf         Build + run frontend tests + exit
     .\launch-windows.ps1 -tg         Run the agent-core unit tests in a Linux container (as CI) + exit
+    .\launch-windows.ps1 -tl         Run the FULL suite in a Linux container (as CI, Release, analyzers on, CPU/memory limited) + exit; before a candidate
+    .\launch-windows.ps1 -tl -LinuxSuites Agent,Back   Same, only these suites
     .\launch-windows.ps1 -ti         Build + run integration tests (Testcontainers) + exit
     .\launch-windows.ps1 -te         Build + run ALL E2E tests on an isolated dedicated DB (dev DB untouched) + exit
     .\launch-windows.ps1 -tec ?      Build + show E2E category picker, run selected + exit
@@ -139,10 +204,13 @@
     .\launch-windows.ps1 -w          Assign fresh free ports to this worktree (renews .ylaunch.local) + launch
     .\launch-windows.ps1 -vps        Build + start the BLANK VPS-sim (bare Ubuntu) + exit
     .\launch-windows.ps1 -vps -full  Build + start the fully-provisioned VPS-sim + exit
-    .\launch-windows.ps1 -vps -net10 Build + start the BLANK VPS-sim with .NET SDK 10.0 pre-installed
+    .\launch-windows.ps1 -vps -net10 Build + start the BLANK VPS-sim with .NET SDK 11.0 pre-installed
     .\launch-windows.ps1 -vps -r     Reset the current VPS-sim flavor (drops its volumes)
     .\launch-windows.ps1 -vps -vpsclean  Also remove the other flavors' VPS-sim volumes
     .\launch-windows.ps1 -vps -full -aa  Full VPS-sim + self-install the agent at boot
+    .\launch-windows.ps1 -vb         VPS bench level 1: integration suite in limited containers (4 CPUs, 8 GB) + exit
+    .\launch-windows.ps1 -vb -BenchLevel 2 -BenchFilter "FullyQualifiedName~ResponsiveLayoutTests"   VPS bench level 2 on one E2E class
+    .\launch-windows.ps1 -pr         Pipeline rehearsal: wizard-generated pipelines run for real on a simulated VPS + exit
     .\launch-windows.ps1 -h          Show available options
     .\launch-windows.ps1 -hl         Show detailed help with examples
 #>
@@ -153,6 +221,9 @@ param(
     [Alias("tb")] [switch]$TestBack,
     [Alias("tf")] [switch]$TestFront,
     [Alias("tg")] [switch]$TestAgent,
+    [Alias("tl")] [switch]$TestLinux,
+    [string[]]$LinuxSuites,
+    [string]$LinuxTestArgs = "",
     [Alias("ti")] [switch]$TestIntegration,
     [Alias("te")] [switch]$TestE2e,
     [Alias("tec")] [string[]]$TestE2eFilter,
@@ -170,6 +241,19 @@ param(
     [Alias("aa")] [switch]$AgentAutoInstall,
     [switch]$Net10,
     [switch]$VpsClean,
+    [Alias("vb")] [switch]$VpsBench,
+    [ValidateSet(1, 2)] [int]$BenchLevel = 1,
+    [ValidateRange(1, 64)] [int]$BenchCpus = 4,
+    [ValidateRange(4, 256)] [int]$BenchMemoryGb = 8,
+    [string]$BenchFilter = "",
+    [switch]$BenchKeepCache,
+    [switch]$BenchKeepStack,
+    [string]$BenchReuse = "",
+    [Alias("pr")] [switch]$PipelineRehearsal,
+    [switch]$RehearsalKeep,
+    [string]$RehearsalReuse = "",
+    [ValidateRange(1, 64)] [int]$RehearsalCpus = 4,
+    [ValidateRange(10, 256)] [int]$RehearsalMemoryGb = 12,
     [Alias("h")]  [switch]$Help,
     [Alias("hl")] [switch]$HelpLong
 )

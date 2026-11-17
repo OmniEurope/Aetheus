@@ -31,7 +31,7 @@
                             <a href="@($"/pipelines/runs/{approval.PipelineRunId}")" class="task-tracker-row pending-approvals-row" @onclick="@(() => _popoverOpen = false)">
                                 <OmniIcon Name="OmniIconName.Stamp" Class="task-tracker-icon-assigned" />
                                 <div class="task-tracker-row-body">
-                                    <div class="task-tracker-row-name">@($"{approval.PipelineName} #{approval.PipelineRunId}")</div>
+                                    <div class="task-tracker-row-name">@($"{approval.PipelineName} #{approval.PipelineRunNumber}")</div>
                                     <div class="task-tracker-row-meta">
                                         @(approval.Scope == ApprovalScope.Pipeline
                                             ? string.Format(L["PendingPipelineApprovalLine"].Value, approval.StageName, approval.RequestedAt.ToLocalTime().ToString("g"))

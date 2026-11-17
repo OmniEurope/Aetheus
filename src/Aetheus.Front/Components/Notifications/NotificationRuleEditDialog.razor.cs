@@ -28,6 +28,13 @@ public partial class NotificationRuleEditDialog : EntityEditDialogBase
         }
     }
 
+    // The list draws the saved rule at once (R-10): the dialog closes with what the server answered.
+    private Task CloseWithSavedRuleAsync(NotificationRuleDto saved)
+    {
+        Dialog.Close(saved);
+        return Task.CompletedTask;
+    }
+
     private async Task SubmitAsync()
     {
         await RunBusyAsync(async () =>
@@ -43,7 +50,7 @@ public partial class NotificationRuleEditDialog : EntityEditDialogBase
                         IsEnabled = _model.IsEnabled
                     }),
                     "Updated",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedRuleAsync,
                     successTitleKey: "Updated");
             }
             else
@@ -56,7 +63,7 @@ public partial class NotificationRuleEditDialog : EntityEditDialogBase
                         FilterJson = filter
                     }),
                     "Created",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedRuleAsync,
                     successTitleKey: "Created");
             }
         });

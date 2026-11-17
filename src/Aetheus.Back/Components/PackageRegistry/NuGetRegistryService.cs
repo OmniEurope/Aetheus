@@ -14,11 +14,15 @@ internal sealed class NuGetRegistryService(
     IAdminChangeNotifier notifier) : INuGetRegistryService
 {
     public async Task PublishAsync(
-        Func<Stream> openContent, string publishedBy, CancellationToken ct = default)
+        Func<Stream> openContent, string publishedBy, CancellationToken ct = default,
+        bool observabilityPackagesOnly = false)
     {
         NuGetPackageMetadata metadata;
         await using (var inspectionStream = openContent())
             metadata = await inspector.InspectAsync(inspectionStream, ct).ConfigureAwait(false);
+        if (observabilityPackagesOnly
+            && !PackageRegistryDefaults.IsObservabilityPackage(PackageRegistryKind.NuGet, metadata.NormalizedName))
+            throw new BadRequestException($"A pipeline run token may not publish NuGet package {metadata.Name}.");
 
         using var lease = await publishGate.EnterAsync(
             PackageRegistryKind.NuGet, metadata.NormalizedName, ct).ConfigureAwait(false);

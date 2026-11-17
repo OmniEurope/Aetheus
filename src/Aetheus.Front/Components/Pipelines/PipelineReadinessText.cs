@@ -30,7 +30,11 @@ internal static class PipelineReadinessText
             [PipelineSetupReadinessKind.NoDotNetSolution] = "ReadinessNoDotNetSolution",
             [PipelineSetupReadinessKind.NoDotNetTestProject] = "ReadinessNoDotNetTestProject",
             [PipelineSetupReadinessKind.NoComposeFile] = "ReadinessNoComposeFile",
-            [PipelineSetupReadinessKind.NoDockerRunner] = "ReadinessNoDockerRunner"
+            [PipelineSetupReadinessKind.NoDockerRunner] = "ReadinessNoDockerRunner",
+            [PipelineSetupReadinessKind.UndefinedVariables] = "ReadinessUndefinedVariables",
+            [PipelineSetupReadinessKind.ChainedDeployServerMissing] = "ReadinessChainedDeployServerMissing",
+            [PipelineSetupReadinessKind.ChainedRequiredParameterMissing] = "ReadinessChainedRequiredParameterMissing",
+            [PipelineSetupReadinessKind.NoGlobalJson] = "ReadinessNoGlobalJson"
         }.ToFrozenDictionary();
 
     public static string TitleKey(PipelineSetupReadinessKind kind) =>
@@ -99,7 +103,8 @@ internal static class PipelineReadinessText
     }
 
     /// <summary>The page of the library or vault holding one empty variable or secret (R2-27), so the item is a
-    /// link to the very element to fill. Null for any other finding, or when the holder is not known.</summary>
+    /// link to the very element to fill; R-21: the page of the follow-up pipeline of a chain that will be refused. Null for
+    /// any other finding, or when the holder is not known.</summary>
     public static string? ItemOwnerHref(PipelineSetupReadinessCheckDto check, string item, string? returnUrl)
     {
         ArgumentNullException.ThrowIfNull(check);
@@ -107,6 +112,8 @@ internal static class PipelineReadinessText
         {
             PipelineSetupReadinessKind.EmptyLibraryValues => "/variable-libraries",
             PipelineSetupReadinessKind.EmptyVaultSecrets => "/vaults",
+            // R-21: the item names the follow-up pipeline: its page is where the default of deployServer is set.
+            PipelineSetupReadinessKind.ChainedDeployServerMissing => "/pipelines",
             _ => null
         };
         return page is not null && check.ItemIds.TryGetValue(item, out var id)
@@ -135,6 +142,56 @@ internal static class PipelineReadinessText
     {
         ArgumentNullException.ThrowIfNull(row);
         return row.PipelineId is { } id ? LocalReturnUrl.Append($"/pipelines/{id}", returnUrl) : null;
+    }
+
+    /// <summary>R-56: the library or vault an undefined variable is created in, opened: its page when it exists, the
+    /// creation of that name when the pipeline lists it and nobody created it, null when the pipeline lists none.</summary>
+    /// <remarks>R-25: a key that already exists in a library or vault of the project opens that holder. R-24: the creation
+    /// of a holder carries the key, so the value is asked for right after it is created.</remarks>
+    public static string? UndefinedOwnerHref(PipelineSetupReadinessUndefinedVariableDto row, int projectId, string? returnUrl)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (row.ExistingHolderId is { } existing)
+            return LocalReturnUrl.Append($"{OwnerPage(row.ExistingHolderKind == PipelineSetupReadinessContainerKind.Vault)}/{existing}", returnUrl);
+        if (row.OwnerName.Length == 0) return null;
+        var page = OwnerPage(row.Container == PipelineSetupReadinessContainerKind.Vault);
+        return LocalReturnUrl.Append(row.OwnerId is { } id
+            ? $"{page}/{id}"
+            : $"{page}/new?projectId={projectId}&name={Uri.EscapeDataString(row.OwnerName)}&key={Uri.EscapeDataString(row.Name)}", returnUrl);
+    }
+
+    /// <summary>R-24: when nothing names a holder and nothing holds the key, the creation of a holder of the kind the name
+    /// calls for in the project, the key carried so the value is asked for right after.</summary>
+    public static string UndefinedCreateHref(PipelineSetupReadinessUndefinedVariableDto row, int projectId, string? returnUrl)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var page = OwnerPage(row.Container == PipelineSetupReadinessContainerKind.Vault);
+        return LocalReturnUrl.Append($"{page}/new?projectId={projectId}&key={Uri.EscapeDataString(row.Name)}", returnUrl);
+    }
+
+    /// <summary>R-25: the pipeline that reads the variable, opened to declare the holder that has the key; null when unknown,
+    /// and null on that pipeline's own page (the return URL is the page the reader is on), where a link would only reload it.</summary>
+    public static string? UndefinedPipelineHref(PipelineSetupReadinessUndefinedVariableDto row, string? returnUrl)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (row.PipelineId is not { } id) return null;
+        var page = $"/pipelines/{id}";
+        return string.Equals(returnUrl, page, StringComparison.OrdinalIgnoreCase) ? null : LocalReturnUrl.Append(page, returnUrl);
+    }
+
+    /// <summary>R-56: the variable itself: its holder's page opened on its entry (its Key column filtered on the name),
+    /// or the creation of the holder while it does not exist. R-24: always a destination, the creation of a holder
+    /// for the key when the pipeline lists none and none holds the key.</summary>
+    public static string UndefinedNameHref(PipelineSetupReadinessUndefinedVariableDto row, int projectId, string? returnUrl)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (row.ExistingHolderId is { } existing)
+            return LocalReturnUrl.Append(
+                $"{OwnerPage(row.ExistingHolderKind == PipelineSetupReadinessContainerKind.Vault)}/{existing}?key={Uri.EscapeDataString(row.Name)}", returnUrl);
+        if (row.OwnerId is { } id)
+            return LocalReturnUrl.Append(
+                $"{OwnerPage(row.Container == PipelineSetupReadinessContainerKind.Vault)}/{id}?key={Uri.EscapeDataString(row.Name)}", returnUrl);
+        return UndefinedOwnerHref(row, projectId, returnUrl) ?? UndefinedCreateHref(row, projectId, returnUrl);
     }
 
     private static string OwnerPage(bool isVault) => isVault ? "/vaults" : "/variable-libraries";
@@ -169,6 +226,7 @@ internal static class PipelineReadinessText
         // Empty values are filled on the list of the existing libraries and vaults.
         PipelineSetupReadinessKind.EmptyLibraryValues => "VariableLibraries",
         PipelineSetupReadinessKind.EmptyVaultSecrets => "Vaults",
+        // R-56: an undefined variable has no generic fix link: its table says the library or vault, one link per name.
         // A missing library or vault is fixed from its own creation page, one link per name
         // (ItemCreationKey), never from the list of all of them.
         _ => null

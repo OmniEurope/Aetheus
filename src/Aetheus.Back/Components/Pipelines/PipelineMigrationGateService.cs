@@ -17,13 +17,15 @@ public sealed class PipelineMigrationGateService(IPipelineMigrationGateRepositor
     public async Task<List<PipelineRunMigrationGateDto>> GetForRunAsync(int runId, CancellationToken ct = default)
     {
         var rows = await repo.ListForRunAsync(runId, ct).ConfigureAwait(false);
-        return [.. rows.Select(ToDto)];
+        var number = rows.Count == 0 ? 0 : await repo.GetRunNumberAsync(runId, ct).ConfigureAwait(false);
+        return [.. rows.Select(row => ToDto(row, number))];
     }
 
-    internal static PipelineRunMigrationGateDto ToDto(PipelineMigrationGateVerdict row) => new()
+    internal static PipelineRunMigrationGateDto ToDto(PipelineMigrationGateVerdict row, int runNumber) => new()
     {
         Id = row.Id,
         RunId = row.PipelineRunId,
+        RunNumber = runNumber,
         StageName = row.StageName,
         StepName = row.StepName,
         Outcome = row.Outcome,

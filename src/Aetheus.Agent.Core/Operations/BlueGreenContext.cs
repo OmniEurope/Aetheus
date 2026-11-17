@@ -60,8 +60,12 @@ internal sealed record BlueGreenContext
     /// Builds the context from the task environment, or returns the reason it is unusable. Returning
     /// a reason rather than throwing keeps the caller able to report an honest step failure.
     /// </summary>
+    /// <param name="requireDatabase">True for the step that reads the project's database (the migrate step and its
+    /// expand/contract gate). The other steps deploy a project without a database as well: the identity is read
+    /// when the env file holds it and left empty otherwise.</param>
     internal static bool TryCreate(
-        string project, IReadOnlyDictionary<string, string> env, out BlueGreenContext? context, out string error)
+        string project, IReadOnlyDictionary<string, string> env, out BlueGreenContext? context, out string error,
+        bool requireDatabase = false)
     {
         context = null;
         error = string.Empty;
@@ -71,7 +75,7 @@ internal sealed record BlueGreenContext
         if (!TryStateDirectory(stateDir, out error)
             || !TryComposeInputs(envFile, env, out var composeFiles, out error)
             || !TryPorts(env, out var ports, out error)
-            || !TryDatabaseIdentity(envFile, out var database, out error))
+            || !TryDatabaseIdentity(envFile, requireDatabase, out var database, out error))
         {
             return false;
         }
@@ -221,19 +225,27 @@ internal sealed record BlueGreenContext
 
     /// <summary>
     /// Reads the database identity from the same env file Compose interpolates, so the container this
-    /// talks to is by construction the one Compose started.
+    /// talks to is by construction the one Compose started. The keys are the ones the Compose file reads
+    /// (<c>${APPNAME}-${ENV}-database</c>): <c>ENV</c> is a line of the env file, never a process variable, and
+    /// the library entry that fills it is <c>DEPLOY_ENV</c> (<c>ENV=#{DEPLOY_ENV}#</c>) because the agent refuses
+    /// to hand a step a variable named ENV (the startup file of <c>sh</c>).
+    /// Only the migrate step needs the identity: without it, an incomplete one is left empty, which is how a
+    /// project without a database deploys.
     /// </summary>
     private static bool TryDatabaseIdentity(
-        string envFile, out (string Container, string User, string Name) database, out string error)
+        string envFile, bool required, out (string Container, string User, string Name) database, out string error)
     {
-        database = default;
+        database = (string.Empty, string.Empty, string.Empty);
+        error = string.Empty;
         var settings = ReadEnvFile(envFile);
         var appName = settings.GetValueOrDefault("APPNAME", string.Empty);
         var environment = settings.GetValueOrDefault("ENV", string.Empty);
         var dbUser = settings.GetValueOrDefault("DB_USER", string.Empty);
         if (appName.Length == 0 || environment.Length == 0 || dbUser.Length == 0)
         {
-            error = $"APPNAME, ENV and DB_USER must all be set in {envFile}.";
+            if (!required) return true;
+            error = $"APPNAME, ENV and DB_USER must all be set in {envFile}: the migrate step reads the project's database. "
+                + "ENV is filled by the library entry DEPLOY_ENV (ENV=#{DEPLOY_ENV}#), never by an entry named ENV.";
             return false;
         }
         // Compose defaults DB_NAME to APPNAME, so mirror that rather than inventing a second rule.

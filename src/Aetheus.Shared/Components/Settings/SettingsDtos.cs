@@ -106,6 +106,10 @@ public sealed record LoginResponse
     /// change-password call can authenticate.
     /// </summary>
     public bool MustChangePassword { get; init; }
+
+    /// <summary>R-1: when true (with <see cref="MustChangePassword"/>), the account is the seeded administrator of a
+    /// fresh install: its holder must first choose their own name, address and password.</summary>
+    public bool MustSetUpAccount { get; init; }
 }
 
 public sealed record PublicDemoInfoDto
@@ -118,6 +122,15 @@ public sealed record RefreshTokenRequest
     [Required]
     [StringLength(200)]
     public string RefreshToken { get; init; } = string.Empty;
+}
+
+/// <summary>The body of a logout: the refresh token this client holds, which the server revokes when it
+/// belongs to the caller. Optional, so a client that sends no body still logs out (its token then lives
+/// until it expires).</summary>
+public sealed record LogoutRequest
+{
+    [StringLength(200)]
+    public string? RefreshToken { get; init; }
 }
 
 /// <summary>Reports an unsolicited client session end anonymously, using only an allowed reason
@@ -161,6 +174,14 @@ public sealed record TotpDisableRequest
     [Required]
     [StringLength(200)]
     public string Password { get; init; } = string.Empty;
+
+    /// <summary>R-50: the second factor, required with the password. An authenticator code, or a one-time
+    /// recovery code when <see cref="UseRecoveryCode"/> is set (the recovery code is then consumed).</summary>
+    [Required]
+    [StringLength(20)]
+    public string Code { get; init; } = string.Empty;
+
+    public bool UseRecoveryCode { get; init; }
 }
 
 public sealed record ExternalLoginRequest

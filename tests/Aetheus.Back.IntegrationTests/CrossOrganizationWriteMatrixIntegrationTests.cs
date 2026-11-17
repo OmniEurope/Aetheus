@@ -15,8 +15,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// never a 400 (a validation answer would mean the authorization was never reached) nor a 2xx; A's
 /// rows are all still there afterwards.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class CrossOrganizationWriteMatrixIntegrationTests(PostgresFixture fixture)
+public sealed class CrossOrganizationWriteMatrixIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static readonly HttpStatusCode[] Refused = [HttpStatusCode.Forbidden, HttpStatusCode.NotFound];
 

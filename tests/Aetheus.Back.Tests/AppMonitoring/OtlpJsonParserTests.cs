@@ -188,4 +188,77 @@ public class OtlpJsonParserTests
         else
             Assert.Equal(expected, JsonDocument.Parse(log.AttributesJson!).RootElement.GetProperty("attempt").GetString());
     }
+
+    /// <summary>BACK-005: an attribute set over the 1024-character column used to be cut mid-text, so the
+    /// performance table dropped the route as malformed. It is now bounded structurally: valid JSON, within
+    /// the column, the route and method kept, and the route reaches the performance report.</summary>
+    [Fact]
+    public void ParseMetrics_OversizedAttributes_StayValidJson_AndTheRouteSurvivesToThePerformanceReport()
+    {
+        var filler = string.Join(",", Enumerable.Range(0, 12).Select(index =>
+            "{\"key\":\"a.filler." + index + "\",\"value\":{\"stringValue\":\"" + new string('x', 150) + "\"}}"));
+        var json = """
+        {"resourceMetrics":[{"scopeMetrics":[{"metrics":[
+          {"name":"aetheus.http.server.request.duration.p95","unit":"ms","gauge":{"dataPoints":[
+            {"timeUnixNano":"1700000000000000000","asDouble":12.5,"attributes":[__FILLER__,
+              {"key":"http.route","value":{"stringValue":"api/projects/{id}"}},
+              {"key":"http.request.method","value":{"stringValue":"GET"}}]}]}}
+        ]}]}]}
+        """.Replace("__FILLER__", filler, StringComparison.Ordinal);
+        using var doc = JsonDocument.Parse(json);
+
+        var point = Assert.Single(OtlpJsonParser.ParseMetrics(doc));
+
+        Assert.NotNull(point.AttributesJson);
+        Assert.InRange(point.AttributesJson.Length, 1, 1024);
+        using var attributes = JsonDocument.Parse(point.AttributesJson);
+        Assert.Equal("api/projects/{id}", attributes.RootElement.GetProperty("http.route").GetString());
+        Assert.Equal("GET", attributes.RootElement.GetProperty("http.request.method").GetString());
+        Assert.Equal(bool.TrueString, attributes.RootElement.GetProperty("_aetheus_truncated").GetString());
+
+        var report = AppRoutePerformance.Build(
+        [
+            new AppMetricSample
+            {
+                MetricName = point.MetricName,
+                Value = point.Value,
+                Timestamp = point.Timestamp,
+                AttributesJson = point.AttributesJson
+            }
+        ]);
+        var route = Assert.Single(report.Routes);
+        Assert.Equal("api/projects/{id}", route.Route);
+        Assert.Equal("GET", route.Method);
+        Assert.Equal(12.5, route.P95Ms);
+    }
+
+    /// <summary>A set that fits is stored exactly as before: the hourly rollups key on this text.</summary>
+    [Fact]
+    public void ParseMetrics_AttributesThatFit_AreStoredUnchanged()
+    {
+        const string json = """
+        {"resourceMetrics":[{"scopeMetrics":[{"metrics":[
+          {"name":"g","gauge":{"dataPoints":[{"timeUnixNano":"1700000000000000000","asDouble":1,
+            "attributes":[{"key":"z","value":{"stringValue":"1"}},{"key":"a","value":{"stringValue":"2"}}]}]}}
+        ]}]}]}
+        """;
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal("""{"z":"1","a":"2"}""", Assert.Single(OtlpJsonParser.ParseMetrics(doc)).AttributesJson);
+    }
+
+    /// <summary>A single value longer than the whole column is shortened rather than dropped.</summary>
+    [Fact]
+    public void ParseLogs_OneHugeValue_IsShortened_AndTheSetStaysValid()
+    {
+        var json = "{\"resourceLogs\":[{\"scopeLogs\":[{\"logRecords\":[{\"body\":{\"stringValue\":\"b\"},"
+            + "\"attributes\":[{\"key\":\"huge\",\"value\":{\"stringValue\":\"" + new string('y', 5000) + "\"}}]}]}]}]}";
+        using var doc = JsonDocument.Parse(json);
+
+        var log = Assert.Single(OtlpJsonParser.ParseLogs(doc));
+
+        Assert.InRange(log.AttributesJson!.Length, 1, 1024);
+        using var attributes = JsonDocument.Parse(log.AttributesJson);
+        Assert.Equal(new string('y', 256), attributes.RootElement.GetProperty("huge").GetString());
+    }
 }

@@ -16,7 +16,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// set to null by the database). The 90-day run purge no longer cascades into a live release's runs and
 /// artifacts.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ReleaseRetentionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime Now = new(2026, 10, 13, 12, 0, 0, DateTimeKind.Utc);

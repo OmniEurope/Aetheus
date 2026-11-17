@@ -20,8 +20,10 @@ public sealed class PipelineSchemaTrackingService(IPipelineMigrationGateReposito
 {
     public async Task<PipelineRunSchemaDto> GetForRunAsync(int runId, CancellationToken ct = default)
     {
-        var gates = (await repo.ListForRunAsync(runId, ct).ConfigureAwait(false))
-            .Select(PipelineMigrationGateService.ToDto)
+        var verdicts = await repo.ListForRunAsync(runId, ct).ConfigureAwait(false);
+        var number = verdicts.Count == 0 ? 0 : await repo.GetRunNumberAsync(runId, ct).ConfigureAwait(false);
+        var gates = verdicts
+            .Select(verdict => PipelineMigrationGateService.ToDto(verdict, number))
             .ToList();
         return new PipelineRunSchemaDto
         {
@@ -45,7 +47,8 @@ public sealed class PipelineSchemaTrackingService(IPipelineMigrationGateReposito
             // a deployment with a recorded gate has a schema this tracking can speak about. Like the run page, the
             // pending list costs several queries and is left out otherwise.
             PendingContractions = last is null ? [] : await ListPendingAsync(ct).ConfigureAwait(false),
-            LastGate = last is null ? null : PipelineMigrationGateService.ToDto(last)
+            LastGate = last is null ? null : PipelineMigrationGateService.ToDto(
+                last, await repo.GetRunNumberAsync(last.PipelineRunId, ct).ConfigureAwait(false))
         };
     }
 

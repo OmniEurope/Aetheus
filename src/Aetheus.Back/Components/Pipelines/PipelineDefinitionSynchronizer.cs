@@ -12,6 +12,7 @@ namespace Aetheus.Back.Components.Pipelines;
 internal sealed class PipelineDefinitionSynchronizer(
     IPipelineService pipelineService,
     IGitLightCliService cli,
+    IGitLightService repositories,
     PipelineRunNotificationPublisher notifications,
     ILogger<PipelineDefinitionSynchronizer> logger)
 {
@@ -22,6 +23,13 @@ internal sealed class PipelineDefinitionSynchronizer(
         try
         {
             if (moved.ProjectId == 0 || moved.DiskPath.Length == 0) return;
+            if (await IsExternalMirrorAsync(moved, ct).ConfigureAwait(false))
+            {
+                logger.LogInformation(
+                    "Ref {Reference} of {Repo} moved on the mirror of an external repository: its .pipeline/ is never synced (import it explicitly)",
+                    update.Reference, moved.RepositoryName);
+                return;
+            }
 
             // Carried over verbatim, including its flaw: a non-branch ref (a tag) is sliced at the
             // length of "refs/heads/" anyway and yields a nonsense source branch. Left as-is so this
@@ -65,6 +73,17 @@ internal sealed class PipelineDefinitionSynchronizer(
             logger.LogWarning(ex, "Failed to sync pipelines from .pipeline/ for repo {Repo}", moved.RepositoryName);
             await ReportSyncFailureAsync(moved, update, ex, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Decision 2026-11-10 (points 4 and 5): the mirror of an external repository is untrusted, whoever can
+    /// push to the external repository writes it, so a ref that moves on it (a push through Aetheus's Git transport,
+    /// which the next forced fetch erases, or a server-side move) never creates or updates a stored definition. The
+    /// explicit import is the one way a mirror's <c>.pipeline/</c> file enters Aetheus.</summary>
+    private async Task<bool> IsExternalMirrorAsync(IGitRefUpdatesEvent moved, CancellationToken ct)
+    {
+        var projectRepositories = await repositories.GetAccessibleRepositoriesAsync([moved.ProjectId], ct)
+            .ConfigureAwait(false);
+        return projectRepositories.Exists(repository => repository.Id == moved.GitRepoId && repository.IsExternalMirror);
     }
 
     /// <summary>Recette R-49: a pushed file that cannot be read used to be skipped with a server log line

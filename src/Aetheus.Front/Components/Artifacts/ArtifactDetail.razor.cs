@@ -62,7 +62,6 @@ public partial class ArtifactDetail
     {
         if (_artifact is null || _downloading) return;
         _downloading = true;
-        StateHasChanged();
         try
         {
             var stream = await Api.ServerTools.DownloadArtifactAsync(_artifact.Id);
@@ -75,7 +74,6 @@ public partial class ArtifactDetail
         finally
         {
             _downloading = false;
-            StateHasChanged();
         }
     }
 

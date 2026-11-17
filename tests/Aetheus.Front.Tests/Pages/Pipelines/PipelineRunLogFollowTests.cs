@@ -14,6 +14,35 @@ public sealed class PipelineRunLogFollowTests : BunitContext
 
     private int Pins() => JSInterop.Invocations.Count(call => call.Identifier == "Aetheus.scrollToBottom");
 
+    /// <summary>R-21, fresh load: the log is filled before the pane is drawn, so the first render has no terminal
+    /// to scroll. That render must not consume the line count, or the log stays at its top and the virtualized
+    /// list never renders the last lines (71 of 89 rows, the tail hidden).</summary>
+    [Fact]
+    public async Task ARenderBeforeTheTerminalIsMounted_DoesNotConsumeThePin()
+    {
+        using var follow = new PipelineRunLogFollow(JSInterop.JSRuntime, () => Task.CompletedTask);
+
+        await follow.AfterRenderAsync(default, 89);
+        Assert.Equal(0, Pins());
+
+        await follow.AfterRenderAsync(Terminal, 89);
+        Assert.Equal(1, Pins());
+    }
+
+    [Fact]
+    public async Task WhenTheListReachesItsFullHeight_FollowingPinsToTheTailAgain_AReaderAwayFromItIsLeftAlone()
+    {
+        using var follow = new PipelineRunLogFollow(JSInterop.JSRuntime, () => Task.CompletedTask);
+        await follow.AfterRenderAsync(Terminal, 89);
+
+        await follow.RepinAsync(Terminal);
+        Assert.Equal(2, Pins());
+
+        await follow.OnUserScrolled(atBottom: false);
+        await follow.RepinAsync(Terminal);
+        Assert.Equal(2, Pins());
+    }
+
     [Fact]
     public async Task ScrollingUpByHand_StopsPinning_AndReachingTheTailAgainResumesIt()
     {

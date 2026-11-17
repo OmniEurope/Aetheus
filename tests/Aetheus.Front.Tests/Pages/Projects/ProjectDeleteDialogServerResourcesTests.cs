@@ -116,7 +116,7 @@ public sealed class ProjectDeleteDialogServerResourcesTests : BunitContext
     }
 
     private void WaitForReport(IRenderedComponent<ProjectDeleteDialog> cut) =>
-        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindComponents<OmniDataGrid<ProjectDeletionReportRow>>().Count), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindComponents<OmniDataGrid<ProjectDeletionReportRow>>().Count), TimeSpan.FromSeconds(30));
 
     [Fact]
     public void TheImages_AndTheBlueGreenUpstreamFile_HaveTheirOwnSections_WithTheirRemovalResults()

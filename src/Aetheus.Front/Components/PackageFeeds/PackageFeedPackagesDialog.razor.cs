@@ -32,7 +32,7 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
     {
         await LoadAsync();
         _adminRt = new AdminEntitySubscription(HubFactory);
-        await _adminRt.StartAsync(
+        _ = _adminRt.StartAsync(
             AdminEntities.PackageFeed,
             () => InvokeAsync(() => _realtimeReload.RequestAsync(RefreshFromPushAsync)));
     }
@@ -77,7 +77,9 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
             if (result is not null)
             {
                 _newPackage = null;
-                await LoadAsync();
+                // R-10: the package shows at once from the answer, the feed is read again behind it without the bar.
+                _packages = [.. _packages.Where(p => p.Id != result.Id), result];
+                _ = RefreshFromPushAsync();
                 Toast.Success("Added", "Saved");
             }
             else Toast.Error("Error", "SaveFailed");
@@ -89,7 +91,6 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
     private async Task SyncAsync()
     {
         _syncing = true;
-        StateHasChanged();
         try
         {
             _lastSync = await Api.Packages.SyncPackageFeedAsync(FeedId);
@@ -101,7 +102,7 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
             }
         }
         catch (HttpRequestException) { Toast.Error("Error", "SaveFailed"); }
-        finally { _syncing = false; StateHasChanged(); }
+        finally { _syncing = false; }
     }
 
     private async Task RemoveAsync(PackageEntryDto package)

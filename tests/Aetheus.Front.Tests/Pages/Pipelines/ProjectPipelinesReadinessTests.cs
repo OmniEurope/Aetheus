@@ -102,6 +102,60 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
             .Contains(Uri.EscapeDataString("/projects/5"), StringComparison.Ordinal));
     }
 
+    /// <summary>R-36: the page of the pipeline that starts another on success says when that follow-up will be refused for want of
+    /// a deployment server, naming both pipelines; the pipelines page lists it too, as a finding to check.</summary>
+    [Fact]
+    public void PipelinePage_AndPipelinesPage_SayTheFollowUpWillNotStart()
+    {
+        var chained = new PipelineSetupReadinessCheckDto
+        {
+            Kind = PipelineSetupReadinessKind.ChainedDeployServerMissing,
+            Severity = PipelineSetupReadinessSeverity.Warning,
+            Items = ["oe1-candidate > oe1-deploy-prod"]
+        };
+        _handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness?pipelineId=181", Verdict(chained));
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=21", Verdict(chained));
+
+        var onPipeline = Render<ProjectPipelinesReadiness>(parameters => parameters
+            .Add(panel => panel.ProjectId, 21).Add(panel => panel.PipelineId, 181));
+        var onProject = Render<ProjectPipelinesReadiness>(parameters => parameters.Add(panel => panel.ProjectId, 21));
+
+        foreach (var cut in new[] { onPipeline, onProject })
+        {
+            cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-readiness-check']")));
+            Assert.Contains("ReadinessChainedDeployServerMissing", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("oe1-candidate &gt; oe1-deploy-prod", cut.Markup, StringComparison.Ordinal);
+        }
+        Assert.Contains("ProjectPipelinesToVerify", onPipeline.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-36: a follow-up that lacks another required parameter is said on the page of the pipeline that starts it and on
+    /// the pipelines page, naming the upstream pipeline, the follow-up and the parameter, with its own title and explanation.</summary>
+    [Fact]
+    public void PipelinePage_AndPipelinesPage_SayTheFollowUpLacksARequiredParameter()
+    {
+        var chained = new PipelineSetupReadinessCheckDto
+        {
+            Kind = PipelineSetupReadinessKind.ChainedRequiredParameterMissing,
+            Severity = PipelineSetupReadinessSeverity.Warning,
+            Items = ["oe1-candidate > oe1-deploy-prod > approvalTicket"]
+        };
+        _handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness?pipelineId=181", Verdict(chained));
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=21", Verdict(chained));
+
+        var onPipeline = Render<ProjectPipelinesReadiness>(parameters => parameters
+            .Add(panel => panel.ProjectId, 21).Add(panel => panel.PipelineId, 181));
+        var onProject = Render<ProjectPipelinesReadiness>(parameters => parameters.Add(panel => panel.ProjectId, 21));
+
+        foreach (var cut in new[] { onPipeline, onProject })
+        {
+            cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-readiness-check']")));
+            Assert.Contains("ReadinessChainedRequiredParameterMissing", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("oe1-candidate &gt; oe1-deploy-prod &gt; approvalTicket", cut.Markup, StringComparison.Ordinal);
+        }
+        Assert.Contains("ProjectPipelinesToVerify", onPipeline.Markup, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Overview_DrawsNothing_WhenOnlyOtherFindingsExist()
     {
@@ -193,6 +247,40 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
         Assert.Equal("GoBack", dialog.LastConfirmOptions.CancelButtonText);
     }
 
+    /// <summary>R-25: the warning before a run says a key that exists in a vault of the project is not declared by the
+    /// pipeline, instead of listing it as missing (and so asking to create it again); a key found nowhere stays listed.</summary>
+    [Fact]
+    public async Task R25_RunWarning_SaysAnExistingKeyIsNotDeclared_AndKeepsTheReallyMissingOne()
+    {
+        Services.AddSingleton<Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings>>(new PlaceholderLocalizer());
+        BunitTestHelper.UseImmediateDialogs(this);
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        dialog.ConfirmResult = false;
+        _handler.SetJsonResponse("api/pipelines/5/preflight", new PipelinePreflightDto());
+        _handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness?pipelineId=5", Verdict(new PipelineSetupReadinessCheckDto
+        {
+            Kind = PipelineSetupReadinessKind.UndefinedVariables,
+            Severity = PipelineSetupReadinessSeverity.Blocking,
+            Items = ["DB_PASSWORD", "JWT_KEY"],
+            UndefinedVariables =
+            [
+                new PipelineSetupReadinessUndefinedVariableDto { Name = "DB_PASSWORD", Container = PipelineSetupReadinessContainerKind.Vault },
+                new PipelineSetupReadinessUndefinedVariableDto
+                {
+                    Name = "JWT_KEY",
+                    Container = PipelineSetupReadinessContainerKind.Vault,
+                    ExistingHolderId = 9,
+                    ExistingHolderName = "w1.prod",
+                    ExistingHolderKind = PipelineSetupReadinessContainerKind.Vault
+                }
+            ]
+        }));
+
+        Assert.False(await Services.GetRequiredService<PipelineRunGate>().ConfirmPreflightAsync(5));
+
+        Assert.Contains("DB_PASSWORD, ReadinessGateExistsInVault[JWT_KEY|w1.prod]", dialog.LastConfirmMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Run_WithAMissingAdapter_RunsAnywayWhenConfirmed()
     {
@@ -228,6 +316,47 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
         Assert.Equal(0, dialog.OpenCount);
     }
 
+    /// <summary>R-21: the follow-up that will be refused is an error with the OE error presentation, not an information
+    /// note, and the pipeline names are a link to the follow-up's page.</summary>
+    [Fact]
+    public void ChainedDeployServerMissing_IsAnErrorAlert_AndItsItemLinksToTheFollowUpPipeline()
+    {
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=5", Verdict(new PipelineSetupReadinessCheckDto
+        {
+            Kind = PipelineSetupReadinessKind.ChainedDeployServerMissing,
+            Severity = PipelineSetupReadinessSeverity.Error,
+            Items = ["oe1-candidate > oe1-deploy-prod"],
+            ItemIds = new Dictionary<string, int> { ["oe1-candidate > oe1-deploy-prod"] = 182 }
+        }));
+
+        var cut = Render<ProjectPipelinesReadiness>(parameters => parameters.Add(panel => panel.ProjectId, 5));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-readiness-check']")));
+        var check = cut.Find("[data-testid='setup-readiness-check']");
+        Assert.Contains("omni-alert--danger", check.ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-badge", check.InnerHtml, StringComparison.Ordinal);
+        var link = cut.Find("[data-testid='setup-readiness-item-link']");
+        Assert.Equal("oe1-candidate > oe1-deploy-prod", link.TextContent.Trim());
+        Assert.Equal($"/pipelines/182?returnUrl={Uri.EscapeDataString("/projects/5/pipelines")}", link.GetAttribute("href"));
+        // An error is not a blocking finding: the page title stays the one of what to verify.
+        Assert.Contains("ProjectPipelinesToVerify", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-22: a long hint is shown whole in its tooltip; OE's preview and its "Show more" action (which the report
+    /// showed as that action alone, without the text) are not used.</summary>
+    [Fact]
+    public void InfoTip_WithALongHint_ShowsTheWholeText_WithoutAPreviewOrShowMoreAction()
+    {
+        var hint = string.Join(' ', Enumerable.Repeat("Une explication longue de la bannière.", 14));
+        Assert.True(hint.Length > 240);
+
+        var cut = Render<PipelineInfoTip>(parameters => parameters.Add(tip => tip.Text, hint));
+
+        Assert.Empty(cut.FindAll(".omni-tooltip--expandable"));
+        Assert.Empty(cut.FindAll(".omni-tooltip__more"));
+        Assert.Equal(hint, cut.Find("[role='tooltip']").TextContent.Trim());
+    }
+
     [Theory]
     [InlineData("/pipelines/setup?projectId=7&step=summary", true)]
     [InlineData("https://evil.example/x", false)]
@@ -248,7 +377,8 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
     private sealed class PlaceholderLocalizer : Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings>
     {
         public Microsoft.Extensions.Localization.LocalizedString this[string name] =>
-            new(name, name == "PipelineRunNotReadyConfirm" ? name + ": {0}" : name);
+            new(name, name == "PipelineRunNotReadyConfirm" ? name + ": {0}"
+                : name.StartsWith("ReadinessGateExistsIn", StringComparison.Ordinal) ? name + "[{0}|{1}]" : name);
         public Microsoft.Extensions.Localization.LocalizedString this[string name, params object[] arguments] =>
             new(name, string.Format(this[name].Value, arguments));
         public IEnumerable<Microsoft.Extensions.Localization.LocalizedString> GetAllStrings(bool includeParentCultures) => [];

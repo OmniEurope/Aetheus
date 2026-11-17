@@ -23,6 +23,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
     private bool _actionRunning;
+    private ServerFollowerBusyLink? _busyLink;
     private string _setupMailOnWarning = string.Empty;
     private List<RkhunterWarningDto> _warnings = [];
     private List<RkhunterScanResultDto> _scanHistory = [];
@@ -36,6 +37,13 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     private bool _savingSchedule;
     private int? _loadedServerId;
     private bool _scheduleDirty;
+
+    // R-12: the actions stay disabled while a task adopted on arrival runs.
+    private bool ActionBusy => _actionRunning || (_busyLink?.Busy ?? false);
+
+    protected override void OnAfterRender(bool firstRender) =>
+        (_busyLink ??= new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged))).Follower = _follower;
+
 
     // Heartbeats refresh RKHunter state; task completion already arrives through the page loader
     // and must not trigger a duplicate reload.
@@ -79,6 +87,15 @@ public partial class ServerRkhunterSection : IAsyncDisposable
         RkhunterAction.UpdateProperties => "UpdateProperties",
         _ => "RunScan"
     };
+
+    /// <summary>Recette R-12: what a task adopted on arrival ("RKHunter - RunScan") is called, as the page names its own.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.Key(L, "RKHunter - setup", "RkhunterSetup"),
+        ServerAdoptedTaskTitles.Key(L, "RKHunter - logs", "ViewLogs"),
+        ServerAdoptedTaskTitles.Key(L, "RKHunter - scheduled scan", "RunScan"),
+        new("RKHunter - ", rest => ServerAdoptedTaskTitles.Action<RkhunterAction>(rest, (action, _) => L[ActionLabelKey(action)].Value))
+    ]);
 
     private async Task ExecuteActionAsync(RkhunterAction action)
     {
@@ -184,7 +201,8 @@ public partial class ServerRkhunterSection : IAsyncDisposable
         {
             return; // the last results stay on screen; the next heartbeat retries
         }
-        StateHasChanged();
+        // A push, not a handler: no render follows this method, so it draws the reloaded results itself.
+        await InvokeAsync(StateHasChanged);
     }
 
     /// <summary>

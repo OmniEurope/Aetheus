@@ -13,8 +13,8 @@ public sealed class ArtifactService(
     // IArtifactRepository; the writes stayed where they were.
     IConfiguration configuration,
     ILogger<ArtifactService> logger,
+    IPostgresLeaderLease operationLock,
     IDbTransactionScope? transaction = null,
-    IPostgresLeaderLease? operationLock = null,
     TimeProvider? timeProvider = null) : IArtifactService
 {
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> ProjectUploadLocks = new();
@@ -101,13 +101,10 @@ public sealed class ArtifactService(
                 // The same per-artifact lock as the expiry cleanup and the checkpoint reuse, so two
                 // paths never delete one artifact at the same time.
                 var evicted = false;
-                if (operationLock is null)
-                    evicted = await EvictUnlessLeasedAsync(artifact, now, ct).ConfigureAwait(false);
-                else
-                    await operationLock.RunSerializedAsync(
-                        ArtifactRetentionLock.For(artifact.Id),
-                        async lockToken => evicted = await EvictUnlessLeasedAsync(artifact, now, lockToken).ConfigureAwait(false),
-                        ct).ConfigureAwait(false);
+                await operationLock.RunSerializedAsync(
+                    ArtifactRetentionLock.For(artifact.Id),
+                    async lockToken => evicted = await EvictUnlessLeasedAsync(artifact, now, lockToken).ConfigureAwait(false),
+                    ct).ConfigureAwait(false);
                 if (!evicted)
                 {
                     logger.LogInformation(
@@ -359,6 +356,7 @@ public sealed class ArtifactService(
     {
         Id = a.Id,
         PipelineRunId = a.PipelineRunId,
+        PipelineRunNumber = a.PipelineRun?.BuildNumber ?? 0,
         PipelineId = a.PipelineId,
         ProjectId = a.ProjectId,
         Name = a.Name,

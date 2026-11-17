@@ -197,27 +197,26 @@ public sealed class ServerMailSetupAssistantTests : BunitContext
     private TaskTrackerService Tracker => Services.GetRequiredService<TaskTrackerService>();
 
     [Fact]
-    public void R3_45_WhileTheSetupRuns_TheVeilLiesOverTheWholeAssistant_AndNoLoaderIsAdded()
+    public void R37_WhileTheSetupRuns_TheAssistantShowsItsProgress_AndNothingIsVeiled()
     {
         Tracker.Upsert(new ServerTaskDto { Id = 91, ServerId = 10, Name = "Mail - full setup (example.com)", Status = TaskExecutionStatus.Running });
 
         var cut = RenderAssistant();
 
-        var veil = cut.Find(".mail-setup-veil");
-        Assert.Contains("omni-busy", veil.ClassList);
-        Assert.Equal("true", veil.GetAttribute("aria-busy"));
-        Assert.NotNull(veil.QuerySelector(".omni-wizard"));
-        Assert.Empty(cut.FindComponents<AetheusLoader>());
+        var assistant = cut.Find(".mail-setup-veil");
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
+        Assert.NotEmpty(cut.FindAll(".mail-setup-running"));
+        Assert.NotNull(assistant.QuerySelector(".omni-wizard"));
+        Assert.Empty(cut.FindComponents<ZoneVeil>());
     }
 
     [Fact]
-    public void R3_45_WithoutASetup_TheAssistantIsNotVeiled()
+    public void R37_WithoutASetup_TheAssistantIsNotVeiled()
     {
         var cut = RenderAssistant();
 
-        var veil = cut.Find(".mail-setup-veil");
-        Assert.DoesNotContain("omni-busy", veil.ClassList);
-        Assert.Equal("false", veil.GetAttribute("aria-busy"));
+        Assert.NotNull(cut.Find(".mail-setup-veil"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Empty(cut.FindAll(".mail-setup-running"));
     }
 

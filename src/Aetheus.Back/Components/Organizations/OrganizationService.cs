@@ -4,7 +4,7 @@ using Aetheus.Back.Data.Entities;
 using Aetheus.Shared.Components.Organizations;
 namespace Aetheus.Back.Components.Organizations;
 
-public class OrganizationService(IOrganizationRepository repo, IResourceAuthorizationService authz, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IAuditService audit, IOrganizationRoleAssignmentService roleAssignments) : IOrganizationService
+public class OrganizationService(IOrganizationRepository repo, IResourceAuthorizationService authz, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IAuditService audit, IOrganizationRoleAssignmentService roleAssignments, IPostgresLeaderLease lease) : IOrganizationService
 {
     public Task<PaginatedResult<OrganizationDto>> GetOrganizationsAsync(string? search, PaginationRequest request, CancellationToken ct) =>
         GetOrganizationsAsync(search, request, null, ct);
@@ -166,15 +166,17 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
         var demotesOwner = member.Role == OrganizationRole.Owner && request.Role != OrganizationRole.Owner;
         // RBAC audit, finding 10: counted and saved under the owners lock, so two Owners demoted at once
         // never both pass the count.
-        await using var owners = demotesOwner ? await roleAssignments.LockOwnersAsync(ct).ConfigureAwait(false) : null;
-        if (demotesOwner)
-            await RefuseLastOwnerAsync(organizationId, ct).ConfigureAwait(false);
-        var previousRole = member.Role;
-        member.Role = request.Role;
-        // The new level's role replaces the old one's in the same unit of work as the level itself.
-        await roleAssignments.ChangeMembershipRoleAsync(
-            member.UserId, organizationId, previousRole, member.Role, ct).ConfigureAwait(false);
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await lease.RunSerializedWhenAsync(demotesOwner, OrganizationRoleAssignmentService.OwnersLockName, async token =>
+        {
+            if (demotesOwner)
+                await RefuseLastOwnerAsync(organizationId, token).ConfigureAwait(false);
+            var previousRole = member.Role;
+            member.Role = request.Role;
+            // The new level's role replaces the old one's in the same unit of work as the level itself.
+            await roleAssignments.ChangeMembershipRoleAsync(
+                member.UserId, organizationId, previousRole, member.Role, token).ConfigureAwait(false);
+            await repo.SaveChangesAsync(token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         await audit.LogAsync("Organization.MemberRoleUpdated", "Organization", organizationId,
             $"User '{member.User.Username}' role changed to {member.Role}", ct).ConfigureAwait(false);
         authz.InvalidateRoleCache(member.User.Username);
@@ -187,13 +189,16 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
     {
         var member = await repo.GetMemberWithUserByIdAsync(memberId, organizationId, ct).ConfigureAwait(false);
         var removesOwner = member?.Role == OrganizationRole.Owner;
-        await using var owners = removesOwner ? await roleAssignments.LockOwnersAsync(ct).ConfigureAwait(false) : null;
-        if (removesOwner)
-            await RefuseLastOwnerAsync(organizationId, ct).ConfigureAwait(false);
-        // A former member keeps no role for the organization (ADR-059).
-        if (member is not null)
-            await roleAssignments.RemoveAllAsync(member.UserId, organizationId, ct).ConfigureAwait(false);
-        var removed = await repo.RemoveMemberAsync(organizationId, memberId, ct).ConfigureAwait(false);
+        // Counted and saved under the owners lock (RBAC audit, finding 10).
+        var removed = await lease.RunSerializedWhenAsync(removesOwner, OrganizationRoleAssignmentService.OwnersLockName, async token =>
+        {
+            if (removesOwner)
+                await RefuseLastOwnerAsync(organizationId, token).ConfigureAwait(false);
+            // A former member keeps no role for the organization (ADR-059).
+            if (member is not null)
+                await roleAssignments.RemoveAllAsync(member.UserId, organizationId, token).ConfigureAwait(false);
+            return await repo.RemoveMemberAsync(organizationId, memberId, token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         if (removed && member?.User is not null)
             authz.InvalidateRoleCache(member.User.Username);
         if (removed)

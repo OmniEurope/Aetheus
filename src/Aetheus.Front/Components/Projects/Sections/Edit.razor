@@ -7,7 +7,7 @@
 @* Standalone edit page (not wrapped in the tabbed ProjectDetailLayout): its own header + back link. *@
 @if (Loader.Project is null)
 {
-    <AetheusLoader />
+    <VeilHold Busy="true" />
 }
 else
 {
@@ -19,7 +19,7 @@ else
     </OmniPageHeader>
     <OmniStack>
     <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectEditSection
-        Project="@Loader.Project" OnSaved="@OnSaved" />
+        Project="@Loader.Project" OnSaved="@OnSaved" OnMigrationGateChanged="@OnMigrationGateChanged" />
     @* How much data the project keeps, saved on its own. *@
     <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectDataRetentionSection
         ProjectId="@Loader.Project.Id" />

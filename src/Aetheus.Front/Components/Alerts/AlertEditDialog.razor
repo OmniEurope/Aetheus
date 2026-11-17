@@ -12,6 +12,11 @@
             <ValidationMessage For="@(() => _model.Name)" />
         </OmniColumn>
         <OmniColumn Span="12" MediumSpan="6">
+            <OmniFormField Label="@L["Server"]" Required="true" Help="@L["AlertRuleServerHelp"]" Class="omni-u-w-100" For="oe-formfield-pages-alerts-alerteditdialog-3">
+                <OmniDropDown Id="oe-formfield-pages-alerts-alerteditdialog-3" TValue="int?" @bind-Value="_model.ServerId" Options="@(_servers.ToOptions(item => (int?)item.Id, item => item.Name))" AllowEmpty="true" />
+            </OmniFormField>
+        </OmniColumn>
+        <OmniColumn Span="12" MediumSpan="6">
             <OmniFormField Label="@L["Metric"]" Class="omni-u-w-100" For="oe-formfield-pages-alerts-alerteditdialog-1">
                 <OmniDropDown Id="oe-formfield-pages-alerts-alerteditdialog-1" @bind-Value="_model.Metric" Options="@_metricTypes" />
             </OmniFormField>

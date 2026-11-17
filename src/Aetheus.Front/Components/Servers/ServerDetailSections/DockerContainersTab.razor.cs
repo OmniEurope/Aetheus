@@ -15,7 +15,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 /// parent, which refreshes it and passes it down through <see cref="Server"/>. The parent's
 /// <c>@key="ServerId"</c> is what clears the state when the server changes.
 /// </summary>
-public partial class DockerContainersTab
+public partial class DockerContainersTab : IDisposable
 {
     [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -24,6 +24,7 @@ public partial class DockerContainersTab
     [Inject] private IJSRuntime JS { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private TaskTrackerService Tracker { get; set; } = default!;
 
     /// <summary>
     /// The whole server, not just its containers: the project zoom dialog takes the server, and the
@@ -57,7 +58,61 @@ public partial class DockerContainersTab
     private OmniDataGrid<DockerContainerDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
-    protected override Task OnParametersSetAsync() => _liveRows.ObserveAsync(_grid, Server.Docker.Containers);
+    protected override void OnInitialized() => Tracker.OnChanged += OnTrackerChanged;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await _liveRows.ObserveAsync(_grid, Server.Docker.Containers);
+        await TryAdoptRunningExecAsync();
+    }
+
+    public void Dispose() => Tracker.OnChanged -= OnTrackerChanged;
+
+    // Recette R-12: the shell panel of a command that runs in a container when the user comes back. The tab opens it
+    // for the container the task names, shows the output so far, and the end of the task (HandleTaskOutput) completes
+    // it. Only on arrival: once the user opens or closes the panel himself, the tab never reopens it on its own.
+    private bool _execAdoptionClosed;
+    private bool _execAdopting;
+    private bool _shellAdopted;
+
+    private void OnTrackerChanged() => _ = InvokeAsync(TryAdoptRunningExecAsync);
+
+    private async Task TryAdoptRunningExecAsync()
+    {
+        if (_execAdoptionClosed || _execAdopting || _shellContainerId is not null || !InitialLoaded) return;
+        foreach (var task in Tracker.Tasks)
+        {
+            if (task.ServerId != ServerId || task.PipelineRunId is not null
+                || !ServerTaskAdoption.IsInFlight(task)
+                || !task.Name.StartsWith(ServerTaskNames.DockerExecPrefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var shortId = task.Name[ServerTaskNames.DockerExecPrefix.Length..].Trim();
+            var container = shortId.Length == 0 ? null : Server.Docker.Containers.FirstOrDefault(c =>
+                c.ContainerId.StartsWith(shortId, StringComparison.Ordinal));
+            if (container is null) continue;
+
+            _execAdopting = true;
+            try
+            {
+                var soFar = await ServerTaskOutputLoader.ReadOrEmptyAsync(Api, task.Id);
+                // The user may have opened a panel of his own while the log was read.
+                if (_execAdoptionClosed || _shellContainerId is not null) return;
+                _shellContainerId = container.ContainerId;
+                _shellContainerName = container.Name;
+                _shellCommand = string.Empty;
+                _shellOutput = soFar.Length == 0 ? string.Empty : soFar + "\n";
+                _shellAdopted = true;
+                _execAdoptionClosed = true;
+            }
+            finally
+            {
+                _execAdopting = false;
+            }
+            StateHasChanged();
+            return;
+        }
+    }
+
     private string? _dockerActionTarget;
     private string? _projectActionTarget;
 
@@ -152,7 +207,9 @@ public partial class DockerContainersTab
 
         if (_shellContainerId is not null && taskName.Contains("exec"))
         {
-            _shellOutput += output + "\n";
+            // An adopted command's log read so far is already shown: its full output replaces it, never doubles it.
+            _shellOutput = _shellAdopted ? output + "\n" : _shellOutput + output + "\n";
+            _shellAdopted = false;
             consumed = true;
             _ = JS.InvokeVoidAsync("dockerInterop.scrollToBottom", "docker-shell-output");
         }
@@ -178,16 +235,16 @@ public partial class DockerContainersTab
         _dockerActionTarget = containerId;
         var request = new DockerActionRequest { ContainerId = containerId, Action = action };
         // Recette R3-37: the follower shows what becomes of the task, in place of a lone "sent" toast.
-        _follower?.Expect($"{action} {containerId[..Math.Min(12, containerId.Length)]}");
+        _follower?.Expect($"{L[action.ToString()]} {containerId[..Math.Min(12, containerId.Length)]}");
         var success = await Api.ServerTools.ExecuteDockerActionAsync(ServerId, request);
         if (success)
         {
-            Toast.Success("Docker", "DockerActionSent", action, containerId[..Math.Min(12, containerId.Length)]);
+            Toast.Success("Docker", "DockerActionSent", L[action.ToString()].Value, containerId[..Math.Min(12, containerId.Length)]);
         }
         else
         {
             _follower?.Forget();
-            Toast.Error("Docker", "DockerActionFailed", action);
+            Toast.Error("Docker", "DockerActionFailed", L[action.ToString()].Value);
         }
         _dockerActionTarget = null;
     }
@@ -208,7 +265,7 @@ public partial class DockerContainersTab
         // backend "Docker {Action} - {first 12 characters of the container id}".
         string TaskName(DockerContainerDto container) =>
             $"Docker {action} - {container.ContainerId[..Math.Min(12, container.ContainerId.Length)]}";
-        _follower?.ExpectGroup($"{action} {(string.IsNullOrEmpty(project) ? L["NoProject"].Value : project)}",
+        _follower?.ExpectGroup($"{L[action.ToString()]} {(string.IsNullOrEmpty(project) ? L["NoProject"].Value : project)}",
             targets.Select(TaskName));
         var ok = 0;
         foreach (var c in targets)
@@ -220,9 +277,9 @@ public partial class DockerContainersTab
         _projectActionTarget = null;
 
         if (ok == targets.Count)
-            Toast.Success("Docker", "DockerActionSent", action, project);
+            Toast.Success("Docker", "DockerActionSent", L[action.ToString()].Value, project);
         else
-            Toast.Error("Docker", "DockerActionFailed", $"{action} ({ok}/{targets.Count})");
+            Toast.Error("Docker", "DockerActionFailed", $"{L[action.ToString()]} ({ok}/{targets.Count})");
     }
 
     private async Task OpenProjectZoom(string project)
@@ -368,6 +425,8 @@ public partial class DockerContainersTab
 
     private void OpenShell(string containerId, string name)
     {
+        _execAdoptionClosed = true;
+        _shellAdopted = false;
         if (_shellContainerId == containerId)
         {
             _shellContainerId = null;

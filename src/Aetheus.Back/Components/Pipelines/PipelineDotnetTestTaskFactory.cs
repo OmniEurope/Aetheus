@@ -60,6 +60,8 @@ public sealed class PipelineDotnetTestTaskFactory(IPipelineStepTaskBuilder taskB
     {
         if (!string.IsNullOrWhiteSpace(stepDef.TrxName))
             variables[PipelineDotnetTestVariables.TrxName] = stepDef.TrxName;
+        if (stepDef.RerunFailedTests)
+            variables[PipelineDotnetTestVariables.RerunFailedTests] = "true";
         if (!string.IsNullOrWhiteSpace(stepDef.RunSettings))
             variables[PipelineDotnetTestVariables.RunSettings] = stepDef.RunSettings;
         if (!string.IsNullOrWhiteSpace(stepDef.Configuration))

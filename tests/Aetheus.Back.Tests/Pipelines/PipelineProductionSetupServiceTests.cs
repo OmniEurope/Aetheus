@@ -386,6 +386,38 @@ public sealed class PipelineProductionSetupServiceTests
     }
 
     [Fact]
+    public async Task AnApacheTemplateTheSourceAlreadyHolds_IsNotWrittenToTheConfigurationRepository_SoItIsNotShadowed()
+    {
+        const string held = ".pipeline/configs/apache/api-http.conf";
+        Repository(ReplaceCompose, held);
+        _git.GetBlobAsync(5, "main", held, Arg.Any<CancellationToken>())
+            .Returns(new GitLightBlobDto { Path = held, Content = "# the project's own api virtual host\n" });
+
+        await _sut.ApplyAsync(Request(), Ct);
+
+        Assert.Equal(
+            [
+                ".pipeline/configs/apache/api-https.conf", ".pipeline/configs/apache/app-http.conf",
+                ".pipeline/configs/apache/app-https.conf", ".pipeline/configs/env/production.env"
+            ],
+            _configurationFiles.Keys.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(held, _configurationFiles.Keys);
+    }
+
+    [Fact]
+    public async Task WhenTheSourceHoldsNoApacheTemplate_AllFourGenericOnesAreWrittenToTheConfigurationRepository()
+    {
+        await _sut.ApplyAsync(Request(), Ct);
+
+        Assert.Equal(
+            [
+                ".pipeline/configs/apache/api-http.conf", ".pipeline/configs/apache/api-https.conf",
+                ".pipeline/configs/apache/app-http.conf", ".pipeline/configs/apache/app-https.conf"
+            ],
+            _configurationFiles.Keys.Where(path => path.Contains("/apache/", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task ABlueGreenComposeFile_GetsItsUpstreamEntries_AndVirtualHostsThatFollowTheLiveColour()
     {
         Repository(BlueGreenCompose);
@@ -651,7 +683,7 @@ public sealed class PipelineProductionSetupServiceTests
         IReadOnlyCollection<int> administered = [4, 9];
         _setupServers.ListServersAsync(administered, Arg.Any<CancellationToken>()).Returns([(4, "vpssim"), (9, "other")]);
 
-        var analysis = await _sut.AnalyzeAsync(ProjectId, null, new ProductionServerScope(administered), Ct);
+        var analysis = await _sut.AnalyzeAsync(ProjectId, null, null, new ProductionServerScope(administered), Ct);
 
         Assert.Equal(["vpssim", "other"], analysis.Servers.Select(server => server.Name));
         Assert.All(analysis.Servers, server => Assert.True(server.Candidate));
@@ -665,7 +697,7 @@ public sealed class PipelineProductionSetupServiceTests
         NoProjectServer();
         _setupServers.ListServersAsync(Arg.Any<IReadOnlyCollection<int>?>(), Arg.Any<CancellationToken>()).Returns([(4, "vpssim")]);
 
-        var analysis = await _sut.AnalyzeAsync(ProjectId, null, new ProductionServerScope(null), Ct);
+        var analysis = await _sut.AnalyzeAsync(ProjectId, null, null, new ProductionServerScope(null), Ct);
 
         Assert.Equal("vpssim", analysis.DefaultServer);
     }

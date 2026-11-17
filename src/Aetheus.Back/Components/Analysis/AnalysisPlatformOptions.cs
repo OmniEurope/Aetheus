@@ -18,6 +18,11 @@ public sealed class AnalysisPlatformOptions
     public int OperationalAlertCooldownHours { get; set; } = 24;
     public int StorageWarningPercent { get; set; } = 80;
 
+    /// <summary>A scanner reported unavailable or degraded is alerted only once it has been seen so for this long
+    /// across health cycles (R-1): the host's daily reboot leaves Docker down for a couple of minutes, and the first
+    /// cycle after the backend restarts reads that. Zero alerts on the first sight.</summary>
+    public int ScannerUnavailableGraceMinutes { get; set; } = 15;
+
     internal bool IsValid() => HasValidIngestionLimits() && HasValidRetention() && HasValidOperationalChecks();
 
     private bool HasValidIngestionLimits() =>
@@ -38,7 +43,8 @@ public sealed class AnalysisPlatformOptions
         && Within(ScannerManifestMaxAgeDays, 1, 365)
         && Within(ContinuousSyncStaleHours, 1, 720)
         && Within(OperationalAlertCooldownHours, 1, 168)
-        && Within(StorageWarningPercent, 1, 100);
+        && Within(StorageWarningPercent, 1, 100)
+        && Within(ScannerUnavailableGraceMinutes, 0, 1440);
 
     private static bool Within(int value, int minimum, int maximum) => value >= minimum && value <= maximum;
 }

@@ -7,7 +7,7 @@
 <div class="iam-page iam-detail-page">
 @if (_loading)
 {
-    <AetheusLoader />
+    <VeilHold Busy="true" />
 }
 else
 {
@@ -26,13 +26,15 @@ else
                         {
                             <OmniAlert Severity="OmniSeverity.Info" Class="role-built-in-note">@L["BuiltInRoleReadOnly"]</OmniAlert>
                         }
-                        <OmniFormField For="oe-pages-users-roleedit-1"><LabelContent>@L["Name"]</LabelContent><ChildContent>
-                            <OmniTextBox @bind-Value="_model.Name" maxlength="50" Id="oe-pages-users-roleedit-1" ReadOnly="@_readOnly" />
-                            <ValidationMessage For="@(() => _model.Name)" />
-                        </ChildContent></OmniFormField>
-                        <OmniFormField For="oe-pages-users-roleedit-2"><LabelContent>@L["Description"]</LabelContent><ChildContent>
-                            <OmniTextArea @bind-Value="_model.Description" MaxLength="200" Rows="3" Id="oe-pages-users-roleedit-2" ReadOnly="@_readOnly" />
-                        </ChildContent></OmniFormField>
+                        <OmniStack Gap="OmniSpacing.Small">
+                            <OmniFormField For="oe-pages-users-roleedit-1"><LabelContent>@L["Name"]</LabelContent><ChildContent>
+                                <OmniTextBox @bind-Value="_model.Name" maxlength="50" Id="oe-pages-users-roleedit-1" ReadOnly="@_readOnly" />
+                                <ValidationMessage For="@(() => _model.Name)" />
+                            </ChildContent></OmniFormField>
+                            <OmniFormField For="oe-pages-users-roleedit-2"><LabelContent>@L["Description"]</LabelContent><ChildContent>
+                                <OmniTextArea @bind-Value="_model.Description" MaxLength="200" Rows="3" Id="oe-pages-users-roleedit-2" ReadOnly="@_readOnly" />
+                            </ChildContent></OmniFormField>
+                        </OmniStack>
                     </OmniStack>
                     @* The action row is a sibling of the field stack, one page gap (omni-u-mt-md) under it, so the only gap the form declares is the page gap: a Large stack alone in the form made the sweep read 16 px as the page gap. *@
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
@@ -113,7 +115,7 @@ else
                     <OmniCard Class="iam-detail-card">
                     @if (!_usersLoaded)
                     {
-                        <AetheusLoader />
+                        <ZoneVeil />
                     }
                     else
                     {

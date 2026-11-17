@@ -29,6 +29,7 @@ public partial class VariableLibrariesList : IAsyncDisposable
     private bool IsProjectScope => ProjectId.HasValue;
     private bool IsGlobal => !ProjectId.HasValue && !ServerId.HasValue;
 
+    private readonly CancellationTokenSource _lifetime = new();
     private List<VariableLibraryDto> _libraries = [];
     private List<VariableLibraryDto> _serverAll = []; // server scope: full list, paged client-side
     private int _totalCount;
@@ -74,12 +75,19 @@ public partial class VariableLibrariesList : IAsyncDisposable
 
         if (IsServerScope)
         {
-            try { await LoadServerLibrariesAsync(); }
+            try
+            {
+                await LoadServerLibrariesAsync();
+                // The grid asked for its page on its first render, before the list had landed.
+                await RefreshGridAsync();
+            }
             catch (HttpRequestException) { } // 401 on expired JWT - redirect handled by AuthProvider
         }
 
         await LoadFilterValuesAsync();
         await LoadUsageAsync();
+        // The hub only refreshes the list: it is drawn from what was read, never after the hub has started.
+        StateHasChanged();
         await StartHubAsync();
     }
 
@@ -221,7 +229,8 @@ public partial class VariableLibrariesList : IAsyncDisposable
                 await RefreshGridAsync();
                 await LoadUsageAsync();
             }));
-            await _hubConnection.StartAsync();
+            // Bound to the page: leaving it cancels a negotiate that does not answer.
+            await _hubConnection.StartAsync(_lifetime.Token);
             await _hubConnection.InvokeAsync("JoinEntityUpdates", ResourceType.VariableLibrary);
             await JoinPipelineUpdatesAsync(_hubConnection);
         }
@@ -239,6 +248,8 @@ public partial class VariableLibrariesList : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
+        await _lifetime.CancelAsync();
+        _lifetime.Dispose();
         if (_hubConnection is not null)
         {
             try { await _hubConnection.InvokeAsync("LeaveEntityUpdates", ResourceType.Pipeline); }

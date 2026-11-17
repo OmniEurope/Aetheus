@@ -27,6 +27,7 @@ internal static partial class GitLightMapper
         CreatedAt = r.CreatedAt,
         LastPushAt = r.LastPushAt,
         IsAdditionalSource = IsAdditionalSource(r),
+        IsExternalMirror = r.GitConnection is { ProviderType: not GitProviderType.AetheusGit },
         IsConfiguration = r.IsConfiguration
     };
 

@@ -9,52 +9,100 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
+/// <summary>
+/// Recette R-4 (decision of 2026-11-10, option B): a project that names an external address is read only through its
+/// project mirror. Without one, the launch and its dialog are refused with a message that says to create the mirror; with
+/// one, the definition, the pinned commit and the workspace all come from the mirror. The real preparation, template
+/// resolver and parser; the Git reads are doubles. The preparation no longer has any client of a raw address at all
+/// (<see cref="IGitCliService"/> lost its branch resolution and pipeline fetch): the refusal is the only outcome.
+/// </summary>
 public class PipelineRunPreparationExternalGitTests
 {
-    [Theory]
-    [InlineData(null, "develop", false)]
-    [InlineData("feature/package", "feature/package", false)]
-    [InlineData("develop", "develop", true)]
-    public async Task PrepareRunAsync_PublicProjectUrl_PinsTheSelectedCommitAndKeepsTheDbDefinition(
-        string? configuredBranch, string resolvedBranch, bool externalDefinition)
+    private const string Url = "https://github.com/example/OmniEurope.Blazor.git";
+    private const string MirrorUrl = "http://localhost:5300/git/7/omnieurope-blazor.git";
+    private const string Commit = "0123456789abcdef0123456789abcdef01234567";
+    private const string StoredYaml =
+        "name: Package CI\nstages:\n  - name: Build\n    steps:\n      - name: Compile\n        shell: dotnet build";
+
+    private static (PipelineRunPreparationService Sut, IPipelineGitService Git) Build(Pipeline pipeline)
     {
-        const string url = "https://github.com/example/OmniEurope.Blazor.git";
-        const string commit = "0123456789abcdef0123456789abcdef01234567";
         var repo = Substitute.For<IPipelineRepository>();
         var pipelineGit = Substitute.For<IPipelineGitService>();
-        var gitCli = Substitute.For<IGitCliService>();
         var parameterResolver = Substitute.For<IPipelineRunParameterResolver>();
-        var pipeline = new Pipeline
-        {
-            Id = 3,
-            ProjectId = 7,
-            Project = new Project { Id = 7, RepositoryUrl = url, DefaultBranch = configuredBranch },
-            Name = "Package CI",
-            YamlDefinition = "name: Package CI\nstages:\n  - name: Build\n    steps:\n      - name: Compile\n        shell: dotnet build"
-        };
-        repo.FindPipelineAsync(3, Arg.Any<CancellationToken>()).Returns(pipeline);
-        repo.GetPipelineOrganizationIdAsync(3, Arg.Any<CancellationToken>()).Returns(1);
-        gitCli.ResolveBranchCommitAsync(url, configuredBranch, Arg.Any<CancellationToken>())
-            .Returns(new GitRemoteBranch(resolvedBranch, commit));
-        gitCli.ReadPipelineYamlAsync(url, commit, pipeline.Name, Arg.Any<CancellationToken>())
-            .Returns(externalDefinition ? pipeline.YamlDefinition.Replace("dotnet build", "dotnet test", StringComparison.Ordinal) : null);
+        repo.FindPipelineAsync(pipeline.Id, Arg.Any<CancellationToken>()).Returns(pipeline);
+        repo.GetPipelineOrganizationIdAsync(pipeline.Id, Arg.Any<CancellationToken>()).Returns(1);
         parameterResolver.ResolveCandidateTargetServerIdsAsync(
             Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([]);
         var sut = new PipelineRunPreparationService(
-            repo, pipelineGit, new PipelineTemplateResolver(repo), parameterResolver, gitCli,
+            repo, pipelineGit, new PipelineTemplateResolver(repo), parameterResolver,
             Substitute.For<IPipelineWorkspaceSourceResolver>(),
             new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
+        return (sut, pipelineGit);
+    }
+
+    private static Pipeline PipelineOf(string? repositoryUrl) => new()
+    {
+        Id = 3,
+        ProjectId = 7,
+        Project = new Project { Id = 7, RepositoryUrl = repositoryUrl, DefaultBranch = "develop" },
+        Name = "Package CI",
+        YamlDefinition = StoredYaml
+    };
+
+    [Fact]
+    public async Task PrepareRunAsync_PublicAddressWithoutMirror_IsRefusedWithTheMirrorMessage()
+    {
+        var (sut, _) = Build(PipelineOf(Url));
+
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(
+            () => sut.PrepareRunAsync(3, null, null, null, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ExternalRepositoryMirrorRequirement.Message, refusal.Message);
+        Assert.DoesNotContain(Url, refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrepareRunAsync_PublicAddressWithoutMirror_IsRefusedEvenWithACommitOverride()
+    {
+        var (sut, _) = Build(PipelineOf(Url));
+
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(
+            () => sut.PrepareRunAsync(3, null, null, Commit, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ExternalRepositoryMirrorRequirement.Message, refusal.Message);
+    }
+
+    [Fact]
+    public async Task GetRunParametersAsync_PublicAddressWithoutMirror_IsRefusedWithTheMirrorMessage()
+    {
+        var (sut, _) = Build(PipelineOf(Url));
+
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(
+            () => sut.GetRunParametersAsync(3, null, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ExternalRepositoryMirrorRequirement.Message, refusal.Message);
+    }
+
+    /// <summary>Once the mirror exists the project's address is the mirror's clone URL: the commit, the definition and the
+    /// workspace the agent clones are the mirror's, never the external address.</summary>
+    [Fact]
+    public async Task PrepareRunAsync_MirroredProject_PinsAndChecksOutTheMirror()
+    {
+        var pipeline = PipelineOf(MirrorUrl);
+        var (sut, pipelineGit) = Build(pipeline);
+        pipelineGit.GetPipelineSourceAsync(7, pipeline.Name, Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns(new PipelineSourceDto { RepositoryId = 4, CloneUrl = MirrorUrl, Branch = "develop", CommitHash = Commit });
+        pipelineGit.ReadProjectPipelineYamlAtRevisionAsync(7, pipeline.Name, Commit, Arg.Any<CancellationToken>(), Arg.Any<int?>())
+            .Returns((string?)null);
 
         var result = await sut.PrepareRunAsync(3, null, null, null, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal(url, result.RepositoryUrl);
-        Assert.Equal(resolvedBranch, result.BranchName);
-        Assert.Equal(commit, result.CommitHash);
-        Assert.Contains(externalDefinition ? "dotnet test" : "dotnet build", result.YamlSnapshot, StringComparison.Ordinal);
-        await gitCli.Received(1).ReadPipelineYamlAsync(url, commit, pipeline.Name, Arg.Any<CancellationToken>());
-        await gitCli.Received(1).ResolveBranchCommitAsync(url, configuredBranch, Arg.Any<CancellationToken>());
+        Assert.Equal(MirrorUrl, result.RepositoryUrl);
+        Assert.Equal(Commit, result.CommitHash);
+        Assert.Equal("develop", result.BranchName);
+        Assert.Contains("dotnet build", result.YamlSnapshot, StringComparison.Ordinal);
     }
 
     /// <summary>Recette R-49: the real preparation, the real template resolver and the real parser. A YAML
@@ -64,27 +112,14 @@ public class PipelineRunPreparationExternalGitTests
     [Fact]
     public async Task PrepareRunAsync_YamlThatIsNotYaml_IsRefusedWithTheLineAndColumn()
     {
-        const string url = "https://github.com/example/OmniEurope.Blazor.git";
-        const string commit = "0123456789abcdef0123456789abcdef01234567";
-        var repo = Substitute.For<IPipelineRepository>();
-        var gitCli = Substitute.For<IGitCliService>();
-        var pipeline = new Pipeline
-        {
-            Id = 3,
-            ProjectId = 7,
-            Project = new Project { Id = 7, RepositoryUrl = url, DefaultBranch = "develop" },
-            Name = "aetheus-deploy-prod",
-            YamlDefinition = "name: aetheus-deploy-prod\nstages: []\n"
-        };
-        repo.FindPipelineAsync(3, Arg.Any<CancellationToken>()).Returns(pipeline);
-        gitCli.ResolveBranchCommitAsync(url, "develop", Arg.Any<CancellationToken>())
-            .Returns(new GitRemoteBranch("develop", commit));
-        gitCli.ReadPipelineYamlAsync(url, commit, pipeline.Name, Arg.Any<CancellationToken>())
+        var pipeline = PipelineOf(MirrorUrl);
+        pipeline.Name = "aetheus-deploy-prod";
+        pipeline.YamlDefinition = "name: aetheus-deploy-prod\nstages: []\n";
+        var (sut, pipelineGit) = Build(pipeline);
+        pipelineGit.GetPipelineSourceAsync(7, pipeline.Name, Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns(new PipelineSourceDto { RepositoryId = 4, CloneUrl = MirrorUrl, Branch = "develop", CommitHash = Commit });
+        pipelineGit.ReadProjectPipelineYamlAtRevisionAsync(7, pipeline.Name, Commit, Arg.Any<CancellationToken>(), Arg.Any<int?>())
             .Returns("name: aetheus-deploy-prod\ntrigger: manual\nparameters:\n  - name: scope\n    description: Diagnostic : liste\nstages: []\n");
-        var sut = new PipelineRunPreparationService(
-            repo, Substitute.For<IPipelineGitService>(), new PipelineTemplateResolver(repo),
-            Substitute.For<IPipelineRunParameterResolver>(), gitCli, Substitute.For<IPipelineWorkspaceSourceResolver>(),
-            new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
 
         var refusal = await Assert.ThrowsAsync<BadRequestException>(
             () => sut.PrepareRunAsync(3, null, null, null, TestContext.Current.CancellationToken));

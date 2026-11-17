@@ -22,9 +22,9 @@ public sealed class PrivateReflectionBudgetTests
             // C3 (RFL-1), 2026-10-15: the dead AddAgent.CopyTokenAsync, PipelineEdit.OnPipelineRunStarted and
             // DockerContainersTab.BrowseParentAsync are deleted with the tests that reached them by reflection,
             // and the browse-panel test no longer forces a sub-directory path.
-            ["BindingFlags.NonPublic"] = 607,
+            ["BindingFlags.NonPublic"] = 604,
             [".GetMethod("] = 786,
-            [".GetField("] = 1021,
+            [".GetField("] = 1008,
             [".GetProperty("] = 277
         };
 

@@ -1184,7 +1184,7 @@ fi
 # ---------- 4. E2E tests (needs servers) ----------
 
 ensure_playwright_browser() {
-    local output_dir="$ROOT/tests/Aetheus.E2E/bin/$BUILD_CONFIGURATION/net10.0"
+    local output_dir="$ROOT/tests/Aetheus.E2E/bin/$BUILD_CONFIGURATION/net11.0"
     local playwright_cli="$output_dir/.playwright/package/cli.js"
     local playwright_node=""
     playwright_node="$(find "$output_dir/.playwright/node" -mindepth 2 -maxdepth 2 -type f -name node -print -quit 2>/dev/null)"

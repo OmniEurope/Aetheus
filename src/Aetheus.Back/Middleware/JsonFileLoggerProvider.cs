@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Middleware;
 
@@ -189,6 +190,7 @@ internal sealed class JsonFileLogger(
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
         if (!IsEnabled(logLevel)) return;
+        if (IsDeliberateHubRefusalEcho(categoryName, exception)) return;
 
         var entry = new
         {
@@ -216,6 +218,12 @@ internal sealed class JsonFileLogger(
             Interlocked.Increment(ref dropCounter.SinceLastWarning);
         }
     }
+
+    /// <summary>SignalR's dispatcher logs every hub method exception at Error, including our own deliberate
+    /// <see cref="HubException"/> refusals, which <c>HubRefusalLogFilter</c> already writes at Information.
+    /// Dropped only when BOTH the dispatcher category and the exception type match.</summary>
+    internal static bool IsDeliberateHubRefusalEcho(string category, Exception? exception) =>
+        exception is HubException && category == "Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher";
 
     private static string? GetProperty<TState>(TState state, string name)
     {

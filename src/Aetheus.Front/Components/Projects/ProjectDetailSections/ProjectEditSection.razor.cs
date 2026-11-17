@@ -13,6 +13,10 @@ public partial class ProjectEditSection
     [Parameter, EditorRequired] public ProjectDetailDto? Project { get; set; }
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    /// <summary>Raised once the migration gate setting was saved, so the page reloads the project the overview reads (the
+    /// expand/contract tab follows the setting) without leaving the settings.</summary>
+    [Parameter] public EventCallback OnMigrationGateChanged { get; set; }
+
     private ProjectFormModel _model = new();
     private int? _modelProjectId;
     private bool _saving;
@@ -24,6 +28,14 @@ public partial class ProjectEditSection
     private int? _branchesProjectId;
     private string? _repositoryDefaultBranch;
 
+    // PLAN-007: the automatic dependency updates setting, null until read (or when it could not be read).
+    private bool? _dependencyUpdatesEnabled;
+    private bool _savingDependencyUpdates;
+
+    // R-13: the migration gate (expand/contract model) setting, read from the project.
+    private bool _migrationGateEnabled;
+    private bool _savingMigrationGate;
+
     private bool DefaultBranchesDiffer =>
         !string.IsNullOrWhiteSpace(_model.DefaultBranch)
         && !string.IsNullOrWhiteSpace(_repositoryDefaultBranch)
@@ -32,6 +44,8 @@ public partial class ProjectEditSection
     protected override void OnParametersSet()
     {
         _statusOptions = ProjectFormModel.BuildStatusOptions(L);
+        if (Project is not null && !_savingMigrationGate)
+            _migrationGateEnabled = Project.MigrationGateEnabled;
 
         // Preserve in-progress edits when the parent rerenders the same project. Rebuilding the
         // model on every parameter pass could visibly restore the stored branch after the user
@@ -47,7 +61,63 @@ public partial class ProjectEditSection
     {
         if (Project is null || _branchesProjectId == Project.Id) return;
         _branchesProjectId = Project.Id;
-        await LoadBranchesAsync();
+        await Task.WhenAll(LoadBranchesAsync(), LoadDependencyUpdatesAsync());
+    }
+
+    private async Task LoadDependencyUpdatesAsync()
+    {
+        _dependencyUpdatesEnabled = null;
+        try
+        {
+            _dependencyUpdatesEnabled = (await Api.Analysis.GetDependencyUpdatesAsync(Project!.Id)).Enabled;
+        }
+        catch (HttpRequestException ex)
+        {
+            Logger.LogDebug(ex, "Could not read the dependency updates setting of project {ProjectId}", Project!.Id);
+        }
+    }
+
+    private async Task SetDependencyUpdatesAsync(bool enabled)
+    {
+        _savingDependencyUpdates = true;
+        try
+        {
+            await Api.Analysis.SetDependencyUpdatesEnabledAsync(Project!.Id, enabled);
+            _dependencyUpdatesEnabled = enabled;
+            Toast.Success("Saved", "ProjectUpdated");
+        }
+        catch (HttpRequestException)
+        {
+            Toast.Error("Error", "SaveFailed");
+        }
+        finally
+        {
+            _savingDependencyUpdates = false;
+        }
+    }
+
+    private async Task SetMigrationGateAsync(bool enabled)
+    {
+        _savingMigrationGate = true;
+        try
+        {
+            if (!(await Api.Projects.SetMigrationGateEnabledAsync(Project!.Id, enabled)).Success)
+            {
+                Toast.Error("Error", "SaveFailed");
+                return;
+            }
+            _migrationGateEnabled = enabled;
+            Toast.Success("Saved", "ProjectUpdated");
+            await OnMigrationGateChanged.InvokeAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Toast.Error("Error", "SaveFailed");
+        }
+        finally
+        {
+            _savingMigrationGate = false;
+        }
     }
 
     private async Task LoadBranchesAsync()

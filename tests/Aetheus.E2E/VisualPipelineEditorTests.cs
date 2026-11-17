@@ -5,7 +5,6 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Pipelines")]
-[RollbackRelevant]
 public sealed class VisualPipelineEditorTests : E2ETestBase
 {
     [SetUp]

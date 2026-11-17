@@ -77,14 +77,16 @@ internal sealed record PipelineSetupLanguages(bool DotNet, bool Python, bool Jav
     /// The <c>stages:</c> block of the quality pipeline: the stages of the template this project has no use for, removed at
     /// creation (<c>remove: true</c>, ADR-012) rather than skipped at every run. The stages that waited for a removed one wait
     /// for what it waited for (the resolver splices them). Names are those of the <c>application-quality</c> template.
-    /// "Publish lint" always goes: the wizard writes no quality command that produces a lint report (R-105).
+    /// "Publish lint" always goes (and, for an external application, "Restore CI evidence"): the wizard writes no quality command that produces a lint report (R-105).
     /// </summary>
     /// <param name="restatedLintSource">The result of <see cref="RestatedLintSource"/>, needed (not null) when exactly one of
     /// Python and Java is used.</param>
-    public string QualityStages(string? restatedLintSource = null)
+    public string QualityStages(string? restatedLintSource = null, bool external = false)
     {
         var yaml = new StringBuilder("stages:\n");
         Remove(yaml, "Publish lint");
+        // R-34: an external application has no CI pipeline of ours whose payload could be restored.
+        if (external) Remove(yaml, "Restore CI evidence");
         if (!DotNet)
         {
             Remove(yaml, "Find pinned SDK");

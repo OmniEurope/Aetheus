@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Production of the rehearsal application, started by the Aetheus deployment pipelines. The published port listens on
+# the loopback only: Apache is the public entry (virtual hosts in .pipeline/configs/apache, written by the setup wizard).
+services:
+
+  front:
+    container_name: ${APPNAME:?}-${ENV:?}-front
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - "127.0.0.1:${PORT_FRONT:?}:8080"
+    environment:
+      - APP_VERSION=${APP_VERSION:?}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && head -n1 <&3 | grep -q 200"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    mem_limit: 256m
+    restart: unless-stopped

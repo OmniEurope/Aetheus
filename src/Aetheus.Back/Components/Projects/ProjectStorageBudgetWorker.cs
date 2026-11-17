@@ -9,16 +9,11 @@ namespace Aetheus.Back.Components.Projects;
 public sealed class ProjectStorageBudgetWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<ProjectStorageBudgetWorker> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, LeaseName)
 {
     internal const string LeaseName = "aetheus:project-storage-budget";
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync(LeaseName, RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(BackendRuntimeDefaults.MaintenanceInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))

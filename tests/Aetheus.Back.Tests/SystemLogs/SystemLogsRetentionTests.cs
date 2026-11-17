@@ -29,7 +29,7 @@ public sealed class SystemLogsRetentionTests
         _settings.GetSettingValueAsync("Retention:LogDays", Arg.Any<CancellationToken>()).Returns(configured);
         _logs.PurgeOldLogsAsync(expectedDays, Arg.Any<CancellationToken>()).Returns(11);
 
-        var result = await new SystemLogsController(_logs, _settings).PurgeOldLogs(ct: TestContext.Current.CancellationToken);
+        var result = await new SystemLogsController(_logs, _settings, Substitute.For<ISystemLogExclusionService>()).PurgeOldLogs(ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(11, Assert.IsType<OkObjectResult>(result.Result).Value);
         await _logs.Received(1).PurgeOldLogsAsync(expectedDays, Arg.Any<CancellationToken>());
@@ -40,7 +40,7 @@ public sealed class SystemLogsRetentionTests
     {
         _logs.PurgeOldLogsAsync(14, Arg.Any<CancellationToken>()).Returns(2);
 
-        await new SystemLogsController(_logs, _settings).PurgeOldLogs(14, TestContext.Current.CancellationToken);
+        await new SystemLogsController(_logs, _settings, Substitute.For<ISystemLogExclusionService>()).PurgeOldLogs(14, TestContext.Current.CancellationToken);
 
         await _settings.DidNotReceiveWithAnyArgs().GetSettingValueAsync(default!, TestContext.Current.CancellationToken);
     }

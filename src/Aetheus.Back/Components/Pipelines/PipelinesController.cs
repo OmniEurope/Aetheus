@@ -38,11 +38,12 @@ public class PipelinesController(
     }
 
     [HttpGet("runs/active")]
-    public async Task<ActionResult<List<PipelineRunDto>>> GetActiveRuns([FromQuery] int? projectId, CancellationToken ct)
+    public async Task<ActionResult<List<PipelineRunDto>>> GetActiveRuns(
+        [FromQuery] int? projectId, CancellationToken ct, [FromQuery] int? serverId = null)
     {
         var accessibleIds = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Pipeline, Permission.Read, ct);
         if (accessibleIds is { Count: 0 }) return Ok(new List<PipelineRunDto>());
-        return Ok(await runService.GetActiveRunsAsync(accessibleIds, projectId, ct));
+        return Ok(await runService.GetActiveRunsAsync(accessibleIds, projectId, serverId, ct));
     }
 
     [HttpGet("runs/recent")]
@@ -128,6 +129,12 @@ public class PipelinesController(
             || !await ownerAuthz.CanOwnAsync(User, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct))
             return Forbid();
 
+        // Turning a schedule on starts runs on its own: it takes the right to run the pipeline, whoever ends
+        // up owning it. Same rule as PUT api/pipelines/{id}/schedule.
+        if (PipelineScheduleOnlyEdit.TurnsScheduleOn(existing.YamlDefinition, request.YamlDefinition)
+            && !await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, id, ct))
+            return Forbid();
+
         var validation = await pipelineService.ValidateYamlStrictAsync(
             request.YamlDefinition, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct: ct)
             ?? pipelineService.ValidateYamlStrict(request.YamlDefinition);
@@ -180,7 +187,11 @@ public class PipelinesController(
             runtimePreparation with
             {
                 RunToEnd = runToEndRequested,
-                GateOverrideBy = gateOverride ? User.Identity?.Name ?? "unknown" : null
+                GateOverrideBy = gateOverride ? User.Identity?.Name ?? "unknown" : null,
+                // R-7: the answer does not wait for the first stage dispatch (it starts the child runs).
+                DeferFirstDispatch = true,
+                // ... and is audited as this person, whom the request no longer names once it answered.
+                InitiatedBy = User.Identity?.Name
             }, parameters: request?.Parameters, ct: ct,
             idempotencyKey: request?.IdempotencyKey);
         if (run is null) return NotFound();

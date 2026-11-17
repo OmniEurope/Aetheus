@@ -441,7 +441,13 @@ public partial class Servers : IAsyncDisposable
                 _totalCount++;
                 StateHasChanged();
             }
-            if (_grid is not null) await _grid.Reload();
+            // R-10: no blanking read. A retired server is out of the grid at once and the read behind it confirms;
+            // a refused retirement reads the real rows back quietly.
+            if (_grid is not null)
+            {
+                if (deleteSucceeded) await _grid.HideRowAsync(server);
+                else await _grid.RestoreRowsAsync();
+            }
         }
     }
 

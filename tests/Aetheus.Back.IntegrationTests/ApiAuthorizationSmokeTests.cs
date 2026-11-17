@@ -40,6 +40,7 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/packages/npm/-/ping")]
     [InlineData("/api/packages/maven/org/example/sample/maven-metadata.xml")]
     [InlineData("/api/system-logs/files")]
+    [InlineData("/api/system-log-rules?organizationId=1")]
     [InlineData("/api/releases")]
     [InlineData("/api/pipelines")]
     [InlineData("/api/pipelines/runs/1/checkpoint-resume-preview")]
@@ -54,7 +55,15 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/pipelines/ownership/candidates")]
     // Who reads each library and vault (recette R-65, R-66).
     [InlineData("/api/pipelines/resource-usage")]
+    [InlineData("/api/pipelines/schedule-plan?organizationId=1&from=2027-01-04T00:00:00Z&to=2027-01-05T00:00:00Z")]
+    [InlineData("/api/pipelines/1/schedule-preview?frequency=EveryEvening&hour=1&minute=30&from=2027-01-04T00:00:00Z&to=2027-01-05T00:00:00Z")]
+    // The matches of the vulnerability watch (PLAN-004), by organization.
+    [InlineData("/api/analysis/cve-watch?organizationId=1")]
     [InlineData("/api/admin/performance")]
+    [InlineData("/api/vulnerability-watch/sources")]
+    [InlineData("/api/admin/task-identity-backfill")]
+    [InlineData("/api/admin/pipeline-run-identity-backfill")]
+    [InlineData("/api/admin/database-tables")]
     [InlineData("/api/pipelines/templates")]
     [InlineData("/api/work-items")]
     [InlineData("/api/service-connections")]
@@ -97,6 +106,8 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     // ingest key.
     [InlineData("/api/projects/1/data-retention")]
     [InlineData("/api/projects/1/release-series")]
+    [InlineData("/api/projects/1/dependency-updates")]
+    [InlineData("/api/projects/1/external-pipelines")]
     [InlineData("/api/projects/1/deletion/tasks?taskIds=1")]
     [InlineData("/api/data-storage/projects")]
     [InlineData("/api/data-storage/reclaim")]
@@ -123,6 +134,8 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/servers/1/modules")]
     [InlineData("/api/servers/1/configuration/export")]
     [InlineData("/api/servers/1/ports")]
+    [InlineData("/api/servers/1/reboot-schedule")]
+    [InlineData("/api/mail/documents/not-a-ticket")]
     public async Task ProtectedGetEndpoint_Anonymous_Returns401(string route)
     {
         using var client = fixture.CreateAnonymousClient();
@@ -137,7 +150,10 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     // id yields 401 at the middleware regardless of the payload or whether the resource exists.
     [Theory]
     [InlineData("POST", "/api/projects")]
+    [InlineData("POST", "/api/projects/1/external-pipelines")]
+    [InlineData("POST", "/api/analysis/cve-watch/1/remediation")]
     [InlineData("POST", "/api/agent-pools")]
+    [InlineData("POST", "/api/servers/agent/reboot-orders/1/confirm")]
     [InlineData("POST", "/api/users")]
     [InlineData("POST", "/api/organizations")]
     [InlineData("POST", "/api/vaults")]
@@ -154,6 +170,7 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     // ClientErrorsController is mutation-only too, and its single POST writes attacker-controlled text
     // straight into the server log - an anonymous caller must never reach it.
     [InlineData("POST", "/api/pipelines/setup/readiness")]
+    [InlineData("PUT", "/api/pipelines/1/schedule")]
     [InlineData("POST", "/api/client-errors")]
     [InlineData("PUT", "/api/users/1")]
     [InlineData("PUT", "/api/users/me/preferences/aetheus.appearance")]
@@ -163,7 +180,10 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("DELETE", "/api/agent-pools/1")]
     [InlineData("DELETE", "/api/vaults/1")]
     [InlineData("PUT", "/api/projects/1/data-retention")]
+    [InlineData("PUT", "/api/projects/1/default-branch")]
     [InlineData("POST", "/api/data-storage/reclaim")]
+    [InlineData("POST", "/api/vulnerability-watch/sources/npm/import")]
+    [InlineData("POST", "/api/vulnerability-watch/sync")]
     [InlineData("POST", "/api/mail/no-reply-sender")]
     [InlineData("PUT", "/api/settings/daily-recap")]
     [InlineData("POST", "/api/settings/daily-recap/send-now")]

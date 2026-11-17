@@ -47,7 +47,7 @@ public sealed class PipelineArtifactSourceStatusTests
         _repo.GetPipelineProjectIdAsync(pipeline, Arg.Any<CancellationToken>()).Returns(ProjectId);
     }
 
-    private Task<(PipelineArtifact? Artifact, string? Error)> ResolveAsync(string? selector = null) =>
+    private Task<(PipelineArtifact? Artifact, PipelineProblem? Error)> ResolveAsync(string? selector = null) =>
         _sut.ResolveArtifactSourceAsync(
             RunId,
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
@@ -87,7 +87,8 @@ public sealed class PipelineArtifactSourceStatusTests
         var (artifact, error) = await ResolveAsync();
 
         Assert.Null(artifact);
-        Assert.Contains("optional producer artifact is unavailable", error, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.ArtifactSourceRunNotSucceeded, error!.Code);
+        Assert.Contains("optional producer artifact is unavailable", error.English, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -98,7 +99,8 @@ public sealed class PipelineArtifactSourceStatusTests
         var (artifact, error) = await ResolveAsync();
 
         Assert.Null(artifact);
-        Assert.Equal("the source run belongs to another source commit.", error);
+        Assert.Equal(PipelineProblemCodes.ArtifactSourceRunOtherCommit, error!.Code);
+        Assert.Equal("the source run belongs to another source commit.", error.English);
     }
 
     [Fact]
@@ -111,7 +113,10 @@ public sealed class PipelineArtifactSourceStatusTests
         var (artifact, error) = await ResolveAsync(PipelineArtifactTaskFactory.LatestSuccessfulSelector);
 
         Assert.Null(artifact);
-        Assert.Contains("never produced by a successful", error, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.ArtifactNeverProduced, error!.Code);
+        Assert.Equal(ArtifactName, error.Parameters["artifact"]);
+        Assert.Equal(SourcePipeline, error.Parameters["pipeline"]);
+        Assert.Contains("never produced by a successful", error.English, StringComparison.Ordinal);
         await _artifacts.DidNotReceive().FindRunArtifactByNameAsync(
             Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -126,6 +131,37 @@ public sealed class PipelineArtifactSourceStatusTests
         var (artifact, error) = await ResolveAsync();
 
         Assert.Null(artifact);
-        Assert.Contains("successful aetheus-ci run", error, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.ArtifactNotFoundAtCommit, error!.Code);
+        Assert.Equal(ArtifactName, error.Parameters["artifact"]);
+        Assert.Equal(SourcePipeline, error.Parameters["pipeline"]);
+        Assert.Equal(Commit, error.Parameters["commit"]);
+        Assert.Contains("successful aetheus-ci run", error.English, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-21: the restore step that finds no artifact stores its run warning as a coded problem whose cause is
+    /// the coded resolution error, so the run page says both in the user's language.</summary>
+    [Fact]
+    public async Task ARestoreThatFindsNoArtifact_StoresTheCodedCauseInTheRunWarning()
+    {
+        _repo.FindTriggeredRunIdByPipelineNameAsync(RunId, SourcePipeline, Arg.Any<CancellationToken>()).Returns((int?)null);
+        _artifacts.FindSuccessfulPipelineArtifactByCommitAsync(
+            ProjectId, SourcePipeline, Commit, ArtifactName, Arg.Any<CancellationToken>()).Returns((PipelineArtifact?)null);
+        IReadOnlyList<string>? warnings = null;
+        await _repo.AppendRunWarningsAsync(
+            RunId, Arg.Do<IReadOnlyList<string>>(value => warnings = value), Arg.Any<CancellationToken>());
+        var stepRun = new PipelineStepRun { Id = 3, StepName = "Restore exact CI artifact manifest" };
+
+        await _sut.CreateRestoreArtifactsTaskAsync(
+            RunId, new Server { Id = 1 }, stepRun,
+            new PipelineStepDefinition { Name = "restore", Artifact = ArtifactName, ArtifactSourcePipeline = SourcePipeline },
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), TestContext.Current.CancellationToken);
+
+        var stored = Assert.Single(warnings!);
+        Assert.True(StoredProblem.TryRead(stored, out var content));
+        Assert.Equal(PipelineProblemCodes.StepFailedRestoreArtifacts, content.Problem.Code);
+        var cause = Assert.Single(content.Inner);
+        Assert.Equal(PipelineProblemCodes.ArtifactNotFoundAtCommit, cause.Code);
+        Assert.Equal(Commit, cause.Parameters["commit"]);
+        Assert.Contains("was not found on a successful aetheus-ci run", content.English, StringComparison.Ordinal);
     }
 }

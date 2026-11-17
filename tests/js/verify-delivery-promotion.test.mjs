@@ -104,6 +104,41 @@ test("refuses a schema that is neither proven state, naming all three", () => {
   assert.match(err, new RegExp(fingerprint(unknown).hash));
 });
 
+// A candidate carrying two migrations: a migrating deploy that committed the first and failed on the
+// second leaves production on AFTER, a state QA itself passed through on the way to NEXT.
+const twoStep = seal({ bootstrap: false, schemaBefore: fingerprint(BEFORE), schemaAfter: fingerprint(NEXT) });
+
+test("accepts production stopped partway through the candidate's own forward migration", () => {
+  const { code, out } = run(twoStep, AFTER);
+  assert.equal(code, 0, out);
+  assert.match(out, /stopped partway through this candidate's own forward migration: 1 of 2 migrations already applied/);
+  assert.match(out, /the migrating deploy applies the remaining 1\./);
+  assert.match(out, /Verified immutable candidate/);
+});
+
+test("refuses a partial history that leaves the candidate's forward path", () => {
+  for (const history of [
+    [...BEFORE, NEXT[3]],
+    [...BEFORE, "20260801000000_NotOnThePath"],
+    BEFORE.slice(0, 1)
+  ]) {
+    const { code, err } = run(twoStep, history);
+    assert.notEqual(code, 0, history.join(","));
+    assert.match(err, /neither state this candidate was proven against/);
+  }
+});
+
+test("refuses a partial history that does not extend the candidate's schemaBefore", () => {
+  const foreign = seal({
+    bootstrap: false,
+    schemaBefore: fingerprint([BEFORE[0], "20260501000000_ForeignBranch"]),
+    schemaAfter: fingerprint(NEXT)
+  });
+  const { code, err } = run(foreign, AFTER);
+  assert.notEqual(code, 0);
+  assert.match(err, /neither state this candidate was proven against/);
+});
+
 test("refuses a non-bootstrap candidate when no production schema is supplied", () => {
   const { code, err } = run(migrating, null);
   assert.notEqual(code, 0);

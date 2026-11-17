@@ -161,6 +161,26 @@ public class ResourceAuthorizationServiceTests
     }
 
     [Fact]
+    public async Task HasPermissionAsync_AgentPool_IsReachedOnlyThroughARoleHeldForItsOrganization()
+    {
+        // R-12: a pool belongs to an organization; a role held for organization 2 reaches pool 4 (of 2), never
+        // pool 5 (of 3).
+        _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("contributor", Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(2, 7, RoleNames.Contributor)]);
+        _permissionRepoMock.GetResourceOrganizationIdAsync(ResourceType.AgentPool, 4, Arg.Any<CancellationToken>()).Returns(2);
+        _permissionRepoMock.GetResourceOrganizationIdAsync(ResourceType.AgentPool, 5, Arg.Any<CancellationToken>()).Returns(3);
+        _permissionRepoMock.HasPermissionAsync(
+            Arg.Any<List<int>>(), ResourceType.AgentPool, Arg.Any<int?>(), Permission.Read,
+            Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await _sut.HasPermissionAsync(
+            CreateUser("contributor"), ResourceType.AgentPool, 4, Permission.Read, ct: TestContext.Current.CancellationToken));
+        Assert.False(await _sut.HasPermissionAsync(
+            CreateUser("contributor"), ResourceType.AgentPool, 5, Permission.Read, ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task HasPermissionAsync_ResourceWithoutOrganization_IsSiteAdminOnly()
     {
         _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([]);
@@ -175,7 +195,7 @@ public class ResourceAuthorizationServiceTests
         Assert.False(await _sut.HasPermissionAsync(
             CreateUser("contributor"), ResourceType.Vault, 3, Permission.Read, ct: TestContext.Current.CancellationToken));
         Assert.False(await _sut.HasPermissionAsync(
-            CreateUser("contributor"), ResourceType.AgentPool, 1, Permission.Read, ct: TestContext.Current.CancellationToken));
+            CreateUser("contributor"), ResourceType.Docker, 1, Permission.Read, ct: TestContext.Current.CancellationToken));
     }
 
     // --- GetAccessibleResourceIdsAsync ---

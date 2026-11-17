@@ -188,8 +188,11 @@ internal sealed partial class DeliveryTemplateVersionReset(
         int organizationId, IEnumerable<string> templateNames, CancellationToken ct)
     {
         var names = templateNames.Select(name => name.ToLower()).ToArray();
+        // An imported external pipeline (ExternalImportCommit set) runs its stored, reviewed copy and is edited
+        // only by a re-import: the reset never rewrites it, neither its database definition nor a Git file.
         return db.Pipelines
-            .Where(pipeline => pipeline.TemplateReferenceName != null
+            .Where(pipeline => pipeline.ExternalImportCommit == null
+                && pipeline.TemplateReferenceName != null
                 && names.Contains(pipeline.TemplateReferenceName.ToLower())
                 && (pipeline.Project != null && pipeline.Project.OrganizationId == organizationId
                     || pipeline.Environment != null && pipeline.Environment.Project != null

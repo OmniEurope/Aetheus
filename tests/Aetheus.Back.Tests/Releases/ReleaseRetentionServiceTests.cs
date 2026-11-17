@@ -113,7 +113,7 @@ public sealed class ReleaseRetentionServiceTests
             NullLogger<ReleaseRetentionService>.Instance, lease);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:release-retention", Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());

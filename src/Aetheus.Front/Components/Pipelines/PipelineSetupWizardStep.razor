@@ -6,13 +6,15 @@
            of the Project step, so it is no longer there once Next went past it. *@
         @StartFrom
         <OmniHeading Level="OmniHeadingLevel.H5">@L["SelectPipelineProject"]</OmniHeading>
-        <OmniFormField Label="@L["Project"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1">
-            <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1" TValue="int?" Options="@(Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
-                            Value="@ProjectId" ValueChanged="@ProjectIdChanged" ValueExpression="@(() => ProjectId)" Class="omni-u-w-100" />
-        </OmniFormField>
-        <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2">
-            <OmniTextBox Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2" Value="@Prefix" ValueChanged="@PrefixChanged" Class="omni-u-w-100"  ValueExpression="@(() => Prefix)"/>
-        </OmniFormField>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniFormField Label="@L["Project"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1">
+                <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1" TValue="int?" Options="@(Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
+                                Value="@ProjectId" ValueChanged="@ProjectIdChanged" ValueExpression="@(() => ProjectId)" Class="omni-u-w-100" />
+            </OmniFormField>
+            <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2">
+                <OmniTextBox Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2" Value="@Prefix" ValueChanged="@PrefixChanged" Class="omni-u-w-100"  ValueExpression="@(() => Prefix)"/>
+            </OmniFormField>
+        </OmniStack>
         @* R-94: the branch every pipeline reads when it runs; develop when the repository has it. *@
         @if (SourceBranch is not null)
         {
@@ -92,48 +94,42 @@ else if (Step == 2)
         @<OmniTooltip Text="@QaNoTestsTip" MaxWidth="OmniTooltipWidth.Wide">
             <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Tone="OmniTone.Warning" Fill="OmniFill.Tonal" data-testid="setup-qa-no-tests">@L["PipelineSetupQaNoTestsBadge"]</OmniBadge>
         </OmniTooltip>;
-    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step">
+    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step pipeline-setup-step--full">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["SelectPipelineCapabilities"]</OmniHeading>
-        @* Only what the type of step 2 proposes (PipelineSetupArchitecture.Proposes). R-3: OE tiles of one grid. *@
-        <OmniTileGrid Columns="4" role="group" aria-label="@L["SelectPipelineCapabilities"]">
-            @if (Proposes("external-security")) { @Option("external-security", OmniIconName.ShieldCheck, L["ExternalSecurityPipeline"], L["ExternalSecurityPipelineHint"], ExternalSecurity, ExternalSecurityChanged) }
-            @if (Proposes("ci")) { @Option("ci", OmniIconName.Wrench, "CI", L["CiPipelineHint"], Ci, CiChanged) }
-            @if (Proposes("quality")) { @Option("quality", OmniIconName.ChartLine, L["Quality"], L["QualityPipelineHint"], Quality, QualityChanged) }
-            @if (Proposes("security")) { @Option("security", OmniIconName.ShieldCheck, L["Security"], L["SecurityPipelineHint"], Security, SecurityChanged) }
-            @if (Proposes("qa")) { @Option("qa", OmniIconName.Flask, "QA", L["QaPipelineHint"], Qa, QaChanged, qaNote) }
-            @if (Proposes("qa-extended")) { @Option("qa-extended", OmniIconName.Gauge, L["QaExtended"], L["QaExtendedPipelineHint"], QaExtended, QaExtendedChanged) }
-            @if (Proposes("security-history")) { @Option("security-history", OmniIconName.Key, L["SecurityHistory"], L["SecurityHistoryPipelineHint"], SecurityHistory, SecurityHistoryChanged) }
-            @if (Proposes("candidate")) { @Option("candidate", OmniIconName.CheckCircle, L["Candidate"], L["CandidatePipelineHint"], Candidate, CandidateChanged) }
-            @if (Proposes("nightly")) { @Option("nightly", OmniIconName.Timer, L["Nightly"], L["NightlyPipelineHint"], Nightly, NightlyChanged) }
-            @if (Proposes("production")) { @Option("production", OmniIconName.RocketLaunch, L["ProductionDeployment"], L["ProductionPipelineHint"], Production, ProductionChanged) }
-            @if (Proposes("fast-deploy")) { @Option("fast-deploy", OmniIconName.Lightning, L["FastDeploy"], L["FastPipelineHint"], FastDeploy, FastDeployChanged) }
-            @if (Proposes("rollback")) { @Option("rollback", OmniIconName.Reset, L["Rollback"], L["RollbackPipelineHint"], Rollback, RollbackChanged) }
-            @if (Proposes("packages")) { @Option("packages", OmniIconName.Package, L["Packages"], L["PackagesPipelineHint"], Packages, PackagesChanged) }
-        </OmniTileGrid>
-        @* R-105: the quality pipeline is written without the steps of a language the project does not use, so none is
-           shown skipped at every run. Pre-ticked from what the repository holds; the user changes them. *@
-        @if (Proposes("quality") && Quality)
+        @* Only what the type of step 2 proposes (PipelineSetupArchitecture.Proposes). R-3: OE tiles of one grid per category.
+           R-15 (user decision 2026-11-09, mockup variant A): every capability lives in a category, the categories are stacked in
+           one order (PipelineSetupCategories), a category with nothing to offer is not drawn. *@
+        @foreach (var category in PipelineSetupCategories.All)
         {
-            <OmniHeading Level="OmniHeadingLevel.H6">@L["PipelineQualityLanguages"]</OmniHeading>
-            <OmniTileGrid Columns="3" role="group" aria-label="@L["PipelineQualityLanguages"]" data-testid="setup-quality-languages">
-                @Option("lang-dotnet", OmniIconName.Code, L["PipelineStackDotNet"], L["PipelineLanguageDotNetHint"], LangDotNet, LangDotNetChanged)
-                @Option("lang-python", OmniIconName.TerminalWindow, "Python", L["PipelineLanguagePythonHint"], LangPython, LangPythonChanged)
-                @Option("lang-java", OmniIconName.Package, "Java", L["PipelineLanguageJavaHint"], LangJava, LangJavaChanged)
-            </OmniTileGrid>
-            @* A language the repository could not be read for is ticked (keeping a producer that finds nothing is harmless,
-               dropping one is a silent loss): the user confirms which to keep. *@
-            @if (LanguagesUncertain)
-            {
-                <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-quality-languages-uncertain">@L["PipelineQualityLanguagesUncertain"]</OmniAlert>
-            }
-        }
-        @* R-72: the candidate starts the deployment pipeline created with it, unless the user unticks it. Offered only
-           when both are created, ticked by default. *@
-        @if (DeployChainOffered)
-        {
-            <OmniTileGrid Columns="3" role="group" aria-label="@L["PipelineSetupDeployChain"]" data-testid="setup-deploy-chain">
-                @Option("deploy-after-candidate", OmniIconName.RocketLaunch, L["PipelineSetupRunDeployAfterCandidate"], L["PipelineSetupRunDeployAfterCandidateHint"], DeployChain, DeployChainChanged)
-            </OmniTileGrid>
+            var tiles = category.Capabilities.Select(key => Tile(key, qaNote)).Where(tile => tile is not null).ToList();
+            if (tiles.Count == 0) continue;
+            <OmniStack Gap="OmniSpacing.Small" data-testid="@($"setup-category-{category.Key}")">
+                <OmniHeading Level="OmniHeadingLevel.H6">@L[category.LabelKey]</OmniHeading>
+                <OmniTileGrid Columns="6" MinColumnWidth="16rem" role="group" aria-label="@L[category.LabelKey]">
+                    @foreach (var tile in tiles)
+                    {
+                        @tile
+                    }
+                </OmniTileGrid>
+                @* R-26: the production strategy is two exclusive tiles, drawn under the grid of the category that holds it. *@
+                @if (StrategyShown(category))
+                {
+                    <PipelineSetupStrategyTile Value="@Strategy" StrategyChanged="@StrategyChanged" Fixed="@StrategyFixed" />
+                }
+                @* R-105: the quality pipeline is written without the steps of a language the project does not use, so none is
+                   shown skipped at every run. Pre-ticked from what the repository holds; the user changes them. *@
+                @if (category.Key == "analysis" && QualityLanguagesShown)
+                {
+                    <OmniHeading Level="OmniHeadingLevel.H6">@L["PipelineQualityLanguages"]</OmniHeading>
+                    <OmniTileGrid Columns="6" MinColumnWidth="16rem" role="group" aria-label="@L["PipelineQualityLanguages"]" data-testid="setup-quality-languages">
+                        @Capability("lang-dotnet", OmniIconName.Code, L["PipelineStackDotNet"], L["PipelineLanguageDotNetHint"], L["PipelineLanguageDotNetHelp"], LangDotNet, LangDotNetChanged)
+                        @Capability("lang-python", OmniIconName.TerminalWindow, "Python", L["PipelineLanguagePythonHint"], L["PipelineLanguagePythonHelp"], LangPython, LangPythonChanged)
+                        @Capability("lang-java", OmniIconName.Package, "Java", L["PipelineLanguageJavaHint"], L["PipelineLanguageJavaHelp"], LangJava, LangJavaChanged)
+                    </OmniTileGrid>
+                    @* R-17: a language the repository could not be read for is ticked (keeping a producer that finds nothing is
+                       harmless, dropping one is a silent loss); that is said as plain information in the summary, not here. *@
+                }
+            </OmniStack>
         }
         @* R-10 to R-13: a selected pipeline whose default commands cannot work on this branch fails at its
            first run; it is blocking for that run, so it is the one alert of the step. *@
@@ -159,7 +155,12 @@ else
         {
             <PipelineSetupRecap ProjectId="@projectId" ProjectName="@ProjectName" ArchitectureSummary="@ArchitectureSummary"
                                 SummaryItems="@SummaryItems" Readiness="@Readiness" ReadinessLoading="@ReadinessLoading"
-                                ReturnUrl="@ReturnUrl" OnReadinessChanged="@OnReadinessChanged" ProductionSetup="@ProductionSetup" />
+                                ReturnUrl="@ReturnUrl" OnReadinessChanged="@OnReadinessChanged" ProductionSetup="@ProductionSetup" FirstPush="@FirstPush"
+                                ReadinessTemplateNames="@ReadinessTemplateNames" ExternalDeployBlocked="@ExternalDeployBlocked" ExternalApplication="@ExternalApplication"
+                                ApprovalOffered="@DeployApprovalOffered" ApprovalAsked="@DeployApproval"
+                                TelemetryOffered="@TelemetryOffered" TelemetryChosen="@Telemetry"
+                                AudienceOffered="@AudienceOffered" AudienceChosen="@Audience"
+                                QualityLanguagesUncertain="@QualityLanguagesUncertain" />
         }
     </div>
 }

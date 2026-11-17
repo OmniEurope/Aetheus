@@ -34,6 +34,8 @@ public partial class ReleaseDetail : IAsyncDisposable
     private List<string> _linkedCommitMessages = [];
 
     /// <summary>R-31: copies the release's full name, shown in the Source tile.</summary>
+    private string PageTitleText => _release is null ? L["Release"].Value : ReleaseHelper.ShortVersion(_release.Version);
+
     private Task CopyVersionAsync() => Clipboard.CopyAsync(_release!.Version, _release.Version);
 
     /// <summary>R-31: copies the release's tag, shown in the Source tile.</summary>
@@ -195,7 +197,7 @@ public partial class ReleaseDetail : IAsyncDisposable
             }, new OmniDialogOptions { Width = "520px", AutoFocusFirstElement = false });
         if (request is not RollbackReleaseRequest rollbackRequest) return;
         if (await Api.Projects.RollbackReleaseAsync(_release.Id, rollbackRequest) is not null)
-            Toast.Success("RollbackQueued", _release.Version);
+            Toast.Success("RollbackQueued", ReleaseHelper.ShortVersion(_release.Version));
     }
 
     /// <summary>Recette R-13: the backend asks release.status.restore (R-11) and Project.Admin; an archived release only
@@ -218,7 +220,7 @@ public partial class ReleaseDetail : IAsyncDisposable
         if (outcome.Value is { } restored)
         {
             _release = restored;
-            Toast.Success("ReleaseStatusRestored", restored.Version);
+            Toast.Success("ReleaseStatusRestored", ReleaseHelper.ShortVersion(restored.Version));
             return;
         }
         Toast.ErrorRaw(L["ReleaseStatusRestoreFailed"].Value, outcome.Error?.Message ?? string.Empty);

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Aetheus.Back.Components.PackageRegistry;
@@ -14,14 +15,30 @@ internal static class PackageRegistryPolicies
 {
     public const string Read = "PackageRegistryRead";
 
+    /// <summary>The NuGet and npm publications: an administrator, as before, or a pipeline run's registry
+    /// credential (<see cref="PackageRunTokens"/>), which the services then restrict to the observability
+    /// packages. Unlist, relist, Maven deployment and administration stay administrator-only.</summary>
+    public const string Publish = "PackageRegistryPublish";
+
     public static IServiceCollection AddPackageRegistryReadPolicy(this IServiceCollection services)
     {
         services.AddScoped<IAuthorizationHandler, PackageRegistryReadHandler>();
-        services.Configure<AuthorizationOptions>(options => options.AddPolicy(Read, policy => policy
-            .AddAuthenticationSchemes(PackageRegistryAuthenticationHandler.SchemeName)
-            .AddRequirements(new PackageRegistryReadRequirement())));
+        services.Configure<AuthorizationOptions>(options =>
+        {
+            options.AddPolicy(Read, policy => policy
+                .AddAuthenticationSchemes(PackageRegistryAuthenticationHandler.SchemeName)
+                .AddRequirements(new PackageRegistryReadRequirement()));
+            options.AddPolicy(Publish, policy => policy
+                .AddAuthenticationSchemes(PackageRegistryAuthenticationHandler.SchemeName)
+                .RequireAuthenticatedUser()
+                .RequireAssertion(context => context.User.IsInRole("Admin") || IsPipelineRun(context.User)));
+        });
         return services;
     }
+
+    /// <summary>Whether the caller authenticated with a pipeline run's registry credential.</summary>
+    public static bool IsPipelineRun(ClaimsPrincipal user) =>
+        user.HasClaim(claim => claim.Type == PackageRunTokens.RunClaim);
 }
 
 /// <summary>Marks a read action whose package may be served without credentials when the package

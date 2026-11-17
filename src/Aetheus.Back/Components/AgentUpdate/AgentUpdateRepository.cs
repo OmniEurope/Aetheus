@@ -3,6 +3,8 @@ using System.Data;
 using System.Text.Json;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace Aetheus.Back.Components.AgentUpdate;
 
@@ -10,6 +12,7 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
     : IAgentUpdateRepository
 {
     private const int UpdateTimeoutSeconds = 600;
+    private const int MaxQueueAttempts = 4;
     // Reads the server data owned by agent-update workflows locally to avoid a dependency cycle
     // with Servers (ADR-039).
 
@@ -152,17 +155,96 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
         return (request, true);
     }
 
+    /// <summary>
+    /// Queues the exclusive self-update task of a request once no assigned or running work blocks it.
+    /// Serializable, so that two callers racing on the same request cannot both create the task. The
+    /// loser of that race is rejected by PostgreSQL with SQLSTATE 40001 on its first write; the whole
+    /// unit is then run again against the committed state, where the request already carries its task
+    /// and the call is a no-op. Several callers can contend (the coordinator, a user request, another
+    /// replica), so the retry is bounded rather than endless.
+    /// </summary>
     public async Task<(AgentUpdateRequest Request, ServerTask? CreatedTask, int BlockingTaskCount)> TryQueueAsync(
+        int requestId,
+        CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await TryQueueOnceAsync(requestId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (attempt < MaxQueueAttempts && IsSerializationFailure(ex))
+            {
+                // The failed attempt is rolled back and its tracked entities already restored.
+            }
+        }
+    }
+
+    private async Task<(AgentUpdateRequest Request, ServerTask? CreatedTask, int BlockingTaskCount)> TryQueueOnceAsync(
         int requestId,
         CancellationToken ct)
     {
         await using var transaction = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct).ConfigureAwait(false)
             : null;
+        var attempt = new QueueAttempt();
+        try
+        {
+            return await QueueInTransactionAsync(requestId, transaction, attempt, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsSerializationFailure(ex))
+        {
+            if (transaction is not null)
+                await transaction.RollbackAsync(ct).ConfigureAwait(false);
+            await RestoreCommittedStateAsync(attempt, ct).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>What one queueing attempt loaded or created, to restore if PostgreSQL rejects it.</summary>
+    private sealed class QueueAttempt
+    {
+        public AgentUpdateRequest? Request { get; set; }
+        public ServerTask? Task { get; set; }
+    }
+
+    /// <summary>
+    /// A failed attempt leaves the context tracking what it read and wrote inside the rolled-back
+    /// transaction: a request already marked Queued and a task that never existed. The caller's own
+    /// entities (the request and its server may be the instances it holds) are reloaded in place rather
+    /// than detached, and the phantom task is detached, so the next attempt starts from the database.
+    /// </summary>
+    private async Task RestoreCommittedStateAsync(QueueAttempt attempt, CancellationToken ct)
+    {
+        if (attempt.Task is not null)
+            db.Entry(attempt.Task).State = EntityState.Detached;
+        if (attempt.Request is not { } request) return;
+        await db.Entry(request).ReloadAsync(ct).ConfigureAwait(false);
+        if (request.Server is not null)
+            await db.Entry(request.Server).ReloadAsync(ct).ConfigureAwait(false);
+    }
+
+    private static bool IsSerializationFailure(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException!)
+        {
+            if (current is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure })
+                return true;
+        }
+        return false;
+    }
+
+    private async Task<(AgentUpdateRequest Request, ServerTask? CreatedTask, int BlockingTaskCount)> QueueInTransactionAsync(
+        int requestId,
+        IDbContextTransaction? transaction,
+        QueueAttempt attempt,
+        CancellationToken ct)
+    {
         var request = await db.AgentUpdateRequests
             .Include(item => item.Server)
             .FirstAsync(item => item.Id == requestId, ct)
             .ConfigureAwait(false);
+        attempt.Request = request;
         if (!request.IsActive || request.TaskId is not null)
         {
             if (transaction is not null)
@@ -201,6 +283,7 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
             EnvironmentVariables = JsonSerializer.Serialize(BuildTaskEnvironment(request)),
             CreatedAt = timeProvider.GetUtcNow().UtcDateTime
         };
+        attempt.Task = task;
         db.Tasks.Add(task);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         request.TaskId = task.Id;

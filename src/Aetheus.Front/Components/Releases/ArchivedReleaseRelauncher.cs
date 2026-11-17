@@ -30,7 +30,7 @@ internal sealed class ArchivedReleaseRelauncher(
         var run = await api.Projects.RelaunchReleaseFromCommitAsync(
             release.Id, new TriggerReleaseBuildRequest { PipelineId = pipelineId });
         if (run is null) return false;
-        toast.Success("RelaunchFromCommit", "RelaunchTriggered", release.Version);
+        toast.Success("RelaunchFromCommit", "RelaunchTriggered", ReleaseHelper.ShortVersion(release.Version));
         navigation.NavigateTo($"/pipelines/runs/{run.Id}");
         return true;
     }

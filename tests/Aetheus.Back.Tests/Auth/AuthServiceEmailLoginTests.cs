@@ -35,7 +35,7 @@ public sealed class AuthServiceEmailLoginTests
             .Build();
         _repo.AnyUsersExistAsync(Arg.Any<CancellationToken>()).Returns(true);
         _sut = new AuthService(
-            _repo, config, _audit, new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
+            _repo, config, _audit, new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }),
             Substitute.For<IMemoryCache>(), Substitute.For<IOrganizationService>(), Substitute.For<ITotpService>(),
             TimeProvider.System, Substitute.For<IHttpContextAccessor>(),
             Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),

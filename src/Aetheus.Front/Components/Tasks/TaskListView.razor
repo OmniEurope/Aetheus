@@ -17,10 +17,10 @@
     VirtualData="@(() => new OmniDataGridResult<ServerTaskDto>(_tasks, _totalCount))"
     RowClick="@OpenTask">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="ServerTaskDto" Property="Id" Title="#" Width="80px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+        <OmniDataGridColumn Frozen="true" TItem="ServerTaskDto" Property="Number" Title="#" Width="80px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
             <Template Context="task">
                 <a href="@($"/tasks/{task.Id}")" class="pipeline-name-link"
-                    @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@task.Id</a>
+                    @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@task.DisplayNumber</a>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServerTaskDto" Property="Name" Title="@L["Name"]" Filterable="true" />
@@ -34,7 +34,7 @@
             <Template Context="task">
                 @if (task.PipelineRunId is { } pipelineRunId)
                 {
-                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/pipelines/runs/{pipelineRunId}")">@($"{L["PipelineRun"]} #{pipelineRunId}")</OmniLink></span>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/pipelines/runs/{pipelineRunId}")">@PipelineRunPresentation.Label(L["PipelineRun"].Value, task.PipelineRunNumber)</OmniLink></span>
                 }
                 else
                 {

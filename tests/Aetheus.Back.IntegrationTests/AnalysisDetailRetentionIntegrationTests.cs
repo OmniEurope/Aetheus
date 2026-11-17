@@ -10,7 +10,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>On PostgreSQL, expired report detail is purged while totals, grades, current reports
 /// and artifact-retained release evidence remain. Release retention resolves by run or commit when
 /// the run is absent.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AnalysisDetailRetentionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime Now = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);

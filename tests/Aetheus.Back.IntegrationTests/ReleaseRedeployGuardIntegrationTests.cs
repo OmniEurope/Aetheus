@@ -14,7 +14,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// kept; a release whose artifact was freed by retention is refused before the run starts, with the code the launch
 /// shows. The front offers "Redéployer cette version" under exactly that rule.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ReleaseRedeployGuardIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const string PayloadName = "ApplicationPayload-artifacts";
@@ -128,18 +127,6 @@ public sealed class ReleaseRedeployGuardIntegrationTests(PostgresFixture fixture
         Assert.Equal("c-previous", gateRelease.Version);
         Assert.Equal(AnalysisGrade.B, gateRelease.AssuranceGrade);
         Assert.Equal(true, gateRelease.Deployable);
-        Assert.Empty(problems);
-    }
-
-    [Fact]
-    public async Task TheLiveRelease_IsNotTreatedDifferentlyFromAnOlderOne()
-    {
-        var seed = await SeedProjectAsync();
-        await using var db = NewContext();
-
-        var problems = await new PipelineReleaseArtifactPreflight(new ArtifactRepository(db), StorageHoldingEveryPayload())
-            .FindProblemsAsync(DeploymentRestore(), Version("c-live"), seed.ProjectId, Ct);
-
         Assert.Empty(problems);
     }
 

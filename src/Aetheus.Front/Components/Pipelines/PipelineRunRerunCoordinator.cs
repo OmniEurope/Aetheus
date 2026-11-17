@@ -44,7 +44,7 @@ internal sealed class PipelineRunRerunCoordinator(
             }
             var details = string.Join("\n", preview.Items.Select(checkpoint =>
                 checkpoint.ReuseCandidate
-                    ? $"• {checkpoint.PipelineName}: run #{checkpoint.RunId} - {localizer["CheckpointWillBeRevalidated"]}"
+                    ? $"• {checkpoint.PipelineName}: run #{checkpoint.RunNumber} - {localizer["CheckpointWillBeRevalidated"]}"
                     : $"• {checkpoint.PipelineName}: {localizer["CheckpointWillReplay"]}"));
             var confirmed = await dialog.Confirm(
                 details,

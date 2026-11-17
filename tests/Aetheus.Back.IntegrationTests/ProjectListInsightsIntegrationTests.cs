@@ -9,11 +9,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class ProjectListInsightsIntegrationTests(PostgresFixture fixture)
+public sealed class ProjectListInsightsIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
-    public async Task ProjectListInsights_UsesAtMostFourBoundedPostgresCommands()
+    public async Task ProjectListInsights_UsesAtMostFiveBoundedPostgresCommands()
     {
         await fixture.ResetAsync();
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -112,7 +111,9 @@ public sealed class ProjectListInsightsIntegrationTests(PostgresFixture fixture)
         // command.
         Assert.True(insight.LastRunIsActive);
         Assert.Equal("orchestrate · child", insight.LastRunCurrentStep);
-        Assert.InRange(counter.Count, 1, 4);
+        // Five set-based commands, one per kind over all the project ids: latest commits, root runs, deployed releases
+        // (added with the deployed-release grade, 92fabc9fe, R-12/R-20), analysis evaluations, production apps.
+        Assert.InRange(counter.Count, 1, 5);
     }
 
     private sealed class CommandCounter : DbCommandInterceptor

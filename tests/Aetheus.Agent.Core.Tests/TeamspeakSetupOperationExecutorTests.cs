@@ -48,6 +48,9 @@ public class TeamspeakSetupOperationExecutorTests
     [Theory]
     [InlineData("/opt/../etc/teamspeak")]   // parent traversal
     [InlineData("/opt/teamspeak/..")]        // trailing traversal
+    [InlineData("/etc")]                     // DEPLOY-001: a system directory root would chown
+    [InlineData("/usr")]
+    [InlineData("/home/teamspeak")]          // outside the dedicated /opt/teamspeak* prefix
     public async Task ExecuteAsync_PathTraversal_ReturnsFailureWithoutSpawning(string path)
     {
         // S-TECH-TSPR: the install-path regex must reject any ".." segment so the helper cannot be

@@ -57,4 +57,12 @@ public interface IPortRegistryRepository
     void RemoveReservation(ServerPortReservation reservation);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// BACK-008: runs one claim (read the holders, then write) under a PostgreSQL transaction advisory lock on
+    /// the server, so two claims of different sources on that server cannot both read a free port and both
+    /// write it. Joins an ambient transaction instead of opening a nested one; the lock is released when the
+    /// transaction ends. The InMemory provider has no locks and runs the claim directly.
+    /// </summary>
+    Task<T> RunUnderServerClaimLockAsync<T>(int serverId, Func<Task<T>> claim, CancellationToken ct = default);
 }

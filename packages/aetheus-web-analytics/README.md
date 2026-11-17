@@ -25,7 +25,7 @@ must return the framework's route template instead of the concrete path, for exa
 neither mechanism resolves the current pathname. The identity resolver shown above is appropriate only
 when every non-numeric path segment is guaranteed to be public static navigation text.
 
-A background heartbeat (every 75s, paused while the tab is hidden) refreshes the visit's server-side
+A background heartbeat (every 75s, paused while the tab is hidden, and sent at once when a hidden tab becomes visible again unless a beat left in the last 10s) refreshes the visit's server-side
 `LastSeenAtUtc` on the current route without inflating page-view counts. Call `identify(userId)` with an
 opaque id already known to the host application (never an email or other raw PII) to mark subsequent
 events as authenticated; the backend hashes it server-side into `AuthenticatedPseudonym` and never stores
@@ -46,5 +46,5 @@ sending any account or token. Such a visit is counted per network prefix and per
 stable identity.
 
 The same source is packaged by the Razor Class Library at
-`/_content/Aetheus.WebAnalytics/<package version>/aetheus-web-analytics.js` (for example `1.1.1`). Pin the exact version and its SHA-384 SRI
+`/_content/Aetheus.WebAnalytics/<package version>/aetheus-web-analytics.js` (for example `1.3.1`). Pin the exact version and its SHA-384 SRI
 value; do not use an unversioned mutable URL.

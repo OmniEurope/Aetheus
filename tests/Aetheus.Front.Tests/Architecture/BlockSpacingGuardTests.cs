@@ -86,6 +86,7 @@ public sealed class BlockSpacingGuardTests
         "PipelineReadinessCheckBody.razor",
         "PipelineReadinessChecks.razor",
         "PipelineReadinessEmptyValues.razor",
+        "PipelineReadinessUndefinedVariables.razor",
         "PipelineRunBlockingTests.razor",
         "PipelineRunCoverageFiles.razor",
         "PipelineRunGateFindings.razor",

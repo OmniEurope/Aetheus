@@ -73,6 +73,9 @@ public sealed class PipelineStepTaskDispatcher(
     {
         /// <summary>Set when the stage is refused; nothing more is dispatched for it.</summary>
         public StageDispatchRefusal? Refusal { get; set; }
+
+        /// <summary>The project of the run's pipeline: the scope of a run-minted registry credential.</summary>
+        public int? ProjectId { get; init; }
         public PipelineRun? ReleaseRun { get; set; }
         public int? ReleaseProjectId { get; set; }
         public string? ReleasePattern { get; set; }
@@ -92,7 +95,7 @@ public sealed class PipelineStepTaskDispatcher(
             runId, resolvedVars, stageDef, stageIsContainer, ct).ConfigureAwait(false);
         var stepsByLeg = stageSteps.GroupBy(s => s.MatrixLeg ?? string.Empty);
         var matrixLegs = ExpandMatrix(stageDef.Matrix);
-        var creationState = new StageTaskCreationState();
+        var creationState = new StageTaskCreationState { ProjectId = projectId };
         foreach (var legGroup in stepsByLeg)
         {
             var legVars = ResolveLegVariables(stageVars, legGroup.Key, matrixLegs);
@@ -293,8 +296,9 @@ public sealed class PipelineStepTaskDispatcher(
                     runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer, ct)
                     .ConfigureAwait(false);
             case "publish-observability":
-                analysisTasks.CreateObservabilityTask(runId, legServer, stepRun, stepDef, legVars, secretKeys);
-                return StepDispatchResult.Handled;
+                return RefuseOnFactoryError(stepRun, await analysisTasks.CreateObservabilityTaskAsync(
+                    runId, legServer, stepRun, stepDef, legVars, secretKeys, creationState.ProjectId, ct)
+                    .ConfigureAwait(false), creationState);
             case "coverage":
                 analysisTasks.CreateCoverageTask(runId, legServer, stepRun, stepDef, legVars, stageDef);
                 return StepDispatchResult.Handled;
@@ -415,6 +419,14 @@ public sealed class PipelineStepTaskDispatcher(
         PipelineStageDefinition stageDef, bool stageIsContainer, HashSet<string> secretKeys,
         StageTaskCreationState creationState, CancellationToken ct)
     {
+        // R-39: a step that only declares `checkout: true` has no command; the run preparation already cloned the
+        // exact revision. No task is created for it: it finishes as a skipped success naming that, never as a
+        // green step that ran nothing.
+        if (IsCheckoutOnlyStep(stepDef))
+        {
+            MarkCheckoutDoneByPreparation(stepRun, legServer.Id, timeProvider.GetUtcNow().UtcDateTime);
+            return StepDispatchResult.Handled;
+        }
         // The versioned environment sample is rendered here, on the control plane, and handed to this step
         // alone; a sample that cannot be rendered fails the run with the reason (ADR-057).
         if (!string.IsNullOrWhiteSpace(stepDef.EnvTemplate))
@@ -502,7 +514,7 @@ public sealed class PipelineStepTaskDispatcher(
                 var now = timeProvider.GetUtcNow().UtcDateTime;
                 stepRun.ServerId = legServer.Id;
                 MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError,
-                    error ?? "The release artifact could not be resolved.", now);
+                    error?.English ?? "The release artifact could not be resolved.", now);
                 await repo.AppendRunWarningsAsync(
                     runId, [PipelineStepFailureWarning.Release(stepRun.StepName, error)], ct).ConfigureAwait(false);
                 return;

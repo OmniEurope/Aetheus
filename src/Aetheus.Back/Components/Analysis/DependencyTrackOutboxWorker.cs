@@ -14,24 +14,15 @@ public sealed class DependencyTrackOutboxWorker(
     IOptions<DependencyTrackOptions> options,
     TimeProvider timeProvider,
     ILogger<DependencyTrackOutboxWorker> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:dependency-track-outbox")
 {
     private const long MaximumPayloadBytes = 104_857_600;
     private readonly DependencyTrackOptions _options = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (!_options.Enabled) return;
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync(
-                "aetheus:dependency-track-outbox",
-                RunLeaderLoopAsync,
-                stoppingToken).ConfigureAwait(false);
-    }
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        _options.Enabled ? base.ExecuteAsync(stoppingToken) : Task.CompletedTask;
 
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(
             TimeSpan.FromSeconds(Math.Clamp(_options.OutboxPollSeconds, 5, 300)),

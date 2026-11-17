@@ -9,6 +9,12 @@ public static class ServersModuleExtensions
     public static IServiceCollection AddServersModule(this IServiceCollection services)
     {
         services.AddScoped<IServerRepository, ServerRepository>();
+        // Recette R-8: the daily reboots Aetheus schedules and the agents execute.
+        services.AddScoped<IServerRebootRepository, ServerRebootRepository>();
+        services.AddScoped<IServerRebootScheduleService, ServerRebootScheduleService>();
+        services.AddScoped<ServerRebootScheduler>();
+        services.AddScoped<IServerRebootPlanSource, ServerRebootPlanSource>();
+        services.AddHostedService<ServerRebootSchedulerService>();
         // Same scope as IServerRepository on purpose: both resolve the SAME AppDbContext, which is
         // what keeps one heartbeat one transaction after the split.
         services.AddScoped<IServerHeartbeatRepository, ServerHeartbeatRepository>();

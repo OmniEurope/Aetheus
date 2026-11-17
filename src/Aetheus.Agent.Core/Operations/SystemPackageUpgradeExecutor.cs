@@ -8,18 +8,23 @@ namespace Aetheus.Agent.Core.Operations;
 /// <summary>
 /// ADR-024 4.1: applies pending OS updates via the controlled-sudo recipe. Two modes ride in
 /// <see cref="PatchingConstants.DryRunEnvVar"/>. In BOTH modes the executor first runs the non-mutating
-/// <c>apt-get -s upgrade</c> simulation and reports exactly what would change; it then ABORTS honestly
+/// <c>apt-get -s upgrade --with-new-pkgs</c> simulation and reports exactly what would change; it then ABORTS honestly
 /// (exit 1, real log) if any <see cref="CriticalPackages"/> - or a per-server override - would be
 /// upgraded. Only when nothing is blocked (and not a dry-run) does it apply via
-/// <c>sudo -n /usr/bin/apt-get upgrade -y</c> against the argv-exact <c>aetheus-patch</c> drop-in.
+/// <c>sudo -n /usr/bin/apt-get upgrade --with-new-pkgs -y</c> against the argv-exact <c>aetheus-patch</c> drop-in.
 /// Never a fake success: a blocked or failed run is red with the real output.
 /// </summary>
 public sealed class SystemPackageUpgradeExecutor(
     IOptions<AetheusAgentOptions> options,
     IShellRunner shell,
-    ILogger<SystemPackageUpgradeExecutor> logger) : EnvironmentOperationExecutor
+    ILogger<SystemPackageUpgradeExecutor> logger,
+    Func<string, bool>? fileExists = null) : EnvironmentOperationExecutor
 {
+    /// <summary>Where Debian and Ubuntu record that an installed package (a kernel, libc, ...) needs a restart.</summary>
+    internal const string RebootRequiredPath = "/var/run/reboot-required";
+
     private readonly AetheusAgentOptions _options = options.Value;
+    private readonly Func<string, bool> _fileExists = fileExists ?? File.Exists;
 
     public override bool CanHandle(OperationKind kind) => kind == OperationKind.SystemPackageUpgrade;
 
@@ -51,7 +56,7 @@ public sealed class SystemPackageUpgradeExecutor(
         try
         {
             // 1) Non-mutating simulation (no sudo). Capture stdout so we can parse + gate on it.
-            var sim = await shell.RunExecAsync("apt-get", ["-s", "upgrade"], cancellationToken).ConfigureAwait(false);
+            var sim = await shell.RunExecAsync("apt-get", BuildAptSimulateArgv(), cancellationToken).ConfigureAwait(false);
             if (sim.ExitCode != 0)
             {
                 await onOutput("apt-get simulation failed; aborting (no changes made)", TaskLogLevel.Error).ConfigureAwait(false);
@@ -86,8 +91,11 @@ public sealed class SystemPackageUpgradeExecutor(
             }
 
             // 3) Apply via controlled-sudo (argv-exact against the aetheus-patch drop-in).
-            return await AptProcessRunner.RunSudoAsync(
+            var applied = await AptProcessRunner.RunSudoAsync(
                 BuildAptUpgradeArgv(), timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+            if (applied.ExitCode == 0)
+                await ReportRebootRequiredAsync(onOutput).ConfigureAwait(false);
+            return applied;
         }
         finally
         {
@@ -104,7 +112,20 @@ public sealed class SystemPackageUpgradeExecutor(
             await onOutput($"  {p.Package} {p.CurrentVersion} -> {p.CandidateVersion}{(p.IsSecurity ? " [security]" : "")}", TaskLogLevel.Info).ConfigureAwait(false);
     }
 
-    // `sudo -n /usr/bin/apt-get upgrade -y` - argv-exact, matches the aetheus-patch allow-list one-to-one.
+    /// <summary>After a successful upgrade, says in the task log whether the system must restart (a new kernel is installed
+    /// but only runs after a reboot). Read from the file apt's hooks write, never guessed.</summary>
+    internal async Task ReportRebootRequiredAsync(Func<string, TaskLogLevel, Task> onOutput)
+    {
+        if (_fileExists(RebootRequiredPath))
+            await onOutput($"Restart needed: the upgrade installed packages that only take effect after a reboot ({RebootRequiredPath} exists).", TaskLogLevel.Warning).ConfigureAwait(false);
+    }
+
+    // `apt-get -s upgrade --with-new-pkgs` - the unprivileged simulation. `--with-new-pkgs` lets apt install NEW packages
+    // an upgrade depends on (a kernel ABI bump is a new linux-image package; plain `upgrade` keeps linux-generic back) and
+    // never removes a package.
+    internal static IReadOnlyList<string> BuildAptSimulateArgv() => SecurityUpdatesCollector.BuildAptSimulateArgv();
+
+    // `sudo -n /usr/bin/apt-get upgrade --with-new-pkgs -y` - argv-exact, matches the aetheus-patch allow-list one-to-one.
     internal static IReadOnlyList<string> BuildAptUpgradeArgv() =>
-        ["-n", "/usr/bin/apt-get", "upgrade", "-y"];
+        ["-n", "/usr/bin/apt-get", "upgrade", "--with-new-pkgs", "-y"];
 }

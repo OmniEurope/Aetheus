@@ -51,7 +51,7 @@ public interface IPipelineRunService
     /// for rendering the run dialog. Empty list when the pipeline declares no <c>parameters:</c>.</summary>
     Task<List<PipelineRunParameterDto>> GetRunParametersAsync(int pipelineId, string? sourceBranch = null, CancellationToken ct = default);
     Task<PaginatedResult<PipelineRunDto>> GetRunsAsync(int pipelineId, PipelineRunPaginationRequest request, CancellationToken ct = default);
-    Task<List<PipelineRunDto>> GetActiveRunsAsync(List<int>? accessiblePipelineIds = null, int? projectId = null, CancellationToken ct = default);
+    Task<List<PipelineRunDto>> GetActiveRunsAsync(List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null, CancellationToken ct = default);
     Task<List<PipelineRunDto>> GetRecentRunsAsync(List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null, CancellationToken ct = default);
     Task<PipelineRunDto?> GetRunAsync(int runId, CancellationToken ct = default);
 
@@ -100,11 +100,13 @@ public interface IPipelineRunService
     /// <summary>
     /// Records a refused automated launch as a failed run carrying the reason. For a caller whose own
     /// transaction rolled back the record the launcher made; does nothing for an unknown pipeline.
+    /// <paramref name="notifySubscribers"/> is false when the caller tells the subscribers itself (an on_success
+    /// follow-up, whose notification opens the upstream run) or when someone is in front of the refusal.
     /// </summary>
     Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
         IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
-        IReadOnlyList<ProblemDto>? problems = null);
+        IReadOnlyList<ProblemDto>? problems = null, bool notifySubscribers = true);
 
     /// <summary>Resolves and authorizes an automated run without persisting it. Callers that
     /// coordinate replacement must complete this phase before cancelling an existing run. A refused
@@ -141,6 +143,10 @@ public interface IPipelineRunService
     /// <summary>Re-evaluates an active run from persisted step state without requiring a new task
     /// completion callback. Used by the scheduler self-heal after a lost advancement signal.</summary>
     Task ReconcileRunAsync(int pipelineRunId, CancellationToken ct = default);
+
+    /// <summary>R-12: an agent reported that a cancelled task of the run has stopped; dispatches the
+    /// cleanup and the always() stages the scheduler held back while it was still dying.</summary>
+    Task ContinueAfterCancelledTaskStoppedAsync(int pipelineRunId, CancellationToken ct = default);
 
     /// <summary>Cancellation records the actor and reason named by <paramref name="cancellation"/>
     /// on the run and its triggered children.</summary>

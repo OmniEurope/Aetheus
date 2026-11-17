@@ -4,11 +4,13 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Front.Tests.Architecture;
 
 /// <summary>
-/// R-116 (rule 10 of the all-pages audit): a long ACTION (a refresh, a fetch, a verification, an apply...) shows OE's
-/// busy veil over its zone (<c>omni-busy</c> + <c>aria-busy</c>), the content of the zone stays mounted underneath. It
+/// R-116 (rule 10 of the all-pages audit): a long ACTION (a refresh, a fetch, a verification, an apply...) shows the one
+/// page veil (R-1: <c>VeilHold</c>, drawn by OE's OmniPageVeil), the content of the zone stays mounted underneath. It
 /// never adds a loader beside the content and never replaces the content by one. The first load of a page or panel,
-/// while nothing exists yet, keeps <c>AetheusLoader</c> (decision D11, see <see cref="LoadingIndicatorAuditTests"/>).
-/// The guard reads every <c>.razor</c> file: an <c>AetheusLoader</c>, or a progress bar without a value, rendered under a
+/// while nothing exists yet, is veiled by the level of <see cref="LoadingLevelGuardTests"/> (R-36: a page by
+/// <c>VeilHold</c>, a component by <c>ZoneVeil</c>; decision D11 in <see cref="LoadingIndicatorAuditTests"/> kept
+/// <c>AetheusLoader</c> for it before).
+/// The guard reads every <c>.razor</c> file: an <c>AetheusLoader</c>, a <c>ZoneVeil</c> (the veil of a first load, not of an action), or a progress bar without a value, rendered under a
 /// condition that names an action flag (<c>_running</c>, <c>_saving</c>, <c>_fetching</c>, <c>_verifying</c>,
 /// <c>_pendingTaskId</c>...) is refused, unless the same condition also tests that nothing exists yet
 /// (<c>x is null</c>, <c>Count == 0</c>, <c>string.IsNullOrEmpty(x)</c>: a first load), or the place is listed in
@@ -37,7 +39,7 @@ public sealed class ActionLoaderVeilGuardTests
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex Loader = new(
-        @"<AetheusLoader\b|<OmniProgressBar\b(?:(?:""[^""]*"")|[^>])*?/>",
+        @"<AetheusLoader\b|<ZoneVeil\b|<OmniProgressBar\b(?:(?:""[^""]*"")|[^>])*?/>",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>A loader under an action flag that is deliberately kept, with the reason. A stale entry fails.</summary>
@@ -79,7 +81,7 @@ public sealed class ActionLoaderVeilGuardTests
         var stale = Allowed.Keys.Where(key => !used.Contains(key)).ToList();
         Assert.True(stale.Count == 0, "These allowed loaders no longer exist, remove them:\n  " + string.Join("\n  ", stale));
         Assert.True(violations.Count == 0,
-            "R-116: a long action veils its zone (class omni-busy and aria-busy on the zone, content kept mounted underneath); "
+            "R-116: a long action holds the page veil (VeilHold, content kept mounted underneath); "
             + "a loader is only for the first load, where nothing exists yet:\n  " + string.Join("\n  ", violations));
     }
 

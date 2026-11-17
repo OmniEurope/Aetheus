@@ -15,6 +15,11 @@ public abstract class E2ETestBase : BrowserTest
     private int _fixtureContextsOpened;
     private int _testsOnFixtureContext;
 
+    /// <summary>Every browser of the suite is launched here, so every test gets a secure context on the front
+    /// (see <see cref="PlaywrightConfig.WithSecureFrontendOrigin"/>).</summary>
+    public override async Task<BrowserTypeLaunchOptions?> LaunchOptionsAsync() =>
+        PlaywrightConfig.WithSecureFrontendOrigin(await base.LaunchOptionsAsync(), PlaywrightConfig.FrontendUrl);
+
     // All harness configuration (URLs, admin creds, timeouts, readiness hook) lives in
     // PlaywrightConfig - each value env-overridable with the historical default. These
     // thin accessors keep the existing test call sites (FrontendUrl, AdminUser, …) intact.
@@ -115,7 +120,15 @@ public abstract class E2ETestBase : BrowserTest
             }
         };
         Page.PageError += (_, exception) => _browserDiagnostics.Add($"page error: {exception}");
+        _requestTrail = new PageRequestTrail(Page);
     }
+
+    private PageRequestTrail? _requestTrail;
+
+    /// <summary>The page's network at this moment: requests still pending (with their age), failed ones and the
+    /// slowest finished ones. Put it in the message of a wait that timed out, so a slow or hung read shows up in
+    /// the failure instead of being guessed at.</summary>
+    protected string DescribeRequestTrail() => _requestTrail?.Describe() ?? "no request trail";
 
     private bool UsesFixtureContext =>
         ShareBrowserContextAcrossTests && !IsolatedBrowserContextAttribute.AppliesToCurrentTest();
@@ -340,10 +353,11 @@ public abstract class E2ETestBase : BrowserTest
         await Page.WaitForSelectorAsync(".omni-data-grid", new() { Timeout = AppReadyTimeoutMs });
     }
 
+    // R-36: a wait is a veil (content area or one component) as well as a loader; both count here.
     protected async Task WaitForNoSpinnerAsync()
     {
         await Page.WaitForFunctionAsync("""
-            () => [...document.querySelectorAll('.aetheus-loader')]
+            () => [...document.querySelectorAll('.aetheus-loader, .omni-page-veil')]
                 .every(element => {
                     const style = getComputedStyle(element);
                     const rect = element.getBoundingClientRect();
@@ -511,6 +525,13 @@ public abstract class E2ETestBase : BrowserTest
             var diagnostics = Path.Combine(dir, $"{safeName}.log");
             await File.WriteAllLinesAsync(diagnostics, _browserDiagnostics);
             TestContext.Out.WriteLine($"[E2E-DIAG] {safeName}: url='{Page.Url}' title='{await Page.TitleAsync()}' screenshot='{shot}' diagnostics='{diagnostics}'");
+            // The container's files are gone after the run: what explains a failure goes to the console too.
+            var text = (await Page.Locator("body").InnerTextAsync(new() { Timeout = 2000 })).ReplaceLineEndings(" | ");
+            var shownText = text.Length > 400 ? text[..400] : text;
+            TestContext.Out.WriteLine(
+                $"[E2E-DIAG] {safeName}: page text '{shownText}'\n"
+                + $"[E2E-DIAG] {safeName}: {_browserDiagnostics.Count} browser errors{string.Concat(_browserDiagnostics.Take(5).Select(line => "\n  " + line))}\n"
+                + $"[E2E-DIAG] {safeName}: {DescribeRequestTrail()}");
         }
         catch (PlaywrightException)
         {

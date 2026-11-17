@@ -55,7 +55,7 @@ public class PluginRegisterDialogTests : BunitContext
     }
 
     [Fact]
-    public async Task Submit_WithValidData_SendsPost_AndClosesWithTrue()
+    public async Task Submit_WithValidData_SendsPost_AndClosesWithTheRegisteredPlugin()
     {
         RegisterSpyDialog();
         _handler.SetJsonResponse(HttpMethod.Post, "api/plugins",
@@ -68,7 +68,8 @@ public class PluginRegisterDialogTests : BunitContext
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/plugins"));
         Assert.Contains(Notifications.Toasts(), m => m.Severity == OmniSeverity.Success);
         Assert.True(Spy().Closed);
-        Assert.Equal(true, Spy().LastResult);
+        var registered = Assert.IsType<PluginRegistrationDto>(Spy().LastResult);
+        Assert.Equal(9, registered.Id);
     }
 
     [Fact]

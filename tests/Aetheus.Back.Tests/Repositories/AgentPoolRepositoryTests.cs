@@ -148,5 +148,31 @@ public class AgentPoolRepositoryTests : IDisposable
         Assert.Equal(1, await _db.AgentPools.CountAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task AllServersInOrganizationAsync_IsFalse_WhenOneServerBelongsToAnotherOrganization()
+    {
+        var own = new Server { Name = "own", Hostname = "own", OrganizationId = 1 };
+        var foreign = new Server { Name = "foreign", Hostname = "foreign", OrganizationId = 2 };
+        _db.Servers.AddRange(own, foreign);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await _repo.AllServersInOrganizationAsync(1, [own.Id, own.Id], TestContext.Current.CancellationToken));
+        Assert.True(await _repo.AllServersInOrganizationAsync(1, [], TestContext.Current.CancellationToken));
+        Assert.False(await _repo.AllServersInOrganizationAsync(1, [own.Id, foreign.Id], TestContext.Current.CancellationToken));
+        Assert.False(await _repo.AllServersInOrganizationAsync(1, [own.Id, 999], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task NameTakenAsync_IgnoresThePoolItself()
+    {
+        var pool = new AgentPool { Name = "Taken", OrganizationId = 1 };
+        _db.AgentPools.Add(pool);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await _repo.NameTakenAsync("Taken", null, TestContext.Current.CancellationToken));
+        Assert.False(await _repo.NameTakenAsync("Taken", pool.Id, TestContext.Current.CancellationToken));
+        Assert.False(await _repo.NameTakenAsync("Free", null, TestContext.Current.CancellationToken));
+    }
+
     public void Dispose() => _db.Dispose();
 }

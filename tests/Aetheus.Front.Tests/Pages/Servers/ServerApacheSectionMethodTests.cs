@@ -171,7 +171,7 @@ public class ServerApacheSectionMethodTests : BunitContext
         {
             TaskId = 2,
             ServerId = 30,
-            TaskName = "Apache config read",
+            TaskName = "Apache config - example.com",
             Status = TaskExecutionStatus.Success,
             Output = "ServerName example.com"
         })));
@@ -192,7 +192,7 @@ public class ServerApacheSectionMethodTests : BunitContext
         {
             TaskId = 3,
             ServerId = 30,
-            TaskName = "Apache config read",
+            TaskName = "Apache config - example.com",
             Status = TaskExecutionStatus.Failed,
             Output = "Could not read /etc/apache2/sites-available/example.com: Permission denied"
         })));

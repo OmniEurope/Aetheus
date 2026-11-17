@@ -110,7 +110,9 @@ public class ProjectRepository(
                 commitsByProject.GetValueOrDefault(projectId),
                 runsByProject.GetValueOrDefault(projectId),
                 gradesByProject.GetValueOrDefault(projectId)?.OverallGrade,
-                productionAppsByProject.GetValueOrDefault(projectId) ?? []);
+                productionAppsByProject.GetValueOrDefault(projectId) ?? [],
+                gradesByProject.GetValueOrDefault(projectId)?.Qualification,
+                activeSessionCutoffUtc);
         }
 
         return result;
@@ -135,6 +137,7 @@ public class ProjectRepository(
                 {
                     ProjectId = run.Pipeline.ProjectId!.Value,
                     run.Id,
+                    run.BuildNumber,
                     PipelineName = run.Pipeline.Name,
                     run.Status,
                     run.StartedAt,
@@ -152,7 +155,7 @@ public class ProjectRepository(
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return rows.ConvertAll(row => new ProjectListRun(row.ProjectId, row.Id, row.PipelineName, row.Status, row.StartedAt,
-            row.CurrentStep is { } step ? new ProjectListCurrentStep(step.StageName, step.StepName) : null));
+            row.CurrentStep is { } step ? new ProjectListCurrentStep(step.StageName, step.StepName) : null, row.BuildNumber));
     }
 
     private async Task<List<ProjectListApp>> EnabledMonitoredAppsAsync(
@@ -167,6 +170,7 @@ public class ProjectRepository(
                 app.ProjectId,
                 app.CurrentStatus,
                 app.AnalyticsEnabled,
+                app.AnalyticsLastIngestAt,
                 EnvironmentType = app.Environment == null
                     ? (EnvironmentType?)null
                     : app.Environment.Type,
@@ -180,7 +184,7 @@ public class ProjectRepository(
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return rows.ConvertAll(row => new ProjectListApp(
-            row.ProjectId, row.CurrentStatus, row.AnalyticsEnabled, row.EnvironmentType, row.ActiveSessionCount));
+            row.ProjectId, row.CurrentStatus, row.AnalyticsEnabled, row.EnvironmentType, row.ActiveSessionCount, row.AnalyticsLastIngestAt));
     }
 
 
@@ -297,9 +301,22 @@ public class ProjectRepository(
 
     /// <summary>Returns the latest candidate grade, matching the list insight, and its root run
     /// without loading other insights.</summary>
+    public Task<IReadOnlyDictionary<int, int>> GetRunNumbersAsync(IEnumerable<int> runIds, CancellationToken ct = default) =>
+        PipelineRunNumbers.ReadAsync(db, runIds, ct);
+
     public async Task<AnalysisGradeSummaryDto?> GetLatestGateGradeAsync(int projectId, CancellationToken ct = default) =>
         (await analysisGrades.GetGradesAsync([projectId], ct).ConfigureAwait(false))
             .GetValueOrDefault(projectId);
+
+    public async Task<RunPipelineRef?> GetRunPipelineAsync(int runId, CancellationToken ct = default) =>
+        await db.PipelineRuns.AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => new RunPipelineRef(run.PipelineId, run.Pipeline.Name))
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+    public Task<PipelineRunDeployedAddressDto?> GetProductionAddressAsync(int projectId, CancellationToken ct = default) =>
+        ProjectProductionAddress.ReadAsync(db, projectId, ct);
 
     public async Task<ProjectSectionCounts> GetProjectSectionCountsAsync(int projectId, CancellationToken ct = default)
     {

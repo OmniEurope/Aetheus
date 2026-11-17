@@ -71,29 +71,39 @@ public sealed class ExecutorProcessRunnerTests
     [Fact]
     public async Task RunAsync_ExternalCancellation_TerminatesAndWaitsForDescendantTree()
     {
-        var survivorMarker = Path.Combine(Path.GetTempPath(), $"aetheus-survivor-{Guid.NewGuid():N}.marker");
+        var startedMarker = Path.Combine(Path.GetTempPath(), $"aetheus-started-{Guid.NewGuid():N}.marker");
         var health = new AgentRuntimeHealth(TimeProvider.System);
         var runner = new ExecutorProcessRunner(
             health,
             NullLogger<ExecutorProcessRunner>.Instance);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
             TestContext.Current.CancellationToken);
+        var descendantId = 0;
 
         try
         {
             var execution = runner.RunAsync(
-                BuildDescendantCommand(survivorMarker),
-                timeoutSeconds: 30,
+                BuildDescendantCommand(startedMarker),
+                timeoutSeconds: RunnerTimeoutSeconds,
                 static (_, _) => Task.CompletedTask,
                 cancellation.Token);
 
+            // The descendant announces itself with its process id: cancelling before it exists would cancel a
+            // bare root and prove nothing about the tree. PowerShell takes 3.6 to 7.1 s to start on a loaded
+            // machine, and the descendant lives for minutes, so a stall of the test thread (measured at over
+            // 3 s under load) cannot let it finish by itself before the cancellation.
             var startupWait = Stopwatch.StartNew();
-            while (health.ActiveProcessCount == 0
+            while (!TryReadProcessId(startedMarker, out descendantId)
                 && !execution.IsCompleted
-                && startupWait.Elapsed < TimeSpan.FromSeconds(10))
+                && startupWait.Elapsed < TimeSpan.FromSeconds(60))
                 await Task.Delay(TimeSpan.FromMilliseconds(25), TestContext.Current.CancellationToken);
+            var startedAfter = startupWait.ElapsedMilliseconds;
+            Assert.True(descendantId > 0, $"The descendant did not announce itself {startedAfter} ms after the start.");
             Assert.False(execution.IsCompleted, "The descendant command exited before cancellation.");
-            Assert.Equal(1, health.ActiveProcessCount);
+            var countedAtStart = health.ActiveProcessCount;
+            Assert.True(countedAtStart == 1,
+                $"Expected the root command alone to be counted {startedAfter} ms after the start, got "
+                + $"{countedAtStart}: " + string.Join(" | ", health.DescribeActiveProcesses()));
             Assert.False(health.IsIdle);
 
             await cancellation.CancelAsync();
@@ -112,25 +122,60 @@ public sealed class ExecutorProcessRunnerTests
                 await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
 
             Assert.True(health.ActiveProcessCount == 0,
-                "Still counted after cancellation: " + string.Join(" | ", health.DescribeActiveProcesses()));
+                $"Still counted {settle.ElapsedMilliseconds} ms after cancellation: "
+                + string.Join(" | ", health.DescribeActiveProcesses()));
             Assert.True(health.IsIdle);
 
-            await Task.Delay(TimeSpan.FromSeconds(WitnessDelaySeconds + 1), TestContext.Current.CancellationToken);
+            // The survivor is looked up by its id: it was seen only by a marker it wrote 3 s after its
+            // start, a timed witness that a stalled test thread read too early or too late.
+            var survivor = Stopwatch.StartNew();
+            while (IsRunning(descendantId) && survivor.Elapsed < TimeSpan.FromSeconds(10))
+                await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
             Assert.False(
-                File.Exists(survivorMarker),
-                "A descendant survived external cancellation and wrote its marker.");
+                IsRunning(descendantId),
+                $"The descendant (PID {descendantId}) survived external cancellation: still running {survivor.ElapsedMilliseconds} ms "
+                + $"after the settle (it was seen running {startedAfter} ms after the start, {countedAtStart} process(es) counted then).");
         }
         finally
         {
-            File.Delete(survivorMarker);
+            File.Delete(startedMarker);
         }
     }
 
-    // The descendant must outlive the cancel-to-check window by seconds, never by tens of
-    // milliseconds, or a loaded CI machine lets it either finish early or hide a surviving tree.
-    private const int WitnessDelaySeconds = 3;
+    // The test waits up to 60 s for the descendant to announce itself, so the runner's own timeout must be
+    // longer: at 30 s it ended a slow start by itself (a timed out run, not a cancelled one) when the
+    // machine was starved, measured in 22 of 150 runs with 40 runs in parallel. And the descendant outlives
+    // that timeout: only the cancellation ends it.
+    private const int RunnerTimeoutSeconds = 120;
+    private const int DescendantLifetimeSeconds = 300;
 
-    private static ProcessStartInfo BuildDescendantCommand(string survivorMarker)
+    private static bool TryReadProcessId(string marker, out int processId)
+    {
+        processId = 0;
+        try
+        {
+            return File.Exists(marker) && int.TryParse(File.ReadAllText(marker), out processId) && processId > 0;
+        }
+        catch (IOException)
+        {
+            return false; // still being written
+        }
+    }
+
+    private static bool IsRunning(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static ProcessStartInfo BuildDescendantCommand(string startedMarker)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -142,10 +187,13 @@ public sealed class ExecutorProcessRunnerTests
 
         if (OperatingSystem.IsWindows())
         {
-            var windowsSurvivor = survivorMarker.Replace("'", "''", StringComparison.Ordinal);
-            var child = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command "
-                + $"\"Start-Sleep -Seconds {WitnessDelaySeconds}; "
-                + $"[IO.File]::WriteAllText('{windowsSurvivor}', 'survived')\"";
+            // Encoded, so no quote crosses the cmd -> powershell boundary: a quoted -Command reached
+            // PowerShell as a string literal, which it printed instead of running, so the descendant
+            // exited about 0.8 s after its start and never slept.
+            var windowsStarted = startedMarker.Replace("'", "''", StringComparison.Ordinal);
+            var script = $"[IO.File]::WriteAllText('{windowsStarted}', [string]$PID); Start-Sleep -Seconds {DescendantLifetimeSeconds}";
+            var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+            var child = $"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}";
             startInfo.FileName = "cmd.exe";
             startInfo.ArgumentList.Add("/d");
             startInfo.ArgumentList.Add("/s");
@@ -154,11 +202,11 @@ public sealed class ExecutorProcessRunnerTests
             return startInfo;
         }
 
-        var linuxSurvivor = survivorMarker.Replace("'", "'\\''", StringComparison.Ordinal);
+        var linuxStarted = startedMarker.Replace("'", "'\\''", StringComparison.Ordinal);
         startInfo.FileName = "/bin/sh";
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add(
-            $"/bin/sh -c 'sleep {WitnessDelaySeconds}; printf survived > \"{linuxSurvivor}\"' & wait");
+            $"/bin/sh -c 'printf %s \"$$\" > \"{linuxStarted}\"; sleep {DescendantLifetimeSeconds}' & wait");
         return startInfo;
     }
 

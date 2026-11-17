@@ -8,7 +8,8 @@
     </OmniStack>
     @* R-10 / R-52: a finding with empty values has its table drawn by the host (PipelineReadinessChecks), under
        the finding and over its full width, never in this column, which sits after the finding's icon. *@
-    @if (Check.EmptyValues.Count == 0 && Check.Items.Count > 0)
+    @* R-56: the same holds for the undefined variables, a table of the host as well. *@
+    @if (Check.EmptyValues.Count == 0 && Check.UndefinedVariables.Count == 0 && Check.Items.Count > 0)
     {
         <ul class="pipeline-setup-readiness-items">
             @foreach (var item in Check.Items)
@@ -45,7 +46,7 @@
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync" data-testid="setup-readiness-create-repository"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CreateGitRepository"]</span></ChildContent></OmniButton>
         </div>
     }
-    else if (Check.EmptyValues.Count == 0 && PipelineReadinessText.RemediationHref(Check.Kind, ProjectId, ReturnUrl, EnvironmentReturnUrl) is { } href)
+    else if (Check.EmptyValues.Count == 0 && Check.UndefinedVariables.Count == 0 && PipelineReadinessText.RemediationHref(Check.Kind, ProjectId, ReturnUrl, EnvironmentReturnUrl) is { } href)
     {
         <OmniLink Href="@href"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[PipelineReadinessText.RemediationKey(Check.Kind)!]</OmniLink>
     }

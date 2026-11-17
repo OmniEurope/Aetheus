@@ -1,0 +1,79 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
+
+@* R-56: the undefined variables as a table drawn like the empty values (R-10): one row per name, the variable (a link
+   to its entry, or to the creation of its holder) and the library or vault to create it in, by name (a link that opens
+   it). When the pipeline lists no holder of that kind, the cell says so instead of guessing one. *@
+<OmniDataGrid TItem="PipelineSetupReadinessUndefinedVariableDto" Items="@Ordered" Class="pipeline-readiness-empty-values"
+              ExportTitle="@ExportContext.Title(L["ReadinessUndefinedVariables"])" ExportFields="@ExportContext.Fields()"
+              ScrollMode="OmniDataGridScrollMode.All" MinHeight="0" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+              data-testid="setup-readiness-undefined-variables">
+    <Columns>
+        <OmniDataGridColumn TItem="PipelineSetupReadinessUndefinedVariableDto" Key="name" Title="@L["ReadinessColumnUndefinedVariable"]" Property="Name">
+            <Template Context="row">
+                @* R-24: every missing variable is a link: to its entry, or to the creation of a holder for it. *@
+                <OmniLink Href="@PipelineReadinessText.UndefinedNameHref(row, ProjectId, ReturnUrl)" data-testid="setup-readiness-undefined-name"><code>@row.Name</code></OmniLink>
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="PipelineSetupReadinessUndefinedVariableDto" Key="owner" Title="@L["ReadinessColumnCreateIn"]" Property="OwnerName">
+            <Template Context="row">
+                @if (row.ExistingHolderId is not null)
+                {
+                    @* R-25: the key exists in a library or vault of the project that this pipeline does not declare: said
+                       so, with the holder to open and the pipeline to open to declare it, never asked to be created again. *@
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                        <span data-testid="setup-readiness-undefined-exists">@L[ExistsKey(row)]</span>
+                        <OmniLink Href="@PipelineReadinessText.UndefinedOwnerHref(row, ProjectId, ReturnUrl)" data-testid="setup-readiness-undefined-owner">@row.ExistingHolderName</OmniLink>
+                        <span data-testid="setup-readiness-undefined-not-declared">@L[NotDeclaredKey(row)]</span>
+                        @if (CanDeclare(row))
+                        {
+                            @* R-24: one click declares the holder in the pipeline (confirmed first); opening the pipeline
+                               to do it by hand is the secondary entry of the menu, absent on the pipeline's own page. *@
+                            @if (PipelineReadinessText.UndefinedPipelineHref(row, ReturnUrl) is { } openHref)
+                            {
+                                <OmniSplitButton Text="@DeclareText(row)" Label="@DeclareText(row)" title="@DeclareText(row)" Variant="OmniButtonVariant.Primary" Size="OmniControlSize.Small"
+                                                 Busy="@IsDeclaring(row)" OnClick="@(() => DeclareAsync(row))"
+                                                 data-testid="setup-readiness-undefined-declare-action">
+                                    <Icon><OmniIcon Name="OmniIconName.Add" /></Icon>
+                                    <ChildContent>
+                                        <OmniMenuItem Href="@openHref" data-testid="setup-readiness-undefined-declare">@L[DeclareKey(row)]</OmniMenuItem>
+                                    </ChildContent>
+                                </OmniSplitButton>
+                            }
+                            else
+                            {
+                                <OmniButton Variant="OmniButtonVariant.Primary" Size="OmniControlSize.Small" Label="@DeclareText(row)" title="@DeclareText(row)"
+                                            Busy="@IsDeclaring(row)" OnClick="@(() => DeclareAsync(row))"
+                                            data-testid="setup-readiness-undefined-declare-action"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent>@DeclareText(row)</ChildContent></OmniButton>
+                            }
+                        }
+                        else if (PipelineReadinessText.UndefinedPipelineHref(row, ReturnUrl) is { } pipelineHref)
+                        {
+                            <OmniLink Href="@pipelineHref" data-testid="setup-readiness-undefined-declare">@L[DeclareKey(row)]</OmniLink>
+                        }
+                    </OmniStack>
+                }
+                else if (PipelineReadinessText.UndefinedOwnerHref(row, ProjectId, ReturnUrl) is { } href)
+                {
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <span data-testid="setup-readiness-undefined-kind">@L[KindKey(row)]</span>
+                        <OmniLink Href="@href" data-testid="setup-readiness-undefined-owner">@row.OwnerName</OmniLink>
+                        @if (row.OwnerId is null)
+                        {
+                            <span data-testid="setup-readiness-undefined-to-create">@L["ReadinessToCreate"]</span>
+                        }
+                    </OmniStack>
+                }
+                else
+                {
+                    @* Nothing in the pipeline says where and nothing holds the key: said plainly, the page never invents a
+                       library or a vault name, and R-24 offers the creation of one for the key, to declare afterwards. *@
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                        <OmniLink Href="@PipelineReadinessText.UndefinedCreateHref(row, ProjectId, ReturnUrl)" data-testid="setup-readiness-undefined-create">@L[CreateKey(row)]</OmniLink>
+                        <span data-testid="setup-readiness-undefined-none">@L[NoneKey(row)]</span>
+                    </OmniStack>
+                }
+            </Template>
+        </OmniDataGridColumn>
+    </Columns>
+</OmniDataGrid>

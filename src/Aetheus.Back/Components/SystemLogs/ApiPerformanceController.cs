@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Microsoft.AspNetCore.Http;
-using OmniEurope.Performance;
+using OmniEurope.Diagnostics;
 
 namespace Aetheus.Back.Components.SystemLogs;
 

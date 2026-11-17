@@ -38,7 +38,8 @@ public class UserServiceCacheInvalidationOrderTests
             _notifier,
             _userNotifier,
             Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(),
-            Substitute.For<Aetheus.Back.Services.IOrganizationRoleAssignmentService>());
+            Substitute.For<Aetheus.Back.Services.IOrganizationRoleAssignmentService>(),
+            LeaderLeaseDouble.Leader());
     }
 
     [Fact]

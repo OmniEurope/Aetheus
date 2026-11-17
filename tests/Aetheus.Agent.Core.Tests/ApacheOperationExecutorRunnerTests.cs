@@ -13,13 +13,15 @@ namespace Aetheus.Agent.Core.Tests;
 public class ApacheOperationExecutorRunnerTests
 {
     private static ApacheOperationExecutor Build(
-        ProcessRunCalls calls, bool isLinux = true, Func<string, bool>? logFileExists = null) =>
+        ProcessRunCalls calls, bool isLinux = true, Func<string, bool>? logFileExists = null,
+        Func<string, LogFileAccess>? probeLogFile = null) =>
         new(
             Options.Create(new AetheusAgentOptions { MinTimeoutSeconds = 5, MaxTimeoutSeconds = 100 }),
             NullLogger<ApacheOperationExecutor>.Instance)
         {
             IsLinux = isLinux,
-            LogFileExists = logFileExists ?? (_ => false),
+            ProbeLogFile = probeLogFile
+                ?? (path => logFileExists?.Invoke(path) == true ? LogFileAccess.Readable : LogFileAccess.Missing),
             RunProcessWithLoggerAsync = calls.RunAsync
         };
 
@@ -182,7 +184,52 @@ public class ApacheOperationExecutorRunnerTests
 
         Assert.Equal(0, result.ExitCode);
         Assert.Empty(calls.Runs);
-        Assert.True(log.Has("No Apache access log found", TaskLogLevel.Warning));
+        Assert.Equal(
+            [("[apache-log] NotFound /var/log/apache2/access.log /var/log/httpd/access_log", TaskLogLevel.Warning)],
+            log.Lines);
+    }
+
+    [Fact]
+    public async Task R19_GetLogs_WithALogTheAgentMayNotRead_FailsWithAccessDeniedNotNotFound()
+    {
+        // vpssim: /var/log/apache2 is root:adm 0750, the agent account is not in adm.
+        var calls = new ProcessRunCalls();
+        var log = new OutputLog();
+        var executor = Build(calls, probeLogFile: path =>
+            path == "/var/log/apache2/error.log" ? LogFileAccess.Denied : LogFileAccess.Missing);
+
+        var result = await Run(executor, OperationKind.ApacheGetLogs, "error", log);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Empty(calls.Runs);
+        Assert.Equal([("[apache-log] AccessDenied /var/log/apache2/error.log", TaskLogLevel.Error)], log.Lines);
+    }
+
+    [Fact]
+    public async Task R19_GetLogs_WithAnotherReadError_SaysReadErrorWithThePath()
+    {
+        var calls = new ProcessRunCalls();
+        var log = new OutputLog();
+        var executor = Build(calls, probeLogFile: path =>
+            path == "/var/log/httpd/error_log" ? LogFileAccess.Unreadable : LogFileAccess.Missing);
+
+        var result = await Run(executor, OperationKind.ApacheGetLogs, "error", log);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal([("[apache-log] ReadError /var/log/httpd/error_log", TaskLogLevel.Error)], log.Lines);
+    }
+
+    [Fact]
+    public async Task R19_GetLogs_ADeniedDebianLog_StillTailsAReadableRedHatOne()
+    {
+        var calls = new ProcessRunCalls();
+        var executor = Build(calls, probeLogFile: path =>
+            path == "/var/log/httpd/error_log" ? LogFileAccess.Readable : LogFileAccess.Denied);
+
+        var result = await Run(executor, OperationKind.ApacheGetLogs, "error", new OutputLog());
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["-n", "100", "/var/log/httpd/error_log"], Assert.Single(calls.Runs).Argv);
     }
 
     [Fact]

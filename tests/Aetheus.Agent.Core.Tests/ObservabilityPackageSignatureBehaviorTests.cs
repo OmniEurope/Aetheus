@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Security.Cryptography;
 
 namespace Aetheus.Agent.Core.Tests;
@@ -136,6 +137,120 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
             StringComparison.Ordinal);
     }
 
+    // R-20: run 3373 restored a net11.0 consumer with the host SDK 10.0.202 (NETSDK1045) after publishing. The
+    // consumer now proves both frameworks the packages ship, with the SDK the harness was handed.
+    [Fact]
+    public async Task PublicationHarness_RestoresANet10AndNet11Consumer_WithTheSdkItWasHanded()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var result = await fixture.RunPublicationAsync("accepted-self-signed-author");
+
+        Assert.True(result.ExitCode == 0, $"stdout={result.StandardOutput}{Environment.NewLine}stderr={result.StandardError}");
+        var consumer = await File.ReadAllTextAsync(fixture.RestoredProject, TestContext.Current.CancellationToken);
+        Assert.Contains("<TargetFrameworks>net10.0;net11.0</TargetFrameworks>", consumer, StringComparison.Ordinal);
+        Assert.Contains("<PackageReference Include=\"Aetheus.Telemetry\" Version=\"1.2.0\" />", consumer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PublicationHarness_RefusesAnSdkThatCannotTargetNet11_BeforeAnyRegistryCall()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var result = await fixture.RunPublicationAsync("accepted-self-signed-author", sdkVersion: "10.0.202");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("The .NET SDK 10.0.202", result.StandardError, StringComparison.Ordinal);
+        Assert.Contains("cannot target net11.0", result.StandardError, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.RestoredProject));
+        Assert.DoesNotContain("Package signature matches", result.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PromotionHarness_RefusesAnSdkThatCannotTargetNet11_BeforeSigningOrPublishing()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var result = await fixture.RunPromotionAsync("accepted-self-signed-author", sdkVersion: "10.0.202");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("cannot target net11.0", result.StandardError, StringComparison.Ordinal);
+        Assert.Contains("Nothing was signed or published.", result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("Package signature matches", result.StandardOutput, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.PublishInvocations));
+    }
+
+    // R-20: `nuget sign` timestamps, so a rerun re-signs the same content into other bytes and the byte-for-byte
+    // comparison refused the already-published version forever. Same content under a pinned-author signature converges.
+    [Fact]
+    public async Task PublicationHarness_AcceptsAPublishedVersionResignedOverTheSameContent()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        await fixture.UsePackagesAsync(
+            NuGetEntries("candidate signature"), NuGetEntries("published signature"));
+        var result = await fixture.RunPublicationAsync("accepted-self-signed-author");
+
+        Assert.True(result.ExitCode == 0, $"stdout={result.StandardOutput}{Environment.NewLine}stderr={result.StandardError}");
+        Assert.Contains(
+            "carries the same content under another pinned-author signature",
+            result.StandardOutput,
+            StringComparison.Ordinal);
+        Assert.True(File.Exists(fixture.RestoredProject));
+    }
+
+    [Fact]
+    public async Task PublicationHarness_RefusesAPublishedVersionWithAnotherContentEntry()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var published = NuGetEntries("published signature");
+        published["lib/net11.0/Aetheus.Telemetry.dll"] = "another build";
+        await fixture.UsePackagesAsync(NuGetEntries("candidate signature"), published);
+        var result = await fixture.RunPublicationAsync("accepted-self-signed-author");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "Entries that differ besides the signature: lib/net11.0/Aetheus.Telemetry.dll",
+            result.StandardError,
+            StringComparison.Ordinal);
+        Assert.Contains("does not carry the same content as this candidate", result.StandardError, StringComparison.Ordinal);
+        Assert.Contains("refusing overwrite", result.StandardError, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.RestoredProject));
+    }
+
+    [Fact]
+    public async Task PublicationHarness_RefusesAPublishedVersionWithAnExtraEntry()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var published = NuGetEntries("published signature");
+        published["tools/install.ps1"] = "added after the build";
+        await fixture.UsePackagesAsync(NuGetEntries("candidate signature"), published);
+        var result = await fixture.RunPublicationAsync("accepted-self-signed-author");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Entries that differ besides the signature: tools/install.ps1", result.StandardError, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.RestoredProject));
+    }
+
+    [Fact]
+    public async Task PublicationHarness_RefusesTheSameContentSignedByAnotherCertificate()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        await fixture.UsePackagesAsync(
+            NuGetEntries("candidate signature"), NuGetEntries("another author's signature"));
+        var result = await fixture.RunPublicationAsync("wrong-fingerprint");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("is not signed by the pinned author certificate", result.StandardError, StringComparison.Ordinal);
+        Assert.Contains("refusing overwrite", result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("same content under another", result.StandardOutput, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.RestoredProject));
+    }
+
+    private static Dictionary<string, string> NuGetEntries(string signature) => new(StringComparer.Ordinal)
+    {
+        ["Aetheus.Telemetry.nuspec"] = "<package><metadata><id>Aetheus.Telemetry</id></metadata></package>",
+        ["lib/net10.0/Aetheus.Telemetry.dll"] = "net10.0 assembly",
+        ["lib/net11.0/Aetheus.Telemetry.dll"] = "net11.0 assembly",
+        [".signature.p7s"] = signature
+    };
+
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;
 
     private sealed class SignatureFixture : IAsyncDisposable
@@ -152,9 +267,13 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
             _registryPackage = registryPackage;
             _shellWrapper = shellWrapper;
             PublishInvocations = Path.Combine(root, "publish-invocations");
+            RestoredProject = Path.Combine(root, "restored-consumer.csproj");
         }
 
         public string PublishInvocations { get; }
+
+        /// <summary>The consumer project the fake SDK was asked to restore; absent when no restore ran.</summary>
+        public string RestoredProject { get; }
 
         public string TelemetryVersion { get; private init; } = "";
 
@@ -205,14 +324,18 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
                 fi
                 exit 91
                 """);
-            await WriteExecutableAsync(Path.Combine(fakeBin, "node"), "#!/bin/sh\nexit 0\n");
+            // The attestation rewrite needs no real node; the content comparison of a re-signed package does.
+            await WriteExecutableAsync(
+                Path.Combine(fakeBin, "node"),
+                "#!/bin/sh\nif [ -n \"${REAL_NODE:-}\" ]; then exec \"$REAL_NODE\" \"$@\"; fi\nexit 0\n");
             await WriteExecutableAsync(
                 Path.Combine(fakeBin, "dotnet"),
                 """
                 #!/bin/sh
+                if [ "$1" = --version ]; then printf '%s\n' "${FAKE_SDK_VERSION:-11.0.100}"; exit 0; fi
                 if [ "$1" = nuget ] && [ "$2" = sign ]; then exit 0; fi
                 if [ "$1" = nuget ] && [ "$2" = push ]; then exit 92; fi
-                if [ "$1" = restore ]; then exit 0; fi
+                if [ "$1" = restore ]; then cp "$2" "$FAKE_RESTORE_PROJECT"; exit 0; fi
                 if [ "$1" != nuget ] || [ "$2" != verify ]; then exit 93; fi
 
                 FINGERPRINT="$EXPECTED_TEST_FINGERPRINT"
@@ -275,11 +398,12 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
         public Task WriteProvenanceAsync(string kind, string? version) =>
             WriteProvenanceAsync(Path.Combine(_root, ".package-candidate", kind), kind, version);
 
-        public Task<ProcessResult> RunPromotionAsync(string scenario, string? legacySetVersion = null)
+        public Task<ProcessResult> RunPromotionAsync(
+            string scenario, string? legacySetVersion = null, string sdkVersion = "11.0.100")
         {
             var startInfo = CreateStartInfo(Path.Combine(
                 FindRepoRoot(), "src", "Aetheus.Agent.Core", "Harnesses", "promote-observability-packages.sh"));
-            ConfigureCommonEnvironment(startInfo, scenario);
+            ConfigureCommonEnvironment(startInfo, scenario, sdkVersion);
             if (legacySetVersion is not null)
                 startInfo.Environment["PACKAGE_VERSION"] = legacySetVersion;
             startInfo.Environment["AETHEUS_WORKING_DIR"] = ToShellPath(_root);
@@ -291,12 +415,14 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
             return RunAsync(startInfo);
         }
 
-        public Task<ProcessResult> RunPublicationAsync(string scenario, string? packageVersion = null)
+        public Task<ProcessResult> RunPublicationAsync(
+            string scenario, string? packageVersion = null, string sdkVersion = "11.0.100")
         {
             var startInfo = CreateStartInfo(Path.Combine(
                 FindRepoRoot(), "src", "Aetheus.Agent.Core", "Harnesses", "publish-observability-package.sh"));
             startInfo.ArgumentList.Add("telemetry");
-            ConfigureCommonEnvironment(startInfo, scenario);
+            ConfigureCommonEnvironment(startInfo, scenario, sdkVersion);
+            startInfo.Environment["REAL_NODE"] = ToShellPath(FindNode());
             startInfo.Environment["PACKAGE_VERSION"] = packageVersion ?? TelemetryVersion;
             startInfo.Environment["WORKSPACE"] = ToShellPath(_root);
             startInfo.Environment["AETHEUS_PACKAGE_BASE_URL"] = "https://packages.invalid";
@@ -306,9 +432,51 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
             return RunAsync(startInfo);
         }
 
-        private void ConfigureCommonEnvironment(ProcessStartInfo startInfo, string scenario)
+        /// <summary>Replaces the Telemetry candidate (its SHA256SUMS follows) and the registry copy with real
+        /// zip packages holding <paramref name="candidate"/> and <paramref name="published"/>.</summary>
+        public async Task UsePackagesAsync(
+            IReadOnlyDictionary<string, string> candidate, IReadOnlyDictionary<string, string> published)
+        {
+            var output = Path.Combine(_root, ".package-candidate", "telemetry");
+            var packageName = $"Aetheus.Telemetry.{TelemetryVersion}.nupkg";
+            var package = Path.Combine(output, packageName);
+            WriteZip(package, candidate, CompressionLevel.Optimal);
+            // Another compression level as well: the published bytes differ beyond the signature entry itself.
+            WriteZip(_registryPackage, published, CompressionLevel.Fastest);
+            var digest = Convert.ToHexStringLower(
+                SHA256.HashData(await File.ReadAllBytesAsync(package, TestContext.Current.CancellationToken)));
+            await File.WriteAllTextAsync(
+                Path.Combine(output, "SHA256SUMS"), $"{digest}  {packageName}\n", TestContext.Current.CancellationToken);
+        }
+
+        private static void WriteZip(
+            string path, IReadOnlyDictionary<string, string> entries, CompressionLevel level)
+        {
+            File.Delete(path);
+            using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+            foreach (var (name, content) in entries)
+            {
+                using var writer = new StreamWriter(archive.CreateEntry(name, level).Open());
+                writer.Write(content);
+            }
+        }
+
+        // The content comparison of a re-signed package runs in node; a host without it fails the test loudly.
+        private static string FindNode()
+        {
+            var name = OperatingSystem.IsWindows() ? "node.exe" : "node";
+            return (Environment.GetEnvironmentVariable("PATH") ?? "")
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(directory => Path.Combine(directory, name))
+                .FirstOrDefault(File.Exists)
+                ?? throw new InvalidOperationException("node is required on PATH to run the publication harness tests.");
+        }
+
+        private void ConfigureCommonEnvironment(ProcessStartInfo startInfo, string scenario, string sdkVersion)
         {
             startInfo.Environment.Remove("PACKAGE_VERSION");
+            startInfo.Environment["FAKE_SDK_VERSION"] = sdkVersion;
+            startInfo.Environment["FAKE_RESTORE_PROJECT"] = ToShellPath(RestoredProject);
             startInfo.Environment["AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT"] = ExpectedFingerprint;
             startInfo.Environment["EXPECTED_TEST_FINGERPRINT"] = ExpectedFingerprint;
             startInfo.Environment["FAKE_VERIFY_SCENARIO"] = scenario;

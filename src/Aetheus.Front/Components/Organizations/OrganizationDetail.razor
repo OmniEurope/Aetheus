@@ -7,7 +7,7 @@
 <div class="iam-page iam-detail-page">
 @if (_loading)
 {
-    <AetheusLoader />
+    <VeilHold Busy="true" />
 }
 else if (_loadError)
 {
@@ -36,7 +36,7 @@ else
                 <OmniCard Class="iam-detail-card">
                 <div class="form-narrow"><OmniTemplateForm TModel="OrgGeneralModel" Model="@_general" OnValidSubmit="@OnSaveGeneral">
                     <OmniDataAnnotationsValidator Localizer="@L" />
-                    <OmniStack Gap="OmniSpacing.Large">
+                    <OmniStack Gap="OmniSpacing.Small">
                         <OmniFormField For="oe-pages-organizations-organizationdetail-1"><LabelContent>@L["Name"]</LabelContent><ChildContent>
                             <OmniTextBox @bind-Value="_general.Name" maxlength="100" Id="oe-pages-organizations-organizationdetail-1" />
                             <ValidationMessage For="@(() => _general.Name)" />

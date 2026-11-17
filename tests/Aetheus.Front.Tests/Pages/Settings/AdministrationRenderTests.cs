@@ -23,10 +23,10 @@ public class AdministrationRenderTests : BunitContext
     }
 
     [Fact]
-    public void OnInitialized_NonAdmin_RedirectsToHome()
+    public async Task OnInitialized_NonAdmin_RedirectsToHome()
     {
         // Register services without admin flag
-        using var ctx = new BunitContext();
+        await using var ctx = new BunitContext();
         BunitTestHelper.RegisterServices(ctx, authenticated: true, isAdmin: false);
 
         var nav = ctx.Services.GetRequiredService<BunitNavigationManager>();

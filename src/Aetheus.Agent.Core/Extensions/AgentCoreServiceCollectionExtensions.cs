@@ -68,6 +68,11 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<AgentRuntimeHealth>();
         services.AddSingleton<ExecutorProcessRunner>();
         services.AddSingleton<IDeploymentBuildRefusalOutbox, DeploymentBuildRefusalOutbox>();
+        services.AddSingleton<IAgentExitJournal>(sp => new AgentExitJournal(
+            sp.GetRequiredService<IOptions<AetheusAgentOptions>>(),
+            sp.GetRequiredService<TimeProvider>(),
+            AgentExitJournal.ReadHostBootId,
+            sp.GetRequiredService<ILogger<AgentExitJournal>>()));
         services.AddSingleton<IAgentProcessRestarter, AgentProcessRestarter>();
         services.AddSingleton<IShellRunner, DefaultShellRunner>();
         services.AddSingleton<DockerStorageMaintenanceService>();
@@ -178,6 +183,8 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IFirewallCollector>(sp => sp.GetRequiredService<FirewallCollector>());
         services.AddSingleton<ISudoersHashCollector, SudoersHashCollector>();
         services.AddSingleton<Collectors.Ssh.ISshConfigCollector, Collectors.Ssh.SshConfigCollector>();
+        services.AddSingleton<Collectors.MachineReboot.IMachineRebootCollector, Collectors.MachineReboot.MachineRebootCollector>();
+        services.AddSingleton<Collectors.MachineJobs.IMachineJobsCollector, Collectors.MachineJobs.MachineJobsCollector>();
 
         // Docker executor (cross-platform)
         services.AddSingleton<IExecutor, DockerExecutor>();
@@ -193,6 +200,8 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IOperationExecutor, ServiceOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PackageOperationExecutor>();
         services.AddSingleton<IOperationExecutor, SystemPackageUpgradeExecutor>();
+        services.AddSingleton<IRebootOrderConfirmer, RebootOrderConfirmer>();
+        services.AddSingleton<IOperationExecutor, ServerRebootOperationExecutor>();
         services.AddSingleton<IOperationExecutor, FirewallOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PortsObserveOperationExecutor>();
         services.AddSingleton<IOperationExecutor, BackupOperationExecutor>();
@@ -244,12 +253,16 @@ public static class AgentCoreServiceCollectionExtensions
         PluginLoader.AddPluginLoader(services);
 
         // Background services
+        // First, so the previous process's exit record is read before any worker can fail.
+        services.AddHostedService<AgentExitRecorderService>();
         services.AddHostedService<AgentStartupService>();
         services.AddHostedService<HeartbeatService>();
         services.AddHostedService<PollingService>();
         services.AddHostedService<AgentLivenessWatchdogService>();
         services.AddHostedService<AppProbeWorker>();
         services.AddHostedService<RunWorkspaceReaper>();
+        // R-41: the host's release and packages for the CVE watch, daily and at start.
+        services.AddHostedService<HostPackageInventoryReporter>();
         services.AddHostedService<Aetheus.Agent.Core.Operations.BlueGreenConfirmationWatchdog>();
         services.AddHostedService(sp => sp.GetRequiredService<DockerStorageMaintenanceService>());
 

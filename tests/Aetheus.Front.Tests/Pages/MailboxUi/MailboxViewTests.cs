@@ -63,6 +63,7 @@ public sealed class MailboxViewTests : BunitContext
             To = "me@example.org",
             Subject = "Planning",
             Html = "<p class=\"probe\">Hello</p>",
+            DocumentPath = "api/mail/documents/ticket-5",
             Text = "Hello",
             IsRead = true,
             BlockedRemoteImages = 2
@@ -98,6 +99,7 @@ public sealed class MailboxViewTests : BunitContext
         _dialog.OpenResult = Access(unlocked: true);
 
         await cut.InvokeAsync(() => cut.Instance.UnlockAsync());
+        cut.Render(); // UnlockAsync is a click handler: the framework renders after it, which the test does by hand
 
         Assert.Equal(typeof(MailboxUnlockDialog), _dialog.LastComponent);
         Assert.Equal((7, 3), ((int)_dialog.LastParameters!["ServerId"]!, (int)_dialog.LastParameters["AccountId"]!));
@@ -179,7 +181,7 @@ public sealed class MailboxViewTests : BunitContext
         await cut.InvokeAsync(() => cut.Instance.OpenAsync(new MailboxMessageSummaryDto { Uid = 5 }));
         cut.Render();
 
-        cut.WaitForAssertion(() => Assert.Contains("<p class=\"probe\">Hello</p>", cut.Find("iframe.mailbox-html").GetAttribute("srcdoc"), StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.Equal("http://test/api/mail/documents/ticket-5", cut.Find("iframe.mailbox-html").GetAttribute("src")));
         var frame = cut.Find("iframe.mailbox-html");
         Assert.Equal("allow-popups allow-popups-to-escape-sandbox", frame.GetAttribute("sandbox"));
         Assert.DoesNotContain("allow-scripts", frame.GetAttribute("sandbox"), StringComparison.Ordinal);
@@ -314,6 +316,8 @@ public sealed class MailboxViewTests : BunitContext
         var listReads = _handler.Requests.Count(request => request.Url.Contains(Base + "/messages?", StringComparison.Ordinal));
 
         await cut.InvokeAsync(() => cut.Instance.ToggleReadAsync());
+        // R-10: the folder is read again quietly behind the row change; wait for that read.
+        await cut.InvokeAsync(() => cut.FindComponent<AetheusDataGrid<MailboxMessageSummaryDto>>().Instance.BackgroundRefresh);
 
         var put = Assert.Single(_handler.RequestDetails, request => request.Method == "PUT");
         Assert.Contains("messages/5/read?folder=INBOX", put.Url, StringComparison.Ordinal);

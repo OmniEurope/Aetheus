@@ -27,6 +27,10 @@ internal static class PipelineReleaseGateVariables
     internal const string GradeVariable = "RELEASE_GATE_GRADE";
     internal const string ApprovalVariable = "RELEASE_GATE_APPROVAL";
 
+    /// <summary>R-60: the pipeline's own variable the setup wizard writes (<c>true</c> by default) to ask for an approval before
+    /// the deployment even for an accepted release graded A to E. It can only add the approval, never lift it.</summary>
+    internal const string RequireApprovalVariable = "APPLICATION_DEPLOY_REQUIRE_APPROVAL";
+
     internal const string Accepted = "accepted";
     internal const string Rejected = "rejected";
     internal const string Unqualified = "unqualified";
@@ -60,10 +64,42 @@ internal static class PipelineReleaseGateVariables
             && !selector.Contains("${{", StringComparison.Ordinal))
             release = await repo.FindDeploymentGateReleaseAsync(id, selector, ct).ConfigureAwait(false);
         Write(resolved, release);
+        if (resolved[ApprovalVariable] == ApprovalNotRequired
+            && await AsksForTheApprovalAsync(resolved, definition, projectId, repo, ct).ConfigureAwait(false))
+            resolved[ApprovalVariable] = ApprovalRequired;
 
         var overridden = runId is { } currentRunId
             && (await repo.GetPipelineRunWithPipelineAsync(currentRunId, ct).ConfigureAwait(false))?.GateOverrideAt is not null;
         resolved[GateOverrideVariable] = overridden ? "true" : "false";
+    }
+
+    /// <summary>The production environments a project's own deployment may go by, as the production setup reads them.</summary>
+    private static readonly string[] ProductionEnvironmentNames = ["prod", "production"];
+
+    /// <summary>R-60: the two reasons, other than the release, to ask for the approval before the deployment, which the template's
+    /// single approval stage then answers: the wizard's option written as <see cref="RequireApprovalVariable"/>, and a
+    /// production environment of the project that requires approval. The second applies only to a pipeline that does not name
+    /// that environment on its stages: the gate asks the environment's own approval for one that does, at launch, and a second
+    /// one asked here would be a second approval for the same run.</summary>
+    private static async Task<bool> AsksForTheApprovalAsync(
+        IDictionary<string, string> resolved, PipelineYamlDefinition definition, int? projectId,
+        IPipelineRepository repo, CancellationToken ct)
+    {
+        if (resolved.TryGetValue(RequireApprovalVariable, out var option)
+            && string.Equals(option.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (projectId is not { } project) return false;
+        var named = YamlParsingHelper.FlattenJobs(definition)
+            .Select(stage => stage.Environment)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in ProductionEnvironmentNames.Where(candidate => !named.Contains(candidate)))
+        {
+            var environment = await repo.FindEnvironmentByNameAsync(name, project, ct).ConfigureAwait(false);
+            // A shared environment of the same name is not the project's own production.
+            if (environment?.ProjectId == project && environment.RequireApproval) return true;
+        }
+        return false;
     }
 
     internal static void Write(IDictionary<string, string> resolved, DeploymentGateRelease? release)

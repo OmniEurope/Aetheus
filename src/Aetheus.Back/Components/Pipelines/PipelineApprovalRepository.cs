@@ -24,6 +24,11 @@ internal sealed class PipelineApprovalRepository(AppDbContext db) : IPipelineApp
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
+    /// <summary>R-8: the number of the run, read alone so neither the approval nor its run aggregate
+    /// (YAML, variable snapshots) is loaded for it; 0 for an unknown run.</summary>
+    public async Task<int> GetRunNumberAsync(int runId, CancellationToken ct = default) =>
+        (await Shared.PipelineRunNumbers.ReadAsync(db, [runId], ct).ConfigureAwait(false)).GetValueOrDefault(runId);
+
     public async Task<PipelineApproval?> FindApprovalAsync(int approvalId, CancellationToken ct = default)
     {
         return await db.PipelineApprovals
@@ -93,6 +98,7 @@ internal sealed class PipelineApprovalRepository(AppDbContext db) : IPipelineApp
             {
                 ApprovalId = a.Id,
                 PipelineRunId = a.PipelineRunId,
+                PipelineRunNumber = a.PipelineRun.BuildNumber,
                 PipelineId = a.PipelineRun.PipelineId,
                 PipelineName = a.PipelineRun.Pipeline.Name,
                 ProjectId = a.PipelineRun.Pipeline.ProjectId,

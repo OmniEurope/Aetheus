@@ -55,7 +55,7 @@ Licensed under the [European Union Public Licence v1.2](LICENSE).
 - .NET 10 SDK, version 10.0.202 or later. `global.json` prefers the 10.0.2xx feature band.
 - Docker and Docker Compose, for the local database and for container deployment.
 - Playwright browsers, only for E2E tests:
-  `pwsh bin/Debug/net10.0/playwright.ps1 install` from `tests/Aetheus.E2E/`.
+  `pwsh bin/Debug/net11.0/playwright.ps1 install` from `tests/Aetheus.E2E/`.
 
 ### Configure
 

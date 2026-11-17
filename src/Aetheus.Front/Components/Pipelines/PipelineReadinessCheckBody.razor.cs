@@ -9,6 +9,7 @@ public partial class PipelineReadinessCheckBody
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
 
     [Parameter, EditorRequired] public PipelineSetupReadinessCheckDto Check { get; set; } = default!;
     [Parameter, EditorRequired] public int ProjectId { get; set; }
@@ -34,7 +35,8 @@ public partial class PipelineReadinessCheckBody
             L["NewRepository"].Value,
             new Dictionary<string, object?> { [nameof(GitRepositoryCreateDialog.ProjectId)] = ProjectId },
             new OmniDialogOptions { Width = "500px", AutoFocusFirstElement = false });
-        if (created is true)
-            await OnChanged.InvokeAsync();
+        // R-31: the new repository page tells how to push the code and leads back to this page.
+        if (GitRepositoryCreateDialog.RepositoryPageHref(created, ReturnUrl, Nav) is { } href)
+            Nav.NavigateTo(href);
     }
 }

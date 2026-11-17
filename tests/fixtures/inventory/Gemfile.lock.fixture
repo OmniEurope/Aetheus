@@ -1,0 +1,33 @@
+GIT
+  remote: https://github.com/example/private-gem.git
+  revision: 0123456789abcdef0123456789abcdef01234567
+  specs:
+    private-gem (9.9.9)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    actionpack (5.2.1)
+      actionview (= 5.2.1)
+      rack (~> 2.0)
+    crass (1.0.4)
+    loofah (2.2.0)
+      crass (~> 1.0.2)
+      nokogiri (>= 1.5.9)
+    mini_portile2 (2.4.0)
+    nokogiri (1.10.0)
+      mini_portile2 (~> 2.3.0)
+    nokogiri (1.10.0-x86_64-linux)
+    rack (2.0.5)
+
+PLATFORMS
+  ruby
+  x86_64-linux
+
+DEPENDENCIES
+  loofah (= 2.2.0)
+  nokogiri (= 1.10.0)
+  rack (= 2.0.5)
+
+BUNDLED WITH
+   2.1.4

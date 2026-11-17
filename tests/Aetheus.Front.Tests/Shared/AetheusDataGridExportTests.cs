@@ -37,9 +37,13 @@ public sealed class AetheusDataGridExportTests : BunitContext
     private static (string FileName, string Content) Downloaded(BunitJSModuleInterop module)
     {
         var download = module.Invocations["download"].Single();
+        // OE 1.14 writes the data inert; the tests read it as a Markdown viewer shows it.
         return (Assert.IsType<string>(download.Arguments[0]),
-            Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2])).TrimStart('﻿'));
+            MarkdownExportText.AsRead(RawDownload(download)));
     }
+
+    private static string RawDownload(JSRuntimeInvocation download) =>
+        Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2])).TrimStart('﻿');
 
     /// <summary>The page shows the first 20 of 250 rows; its reader serves the API's pages of 200.</summary>
     private (IRenderedComponent<AetheusDataGrid<Row>> Grid, List<GridLoadArgs> Reads, Func<int> PageLoads) RenderRemoteGrid(
@@ -116,6 +120,9 @@ public sealed class AetheusDataGridExportTests : BunitContext
         Assert.All(reads, read => Assert.Equal(200, read.Top));
         Assert.Equal(loadsBefore, pageLoads());
         Assert.Contains("Projects > Aetheus > Quality > Findings", markdown, StringComparison.Ordinal);
+        // The file itself is inert (OE 1.14): the breadcrumb's ">" is written as a character reference.
+        Assert.Contains("Projects &gt; Aetheus &gt; Quality &gt; Findings",
+            RawDownload(module.Invocations["download"].Single()), StringComparison.Ordinal);
         Assert.Contains("GridExportSource", markdown, StringComparison.Ordinal);
         Assert.Contains("Aetheus", markdown, StringComparison.Ordinal);
         Assert.Contains("GridExportAddress", markdown, StringComparison.Ordinal);

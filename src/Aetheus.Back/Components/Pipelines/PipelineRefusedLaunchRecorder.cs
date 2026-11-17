@@ -30,7 +30,8 @@ public sealed class PipelineRefusedLaunchRecorder(
         string reason,
         IReadOnlyDictionary<string, string>? additionalVariables,
         CancellationToken ct,
-        IReadOnlyList<ProblemDto>? reasonProblems = null)
+        IReadOnlyList<ProblemDto>? reasonProblems = null,
+        bool notifySubscribers = true)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         if (transaction?.InTransaction == true) return;
@@ -40,6 +41,11 @@ public sealed class PipelineRefusedLaunchRecorder(
             && RepeatsRefusal(latest, refusal))
         {
             var repeats = RepeatCount(latest) + 1;
+            // The run stands for its LAST refusal: the list sorts on the start, so a refusal that keeps coming
+            // stays at the top and shows today's date, not the night it first happened (R-30: five nights of
+            // refusals sat under one run dated 2026-10-30, and nobody saw them).
+            var previousRefusal = latest.CompletedAt ?? latest.StartedAt;
+            latest.StartedAt = now;
             latest.CompletedAt = now;
             latest.WarningsJson = JsonSerializer.Serialize(new[] { refusal, BuildRepeat(repeats, now) });
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -48,6 +54,12 @@ public sealed class PipelineRefusedLaunchRecorder(
             await TellAsync(latest.Id, "live event", () => pipelineHub.Clients
                 .Groups(HubGroups.PipelineRunUpdates(latest.Id, pipeline.Id))
                 .SendAsync("PipelineRunCompleted", latest.Id, PipelineStatus.Failed, ct)).ConfigureAwait(false);
+            // A repeat after a quiet hour is a new occurrence of a schedule (a new night), and its followers
+            // hear about it again. Only the bursts R1-3 grouped (a frequent schedule, several pushes in a row)
+            // stay silent after the first notification.
+            if (notifySubscribers && now - previousRefusal >= RenotifyAfter)
+                await TellAsync(latest.Id, "notification", () =>
+                    notifications.PublishLaunchRefusedAsync(pipeline, triggerSource, reason, reasonProblems, ct)).ConfigureAwait(false);
             return;
         }
         var run = new PipelineRun
@@ -72,9 +84,13 @@ public sealed class PipelineRefusedLaunchRecorder(
         await TellAsync(run.Id, "live event", () => pipelineHub.Clients
             .Groups(HubGroups.PipelineRunUpdates(run.Id, pipeline.Id))
             .SendAsync("PipelineRunCompleted", run.Id, PipelineStatus.Failed, ct)).ConfigureAwait(false);
-        await TellAsync(run.Id, "notification", () =>
-            notifications.PublishLaunchRefusedAsync(pipeline, triggerSource, reason, ct)).ConfigureAwait(false);
+        if (notifySubscribers)
+            await TellAsync(run.Id, "notification", () =>
+                notifications.PublishLaunchRefusedAsync(pipeline, triggerSource, reason, reasonProblems, ct)).ConfigureAwait(false);
     }
+
+    /// <summary>How long a grouped refusal stays quiet: a repeat later than this tells the followers again.</summary>
+    internal static readonly TimeSpan RenotifyAfter = TimeSpan.FromHours(1);
 
     private async Task TellAsync(int runId, string what, Func<Task> effect)
     {
@@ -148,7 +164,11 @@ public sealed class PipelineRefusedLaunchRecorder(
     /// <summary>The reason a refused run carries, as the run page shows it: a stored problem naming the trigger
     /// and the reason, with the problems that explain it when the refusal stated them.</summary>
     internal static string BuildReason(string triggerSource, string reason, IReadOnlyList<ProblemDto>? reasonProblems = null)
-        => PipelineProblem.Of(
+        => triggerSource == PipelineLaunchSources.Manual
+            ? PipelineProblem.Of(
+                PipelineProblemCodes.ManualLaunchRefused, $"The manual launch was refused: {reason}",
+                ("detail", reason)).ToStored(reasonProblems)
+            : PipelineProblem.Of(
             PipelineProblemCodes.LaunchRefused, $"The automated launch ({triggerSource}) was refused: {reason}",
             ("source", triggerSource), ("detail", reason)).ToStored(reasonProblems);
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Aetheus.Back.Data.Entities;
 
@@ -45,6 +46,41 @@ public class Pipeline
     /// <see cref="PipelineRun.BuildNumber"/>.
     /// </summary>
     public int BuildCounter { get; set; }
+
+    /// <summary>
+    /// The latest cron occurrence of this pipeline's schedule the scheduler took in charge (started, or
+    /// skipped on purpose), UTC. It lives in the database so that an occurrence is decided once across
+    /// ticks, restarts and replicas, and so that a new leader knows where the previous one stopped and
+    /// can catch up an occurrence missed in between. Written only by the scheduler through a
+    /// conditional bulk update (never by a save, so <see cref="UpdatedAt"/> and <see cref="RowVersion"/>
+    /// do not move); null until the scheduler first sees the pipeline.
+    /// </summary>
+    public DateTime? LastScheduledOccurrence { get; set; }
+
+    /// <summary>R-11 (decision of 2026-11-10, option A): the <c>.pipeline/</c> file of the external repository's mirror
+    /// this pipeline was imported from, read-only. Null for every pipeline defined in Aetheus. An imported pipeline
+    /// runs its stored definition (never the mirror's current file), is never edited in Aetheus and never fires on
+    /// its own: see <c>PipelineExternalImportPolicy</c>.</summary>
+    [MaxLength(255)]
+    public string? ExternalImportPath { get; set; }
+
+    /// <summary>The mirror commit the imported definition was read at (immutable).</summary>
+    [MaxLength(64)]
+    public string? ExternalImportCommit { get; set; }
+
+    /// <summary>SHA-256 of the imported file, normalized as <c>PipelineRepositoryDefinitionGuard.Sha256</c>: a re-import
+    /// of the same content is a no-op, a different content means the mirror's definition changed since import.</summary>
+    [MaxLength(64)]
+    public string? ExternalImportSha256 { get; set; }
+
+    public DateTime? ExternalImportedAt { get; set; }
+
+    [MaxLength(256)]
+    public string? ExternalImportedBy { get; set; }
+
+    /// <summary>True for a pipeline imported read-only from an external repository's mirror.</summary>
+    [NotMapped]
+    public bool IsExternalImport => ExternalImportCommit is not null;
 
     [ConcurrencyCheck]
     public Guid RowVersion { get; set; } = Guid.NewGuid();

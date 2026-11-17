@@ -276,6 +276,82 @@ public class BackupOperationExecutorTests
         Assert.False(File.Exists(extractedDump));
     }
 
+    // ACORE-004: the scratch database holds restored production data. The verdict of the restore and the
+    // outcome of its cleanup are two facts: the restore stays what it was, and a copy left behind is reported.
+    private static async Task<(ExecutorResult Result, string Message, bool? Verified)> RestoreCheckWithCleanup(
+        BackupExecutorFixture fixture, int runId, ExecutorResult cleanup, int pgRestoreExitCode = 0)
+    {
+        var databaseDump = Path.Combine(fixture.Root, "database.dump");
+        await File.WriteAllTextAsync(databaseDump, "desired-database", TestContext.Current.CancellationToken);
+        var archive = Path.Combine(fixture.Root, $"restore-check-{runId}.aetheus-backup");
+        await BackupArchiveBundle.CreateAsync(archive, databaseDump, [], TestContext.Current.CancellationToken);
+        var drops = 0;
+        fixture.Executor.ProcessInvoker = (fileName, _, _, _, _, _, _) =>
+        {
+            if (fileName == "pg_restore")
+                return Task.FromResult(new ExecutorResult(pgRestoreExitCode, false));
+            // The first dropdb clears a leftover before the restore; the last one is the cleanup.
+            return Task.FromResult(fileName == "dropdb" && ++drops == 2 ? cleanup : new ExecutorResult(0, false));
+        };
+        var environment = fixture.DatabaseRestoreEnvironment(archive);
+        environment[BackupConstants.RunIdEnvVar] = runId.ToString();
+
+        var result = await fixture.Executor.ExecuteSupportedPlatformAsync(
+            OperationKind.BackupRestoreCheck, environment, 30, fixture.CaptureOutput, TestContext.Current.CancellationToken);
+
+        var report = fixture.Api.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IServerApiClient.ReportRestoreCheckResultAsync))
+            .Select(call => (RestoreCheckResultDto)call.GetArguments()[1]!)
+            .Single();
+        return (result, report.Message ?? string.Empty, report.Verified);
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(-1, true)]
+    public async Task RestoreCheck_ScratchDropFails_KeepsTheRestoreVerdictAndReportsTheLeftoverCopy(int exitCode, bool timedOut)
+    {
+        using var fixture = new BackupExecutorFixture();
+
+        var (result, message, verified) = await RestoreCheckWithCleanup(
+            fixture, runId: 808, new ExecutorResult(exitCode, timedOut));
+
+        // The restore really succeeded, so it is still reported as verified ...
+        Assert.True(verified);
+        // ... but the task is not a success, and the copy left behind is named where the verdict is read.
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("aetheus_restorecheck_808", message, StringComparison.Ordinal);
+        Assert.Contains("could not be dropped", message, StringComparison.Ordinal);
+        Assert.Contains(fixture.Output, line => line.Contains("could not be dropped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RestoreCheck_FailedRestoreAndFailedScratchDrop_ReportsBothFacts()
+    {
+        using var fixture = new BackupExecutorFixture();
+
+        var (result, message, verified) = await RestoreCheckWithCleanup(
+            fixture, runId: 809, new ExecutorResult(1, false), pgRestoreExitCode: 3);
+
+        Assert.False(verified);
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Restore failed (exit 3)", message, StringComparison.Ordinal);
+        Assert.Contains("could not be dropped", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RestoreCheck_ScratchDropSucceeds_ReportsTheCleanVerdictUnchanged()
+    {
+        using var fixture = new BackupExecutorFixture();
+
+        var (result, message, verified) = await RestoreCheckWithCleanup(
+            fixture, runId: 810, new ExecutorResult(0, false));
+
+        Assert.True(verified);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("Database restore verified.", message);
+    }
+
     [Fact]
     public async Task RestoreCheck_CorruptArchiveReportsTerminalFailure()
     {

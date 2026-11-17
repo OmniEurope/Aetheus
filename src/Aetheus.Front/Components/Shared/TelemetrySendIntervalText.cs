@@ -26,14 +26,14 @@ public static class TelemetrySendIntervalText
 
     /// <summary>
     /// What the samples say about the server's interval: null when they follow it; the observed interval
-    /// when they show another one; otherwise that the server's interval needs Aetheus.Telemetry 1.1.0.
+    /// when they show another one; null too when there is no sample to observe (R-27: no sentence then).
     /// </summary>
     public static string? Observation(IStringLocalizer localizer, AppTelemetrySendIntervalDto interval)
     {
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(interval);
         if (interval.ObservedIntervalSeconds is not { } observed)
-            return localizer["TelemetrySendIntervalUnobserved"].Value;
+            return null;
         return Follows(interval.ServerIntervalSeconds, observed)
             ? null
             : localizer["TelemetrySendIntervalObservedDiffers", Long(localizer, observed)].Value;

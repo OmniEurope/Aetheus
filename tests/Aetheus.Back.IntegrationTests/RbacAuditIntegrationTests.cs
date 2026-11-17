@@ -21,8 +21,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// findings need (rights in both, yet a write must never link one organization's resource to the
 /// other's).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class RbacAuditIntegrationTests(PostgresFixture fixture)
+public sealed class RbacAuditIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static readonly HttpStatusCode[] Refused = [HttpStatusCode.Forbidden, HttpStatusCode.NotFound, HttpStatusCode.BadRequest];
 

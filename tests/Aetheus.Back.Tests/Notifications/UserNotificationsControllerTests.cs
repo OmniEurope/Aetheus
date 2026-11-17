@@ -217,9 +217,12 @@ public sealed class UserNotificationsControllerTests : IDisposable
         // R2-034: so are a deployed release and a failed agent update; a completed update is off.
         // R3-16: and a finished AI task run, whose notification links to its report.
         // R1-77: and a rejected run, a final result beside failed and succeeded; the child results option is off.
+        // PLAN-004: and a vulnerability the watch found, which no run would have told.
+        // R-30: and the two results of an automatic dependency update (pull request ready, branch retired).
         Assert.Equal(
             [NotificationEventTypes.PipelineFailed, NotificationEventTypes.PipelineRejected, NotificationEventTypes.PipelineApprovalRequested, NotificationEventTypes.PipelineLaunchRefused,
-             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed, NotificationEventTypes.AiTaskCompleted],
+             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed, NotificationEventTypes.AiTaskCompleted, NotificationEventTypes.CveDetected,
+             NotificationEventTypes.DependencyUpdateReady, NotificationEventTypes.DependencyUpdateClosed],
             defaults.Where(p => p.IsEnabled).Select(p => p.EventType));
         Assert.All(defaults, p => Assert.False(p.IsSaved));
 
@@ -235,7 +238,8 @@ public sealed class UserNotificationsControllerTests : IDisposable
         var saved = (List<NotificationPreferenceDto>)((OkObjectResult)(await _sut.GetPreferences(TestContext.Current.CancellationToken)).Result!).Value!;
         Assert.Equal(
             [NotificationEventTypes.PipelineSucceeded, NotificationEventTypes.PipelineRejected, NotificationEventTypes.PipelineApprovalRequested, NotificationEventTypes.PipelineLaunchRefused,
-             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed, NotificationEventTypes.AiTaskCompleted],
+             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed, NotificationEventTypes.AiTaskCompleted, NotificationEventTypes.CveDetected,
+             NotificationEventTypes.DependencyUpdateReady, NotificationEventTypes.DependencyUpdateClosed],
             saved.Where(p => p.IsEnabled).Select(p => p.EventType));
         Assert.Equal(2, await _db.UserNotificationPreferences.CountAsync(p => p.UserId == Alice, TestContext.Current.CancellationToken));
     }

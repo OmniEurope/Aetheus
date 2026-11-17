@@ -1,0 +1,51 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@using Aetheus.Front.Components.Environments
+
+@* Recette R-10: the database's expand/contract tracking of a project, grouped by environment, production first
+   (open), the others folded. Each group is the tracking of the environment page itself (EnvironmentSchemaTracking);
+   the verdict of the group comes from the last migration gate its own deployments recorded. *@
+@if (_groups is null)
+{
+    <ZoneVeil />
+}
+else if (_groups.Count == 0)
+{
+    <OmniEmptyState Title="@L["SchemaTrackingNoEnvironments"]" data-testid="project-schema-tracking-empty" />
+}
+else
+{
+    <OmniStack data-testid="project-schema-tracking">
+        <OmniTileGrid Columns="2" MinColumnWidth="9rem" Gap="OmniSpacing.Large">
+            <OmniStatTile Value="@PendingCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["SchemaTrackingPendingTile"]" data-testid="project-schema-pending-tile" />
+            <OmniStatTile Value="@string.Format(L["SchemaTrackingVerdictsValue"].Value, WithVerdictCount, _groups.Count)" Title="@L["SchemaTrackingVerdictsTile"]" data-testid="project-schema-verdicts-tile" />
+        </OmniTileGrid>
+        @foreach (var group in _groups)
+        {
+            <OmniFieldset Collapsible="true" Expanded="@group.IsProduction" data-testid="project-schema-environment">
+                <Legend>
+                    <span data-testid="project-schema-environment-name">@group.Environment.Name</span>
+                    <OmniBadge Icon="@(BadgeIcon.For(group.IsProduction ? OmniTone.Accent : OmniTone.Neutral))" Fill="OmniFill.Tonal" Tone="@(group.IsProduction ? OmniTone.Accent : OmniTone.Neutral)">@L.Localize(group.Environment.Type)</OmniBadge>
+                    @if (group.Schema?.LastGate is { } gate)
+                    {
+                        <OmniBadge Icon="@(BadgeIcon.For(OutcomeTone(gate.Outcome)))" Fill="OmniFill.Tonal" Tone="@OutcomeTone(gate.Outcome)">@L.Localize(gate.Outcome)</OmniBadge>
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@string.Format(L["SchemaTrackingToDeliver"].Value, group.Schema.PendingContractions.Count)</OmniText>
+                    }
+                    else if (group.Schema is not null)
+                    {
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral">@L["SchemaTrackingNoVerdictBadge"]</OmniBadge>
+                    }
+                </Legend>
+                <ChildContent>
+                    @if (group.Schema is null)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Warning">@L["LoadFailed"]</OmniAlert>
+                    }
+                    else
+                    {
+                        <EnvironmentSchemaTracking EnvironmentId="@group.Environment.Id" Schema="@group.Schema" ShowTitle="false" />
+                    }
+                </ChildContent>
+            </OmniFieldset>
+        }
+    </OmniStack>
+}

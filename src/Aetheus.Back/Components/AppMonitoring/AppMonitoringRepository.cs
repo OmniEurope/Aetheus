@@ -333,36 +333,63 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
             ?? (apps.Count == 1 ? apps[0] : null);
     }
 
+    public Task<string?> GetProjectNameAsync(int projectId, CancellationToken ct = default) =>
+        db.Projects.AsNoTracking()
+            .Where(p => p.Id == projectId)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<MonitoredApp?> GetFirstEnabledAppForUpdateAsync(int projectId, CancellationToken ct = default) =>
+        db.MonitoredApps
+            .Where(a => a.ProjectId == projectId && a.Enabled)
+            .OrderBy(a => a.Id)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<bool> HasTelemetrySetupRequestedAsync(int projectId, CancellationToken ct = default) =>
+        db.MonitoredApps.AsNoTracking()
+            .AnyAsync(a => a.ProjectId == projectId && a.Enabled && a.TelemetrySetupRequested, ct);
+
+    public Task<bool> HasTelemetryPackagesAsync(int projectId, CancellationToken ct = default) =>
+        db.ProjectInventoryItems.AsNoTracking()
+            .AnyAsync(item => item.ProjectId == projectId
+                && item.Ecosystem == TelemetryPackageEcosystem
+                && item.PackageName == TelemetryPackageName, ct);
+
+    /// <summary>The inventory's own spelling (<c>VulnerabilityPackageName.Normalize</c>: NuGet names are stored lower case).</summary>
+    private const string TelemetryPackageEcosystem = "NuGet";
+    private const string TelemetryPackageName = "aetheus.telemetry";
+
     public async Task<IngestKeyResolution?> ResolveIngestKeyHashAsync(
-        string ingestKeyHash,
+        IReadOnlyCollection<string> ingestKeyHashes,
         DateTime nowUtc,
         CancellationToken ct = default)
     {
         var match = await db.MonitoredApps
             .AsNoTracking()
             .Where(a => a.Enabled
-                        && ((a.IngestKeyHash == ingestKeyHash
+                        && ((a.IngestKeyHash != null && ingestKeyHashes.Contains(a.IngestKeyHash)
                              && a.IngestKeyExpiresAt >= nowUtc)
-                            || (a.PreviousIngestKeyHash == ingestKeyHash
+                            || (a.PreviousIngestKeyHash != null && ingestKeyHashes.Contains(a.PreviousIngestKeyHash)
                                 && a.PreviousIngestKeyValidUntil >= nowUtc)
-                            || (a.SecondPreviousIngestKeyHash == ingestKeyHash
+                            || (a.SecondPreviousIngestKeyHash != null && ingestKeyHashes.Contains(a.SecondPreviousIngestKeyHash)
                                 && a.SecondPreviousIngestKeyValidUntil >= nowUtc)))
             .Select(a => new
             {
                 a.Id,
-                IsCurrent = a.IngestKeyHash == ingestKeyHash,
-                IsPrevious = a.PreviousIngestKeyHash == ingestKeyHash,
+                a.IngestKeyHash,
+                a.PreviousIngestKeyHash,
+                a.SecondPreviousIngestKeyHash,
                 a.PreviousIngestKeyValidUntil,
                 a.SecondPreviousIngestKeyValidUntil
             })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (match is null)
             return null;
-        return new IngestKeyResolution(
-            match.Id,
-            match.IsCurrent ? null
-            : match.IsPrevious ? match.PreviousIngestKeyValidUntil
-            : match.SecondPreviousIngestKeyValidUntil);
+        if (match.IngestKeyHash is { } current && ingestKeyHashes.Contains(current))
+            return new IngestKeyResolution(match.Id, null, current);
+        if (match.PreviousIngestKeyHash is { } previous && ingestKeyHashes.Contains(previous))
+            return new IngestKeyResolution(match.Id, match.PreviousIngestKeyValidUntil, previous);
+        return new IngestKeyResolution(match.Id, match.SecondPreviousIngestKeyValidUntil, match.SecondPreviousIngestKeyHash!);
     }
 
     public async Task<MonitoredApp?> GetAppByAnalyticsSiteIdAsync(
@@ -420,6 +447,50 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
         app.LastIngestAt = now;
         app.IngestDroppedCount += droppedDelta;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task MarkTelemetryExportReceivedAsync(int appId, DateTime now, CancellationToken ct = default)
+    {
+        var awaiting = db.MonitoredApps.Where(a => a.Id == appId
+            && a.TelemetryExportDeliveredAt != null
+            && (a.TelemetryExportReceivedAt == null || a.TelemetryExportReceivedAt < a.TelemetryExportDeliveredAt));
+        if (db.Database.IsRelational())
+        {
+            await awaiting.ExecuteUpdateAsync(s => s.SetProperty(a => a.TelemetryExportReceivedAt, now), ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // InMemory fallback - ExecuteUpdate not supported
+        var app = await awaiting.FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (app is null) return;
+        app.TelemetryExportReceivedAt = now;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<DateTime?> TakeTelemetryExportRequestAsync(int appId, DateTime now, CancellationToken ct = default)
+    {
+        var pending = db.MonitoredApps.Where(a => a.Id == appId
+            && a.TelemetryExportRequestedAt != null
+            && a.TelemetryExportDeliveredAt == null);
+        var requestedAt = await pending.Select(a => a.TelemetryExportRequestedAt).FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (requestedAt is null)
+            return null;
+        if (db.Database.IsRelational())
+        {
+            // Both colours of a blue-green application poll: the conditional update lets only one take the request.
+            var taken = await pending.Where(a => a.TelemetryExportRequestedAt == requestedAt)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.TelemetryExportDeliveredAt, now), ct)
+                .ConfigureAwait(false);
+            return taken == 1 ? requestedAt : null;
+        }
+
+        // InMemory fallback - ExecuteUpdate not supported
+        var app = await pending.FirstAsync(ct).ConfigureAwait(false);
+        app.TelemetryExportDeliveredAt = now;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return requestedAt;
     }
 
     public async Task<int> AggregateHourAsync(DateTime hourUtc, CancellationToken ct = default)

@@ -50,13 +50,22 @@ public class TasksController(ITaskService taskService, IResourceAuthorizationSer
         return Ok(task);
     }
 
+    /// <summary>ADR-060: the same read by public identifier, through the same permission check.</summary>
+    [HttpGet("{uid:guid}")]
+    public async Task<ActionResult<ServerTaskDto>> GetTaskByUid(Guid uid, CancellationToken ct)
+    {
+        var id = await taskService.GetTaskIdByUidAsync(uid, ct);
+        return id is null ? NotFound() : await GetTask(id.Value, ct);
+    }
+
     [HttpPost]
     public async Task<ActionResult<ServerTaskDto>> CreateTask([FromBody] CreateTaskRequest request, CancellationToken ct)
     {
         // F-15: a free-form command is effectively arbitrary code execution on the target server.
         // Require Server Admin (the strongest permission) instead of plain Write so users with
         // ordinary edit rights cannot escalate to RCE. Typed operations (CreateOperation below)
-        // remain Write-gated because their surface is constrained by OperationTargetValidator.
+        // start at Write because their surface is constrained by OperationTargetValidator, plus the
+        // per-kind requirement of OperationKindPermissions.
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, request.ServerId, Permission.Admin, ct))
             return Forbid();
 
@@ -79,7 +88,16 @@ public class TasksController(ITaskService taskService, IResourceAuthorizationSer
         if (!OperationTargetValidator.IsValid(request.Operation, request.Target))
             return BadRequest(new { error = "InvalidTarget", message = "Operation target format is invalid for the selected kind" });
 
+        // BACK-003: Server Write is the floor; a kind also needs what its dedicated endpoint needs (a named
+        // permission or Server Admin), and an unclassified kind is refused.
+        if (OperationKindPermissions.For(request.Operation) is not { } required)
+            return Forbid();
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, request.ServerId, Permission.Write, ct))
+            return Forbid();
+        if (required.Level == Permission.Admin
+            && !await authz.HasPermissionAsync(User, ResourceType.Server, request.ServerId, Permission.Admin, ct))
+            return Forbid();
+        if (required.ActionKey is { } key && !await authz.HasPermissionAsync(User, key, request.ServerId, ct))
             return Forbid();
 
         var task = await taskService.CreateOperationAsync(request, ct);
@@ -196,6 +214,13 @@ public class TasksController(ITaskService taskService, IResourceAuthorizationSer
         var taskServerId = await taskService.GetTaskServerIdAsync(id, ct);
         if (taskServerId is null) return NotFound();
         if (!IsAgentAuthorizedForServer(taskServerId.Value)) return Forbid();
+        // BACK-004: the refusal closes the task, so it needs the same fenced lease as CompleteTask.
+        var hasFencedLease = report.AgentSessionId is not null
+            && Guid.TryParseExact(report.AgentSessionId, "N", out _)
+            && report.AgentSessionFencingToken is > 0;
+        if (!hasFencedLease
+            && !await taskService.AllowsLegacyUnfencedTaskProtocolAsync(taskServerId.Value, ct))
+            return BadRequest();
 
         var success = await taskService.ReportDeploymentBuildRefusalAsync(id, report, ct);
         return success ? Ok() : Conflict();

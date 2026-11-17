@@ -9,7 +9,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// unit suite runs the repository on the in-memory provider, which evaluates a positional
 /// <see cref="RoleUserDto"/> projection on the client; only Npgsql proves the query is translatable.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class RoleUsersGridIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

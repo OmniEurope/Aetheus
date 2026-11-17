@@ -12,6 +12,10 @@ public abstract class ServerActionSectionBase : ComponentBase
 
     protected bool _actionRunning;
 
+    /// <summary>The markup disables the section's actions on this: while the section launches one, and, R-12, while its
+    /// follower runs a task adopted on arrival, so a second launch is impossible meanwhile.</summary>
+    protected bool ActionBusy => _actionRunning || _busyLink.Busy;
+
     /// <summary>SITE-OFFLINE-001: the section's actions are disabled while the agent cannot claim a task.</summary>
     protected bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
 
@@ -21,6 +25,13 @@ public abstract class ServerActionSectionBase : ComponentBase
     /// <summary>Recette R3-37: the section's <see cref="ServerTaskFollower"/>, when its markup places one;
     /// it then shows what becomes of each task <see cref="ExecuteServerActionAsync"/> queues.</summary>
     protected ServerTaskFollower? _follower;
+
+    private readonly ServerFollowerBusyLink _busyLink;
+
+    protected ServerActionSectionBase() => _busyLink = new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged));
+
+    // The follower is a child, placed by the markup: its reference exists only once the section has rendered.
+    protected override void OnAfterRender(bool firstRender) => _busyLink.Follower = _follower;
 
     /// <param name="changesInventory">False for an action that only reads (a configuration test): the follower then
     /// does not wait for a new server state after it (R-119).</param>

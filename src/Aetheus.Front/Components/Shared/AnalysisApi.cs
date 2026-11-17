@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Aetheus.Shared.Components.DependencyUpdates;
 using Aetheus.Shared.Components.Organizations;
 using Microsoft.AspNetCore.WebUtilities;
 
@@ -48,6 +49,122 @@ public sealed class AnalysisApi(HttpClient http) : ApiClientBase(http)
         CancellationToken ct = default) =>
         await Http.GetFromJsonAsync<List<AnalysisPortfolioProjectDto>>(
             "api/analysis/portfolio/projects", JsonOptions.Web, ct) ?? [];
+
+
+    /// <summary>R-15: one page of the advisories the caller's projects are concerned by, one entry per CVE with its
+    /// projects. Throws <see cref="HttpRequestException"/> on a failed read.</summary>
+    public async Task<PaginatedResult<CveWatchAdvisoryGroupDto>> GetCveWatchAdvisoriesAsync(
+        int page, int pageSize, AnalysisSeverity? severity = null, bool exploitedOnly = false, bool withoutFixOnly = false,
+        bool includeClosed = false, int? projectId = null, int? organizationId = null, CancellationToken ct = default)
+    {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var query = new Dictionary<string, string?>
+        {
+            ["page"] = page.ToString(invariant),
+            ["pageSize"] = pageSize.ToString(invariant)
+        };
+        if (severity.HasValue) query["severity"] = severity.Value.ToString();
+        if (exploitedOnly) query["exploitedOnly"] = "true";
+        if (withoutFixOnly) query["withoutFixOnly"] = "true";
+        if (includeClosed) query["includeClosed"] = "true";
+        if (projectId.HasValue) query["projectId"] = projectId.Value.ToString(invariant);
+        if (organizationId.HasValue) query["organizationId"] = organizationId.Value.ToString(invariant);
+        return await Http.GetFromJsonAsync<PaginatedResult<CveWatchAdvisoryGroupDto>>(
+            QueryHelpers.AddQueryString("api/analysis/cve-watch/advisories", query), JsonOptions.Web, ct) ?? new();
+    }
+
+    /// <summary>R-15: the figures of the CVE watch tab, the uncovered projects and the freshness of the sources.</summary>
+    public async Task<CveWatchOverviewDto> GetCveWatchOverviewAsync(CancellationToken ct = default) =>
+        await GetJsonAsync<CveWatchOverviewDto>("api/analysis/cve-watch/overview", ct) ?? new();
+
+    /// <summary>R-4: every feed of the CVE watch with its state, and the licences owed. The site administrator's; throws on a failed read.</summary>
+    public async Task<VulnerabilitySourcesDto> GetVulnerabilitySourcesAsync(CancellationToken ct = default) =>
+        await GetJsonAsync<VulnerabilitySourcesDto>("api/vulnerability-watch/sources", ct)
+        ?? throw new HttpRequestException("The vulnerability sources answer was empty.");
+
+    /// <summary>
+    /// R-4: asks the feed service for a pass now. The server answers 202 when it takes the request and 409 with the
+    /// reason otherwise; both carry the outcome, so a 409 is an answer, not a failure (no global toast). Throws
+    /// <see cref="HttpRequestException"/> on any other status.
+    /// </summary>
+    public async Task<VulnerabilitySyncRequestDto> RequestVulnerabilitySyncAsync(CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "api/vulnerability-watch/sync");
+        message.Options.Set(ErrorNotificationHandler.CallerHandlesConflict, true);
+        using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
+        if (response.StatusCode is not (HttpStatusCode.Accepted or HttpStatusCode.Conflict))
+            response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<VulnerabilitySyncRequestDto>(JsonOptions.Web, ct).ConfigureAwait(false)
+            ?? throw new HttpRequestException("The pass request answer was empty.");
+    }
+
+    /// <summary>Moves the one daily pass of the CVE watch (a drag in the planner). Site administrators only: the endpoint refuses any other role.</summary>
+    public Task<ApiStatus> SetVulnerabilityPassTimeAsync(SetVulnerabilityPassTimeRequest request, CancellationToken ct = default) =>
+        PutJsonNoBodyAsync("api/vulnerability-watch/pass-time", request, ct);
+
+    /// <summary>PLAN-007: the automatic dependency updates of a project and its setting. Throws <see cref="HttpRequestException"/> on a failed read.</summary>
+    public async Task<DependencyUpdatesOverviewDto> GetDependencyUpdatesAsync(int projectId, CancellationToken ct = default) =>
+        await Http.GetFromJsonAsync<DependencyUpdatesOverviewDto>($"api/projects/{projectId}/dependency-updates", JsonOptions.Web, ct)
+        ?? throw new HttpRequestException("The dependency updates answer was empty.");
+
+    /// <summary>PLAN-007: turns the automatic dependency updates of a project on or off. Throws <see cref="HttpRequestException"/> on a refusal.</summary>
+    public async Task SetDependencyUpdatesEnabledAsync(int projectId, bool enabled, CancellationToken ct = default)
+    {
+        using var response = await Http.PutAsJsonAsync(
+            $"api/projects/{projectId}/dependency-updates/settings", new UpdateDependencyUpdateSettingsRequest { Enabled = enabled }, JsonOptions.Web, ct)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>What the CVE watch says of one project (open CVE by severity, inventories, last pass), null when it is unknown or not readable.
+    /// Throws <see cref="HttpRequestException"/> on a failed read; the caller shows its own failure, no global toast.</summary>
+    public Task<CveWatchProjectDto?> GetCveWatchProjectAsync(int projectId, CancellationToken ct = default) =>
+        ReadOrNullAsync<CveWatchProjectDto>($"api/analysis/cve-watch/projects/{projectId}", ct);
+
+    /// <summary>The CVE watch match an analysis finding was written for, null when the finding has none (or it is not readable).</summary>
+    public Task<CveWatchMatchDto?> GetCveWatchMatchByFindingAsync(int findingId, CancellationToken ct = default) =>
+        ReadOrNullAsync<CveWatchMatchDto>($"api/analysis/cve-watch/by-finding/{findingId}", ct);
+
+    /// <summary>The latest attempt to fix a match, null when the match is unknown or not readable.</summary>
+    public Task<CveRemediationDto?> GetCveRemediationAsync(long matchId, CancellationToken ct = default) =>
+        ReadOrNullAsync<CveRemediationDto>($"api/analysis/cve-watch/{matchId}/remediation", ct);
+
+    /// <summary>
+    /// Asks the platform to prepare the fix of a match. 201 (started) and 200 (already under way) are answers, so is 422: the platform
+    /// cannot do it and the answer carries the command to run and why, shown in place, never as a global toast. Any other status throws
+    /// <see cref="HttpRequestException"/>.
+    /// </summary>
+    public async Task<CveRemediationRequestResult> RequestCveRemediationAsync(long matchId, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, $"api/analysis/cve-watch/{matchId}/remediation");
+        message.Options.Set(ErrorNotificationHandler.CallerHandlesErrors, true);
+        using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
+        if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.Created or HttpStatusCode.UnprocessableEntity))
+            response.EnsureSuccessStatusCode();
+        var remediation = await response.Content.ReadFromJsonAsync<CveRemediationDto>(JsonOptions.Web, ct).ConfigureAwait(false)
+            ?? throw new HttpRequestException("The remediation answer was empty.");
+        return new CveRemediationRequestResult(
+            remediation, response.StatusCode == HttpStatusCode.UnprocessableEntity, response.StatusCode == HttpStatusCode.OK);
+    }
+
+    private async Task<T?> ReadOrNullAsync<T>(string url, CancellationToken ct) where T : class
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, url);
+        message.Options.Set(ErrorNotificationHandler.CallerHandlesErrors, true);
+        using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions.Web, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>R-22: one run of the CVE watch, null when it is unknown or not readable.</summary>
+    public async Task<CveWatchRunDto?> GetCveWatchRunAsync(int reportId, CancellationToken ct = default)
+    {
+        using var response = await Http.GetAsync($"api/analysis/cve-watch/runs/{reportId}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<CveWatchRunDto>(JsonOptions.Web, ct);
+    }
 
 
     public async Task<AnalysisRunGateDto?> GetAnalysisRunGateAsync(int runId, CancellationToken ct = default) =>

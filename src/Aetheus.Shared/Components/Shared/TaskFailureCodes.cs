@@ -21,4 +21,9 @@ public static class TaskFailureCodes
     /// <summary>The agent session that held the task was replaced (agent restart, host reboot) before
     /// the task could finish, and the task is not replayed on its own. Raised by the backend.</summary>
     public const string AgentSessionReplaced = nameof(AgentSessionReplaced);
+
+    /// <summary>Recette R-8: the agent refused a reboot order (expired, or not confirmed by the backend). The failure
+    /// reason is then the name of a <c>RebootOrderRefusal</c> value, so a page can say it in the reader's language.
+    /// Raised by an agent; the host was not rebooted.</summary>
+    public const string RebootRefused = nameof(RebootRefused);
 }

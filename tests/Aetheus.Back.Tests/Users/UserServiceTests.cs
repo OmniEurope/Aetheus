@@ -20,6 +20,7 @@ public class UserServiceTests
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IUserChangeNotifier _userNotifier = Substitute.For<IUserChangeNotifier>();
     private readonly IDomainEventDispatcher _domainEvents = Substitute.For<IDomainEventDispatcher>();
+    private readonly LeaderLeaseDouble _lease = LeaderLeaseDouble.Leader();
     private readonly UserService _sut;
 
     public UserServiceTests()
@@ -34,7 +35,8 @@ public class UserServiceTests
                 _notifier,
                 _userNotifier,
                 _domainEvents,
-                _roleAssignments);
+                _roleAssignments,
+                _lease);
     }
 
     private readonly Aetheus.Back.Services.IOrganizationRoleAssignmentService _roleAssignments =
@@ -759,6 +761,9 @@ public class UserServiceTests
         _repoMock.CountActiveAdminsAsync(Arg.Any<CancellationToken>()).Returns(1);
 
         await Assert.ThrowsAsync<BadRequestException>(() => _sut.UnassignRoleAsync(1, 9, null, ct: TestContext.Current.CancellationToken));
+        // AUD-05: the last-administrator count runs under the administrator-set lock.
+        Assert.Equal(1, _lease.SerializedRequests);
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -781,6 +786,8 @@ public class UserServiceTests
         Assert.Empty(user.UserRoles);
         Assert.NotEqual("old", user.SecurityStamp);
         await _userNotifier.Received(1).NotifyPermissionsChangedAsync(1, PermissionChangeReasons.Roles, Arg.Any<CancellationToken>());
+        // Removing a role other than Admin cannot lose an administrator: no lock taken.
+        Assert.Equal(0, _lease.SerializedRequests);
     }
 
     [Fact]

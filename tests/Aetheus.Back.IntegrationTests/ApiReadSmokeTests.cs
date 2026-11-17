@@ -49,12 +49,15 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/package-feeds")]
     [InlineData("/api/package-registry")]
     [InlineData("/api/system-logs/files")]
+    [InlineData("/api/system-log-rules?organizationId=1")]
     [InlineData("/api/releases")]
     [InlineData("/api/pipelines")]
     [InlineData("/api/pipelines/templates")]
     [InlineData("/api/pipelines/approvals/pending")]
     [InlineData("/api/pipelines/ownership/candidates")]
     [InlineData("/api/pipelines/resource-usage")]
+    [InlineData("/api/pipelines/schedule-plan?organizationId=1&from=2027-01-04T00:00:00Z&to=2027-01-05T00:00:00Z")]
+    [InlineData("/api/analysis/cve-watch?organizationId=1")]
     [InlineData("/api/service-connections")]
     [InlineData("/api/test-suites")]
     [InlineData("/api/webhooks")]
@@ -82,6 +85,9 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/analysis/policies/global")]
     [InlineData("/api/ai/profiles")]
     [InlineData("/api/admin/performance")]
+    [InlineData("/api/admin/task-identity-backfill")]
+    [InlineData("/api/admin/pipeline-run-identity-backfill")]
+    [InlineData("/api/admin/database-tables")]
     // Covers both AppMonitoringController and AppTelemetryController (shared api/appmonitoring prefix).
     [InlineData("/api/appmonitoring/summary")]
     [InlineData("/metrics")]
@@ -90,6 +96,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/data-storage/reclaim")]
     // The mailbox directory is read from the stored mail inventory of every readable server.
     [InlineData("/api/mail/mailboxes")]
+    [Trait("Category", "RollbackRelevant")]
     public async Task CollectionGetEndpoint_AsAdmin_ReturnsNonEmpty200(string route)
     {
         using var client = fixture.CreateAdminClient();
@@ -117,6 +124,42 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("modules")]
     [InlineData("apps")]
     [InlineData("module-links")]
+    // R-1: the rest of what a server page reads. The host throws the query shape warnings (First without an ordering or
+    // a filter, several collections in one query), so a read of the page that raises one fails here with its stack.
+    [InlineData("diagnostic")]
+    [InlineData("projects")]
+    [InlineData("pipelines")]
+    [InlineData("variable-libraries")]
+    [InlineData("vaults")]
+    [InlineData("security-updates")]
+    [InlineData("firewall")]
+    [InlineData("tasks")]
+    [InlineData("logs")]
+    [InlineData("releases")]
+    [InlineData("releases/filter-values")]
+    [InlineData("docker/images")]
+    [InlineData("docker/networks")]
+    [InlineData("docker/volumes")]
+    [InlineData("docker/compose")]
+    [InlineData("apache/modules")]
+    [InlineData("apache/vhosts")]
+    [InlineData("mail/domains")]
+    [InlineData("mail/accounts")]
+    [InlineData("mail/aliases")]
+    [InlineData("mail/certificate")]
+    [InlineData("mail/spam")]
+    [InlineData("mail/diagnostics")]
+    [InlineData("ports/range")]
+    [InlineData("portsentry/whitelist")]
+    [InlineData("portsentry/blocked")]
+    [InlineData("portsentry/filter-values")]
+    [InlineData("rkhunter/warnings")]
+    [InlineData("rkhunter/history")]
+    [InlineData("apps/filter-values")]
+    [InlineData("teamspeak/clients")]
+    [InlineData("teamspeak/filter-values")]
+    [InlineData("teamspeak/channels")]
+    [InlineData("teamspeak/bans")]
     public async Task ServerScopedGet_AsAdmin_ReturnsNonEmpty200(string suffix)
     {
         using var client = fixture.CreateAdminClient();
@@ -128,6 +171,20 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
             $"GET /api/servers/{{id}}/{suffix} returned {(int)response.StatusCode}. Body: {Truncate(body)}");
         Assert.False(string.IsNullOrWhiteSpace(body),
             $"GET /api/servers/{{id}}/{suffix} returned 200 with an empty body.");
+    }
+
+    /// <summary>The server page itself: the detail read behind the page header and every tab.</summary>
+    [Fact]
+    public async Task ServerDetailGet_AsAdmin_Returns200WithTheServer()
+    {
+        using var client = fixture.CreateAdminClient();
+
+        using var response = await client.GetAsync($"/api/servers/{fixture.ServerId}", cancellationToken: TestContext.Current.CancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(response.StatusCode == HttpStatusCode.OK,
+            $"GET /api/servers/{{id}} returned {(int)response.StatusCode}. Body: {Truncate(body)}");
+        Assert.Contains($"\"id\":{fixture.ServerId}", body, StringComparison.OrdinalIgnoreCase);
     }
 
     // --- project-scoped read paths ------------------------------------------------------------

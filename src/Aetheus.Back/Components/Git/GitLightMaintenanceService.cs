@@ -8,15 +8,9 @@ public sealed class GitLightMaintenanceService(
     IServiceScopeFactory scopeFactory,
     IOptions<GitLightOptions> options,
     ILogger<GitLightMaintenanceService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:gitlight-maintenance")
 {
-    // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:gitlight-maintenance", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         var interval = TimeSpan.FromHours(options.Value.MaintenanceIntervalHours);
         using var timer = new PeriodicTimer(interval);

@@ -1,0 +1,153 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-14: the CVE section of the quality page of a project: its open CVE by severity, what feeds the watch (the inventories read, when,
+   and how complete they are), the date of the last pass and how fresh the sources are. Read through the caller's reach: the back
+   answers 404 for a project it may not read, and the panel then says nothing. *@
+<div class="cve-watch" data-testid="project-cve-watch">
+    @if (_loadFailed)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger">
+            @L["LoadFailed"]
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ReloadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+        </OmniAlert>
+    }
+
+    @if (StaleSources.Count > 0)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@L["CveWatchStaleTitle"]" data-testid="project-cve-stale">
+            @string.Format(L["CveWatchStaleText"], string.Join(", ", StaleSources.Select(source => source.Source)))
+        </OmniAlert>
+    }
+
+    <OmniTileGrid Columns="4" MinColumnWidth="9rem" Class="cve-watch-tiles" role="group" aria-label="@L["CveWatchTab"]">
+        <OmniStatTile Value="@Count(_project?.OpenCount)" Title="@L["CveProjectOpen"]" data-testid="project-cve-open">
+            <Icon><OmniIcon Name="OmniIconName.Bug" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@Count(_project?.CriticalCount)" Title="@L["CveWatchTileCritical"]" data-testid="project-cve-critical">
+            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@Count(_project?.ExploitedCount)" Title="@L["CveWatchTileExploited"]" data-testid="project-cve-exploited">
+            <Icon><OmniIcon Name="OmniIconName.Lightning" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@Count(_project?.WithoutFixCount)" Title="@L["CveWatchTileNoFix"]" data-testid="project-cve-nofix">
+            <Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon>
+        </OmniStatTile>
+    </OmniTileGrid>
+
+    <OmniCard Class="cve-watch-list-card">
+        <HeaderContent><OmniHeading Level="OmniHeadingLevel.H5">@L["CveProjectListTitle"]</OmniHeading></HeaderContent>
+        <ChildContent>
+            <VeilHold Busy="@_busy" />
+            <OmniDataGrid TItem="CveProjectRow" Items="@_rows" KeyOf="@(row => row.Match.MatchId)" Density="OmniDensity.Compact"
+                          ExportTitle="@ExportContext.Title(L["CveProjectListTitle"])" ExportFields="@ExportContext.Fields()"
+                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
+                          Class="cve-watch-grid aetheus-clickable-rows" OnRowClick="@(args => OpenFinding(args.Item))" data-testid="project-cve-list">
+                <EmptyContent>
+                    @* "No CVE" is a conclusion, drawn only once the read ended well. *@
+                    @if (Settled)
+                    {
+                        <EmptyState Icon="@EmptyIcon" Title="@EmptyTitle" Description="@EmptyDescription" />
+                    }
+                </EmptyContent>
+                <Columns>
+                    <OmniDataGridColumn TItem="CveProjectRow" Sortable="false" Title="@L["Severity"]" Width="12rem" ExportValue="@SeverityExport">
+                        <Template Context="row">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniBadge Icon="@(BadgeIcon.ForSeverity(SeverityTone(row.Group.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityTone(row.Group.Severity)">@L.Localize(row.Group.Severity)</OmniBadge>
+                                @if (!row.Group.SeverityPublished)
+                                {
+                                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Question))" Fill="OmniFill.Outline" Tone="OmniTone.Neutral" title="@L["CveWatchSeverityAssumedHint"]">@L["CveWatchSeverityAssumed"]</OmniBadge>
+                                }
+                                @if (row.Group.ExploitedSince is not null)
+                                {
+                                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lightning))" Fill="OmniFill.Solid" Tone="OmniTone.Danger" title="@L["CveWatchExploitedHint"]">@L["CveWatchExploited"]</OmniBadge>
+                                }
+                            </OmniStack>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveProjectRow" Sortable="false" Title="@L["CveWatchAdvisory"]" ExportValue="@AdvisoryExport">
+                        <Template Context="row">
+                            <div class="cve-watch-advisory">
+                                <span class="cve-watch-cve-id">@(row.Group.CveId ?? row.Group.AdvisoryId)</span>
+                                @if (row.Group.CveId is not null)
+                                {
+                                    <span class="cve-watch-advisory-id">@row.Group.AdvisoryId</span>
+                                }
+                                <span class="cve-watch-advisory-summary">@row.Group.Summary</span>
+                            </div>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveProjectRow" Sortable="false" Title="@L["Package"]" ExportValue="@PackageExport">
+                        <Template Context="row">
+                            @* R-14: one package matched in the branch head and in the deployed release is two rows; the origin tells them apart. *@
+                            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
+                                <span>@PackageText(row)</span>
+                                @if (MatchOriginText(row) is { } origin)
+                                {
+                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="project-cve-match-origin">@origin</OmniText>
+                                }
+                            </OmniStack>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveProjectRow" Sortable="false" Title="@L["CveWatchFixedIn"]" Width="10rem" ExportValue="@FixExport">
+                        <Template Context="row">@FixText(row)</Template>
+                    </OmniDataGridColumn>
+                </Columns>
+            </OmniDataGrid>
+            @if (_total > PageSize)
+            {
+                <OmniPager Page="@_page" PageCount="@Math.Max(1, (int)Math.Ceiling(_total / (double)PageSize))"
+                           PageChanged="@OnPageChangedAsync" PageSize="@PageSize" Class="omni-u-mt-md" />
+            }
+        </ChildContent>
+    </OmniCard>
+
+    <div class="cve-watch-side">
+        <OmniCard Class="cve-project-inventories-card" data-testid="project-cve-inventories">
+            <HeaderContent><OmniHeading Level="OmniHeadingLevel.H5">@L["CveProjectInventoriesTitle"]</OmniHeading></HeaderContent>
+            <ChildContent>
+                @if (_project is { Inventories.Count: 0 })
+                {
+                    <OmniText Tone="OmniTextTone.Muted">@L["CveProjectNoInventory"]</OmniText>
+                }
+                else if (_project is not null)
+                {
+                    <OmniDataList TItem="CveWatchProjectInventoryDto" Items="@_project.Inventories" Class="cve-watch-source-list">
+                        <ItemTemplate Context="inventory">
+                            <div class="cve-project-inventory">
+                                <div class="cve-watch-source">
+                                    <span class="cve-watch-source-name">@OriginText(inventory)</span>
+                                    <span class="cve-watch-source-date">@string.Format(L["CveProjectReadOn"], inventory.ReadAt.ToString("g", System.Globalization.CultureInfo.CurrentCulture))</span>
+                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@string.Format(L["CveProjectComponents"], inventory.ItemCount)</OmniText>
+                                    <OmniBadge Icon="@(BadgeIcon.ForState(CoverageTone(inventory.Coverage)))" Fill="OmniFill.Tonal" Tone="@CoverageTone(inventory.Coverage)">@L.Localize(inventory.Coverage)</OmniBadge>
+                                </div>
+                                @foreach (var gap in GapLines(inventory))
+                                {
+                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@gap</OmniText>
+                                }
+                            </div>
+                        </ItemTemplate>
+                    </OmniDataList>
+                }
+
+                @if (_project is not null)
+                {
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md" data-testid="project-cve-last-pass">
+                        @if (_project.LastWatchedAt is { } watchedAt)
+                        {
+                            <OmniText Element="OmniTextElement.Small">@L["CveProjectLastPass"]: @AsLocal(watchedAt).ToString("g", System.Globalization.CultureInfo.CurrentCulture)</OmniText>
+                            @if (_project.LastWatchRunId is { } runId)
+                            {
+                                <OmniLink Href="@($"analysis/cve-watch/runs/{runId}")">@L["CveProjectOpenRun"]</OmniLink>
+                            }
+                        }
+                        else
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CveProjectNeverWatched"]</OmniText>
+                        }
+                    </OmniStack>
+                }
+            </ChildContent>
+        </OmniCard>
+        <CveWatchSourcesCard Sources="@(_project?.Sources ?? [])" Pending="@(_project is null)" />
+    </div>
+</div>

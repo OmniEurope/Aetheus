@@ -47,11 +47,23 @@ public class ServerPortsSectionTests : BunitContext
         bool canWrite = true,
         DateTime? lastScan = null,
         bool? observationAvailable = null,
-        bool agentOnline = true)
+        bool agentOnline = true,
+        DateTime? serverScan = null,
+        bool serverScanReadFails = false)
     {
         _handler = BunitTestHelper.RegisterServices(this);
         var handler = _handler;
         handler.SetJsonResponse(HttpMethod.Get, "/ports", reservations);
+        // The section reads the server's own scan time (an empty port check); it is the same value the
+        // layout's DTO carries unless a test says the DTO went stale.
+        if (serverScanReadFails)
+            handler.SetResponse(HttpMethod.Post, "/ports/check", HttpStatusCode.InternalServerError);
+        else
+            handler.SetJsonResponse(HttpMethod.Post, "/ports/check", new PortCheckResultDto
+            {
+                ServerId = 1,
+                LastScanAt = serverScan ?? lastScan
+            });
         handler.SetJsonResponse(HttpMethod.Get, "/ports/range", new PortRangeDto
         {
             From = PortRegistryLimits.DefaultRangeFrom,
@@ -78,6 +90,21 @@ public class ServerPortsSectionTests : BunitContext
             .Add(c => c.PortObservationAvailable, observationAvailable)
             .Add(c => c.AgentOnline, agentOnline));
         return _host.FindComponent<ServerPortsSection>();
+    }
+
+    [Fact]
+    public async Task ReservationForm_IsFoldedByDefault_OpensOnDemand_AndTheGridStaysRendered()
+    {
+        var cut = RenderWith(ThreeReservations());
+        var fieldset = cut.FindComponent<OmniFieldset>();
+
+        Assert.False(fieldset.Instance.Expanded);
+        Assert.False(cut.Find(".port-registry-form details").HasAttribute("open"));
+        Assert.Contains("10031", Rows(cut));
+
+        await cut.InvokeAsync(() => fieldset.Instance.ExpandedChanged.InvokeAsync(true));
+
+        Assert.True(cut.Find(".port-registry-form details").HasAttribute("open"));
     }
 
     [Fact]
@@ -138,10 +165,10 @@ public class ServerPortsSectionTests : BunitContext
     }
 
     [Fact]
-    public void StaleServerDto_DoesNotSayNeverScannedAboveRowsAScanJustStamped()
+    public void StaleServerDto_DoesNotSayNeverScannedWhenTheServerHasBeenScanned()
     {
-        // A heartbeat-reported scan stamps the rows but never refreshes the server DTO the layout
-        // loaded, so the parameter is still null while the rows carry the scan time.
+        // A heartbeat-reported scan never refreshes the server DTO the layout loaded, so the parameter
+        // is still null while the server (read by the section itself) carries the scan time.
         var scan = new DateTime(2026, 9, 12, 11, 50, 0, DateTimeKind.Utc);
         var reservations = ThreeReservations();
         reservations[0] = reservations[0] with { ObservedAt = scan };
@@ -157,7 +184,7 @@ public class ServerPortsSectionTests : BunitContext
             ObservedAt = scan
         });
 
-        var cut = RenderWith(reservations, lastScan: null);
+        var cut = RenderWith(reservations, lastScan: null, serverScan: scan);
 
         Assert.DoesNotContain("PortNeverScanned", cut.Markup);
         Assert.Contains("PortLastScan", cut.Markup);
@@ -166,6 +193,49 @@ public class ServerPortsSectionTests : BunitContext
         // 10031 was seen by that scan, 10041 and 15432 were not: once the scan is known they read "no".
         Assert.Contains("PortListeningNo", Rows(cut));
         Assert.DoesNotContain("PortListeningUnknown", Rows(cut));
+    }
+
+    [Fact]
+    public void ClaimWhosePortStoppedListening_ReadsNotListeningEvenThoughNoRowWasRewrittenSince()
+    {
+        // R-2: a scan that finds an observed row unchanged does not rewrite it, so once the claim's port
+        // stops listening nothing carries the newer scan time any more: the claim keeps its old stamp
+        // and the rows hold no stamp at or after the scan. Only the server knows when it was scanned.
+        var claimConfirmed = new DateTime(2026, 9, 12, 11, 40, 0, DateTimeKind.Utc);
+        var lastScan = claimConfirmed.AddMinutes(4);
+        var reservations = ThreeReservations();
+        reservations[0] = reservations[0] with { ObservedAt = claimConfirmed };
+        reservations.Add(new PortReservationDto
+        {
+            Id = 9,
+            ServerId = 1,
+            Port = 22,
+            OwnerLabel = "sshd",
+            Source = PortReservationSource.Observed,
+            DeclaredAt = claimConfirmed.AddHours(-3),
+            UpdatedAt = claimConfirmed.AddHours(-3),
+            ObservedAt = claimConfirmed.AddHours(-3)
+        });
+
+        var cut = RenderWith(reservations, lastScan: null, serverScan: lastScan);
+
+        Assert.Equal(lastScan, cut.Instance.LastScanAt?.ToUniversalTime());
+        // The only "listening" row is the unclaimed sshd observation (it exists, so it listens); the
+        // claim 10031 last seen four minutes before the scan must read "no".
+        Assert.Equal(1, Rows(cut).Split("PortListeningYes").Length - 1);
+        Assert.Contains("PortListeningNo", Rows(cut));
+    }
+
+    [Fact]
+    public void ServerScanTimeUnreadable_FallsBackToTheServerDtoAndNeverToRowStamps()
+    {
+        var dtoScan = new DateTime(2026, 9, 12, 11, 40, 0, DateTimeKind.Utc);
+        var reservations = ThreeReservations();
+        reservations[0] = reservations[0] with { ObservedAt = dtoScan.AddMinutes(30) };
+
+        var cut = RenderWith(reservations, lastScan: dtoScan, serverScanReadFails: true);
+
+        Assert.Equal(dtoScan, cut.Instance.LastScanAt);
     }
 
     [Fact]
@@ -414,6 +484,7 @@ public class ServerPortsSectionTests : BunitContext
     {
         var handler = BunitTestHelper.RegisterServices(this);
         handler.SetResponse(HttpMethod.Get, "/ports", HttpStatusCode.InternalServerError);
+        handler.SetJsonResponse(HttpMethod.Post, "/ports/check", new PortCheckResultDto { ServerId = 1 });
         handler.SetJsonResponse(HttpMethod.Get, "/ports/range", new PortRangeDto
         {
             From = PortRegistryLimits.DefaultRangeFrom,

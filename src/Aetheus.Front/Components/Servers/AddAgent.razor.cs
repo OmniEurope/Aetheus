@@ -44,6 +44,7 @@ public partial class AddAgent : IAsyncDisposable
     // R3-57: patch-manage is ticked by default like the other capabilities (the operator unticks it).
     private bool _includePatchManagement = true;
     private bool _includeFirewallManagement;
+    private bool _includeHostReboot;
     private bool _includeDocker = true;
     private bool _devModeInsecureTls;
     private bool _devModeAutoApplied;
@@ -85,7 +86,7 @@ public partial class AddAgent : IAsyncDisposable
     // command shown in the install step (S-TECH-WZFL).
     private string LinuxModuleFlags() => AgentWizard.AgentInstallFlags.BuildLinux(
         _includePipelineRunner, _includeServerManagement, _includeDeploymentAgent,
-        _includePatchManagement, _includeFirewallManagement, _includeDocker);
+        _includePatchManagement, _includeFirewallManagement, _includeDocker, _includeHostReboot);
 
     protected override async Task OnInitializedAsync()
     {
@@ -131,7 +132,7 @@ public partial class AddAgent : IAsyncDisposable
     // warning; this dialog explains why Next is refused. Returns true to allow advancing.
     private async Task<bool> ValidateBeforeNextAsync(int currentStep)
     {
-        if (currentStep == 1 && !_includePipelineRunner && !_includeServerManagement && !_includeDeploymentAgent && !_includePatchManagement && !_includeFirewallManagement)
+        if (currentStep == 1 && !_includePipelineRunner && !_includeServerManagement && !_includeDeploymentAgent && !_includePatchManagement && !_includeFirewallManagement && !_includeHostReboot)
         {
             await Dialog.Alert(L["WizardNoModuleError"], L["WizardNoModuleErrorTitle"], new OmniAlertOptions { OkButtonText = L["OK"] });
             return false;
@@ -205,6 +206,8 @@ public partial class AddAgent : IAsyncDisposable
         builder.AddAttribute(13, "IncludePatchManagementChanged", EventCallback.Factory.Create<bool>(this, v => { _includePatchManagement = v; RefreshSteps(); }));
         builder.AddAttribute(14, "IncludeFirewallManagement", _includeFirewallManagement);
         builder.AddAttribute(15, "IncludeFirewallManagementChanged", EventCallback.Factory.Create<bool>(this, v => { _includeFirewallManagement = v; RefreshSteps(); }));
+        builder.AddAttribute(16, "IncludeHostReboot", _includeHostReboot);
+        builder.AddAttribute(17, "IncludeHostRebootChanged", EventCallback.Factory.Create<bool>(this, v => { _includeHostReboot = v; RefreshSteps(); }));
         builder.CloseComponent();
     };
 
@@ -310,6 +313,7 @@ public partial class AddAgent : IAsyncDisposable
         builder.AddAttribute(9, "DevModeInsecureTls", _devModeInsecureTls);
         builder.AddAttribute(10, "IncludePatchManagement", _includePatchManagement);
         builder.AddAttribute(11, "IncludeFirewallManagement", _includeFirewallManagement);
+        builder.AddAttribute(12, "IncludeHostReboot", _includeHostReboot);
         builder.CloseComponent();
     };
 

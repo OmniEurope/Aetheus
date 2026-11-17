@@ -14,7 +14,7 @@
 
 <OmniStack Class="page-fill-body">
 @* R-5: the consumption figures are OE stat tiles of one OmniTileGrid (same width, same height). *@
-<OmniTileGrid Columns="3" Gap="OmniSpacing.Large">
+<OmniTileGrid Columns="3" MinColumnWidth="9rem" Gap="OmniSpacing.Large" Class="tiles-above-grid">
     <OmniStatTile Value="@((_consumption?.RunCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture))" Title="@L["RunsLastSevenDays"]" />
     <OmniStatTile Value="@((_consumption?.FailedCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture))" Title="@L["FailedRuns"]" />
     <OmniStatTile Value="@FormatDuration(_consumption?.DurationMs ?? 0)" Title="@L["ExecutionTime"]" />
@@ -79,7 +79,7 @@
                                   Sortable="false" Filterable="false" TextAlign="OmniAlignment.Center">
                 <Template Context="task">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunAsync(task))" Disabled="@(_runningTaskId.HasValue || !CanWrite(task))" Class="@((_runningTaskId == task.Id) ? "btn-busy" : null)" Busy="@((_runningTaskId == task.Id))" title="@L["RunNow"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunAsync(task))" Disabled="@(_runningTaskId.HasValue || RunInProgress(task) || !CanWrite(task))" Class="@((_runningTaskId == task.Id || RunInProgress(task)) ? "btn-busy" : null)" Busy="@(_runningTaskId == task.Id || RunInProgress(task))" title="@L["RunNow"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem OnClick="@(() => OpenResults(task))"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["Results"]</ChildContent></OmniMenuItem>
                         <OmniMenuItem OnClick="@(() => OpenDialogAsync(task))" Disabled="@(!CanWrite(task))"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>

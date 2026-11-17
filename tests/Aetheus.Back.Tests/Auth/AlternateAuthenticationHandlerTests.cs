@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Components.PackageRegistry;
 using Aetheus.Back.Components.PersonalAccessTokens;
+using Aetheus.Back.Components.Shared;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,13 +32,13 @@ public sealed class AlternateAuthenticationHandlerTests
     private static PatPrincipal Principal(PatScope scope = PatScope.ReadWrite, params string[] roles) =>
         new(42, "alice", roles.Length > 0 ? roles : ["Developer"], scope, 7);
 
-    private async Task<THandler> BuildAsync<THandler>(HttpContext context, string schemeName)
+    private async Task<THandler> BuildAsync<THandler>(HttpContext context, string schemeName, params object[] extra)
         where THandler : AuthenticationHandler<AuthenticationSchemeOptions>
     {
         var options = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();
         options.Get(Arg.Any<string>()).Returns(new AuthenticationSchemeOptions());
         var handler = (THandler)Activator.CreateInstance(
-            typeof(THandler), options, NullLoggerFactory.Instance, UrlEncoder.Default, _pat)!;
+            typeof(THandler), [options, NullLoggerFactory.Instance, UrlEncoder.Default, _pat, .. extra])!;
         await handler.InitializeAsync(
             new AuthenticationScheme(schemeName, schemeName, typeof(THandler)), context);
         return handler;
@@ -48,7 +49,11 @@ public sealed class AlternateAuthenticationHandlerTests
 
     private Task<PackageRegistryAuthenticationHandler> RegistryHandlerAsync(HttpContext context)
         => BuildAsync<PackageRegistryAuthenticationHandler>(
-            context, PackageRegistryAuthenticationHandler.SchemeName);
+            context, PackageRegistryAuthenticationHandler.SchemeName,
+            new PackageRunTokens(
+                new TokenHashKeys(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }),
+                TimeProvider.System),
+            Substitute.For<IPackageRegistryRepository>());
 
     private static HttpContext ContextWith(params (string Header, string Value)[] headers)
     {

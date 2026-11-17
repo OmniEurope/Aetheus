@@ -19,7 +19,8 @@ internal sealed record AssuranceVerificationMode(bool RequireEvidence, bool Requ
 /// meaning (<c>===</c>, truthiness, <c>String()</c> before a regular expression test,
 /// <c>Object.entries</c> of whatever the contract holds), so a contract the script accepts is accepted
 /// and one it refuses is refused; where the script would have crashed on a <c>TypeError</c>, the
-/// verification fails too.
+/// verification fails too. One difference: the script predates the single rerun, so it knows no
+/// <c>flakyTests</c>; here a passed suite that names flaky tests carries their grade (<see cref="FlakyGrade"/>).
 /// </summary>
 internal sealed partial class AssuranceContractVerifier(
     string sourceSha, string minimumGrade, AssuranceVerificationMode mode, string contractRoot)
@@ -49,8 +50,9 @@ internal sealed partial class AssuranceContractVerifier(
         CheckResume(contract);
         var grades = await CheckAnalysesAsync(contract, cancellationToken).ConfigureAwait(false);
         CheckAnalysisKeys(contract, profile);
+        var flakyGrade = FlakyGrade(contract, schema);
         foreach (var name in DeclaredTests(schema))
-            CheckTest(contract, profile, name, grades);
+            CheckTest(contract, profile, name, grades, flakyGrade);
         CheckLightAgent(contract, profile);
         return CheckOverall(contract, grades);
     }
@@ -199,7 +201,26 @@ internal sealed partial class AssuranceContractVerifier(
         new[] { "unit", "analyzers", "currentIntegration", "currentE2E", "agentCompatibility", "previousIntegration", "previousE2E", "performance" }
             .Concat(schema >= 2 ? ["previousSmoke"] : []);
 
-    private void CheckTest(object? contract, string profile, string name, List<string> grades)
+    /// <summary>The grade the candidate's flaky tests give it, counted over the <c>flakyTests</c> lists of
+    /// every declared suite, as <see cref="AssuranceTestOutcomes.GradeFlaky"/> sealed it. A list that is
+    /// not a one-line string is refused here rather than counted as nothing.</summary>
+    private static string FlakyGrade(object? contract, double schema)
+    {
+        var tests = JsValue.GetOptional(contract, "tests");
+        var lists = new List<string>();
+        foreach (var name in DeclaredTests(schema))
+        {
+            var flaky = JsValue.GetOptional(JsValue.GetOptional(tests, name), "flakyTests");
+            if (flaky is JsUndefined)
+                continue;
+            if (flaky is not string list || list.Length == 0 || list.Contains('\n', StringComparison.Ordinal) || list.Contains('\r', StringComparison.Ordinal))
+                throw new AssuranceContractException($"{name} flaky tests are invalid.");
+            lists.Add(list);
+        }
+        return AssuranceFlakyGrade.Grade(AssuranceFlakyGrade.Count(lists));
+    }
+
+    private void CheckTest(object? contract, string profile, string name, List<string> grades, string flakyGrade)
     {
         var test = JsValue.GetOptional(JsValue.Get(contract, "tests"), name);
         if (!JsValue.Truthy(test))
@@ -208,7 +229,7 @@ internal sealed partial class AssuranceContractVerifier(
         if (name == "previousSmoke" && !JsValue.StrictEquals(required, true))
             throw new AssuranceContractException("previousSmoke must be required in every qualification profile.");
         if (JsValue.StrictEquals(required, true))
-            grades.Add(CheckRequiredTest(contract, name, test));
+            grades.Add(CheckRequiredTest(contract, name, test, flakyGrade));
         if (JsValue.StrictEquals(required, false)
             && (!JsValue.StrictEquals(JsValue.Get(test, "status"), "NotRun") || JsValue.Get(test, "effectiveGrade") is not null))
             throw new AssuranceContractException($"{name} optional test assurance has an invalid status.");
@@ -219,23 +240,27 @@ internal sealed partial class AssuranceContractVerifier(
             throw new AssuranceContractException($"{name} claims the nightly profile exemption outside a light qualification.");
     }
 
-    private string CheckRequiredTest(object? contract, string name, object? test)
+    private string CheckRequiredTest(object? contract, string name, object? test, string flakyGrade)
     {
         if (CompatibilityTests.Contains(name, StringComparer.Ordinal))
             CheckCompatibility(contract, name, test);
-        var (status, expected) = ExpectedTestGrade(name, test);
+        var (status, expected) = ExpectedTestGrade(name, test, flakyGrade);
         CheckTestReadiness(name, status, expected);
         return expected;
     }
 
     /// <summary>A required test's status, Passed, Failed or Unavailable, and the grade it must carry:
-    /// A when it passed, F otherwise.</summary>
-    internal static (string Status, string Expected) ExpectedTestGrade(string name, object? test)
+    /// F unless it passed; when it passed, A, or <paramref name="flakyGrade"/>, the grade of the
+    /// candidate's flaky tests, when it names flaky tests of its own (PLAN-006: a flaky test never fails
+    /// its suite, it grades the candidate).</summary>
+    internal static (string Status, string Expected) ExpectedTestGrade(string name, object? test, string flakyGrade = "A")
     {
         var status = JsValue.Get(test, "status");
         if (status is not ("Passed" or "Failed" or "Unavailable"))
             throw new AssuranceContractException($"{name} required test assurance status is invalid.");
-        var expected = status is "Passed" ? "A" : "F";
+        var expected = status is not "Passed" ? "F"
+            : JsValue.GetOptional(test, "flakyTests") is string ? flakyGrade
+            : "A";
         if (!JsValue.StrictEquals(JsValue.Get(test, "effectiveGrade"), expected))
             throw new AssuranceContractException($"{name} effective grade is inconsistent.");
         return ((string)status, expected);

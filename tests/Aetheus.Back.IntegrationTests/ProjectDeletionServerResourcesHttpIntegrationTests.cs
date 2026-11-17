@@ -16,8 +16,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// Only the agent is played by the test: it writes the lines a real agent prints into the task log (the removal on a
 /// real host is proved on the vpssim stack, not here).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class ProjectDeletionServerResourcesHttpIntegrationTests(PostgresFixture fixture)
+public sealed class ProjectDeletionServerResourcesHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string Capabilities = "{\"software\":[\"project.resources\",\"apache.manage\",\"certbot.manage\"]}";
 

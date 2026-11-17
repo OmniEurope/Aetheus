@@ -13,7 +13,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>PostgreSQL reclamation must reduce physical table size after purging and refuse while a
 /// pipeline runs.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ReclaimSpaceIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

@@ -27,11 +27,11 @@ public sealed record ClientErrorLogRequest
     [System.ComponentModel.DataAnnotations.StringLength(MaxStackTraceLength)]
     public string? StackTrace { get; init; }
 
-    /// <summary>The system log level the report is written at: <see cref="ClientErrorLogLevels.Error"/>
-    /// or <see cref="ClientErrorLogLevels.Warning"/>, matched exactly. Null (a client that predates the
-    /// field) is an error, as every report was before (recette R1-89).</summary>
+    /// <summary>The system log level the report is written at: <see cref="ClientErrorLogLevels.Error"/>,
+    /// <see cref="ClientErrorLogLevels.Warning"/> or <see cref="ClientErrorLogLevels.Information"/>, matched
+    /// exactly. Null (a client that predates the field) is an error, as every report was before (recette R1-89).</summary>
     [System.ComponentModel.DataAnnotations.StringLength(16)]
-    [System.ComponentModel.DataAnnotations.AllowedValues(null, ClientErrorLogLevels.Error, ClientErrorLogLevels.Warning)]
+    [System.ComponentModel.DataAnnotations.AllowedValues(null, ClientErrorLogLevels.Error, ClientErrorLogLevels.Warning, ClientErrorLogLevels.Information)]
     public string? Level { get; init; }
 
     /// <summary>Drops the query string and the fragment: either can carry a token or text the user
@@ -57,3 +57,36 @@ public record SystemLogFileDto(
     string FileName,
     long SizeBytes,
     DateTime LastModified);
+
+/// <summary>
+/// An organization's exclusion rule of the system logs (R-28): an entry whose message contains
+/// <see cref="Pattern"/> (and whose category contains <see cref="Category"/> when it is not empty) is shown
+/// on the logs page's second tab instead of the first. Nothing is removed from the log.
+/// </summary>
+public record SystemLogExclusionRuleDto(
+    int Id,
+    int OrganizationId,
+    string Pattern,
+    string Category,
+    bool Enabled,
+    string? CreatedBy,
+    DateTime CreatedAt);
+
+public sealed record SaveSystemLogExclusionRuleRequest
+{
+    public const int MaxPatternLength = 300;
+    public const int MaxCategoryLength = 200;
+
+    /// <summary>Text the entry's message contains, case-insensitive.</summary>
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.StringLength(MaxPatternLength, MinimumLength = 1)]
+    public string Pattern { get; init; } = string.Empty;
+
+    /// <summary>Text the entry's category contains, case-insensitive; empty for any category.</summary>
+    [System.ComponentModel.DataAnnotations.StringLength(MaxCategoryLength)]
+    public string Category { get; init; } = string.Empty;
+
+    public bool Enabled { get; init; } = true;
+}
+
+public sealed record SetSystemLogExclusionRuleEnabledRequest(bool Enabled);

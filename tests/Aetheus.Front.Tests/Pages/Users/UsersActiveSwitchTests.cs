@@ -126,6 +126,61 @@ public class UsersActiveSwitchTests : BunitContext
         Assert.Contains(activity.ToString("g", System.Globalization.CultureInfo.CurrentCulture), aliceCells);
     }
 
+    // ---- R-10: the row shows the answer of the save at once; the read behind it neither empties nor veils ----
+
+    private static PaginatedResult<UserDto> UsersWith(bool bobActive) => new()
+    {
+        Items =
+        [
+            new UserDto { Id = 1, Username = "alice", Email = "alice@example.org", IsActive = true, Roles = ["Admin"] },
+            new UserDto { Id = 2, Username = "bob", Email = "bob@example.org", IsActive = bobActive, Roles = ["Reader"] }
+        ],
+        TotalCount = 2
+    };
+
+    private TaskCompletionSource<PaginatedResult<UserDto>> HoldTheNextUsersRead()
+    {
+        var gate = new TaskCompletionSource<PaginatedResult<UserDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/users", _ => gate.Task);
+        return gate;
+    }
+
+    [Fact]
+    public async Task ASavedSwitch_ShowsTheAnswerAtOnce_BeforeTheListIsReadAgain_AndTheTableStaysFull()
+    {
+        _handler.SetJsonResponse(HttpMethod.Put, "api/users/2", new UserDto { Id = 2, Username = "bob", Email = "bob@example.org", IsActive = false, Roles = ["Reader"] });
+        var cut = await RenderPageAsync();
+        var gate = HoldTheNextUsersRead();
+
+        await cut.InvokeAsync(() => SwitchOf(cut, "bob").Click());
+
+        var grid = cut.FindComponent<AetheusDataGrid<UserDto>>().Instance;
+        cut.WaitForAssertion(() => Assert.False(IsOn(SwitchOf(cut, "bob"))));
+        // The read behind the save is still running: what is on screen came from the answer of the save.
+        Assert.False(grid.BackgroundRefresh.IsCompleted);
+        Assert.Contains("alice", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("thead > tr.omni-data-grid__progress .omni-loading-bar"));
+
+        gate.SetResult(UsersWith(bobActive: false));
+        await cut.InvokeAsync(() => grid.BackgroundRefresh);
+        Assert.False(IsOn(SwitchOf(cut, "bob")));
+    }
+
+    [Fact]
+    public async Task ARefusedSave_PutsTheSwitchBackToTheServersState_WithoutEmptyingTheTable()
+    {
+        _handler.SetResponse(HttpMethod.Put, "api/users/2", System.Net.HttpStatusCode.BadRequest);
+        var cut = await RenderPageAsync();
+
+        await cut.InvokeAsync(() => SwitchOf(cut, "bob").Click());
+
+        var grid = cut.FindComponent<AetheusDataGrid<UserDto>>().Instance;
+        await cut.InvokeAsync(() => grid.BackgroundRefresh);
+        cut.WaitForAssertion(() => Assert.True(IsOn(SwitchOf(cut, "bob"))));
+        Assert.Contains("alice", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Danger);
+    }
+
     private static AngleSharp.Dom.IElement SwitchOf(IRenderedComponent<UsersPage> cut, string username)
     {
         var row = cut.FindAll("tr").First(candidate => candidate.TextContent.Contains(username, StringComparison.Ordinal));

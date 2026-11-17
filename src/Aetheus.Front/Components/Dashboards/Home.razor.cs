@@ -121,6 +121,8 @@ public partial class Home : IAsyncDisposable
             _appSummaryLoading = false;
         }
 
+        // The hubs only refresh the page: it is drawn from what was read, never after they have started.
+        StateHasChanged();
         await ConnectHubsAsync();
     }
 
@@ -151,7 +153,7 @@ public partial class Home : IAsyncDisposable
                 await _serversHub.InvokeAsync("JoinAllServers");
                 await ReloadAsync();
             });
-            await _serversHub.StartAsync();
+            await _serversHub.StartAsync(_lifetime);
             await _serversHub.InvokeAsync("JoinAllServers");
         }
         catch { /* best-effort */ }
@@ -169,7 +171,7 @@ public partial class Home : IAsyncDisposable
                 await _pipelinesHub.InvokeAsync("JoinPipelineUpdatesGroup");
                 await ReloadAsync();
             });
-            await _pipelinesHub.StartAsync();
+            await _pipelinesHub.StartAsync(_lifetime);
             await _pipelinesHub.InvokeAsync("JoinPipelineUpdatesGroup");
         }
         catch { /* best-effort */ }
@@ -188,7 +190,7 @@ public partial class Home : IAsyncDisposable
                 await _entitiesHub.InvokeAsync("JoinEntityUpdates", ResourceType.Project);
                 await ReloadAppSummaryAsync();
             });
-            await _entitiesHub.StartAsync();
+            await _entitiesHub.StartAsync(_lifetime);
             await _entitiesHub.InvokeAsync("JoinEntityUpdates", ResourceType.Project);
         }
         catch { /* best-effort */ }

@@ -14,12 +14,14 @@ namespace Aetheus.Back.Components.Pipelines;
 public interface IPipelineSystemTaskFactory
 {
     /// <summary>Creates the agent tasks for a set of injected system steps.</summary>
+    /// <param name="loadedRun">The run with its pipeline when the caller already holds it; read otherwise.</param>
+    /// <param name="knownAffinity">The run's affinity runner when the caller already read it; read otherwise.</param>
     /// <returns><c>false</c> when no runner could take them, or when cleanup was queued durably for an
     /// offline affinity runner - in both cases the caller must not treat the stage as dispatched.</returns>
     Task<bool> CreateSystemTasksAsync(
         int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars,
         PipelineYamlDefinition definition, int? organizationId, int? projectId, List<string> completedStages,
-        CancellationToken ct);
+        CancellationToken ct, PipelineRun? loadedRun = null, KnownRunAffinity? knownAffinity = null);
 
     /// <summary>Dispatches the pending System:Cleanup stage of a run, if it has one left.</summary>
     /// <returns><c>true</c> when cleanup is now running or durably queued, so the caller must stop.</returns>
@@ -49,10 +51,13 @@ public sealed class PipelineSystemTaskFactory(
     public async Task<bool> CreateSystemTasksAsync(
         int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars,
         PipelineYamlDefinition definition, int? organizationId, int? projectId, List<string> completedStages,
-        CancellationToken ct)
+        CancellationToken ct, PipelineRun? loadedRun = null, KnownRunAffinity? knownAffinity = null)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
+        var run = loadedRun ?? await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         if (run?.Pipeline is null) return false;
+        var affinityServerId = knownAffinity is { } known
+            ? known.ServerId
+            : await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false);
 
         // The canonical clone URL is snapshotted on the run together with the immutable commit.
         // Project.RepositoryUrl is a legacy fallback and can legitimately be empty for repositories
@@ -60,8 +65,16 @@ public sealed class PipelineSystemTaskFactory(
         var hasRepo = !string.IsNullOrWhiteSpace(run.RepositoryUrl);
 
         var (server, deferredCleanup) = await ResolveSystemServerAsync(
-            runId, systemSteps, resolvedVars, definition, organizationId, projectId, ct).ConfigureAwait(false);
+            runId, systemSteps, resolvedVars, definition, organizationId, projectId, affinityServerId, ct).ConfigureAwait(false);
         if (server is null) return false;
+        // R-11 (decision of 2026-11-10): an imported external pipeline runs only on servers linked to its project,
+        // its checkout and cleanup included. Fail closed on any other server, the run's affinity runner too.
+        if (run.Pipeline.IsExternalImport)
+        {
+            server = await ResolveImportServerAsync(
+                server, deferredCleanup, affinityServerId, definition, resolvedVars, organizationId, projectId, ct).ConfigureAwait(false);
+            if (server is null) return false;
+        }
 
         // Phase 2: the whole run executes in containers when isolation is set at the run level.
         // Container execution is Linux-only - the system scripts use the Linux variants and the
@@ -92,14 +105,28 @@ public sealed class PipelineSystemTaskFactory(
         return !deferredCleanup;
     }
 
+    // Null means the run cannot be dispatched (no linked project, or no linked server to fall back on).
+    private async Task<Server?> ResolveImportServerAsync(
+        Server server, bool deferredCleanup, int? affinityServerId, PipelineYamlDefinition definition,
+        Dictionary<string, string> resolvedVars, int? organizationId, int? projectId, CancellationToken ct)
+    {
+        if (projectId is not { } importProjectId) return null;
+        if ((await repo.GetProjectLinkedServerIdsAsync(importProjectId, ct).ConfigureAwait(false)).Contains(server.Id))
+            return server;
+        if (deferredCleanup || affinityServerId is not null)
+            return null;
+        return await dispatchServers.ResolveProjectServerForTargetAsync(
+            YamlParsingHelper.FlattenJobs(definition).FirstOrDefault() ?? new PipelineStageDefinition(),
+            resolvedVars, organizationId, false, importProjectId, ct).ConfigureAwait(false);
+    }
+
     // Use run affinity if available - cleanup should run on the same server as prepare. A cleanup whose
     // affinity runner is offline is queued durably for it (DeferredCleanup); without affinity the
     // first stage's target, or any online runner, takes the system steps.
     private async Task<(Server? Server, bool DeferredCleanup)> ResolveSystemServerAsync(
         int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars,
-        PipelineYamlDefinition definition, int? organizationId, int? projectId, CancellationToken ct)
+        PipelineYamlDefinition definition, int? organizationId, int? projectId, int? affinityServerId, CancellationToken ct)
     {
-        var affinityServerId = await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false);
         var isCleanup = systemSteps.All(step => step.StageName == PipelineRunHelpers.SystemCleanupStage);
         Server? server = null;
         if (affinityServerId is not null)
@@ -265,7 +292,7 @@ public sealed class PipelineSystemTaskFactory(
         if (definition is null) return false;
 
         var resolvedVars = await variableResolver.ResolveFullVariablesForRunAsync(run, definition, ct).ConfigureAwait(false);
-        if (await CreateSystemTasksAsync(runId, cleanupSteps, resolvedVars, definition, null, null, [], ct).ConfigureAwait(false))
+        if (await CreateSystemTasksAsync(runId, cleanupSteps, resolvedVars, definition, null, null, [], ct, run).ConfigureAwait(false))
             return true;
 
         if (!await finalizer.IsRunActiveAsync(runId, ct).ConfigureAwait(false)) return false;

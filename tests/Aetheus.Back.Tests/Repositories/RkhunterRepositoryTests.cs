@@ -128,10 +128,20 @@ public class RkhunterRepositoryTests : IDisposable
         });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        await _repo.UpdateScanScheduleAsync(_serverId, "0 3 * * 0", ct: TestContext.Current.CancellationToken);
+        var stored = await _repo.UpdateScanScheduleAsync(_serverId, "0 3 * * 0", ct: TestContext.Current.CancellationToken);
 
+        Assert.True(stored);
         var state = await _db.RkhunterStates.FirstAsync(r => r.ServerId == _serverId, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("0 3 * * 0", state.ScanScheduleCron);
+    }
+
+    [Fact]
+    public async Task UpdateScanScheduleAsync_ServerWithoutRkhunterState_StoresNothingAndSaysSo()
+    {
+        var stored = await _repo.UpdateScanScheduleAsync(_serverId, "0 3 * * 0", ct: TestContext.Current.CancellationToken);
+
+        Assert.False(stored);
+        Assert.False(await _db.RkhunterStates.AnyAsync(r => r.ServerId == _serverId, TestContext.Current.CancellationToken));
     }
 
     [Fact]

@@ -43,7 +43,7 @@ public class AuthServiceMustChangePasswordTests
             _repo,
             config,
             Substitute.For<IAuditService>(),
-            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
+            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }),
             Substitute.For<IMemoryCache>(),
             orgRepo,
             Substitute.For<ITotpService>(),
@@ -82,12 +82,12 @@ public class AuthServiceMustChangePasswordTests
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(response!.Token);
         var visitor = jwt.Claims.Single(claim => claim.Type == AetheusClaimTypes.AnalyticsVisitor).Value;
-        Assert.Equal(AuthTokenHelper.AnalyticsVisitorId("aetheus-dev-key-minimum-32-bytes!!", "1"), visitor);
+        Assert.Equal(new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }).AnalyticsVisitorId("1"), visitor);
         Assert.Matches("^[A-Za-z0-9_-]{22}$", visitor);
         Assert.DoesNotContain("testuser", visitor, StringComparison.OrdinalIgnoreCase);
         // One identifier per account, and another key gives other identifiers.
-        Assert.NotEqual(visitor, AuthTokenHelper.AnalyticsVisitorId("aetheus-dev-key-minimum-32-bytes!!", "2"));
-        Assert.NotEqual(visitor, AuthTokenHelper.AnalyticsVisitorId("another-key-of-at-least-32-bytes!!!", "1"));
+        Assert.NotEqual(visitor, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }).AnalyticsVisitorId("2"));
+        Assert.NotEqual(visitor, new TokenHashKeys(new JwtOptions { SigningKey = "another-key-of-at-least-32-bytes!!!" }).AnalyticsVisitorId("1"));
     }
 
     [Fact]

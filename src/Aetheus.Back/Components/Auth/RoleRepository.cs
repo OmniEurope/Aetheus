@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Users;
 using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Auth;
@@ -382,7 +383,8 @@ public class RoleRepository(AppDbContext db, TimeProvider? time = null) : IRoleR
 
     public Task<(List<RoleUserDto> Items, int Total)> GetUsersInRolePagedAsync(
         int roleId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
-        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null)
+        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null,
+        bool siteAdminView = true)
     {
         // SITE-FUNC-ROLE-001: filtered, searched and sorted on the User entity, projected to the
         // positional RoleUserDto only after paging: Npgsql cannot translate a predicate or an
@@ -394,14 +396,15 @@ public class RoleRepository(AppDbContext db, TimeProvider? time = null) : IRoleR
                 ? HoldsRole(roleId)
                 : user => user.OrganizationRoles.Any(assignment =>
                     assignment.RoleId == roleId && organizationIds.Contains(assignment.OrganizationId)));
-        // The header filters, before PageUsersAsync counts the page.
-        query = RoleListQuery.UserColumns.ApplyFilters(query, filters);
-        return PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, ct);
+        // The header filters, before PageUsersAsync counts the page; outside the site Admin's view, never on the
+        // e-mail it does not show (a prefix filter would let the caller guess an address).
+        query = RoleListQuery.UserColumns.ApplyFilters(query, siteAdminView ? filters : UserListQuery.WithoutEmail(filters));
+        return PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, siteAdminView, ct);
     }
 
     public async Task<(List<RoleUserDto> Items, int Total)> GetUsersAvailableForRolePagedAsync(
         int roleId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
-        CancellationToken ct = default, IReadOnlyList<int>? organizationIds = null)
+        CancellationToken ct = default, IReadOnlyList<int>? organizationIds = null, bool siteAdminView = true)
     {
         // A role held for one organization can still be given to its holders for another one, so
         // only the site-wide Admin role excludes the users who already hold it (ADR-059).
@@ -412,7 +415,7 @@ public class RoleRepository(AppDbContext db, TimeProvider? time = null) : IRoleR
                 member.UserId == user.Id && organizationIds.Contains(member.OrganizationId)));
         if (await db.Roles.AnyAsync(role => role.Id == roleId && role.Name == RoleNames.Admin, ct).ConfigureAwait(false))
             query = query.Where(user => !user.UserRoles.Any(userRole => userRole.RoleId == roleId));
-        return await PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, ct).ConfigureAwait(false);
+        return await PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, siteAdminView, ct).ConfigureAwait(false);
     }
 
     /// <summary>Holds the role site-wide (Admin only, ADR-059) or for at least one organization.</summary>
@@ -420,20 +423,27 @@ public class RoleRepository(AppDbContext db, TimeProvider? time = null) : IRoleR
         user => user.UserRoles.Any(userRole => userRole.RoleId == roleId && userRole.Role.Name == RoleNames.Admin)
             || user.OrganizationRoles.Any(assignment => assignment.RoleId == roleId);
 
+    /// <summary>One page of users. Outside the site Admin's view (<paramref name="siteAdminView"/> false) the e-mail is
+    /// not returned, and the search and the sort ignore it, so an organization's administrator cannot guess an
+    /// address by prefix, as on <c>/api/users</c>.</summary>
     private static async Task<(List<RoleUserDto> Items, int Total)> PageUsersAsync(
         IQueryable<User> query, string? search, int page, int pageSize,
-        string? sortBy, bool sortDescending, CancellationToken ct)
+        string? sortBy, bool sortDescending, bool siteAdminView, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(search))
         {
             var pattern = $"%{search.Trim()}%";
-            query = query.Where(user =>
-                EF.Functions.ILike(user.Username, pattern) ||
-                EF.Functions.ILike(user.Email, pattern));
+            query = siteAdminView
+                ? query.Where(user =>
+                    EF.Functions.ILike(user.Username, pattern) ||
+                    EF.Functions.ILike(user.Email, pattern))
+                : query.Where(user => EF.Functions.ILike(user.Username, pattern));
         }
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
-        query = (sortBy?.Trim().ToLowerInvariant(), sortDescending) switch
+        var sortKey = sortBy?.Trim().ToLowerInvariant();
+        if (!siteAdminView && sortKey == UserListQuery.EmailKey) sortKey = null;
+        query = (sortKey, sortDescending) switch
         {
             ("email", false) => query.OrderBy(user => user.Email).ThenBy(user => user.Username),
             ("email", true) => query.OrderByDescending(user => user.Email).ThenBy(user => user.Username),
@@ -445,7 +455,7 @@ public class RoleRepository(AppDbContext db, TimeProvider? time = null) : IRoleR
         var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(user => new RoleUserDto(user.Id, user.Username, user.Email, user.IsActive))
+            .Select(user => new RoleUserDto(user.Id, user.Username, siteAdminView ? user.Email : null, user.IsActive))
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return (items, total);

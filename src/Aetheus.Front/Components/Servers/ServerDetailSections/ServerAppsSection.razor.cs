@@ -108,8 +108,6 @@ public partial class ServerAppsSection
         return _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadAsync();
     }
 
-    private Task RefreshAppsAsync() => _grid is not null ? _grid.Refresh() : LoadAsync();
-
     private async Task AddAppAsync()
     {
         _addSaving = true;
@@ -122,12 +120,22 @@ public partial class ServerAppsSection
         });
         if (result is not null)
         {
-            await Task.WhenAll(ReloadAppsAsync(), LoadSourceValuesAsync());
             _addVisible = false;
             _addName = string.Empty;
             _addVersion = string.Empty;
             _addPort = null;
             Toast.Success("Created", "ApplicationCreated");
+            // R-10: the application shows at once from the answer, the quiet read behind it confirms; the
+            // sources the Source filter offers are read again beside it (a new source may have appeared).
+            var sources = LoadSourceValuesAsync();
+            if (_grid is not null) await _grid.ShowRowAsync(result);
+            else await LoadAsync();
+            await sources;
+        }
+        else
+        {
+            // Refused (validation, duplicate name, no right): nothing was created, the grid is untouched.
+            Toast.Error("Error", "SaveFailed");
         }
         _addSaving = false;
     }
@@ -143,7 +151,9 @@ public partial class ServerAppsSection
             var success = await Api.Servers.DeleteServerAppAsync(ServerId, app.Id);
             if (success)
             {
-                await RefreshAppsAsync();
+                // R-10: the application leaves the grid at once, the quiet read behind it confirms.
+                if (_grid is not null) await _grid.HideRowAsync(app);
+                else await LoadAsync();
                 Toast.Success("Deleted", "Deleted");
             }
             else

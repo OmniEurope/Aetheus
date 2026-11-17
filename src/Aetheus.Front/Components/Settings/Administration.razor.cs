@@ -38,6 +38,7 @@ public partial class Administration
             new("/admin/ai-profiles", "smart_toy", "AiRunnerProfiles", "AiRunnerProfilesDescription"),
             new("/admin/package-feeds", "inventory", "PackageFeeds", "PackageFeedsDescription"),
             new("/admin/package-registry", "deployed_code", "PackageRegistry", "PackageRegistryDescription"),
+            new("/admin/cve-sources", "shield", "CveSourcesTitle", "CveSourcesDescription"),
             new("/admin/plugins", "extension", "Plugins", "PluginsDescription"),
             new("/admin/dashboards", "space_dashboard", "Dashboards", "ManageDashboards"),
             new("/admin/api-reference", "api", "ApiReference", "ApiReferenceDescription")

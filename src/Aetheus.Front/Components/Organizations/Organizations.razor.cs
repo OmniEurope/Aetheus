@@ -39,7 +39,7 @@ public partial class Organizations : IAsyncDisposable
         // Realtime: refresh the list on any org create/update/delete, and on member/project changes
         // (which move the Members/Projects counts shown in the grid). RT4M.
         _adminRt = new AdminEntitySubscription(HubFactory);
-        await _adminRt.StartAsync(AdminEntities.Organization, () => InvokeAsync(async () =>
+        _ = _adminRt.StartAsync(AdminEntities.Organization, () => InvokeAsync(async () =>
         {
             // A pushed change refreshes the grid quietly (rows, page, filters kept).
             await RefreshSilentlyAsync(() => _grid?.Refresh() ?? Task.CompletedTask);
@@ -120,7 +120,8 @@ public partial class Organizations : IAsyncDisposable
         {
             if (await Api.Servers.DeleteOrganizationAsync(org.Id))
             {
-                await RefreshSilentlyAsync();
+                // R-10: the organization is out of the grid at once, the read behind it confirms.
+                await (_grid?.HideRowAsync(org) ?? ReloadAsync());
                 Notify.Success("Deleted", "Deleted");
             }
             else

@@ -129,6 +129,37 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
     public async Task<int?> UpgradeSystemAsync(int serverId, bool dryRun, CancellationToken ct = default)
         => (await PostJsonAsync<SystemUpgradeRequest, ServiceTaskResponse>($"api/servers/{serverId}/system/upgrade", new SystemUpgradeRequest { DryRun = dryRun }, ct).ConfigureAwait(false))?.TaskId;
 
+    /// <summary>R-41: the CVE watch of one server's host system. Throws <see cref="HttpRequestException"/> on a failed read.</summary>
+    public async Task<ServerHostVulnerabilitiesDto> GetHostVulnerabilitiesAsync(int serverId, CancellationToken ct = default) =>
+        await Http.GetFromJsonAsync<ServerHostVulnerabilitiesDto>($"api/servers/{serverId}/host-vulnerabilities", JsonOptions.Web, ct).ConfigureAwait(false) ?? new();
+
+    /// <summary>R-7: the quality grade of every server the caller may read that reported its packages, or of one server.
+    /// Throws <see cref="HttpRequestException"/> on a failed read.</summary>
+    public async Task<List<ServerQualityDto>> GetHostQualityAsync(int? serverId = null, CancellationToken ct = default)
+    {
+        var url = serverId is { } id ? $"api/servers/host-quality?serverId={id.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : "api/servers/host-quality";
+        return await Http.GetFromJsonAsync<List<ServerQualityDto>>(url, JsonOptions.Web, ct).ConfigureAwait(false) ?? [];
+    }
+
+    /// <summary>R-41: one page of the host findings of every server the caller may read. Throws <see cref="HttpRequestException"/> on a failed read.</summary>
+    public async Task<PaginatedResult<ServerHostFindingDto>> GetHostFindingsAsync(
+        int page, int pageSize, AnalysisSeverity? severity = null, bool exploitedOnly = false, bool withoutFixOnly = false,
+        int? organizationId = null, CancellationToken ct = default)
+    {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var query = new Dictionary<string, string?>
+        {
+            ["page"] = page.ToString(invariant),
+            ["pageSize"] = pageSize.ToString(invariant)
+        };
+        if (severity.HasValue) query["severity"] = severity.Value.ToString();
+        if (exploitedOnly) query["exploitedOnly"] = "true";
+        if (withoutFixOnly) query["withoutFixOnly"] = "true";
+        if (organizationId.HasValue) query["organizationId"] = organizationId.Value.ToString(invariant);
+        return await Http.GetFromJsonAsync<PaginatedResult<ServerHostFindingDto>>(
+            QueryHelpers.AddQueryString("api/servers/host-vulnerabilities", query), JsonOptions.Web, ct).ConfigureAwait(false) ?? new();
+    }
+
     public async Task<PaginatedResult<BackupPolicyDto>> GetBackupPoliciesAsync(
         int page = 1, int pageSize = 25, string? search = null,
         string? sortBy = null, bool sortDescending = false, int? projectId = null,
@@ -161,6 +192,11 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
 
     public Task<BackupPolicyDto?> UpdateBackupPolicyAsync(int id, UpdateBackupPolicyRequest request, CancellationToken ct = default)
         => PutJsonAsync<UpdateBackupPolicyRequest, BackupPolicyDto>($"api/backups/{id}", request, ct);
+
+
+    /// <summary>Replaces only the backup schedule of a policy (a move in the build planner).</summary>
+    public Task<ApiStatus> SetBackupScheduleAsync(int id, SetBackupScheduleRequest request, CancellationToken ct = default)
+        => PutJsonNoBodyAsync<SetBackupScheduleRequest>($"api/backups/{id}/schedule", request, ct);
 
 
     public Task<ApiStatus> DeleteBackupPolicyAsync(int id, CancellationToken ct = default)
@@ -254,6 +290,10 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
     public Task<ApiPerformanceReportDto?> GetApiPerformanceAsync(CancellationToken ct = default) =>
         Http.GetFromJsonAsync<ApiPerformanceReportDto>("api/admin/performance", JsonOptions.Web, ct);
 
+    /// <summary>R-6: the volume of every table of the database (administrators).</summary>
+    public Task<List<DatabaseTableVolumeDto>?> GetDatabaseTablesAsync(CancellationToken ct = default) =>
+        Http.GetFromJsonAsync<List<DatabaseTableVolumeDto>>("api/admin/database-tables", JsonOptions.Web, ct);
+
 
     public async Task<List<SystemLogFileDto>> GetSystemLogFilesAsync()
     {
@@ -265,9 +305,16 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
         string? fileName, string? level, string? search, DateTime? dateFrom, DateTime? dateTo,
         int page = 1, int pageSize = 50,
         string? sortBy = null, bool sortDescending = true,
-        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
+        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null,
+        int? organizationId = null, bool excluded = false)
     {
         var query = BuildSystemLogFilters(fileName, level, search, dateFrom, dateTo);
+        // R-28: the organization's rules split the log into the page's two tabs.
+        if (organizationId is { } organization)
+        {
+            query["organizationId"] = organization.ToString();
+            query["excluded"] = excluded ? "true" : "false";
+        }
         query["page"] = page.ToString();
         query["pageSize"] = pageSize.ToString();
         if (!string.IsNullOrWhiteSpace(sortBy))

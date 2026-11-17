@@ -47,6 +47,21 @@ public sealed class TaskListQueryTests : IDisposable
         Assert.Equal("build", Assert.Single(items).Name);
     }
 
+    /// <summary>ADR-060: the # column shows the number, so its filter reads the number, per server.</summary>
+    [Fact]
+    public async Task Repository_FiltersOnTheNumberTheColumnShows()
+    {
+        await SeedAsync();
+        var repo = new TaskRepository(_db, TimeProvider.System);
+
+        var (items, total) = await repo.GetTasksPagedAsync(
+            null, 1, 10, ct: TestContext.Current.CancellationToken,
+            columnFilters: [new GridFilter { Field = "Number", Operator = GridFilterOperator.Equals, Value = "2" }]);
+
+        Assert.Equal(1, total);
+        Assert.Equal("test", Assert.Single(items).Name);
+    }
+
     [Fact]
     public async Task Repository_KeepsTheCallersScope_UnderAFilter()
     {

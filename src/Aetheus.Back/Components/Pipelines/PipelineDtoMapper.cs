@@ -32,6 +32,7 @@ internal static class PipelineDtoMapper
                 return new PipelineRunSummaryDto
                 {
                     Id = run.Id,
+                    BuildNumber = run.BuildNumber,
                     Status = run.Status,
                     StartedAt = run.StartedAt,
                     CompletedAt = run.CompletedAt,
@@ -41,7 +42,9 @@ internal static class PipelineDtoMapper
             }).ToList(),
             CreatedAt = pipeline.CreatedAt,
             UpdatedAt = pipeline.UpdatedAt,
-            OwnerUsername = pipeline.CreatedByUsername
+            OwnerUsername = pipeline.CreatedByUsername,
+            ExternalImportPath = pipeline.ExternalImportPath,
+            ExternalImportCommit = pipeline.ExternalImportCommit
         };
     }
 }

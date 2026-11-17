@@ -1,0 +1,75 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Pipelines
+@* R-11 (decision of 2026-11-10, option A): the pipeline files of the project's external repository mirrors, imported
+   read-only. Nothing is drawn for a project without an external repository. *@
+@if (_candidates is { HasExternalRepository: true } candidates)
+{
+    <OmniCard Class="external-pipelines-panel">
+        <HeaderContent>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="external-pipelines-header">
+                <OmniIcon Name="OmniIconName.Lock" />
+                <strong>@L["ExternalPipelinesTitle"]</strong>
+            </OmniStack>
+        </HeaderContent>
+        <ChildContent>
+            <p class="external-pipelines-hint">@L["ExternalPipelinesHint"]</p>
+            @if (candidates.UnreadableRepositories.Count > 0 || _error is not null)
+            {
+                <OmniStack Gap="OmniSpacing.Medium" Class="omni-u-mb-md">
+                    @foreach (var unreadable in candidates.UnreadableRepositories)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Warning">@L["ExternalPipelinesUnreadable", unreadable]</OmniAlert>
+                    }
+                    @if (_error is not null)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Danger" Dismissible="true" OnDismiss="@(() => _error = null)">@_error</OmniAlert>
+                    }
+                </OmniStack>
+            }
+            @if (candidates.Items.Count == 0 && candidates.UnreadableRepositories.Count == 0)
+            {
+                <p class="external-pipelines-empty">@L["ExternalPipelinesNone"]</p>
+            }
+            <OmniStack Gap="OmniSpacing.Small" Class="external-pipelines-list">
+                @foreach (var item in candidates.Items)
+                {
+                    <div class="external-pipelines-row" data-file="@item.FilePath">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="external-pipelines-row-head">
+                            @if (item.PipelineId is { } pipelineId && item.State is not ExternalPipelineImportState.NameTaken)
+                            {
+                                <a href="@($"pipelines/{pipelineId}")" class="external-pipelines-name">@item.Name</a>
+                            }
+                            else
+                            {
+                                <span class="external-pipelines-name">@item.Name</span>
+                            }
+                            <OmniBadge Tone="@ExternalPipelineStateView.Tone(item.State)" Fill="OmniFill.Tonal" Class="external-pipelines-state">
+                                <Icon><OmniIcon Name="@ExternalPipelineStateView.Icon(item.State)" /></Icon>
+                                <ChildContent>@L[ExternalPipelineStateView.LabelKey(item.State)]</ChildContent>
+                            </OmniBadge>
+                            @if (ExternalPipelineStateView.CanImport(item.State))
+                            {
+                                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!_canWrite || _importing is not null)" Busy="@(_importing == item.FilePath)"
+                                            OnClick="@(() => ImportAsync(item))" Class="external-pipelines-import"
+                                            title="@(!_canWrite ? L["InsufficientPermissions"].Value : L["ExternalPipelinesImportHint"].Value)">
+                                    <Icon><OmniIcon Name="OmniIconName.Download" /></Icon>
+                                    <ChildContent><span>@L[item.State == ExternalPipelineImportState.ChangedSinceImport ? "ExternalPipelinesReimport" : "ExternalPipelinesImport"]</span></ChildContent>
+                                </OmniButton>
+                            }
+                        </OmniStack>
+                        <span class="external-pipelines-source">@L["ExternalPipelinesSource", item.FilePath, item.RepositoryName] <ShortId Value="@item.CommitSha" Href="@CommitHref(item)" /></span>
+                        @if (item.Problems.Count > 0)
+                        {
+                            <ul class="external-pipelines-problems">
+                                @foreach (var problem in item.Problems)
+                                {
+                                    <li>@problem</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
+            </OmniStack>
+        </ChildContent>
+    </OmniCard>
+}

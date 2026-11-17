@@ -18,9 +18,10 @@
     }
     @if (_loadingPreview)
     {
-        @* Recette R-116: the preview is read under OE's busy veil over the zone it will fill (the previous
-           preview belongs to another owner and is dropped at once), no loader. *@
-        <div class="omni-busy action-veil-placeholder" aria-busy="true" data-testid="owner-transfer-preview-pending"></div>
+        @* Recette R-116, R-1: the preview is read with the page veil held, over a block of sensible height where it
+           will appear (the previous preview belongs to another owner and is dropped at once), no loader. *@
+        <VeilHold Busy="true" />
+        <div class="action-veil-placeholder" data-testid="owner-transfer-preview-pending"></div>
     }
     else if (_preview is not null)
     {

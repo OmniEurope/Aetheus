@@ -19,7 +19,7 @@ public sealed class AdministrationScopeService(ApiClient api, AuthStateProvider 
 
     public event Action? Changed;
 
-    /// <summary>Loads the organizations once per signed-in user; a failed load leaves the list empty.</summary>
+    /// <summary>Loads the organizations once per signed-in user; a failed load leaves the list empty and is retried by the next call.</summary>
     public async Task EnsureLoadedAsync(CancellationToken ct = default)
     {
         if (_loadedFor is not null && _loadedFor == auth.UserId) return;
@@ -27,9 +27,11 @@ public sealed class AdministrationScopeService(ApiClient api, AuthStateProvider 
         {
             Organizations = await api.Servers.GetAdministeredOrganizationsAsync(ct);
         }
-        catch (HttpRequestException)
+        catch (Exception exception) when (exception is HttpRequestException or Polly.ExecutionRejectedException)
         {
+            // Not marked as loaded: the next call retries instead of leaving the selector empty until the user changes.
             Organizations = [];
+            return;
         }
         _loadedFor = auth.UserId;
         if (SelectedOrganizationId is { } selected && Organizations.All(organization => organization.Id != selected))
@@ -47,19 +49,21 @@ public sealed class AdministrationScopeService(ApiClient api, AuthStateProvider 
     }
 
     /// <summary>The organizations where the user holds <paramref name="organizationKey"/>, the key a page's API
-    /// resolves its scope with: a page never offers (or requests) an organization its API would refuse.</summary>
-    public IReadOnlyList<AdministeredOrganizationDto> OrganizationsFor(string organizationKey) =>
-        [.. Organizations.Where(organization => organization.Holds(organizationKey))];
+    /// resolves its scope with: a page never offers (or requests) an organization its API would refuse. A null key
+    /// (a site Admin's page, R-12) keeps every organization.</summary>
+    public IReadOnlyList<AdministeredOrganizationDto> OrganizationsFor(string? organizationKey) =>
+        [.. Organizations.Where(organization => organizationKey is null || organization.Holds(organizationKey))];
 
     /// <summary>The chosen organization as <paramref name="organizationKey"/>'s page sees it: the choice when the
     /// user holds that key there, else null (all), so a choice made on another page never reaches this page's API.</summary>
-    public int? SelectedFor(string organizationKey) =>
-        SelectedOrganizationId is { } selected && Organizations.Any(organization => organization.Id == selected && organization.Holds(organizationKey))
+    public int? SelectedFor(string? organizationKey) =>
+        SelectedOrganizationId is { } selected && Organizations.Any(organization => organization.Id == selected
+            && (organizationKey is null || organization.Holds(organizationKey)))
             ? selected
             : null;
 
     /// <summary>The organization a page that works on one organization at a time uses: the one chosen (when valid
     /// for the page), else the first one holding the key; null when there is none.</summary>
-    public int? SelectedOrFirstFor(string organizationKey) =>
+    public int? SelectedOrFirstFor(string? organizationKey) =>
         SelectedFor(organizationKey) ?? OrganizationsFor(organizationKey).FirstOrDefault()?.Id;
 }

@@ -246,8 +246,8 @@ public partial class ReleasesList : IAsyncDisposable
             var result = await Api.Projects.TriggerReleaseBuildAsync(release.Id, new TriggerReleaseBuildRequest { PipelineId = pipelineId });
             if (result is not null)
             {
-                Toast.Success("BuildTriggered", release.Version);
-                await ReloadGrid();
+                Toast.Success("BuildTriggered", ReleaseHelper.ShortVersion(release.Version));
+                await ShowReleaseAsync(result);
             }
         }
     }
@@ -281,7 +281,7 @@ public partial class ReleasesList : IAsyncDisposable
         var result = await Api.Projects.RollbackReleaseAsync(release.Id, rollbackRequest);
         if (result is not null)
         {
-            Toast.Success("RollbackQueued", release.Version);
+            Toast.Success("RollbackQueued", ReleaseHelper.ShortVersion(release.Version));
             await ReloadGrid();
         }
     }
@@ -289,7 +289,7 @@ public partial class ReleasesList : IAsyncDisposable
     private async Task PromoteRelease(ReleaseDto release)
     {
         var confirmed = await Dialog.Confirm(
-            string.Format(L["PromoteConfirm"].Value, release.Version),
+            string.Format(L["PromoteConfirm"].Value, ReleaseHelper.ShortVersion(release.Version)),
             L["Promote"].Value,
             new OmniConfirmOptions { OkButtonText = L["Promote"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
@@ -297,8 +297,8 @@ public partial class ReleasesList : IAsyncDisposable
         var result = await Api.Projects.PromoteReleaseAsync(release.Id);
         if (result is not null)
         {
-            Toast.Success("Promoted", release.Version);
-            await ReloadGrid();
+            Toast.Success("Promoted", ReleaseHelper.ShortVersion(release.Version));
+            await ShowReleaseAsync(result);
         }
     }
 
@@ -316,7 +316,7 @@ public partial class ReleasesList : IAsyncDisposable
     {
         if (release.RevertPipelineId is not { } pipelineId) return;
         var confirmed = await Dialog.Confirm(
-            string.Format(L["RevertToPreviousConfirm"].Value, release.Version),
+            string.Format(L["RevertToPreviousConfirm"].Value, ReleaseHelper.ShortVersion(release.Version)),
             L["RevertToPrevious"].Value,
             new OmniConfirmOptions { Destructive = true, ConfirmIcon = OmniIconName.ArrowUUpLeft, OkButtonText = L["Rollback"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
@@ -422,6 +422,14 @@ public partial class ReleasesList : IAsyncDisposable
     }
 
     private AetheusDataGrid<ReleaseDto>? _grid;
+    // R-10: the row shows what the action answered at once; the read behind it confirms. The page cache holds
+    // the old row, so it is dropped before that read.
+    private Task ShowReleaseAsync(ReleaseDto saved)
+    {
+        Cache.InvalidatePrefix("releases:");
+        return _grid is not null ? _grid.ShowRowAsync(saved) : Task.CompletedTask;
+    }
+
     private Task ReloadGrid() => _grid?.Reload() ?? Task.CompletedTask;
     private Task RefreshGrid() => _grid?.Refresh() ?? Task.CompletedTask;
 

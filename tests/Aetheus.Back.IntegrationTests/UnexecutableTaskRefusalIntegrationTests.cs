@@ -8,6 +8,7 @@ using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
 using Aetheus.Back.Services.DomainEvents;
+using Aetheus.Back.Tests;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +24,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// coordinator's sweep against PostgreSQL: the task now fails with an actionable reason, and work
 /// fenced behind an agent update still resumes once the update is confirmed.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class UnexecutableTaskRefusalIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const string OldSession = "session-old";
@@ -321,7 +321,8 @@ public sealed class UnexecutableTaskRefusalIntegrationTests(PostgresFixture fixt
                 services.GetRequiredService<IServiceScopeFactory>(),
                 services.GetRequiredService<IHubContext<ServerHub>>(),
                 TimeProvider.System,
-                NullLogger<AgentUpdateCoordinatorService>.Instance);
+                NullLogger<AgentUpdateCoordinatorService>.Instance,
+                leaderLease: LeaderLeaseDouble.Leader());
         }
 
         public AgentReleaseManifestDto Release { get; }

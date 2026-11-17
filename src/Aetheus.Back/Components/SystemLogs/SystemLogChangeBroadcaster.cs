@@ -1,55 +1,44 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Threading.Channels;
+using OmniEurope.Diagnostics.Logs;
+
 namespace Aetheus.Back.Components.SystemLogs;
 
 /// <summary> The system logs page follows the log files live instead of a Refresh button or a
-/// polling toggle. A watcher on the log directory marks it changed; at most every <see
-/// cref="Throttle"/> the admin hub is told <c>AdminEntityChanged("SystemLog", 0, "Updated")</c> and
-/// the page reloads. The throttle bounds the pushes whatever the write rate, including the lines
-/// the page's own reload may write. </summary>
+/// polling toggle. The OmniEurope.Diagnostics change signal watches the log directory and raises
+/// <see cref="ILogChanges.Changed"/> at most every <see cref="ILogChanges.ThrottleMilliseconds"/>,
+/// including for the lines the page's own reload may write; each signal tells the admin hub
+/// <c>AdminEntityChanged("SystemLog", 0, "Updated")</c> and the page reloads. </summary>
 public sealed class SystemLogChangeBroadcaster(
-    IConfiguration configuration,
+    ILogChanges changes,
     IAdminChangeNotifier notifier,
-    TimeProvider timeProvider,
     ILogger<SystemLogChangeBroadcaster> logger) : BackgroundService
 {
-    internal static readonly TimeSpan Throttle = TimeSpan.FromSeconds(2);
+    // One pending signal is enough: signals arriving while a push is in flight fold into the next one.
+    private readonly Channel<bool> _signals = Channel.CreateBounded<bool>(
+        new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
 
-    private int _changed;
+    /// <summary>Marks the logs as changed; the loop pushes once. Also the test seam.</summary>
+    internal void MarkChanged() => _signals.Writer.TryWrite(true);
 
-    /// <summary>Marks the logs as changed; the next tick pushes once. Also the test seam.</summary>
-    internal void MarkChanged() => Interlocked.Exchange(ref _changed, 1);
-
-    /// <summary>Pushes when something changed since the last tick; true when it pushed.</summary>
-    internal async Task<bool> FlushAsync(CancellationToken ct)
+    /// <summary>Waits for a change, then tells the open pages once.</summary>
+    internal async Task PushNextChangeAsync(CancellationToken ct)
     {
-        if (Interlocked.Exchange(ref _changed, 0) == 0) return false;
+        await _signals.Reader.ReadAsync(ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(AdminEntities.SystemLog, 0, EntityChangeOps.Updated, ct).ConfigureAwait(false);
-        return true;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var directory = configuration["Logging:FileLog:Directory"] ?? Path.Combine(AppContext.BaseDirectory, "logs");
-        Directory.CreateDirectory(directory);
-        using var watcher = new FileSystemWatcher(directory)
-        {
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-            IncludeSubdirectories = false
-        };
-        watcher.Changed += (_, _) => MarkChanged();
-        watcher.Created += (_, _) => MarkChanged();
-        watcher.Deleted += (_, _) => MarkChanged();
-        watcher.Renamed += (_, _) => MarkChanged();
-        watcher.EnableRaisingEvents = true;
-
-        using var timer = new PeriodicTimer(Throttle, timeProvider);
+        void OnChanged(object? sender, EventArgs args) => MarkChanged();
+        changes.Changed += OnChanged;
         try
         {
-            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    await FlushAsync(stoppingToken).ConfigureAwait(false);
+                    await PushNextChangeAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -60,6 +49,10 @@ public sealed class SystemLogChangeBroadcaster(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+        }
+        finally
+        {
+            changes.Changed -= OnChanged;
         }
     }
 }

@@ -83,4 +83,36 @@ public sealed class GitRepositoriesRepositoryGroupsTests : BunitContext
         Assert.Equal(1, Git.ConnectAttempts);
         Assert.Empty(Git.Invocations);
     }
+
+    [Fact]
+    public async Task AHubThatRefusesTheJoin_StillShowsTheRows_AndALaterLiveChangeJoinsAgain()
+    {
+        Git.Refuse("JoinRepositoryGroup");
+
+        var cut = Render<GitRepositories>();
+
+        await Git.WhenInvokedAsync("JoinRepositoryGroup");
+        await cut.WhenRenderedAsync(() => Assert.Contains("repo2", cut.Markup, StringComparison.Ordinal));
+        Git.Accept("JoinRepositoryGroup");
+        var before = Git.Count("JoinRepositoryGroup");
+
+        await Git.PushAsync("RepositoryChanged", 1);
+
+        await Git.WhenAsync(
+            () => Git.Count("JoinRepositoryGroup") >= before + 2, "both repositories joined after the refusal");
+    }
+
+    [Fact]
+    public async Task DisposingThePage_WhileAJoinIsHeld_EndsWithoutAnError_AndJoinsNothingMore()
+    {
+        using var hold = Git.Hold("JoinRepositoryGroup");
+        var cut = Render<GitRepositories>();
+        await Git.WhenInvokedAsync("JoinRepositoryGroup");
+
+        var disposing = cut.Instance.DisposeAsync().AsTask();
+        hold.Dispose();
+        await disposing;
+
+        Assert.Equal(1, Git.Count("JoinRepositoryGroup"));
+    }
 }

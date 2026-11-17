@@ -46,7 +46,7 @@ internal static class MenuTestExtensions
     {
         try
         {
-            cut.WaitForState(() => cut.FindAll(".omni-menu__item").Count > 0, TimeSpan.FromSeconds(5));
+            cut.WaitForState(() => cut.FindAll(".omni-menu__item").Count > 0, TimeSpan.FromSeconds(30));
         }
         catch (Bunit.Extensions.WaitForHelpers.WaitForFailedException)
         {

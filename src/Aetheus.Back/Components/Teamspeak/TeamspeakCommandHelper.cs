@@ -9,8 +9,11 @@ public static partial class TeamspeakCommandHelper
     private const string DefaultInstallPath = "/opt/teamspeak3-server_linux_amd64";
     private const string CredentialPath = "/opt/aetheus-agent/teamspeak/query-credentials";
 
+    // DEPLOY-001: the same rule the agent and the root-owned teamspeak-setup helper apply (a dedicated
+    // /opt/teamspeak* directory), so a bad request is refused here with a clear message first.
     public static bool IsValidInstallPath(string path) =>
-        !string.IsNullOrWhiteSpace(path) && InstallPathRegex().IsMatch(path);
+        !string.IsNullOrWhiteSpace(path)
+        && Aetheus.Shared.Components.Pipelines.OperationTargetValidator.TeamspeakSetupInstallPathRegex().IsMatch(path);
 
     public static bool IsValidChannelName(string name) =>
         !string.IsNullOrWhiteSpace(name) && ChannelNameRegex().IsMatch(name);
@@ -218,10 +221,6 @@ public static partial class TeamspeakCommandHelper
             .Replace("\n", "\\n")
             .Replace("\r", "\\r");
     }
-
-    // Install path: only valid filesystem paths
-    [GeneratedRegex(@"^/[a-zA-Z0-9._/-]+$")]
-    private static partial Regex InstallPathRegex();
 
     // Channel name: printable chars, no pipe
     [GeneratedRegex(@"^[^\x00-\x1f|]{1,40}$")]

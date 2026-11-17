@@ -50,6 +50,23 @@ public sealed class AppIngestionSettingsBehaviorTests : BunitContext
     }
 
     [Fact]
+    public void R28_TheAddThresholdButton_SitsInTheFieldOfTheLastControl_OnTheControlsLine()
+    {
+        _handler.SetJsonResponse("api/appmonitoring/apps/7/thresholds", new List<AppMetricThresholdDto>());
+
+        var cut = Render<AppIngestionSettings>(p => p.Add(x => x.AppId, 7).Add(x => x.CanWrite, true));
+
+        var form = cut.Find("[data-testid=metric-threshold-form]");
+        // Metric, Operator, Threshold: three fields, and the button is not a fourth flex item that wraps alone.
+        var fields = form.Children.Where(child => child.ClassList.Contains("omni-form-field")).ToList();
+        Assert.Equal(3, fields.Count);
+        Assert.DoesNotContain(form.Children, child => child.TagName == "BUTTON");
+        var control = fields[2].QuerySelector(".omni-form-field__control--end")!;
+        Assert.NotNull(control.QuerySelector("#analytics-threshold-value"));
+        Assert.Contains("Add", control.QuerySelector("button")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void R2007_TheAudienceStorage_IsOneLineUnderTheBudgetField()
     {
         _handler.SetJsonResponse("api/appmonitoring/apps/7/thresholds", new List<AppMetricThresholdDto>());

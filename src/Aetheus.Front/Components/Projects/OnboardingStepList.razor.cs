@@ -22,6 +22,12 @@ public partial class OnboardingStepList
     /// <summary>When set, the heading shows a Done button that raises it (the caller then hides the list).</summary>
     [Parameter] public EventCallback OnDone { get; set; }
 
+    /// <summary>The text of that button; "Done" when null.</summary>
+    [Parameter] public string? DoneLabel { get; set; }
+
+    /// <summary>The test id of that button; "onboarding-done" when null.</summary>
+    [Parameter] public string? DoneTestId { get; set; }
+
     private static string RowCss(OnboardingStep step) => step.State switch
     {
         OnboardingStepState.Done => "onboarding-step-row is-done",

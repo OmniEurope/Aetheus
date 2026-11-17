@@ -2,9 +2,11 @@
 # The nightly extension of application-qa: what is too long or too heavy to run on every candidate
 # (long-running scenarios, performance, the whole API surface under dynamic scan). The project decides what
 # that is, in shell written in its pipeline in APPLICATION_QA_EXTENDED_COMMANDS (run with `sh -eu -c` from
-# the workspace): nothing is required in its repository (ADR-050, recette R3-64), and without commands the
-# step fails and says so. Only the nightly triggers this pipeline. The restore and the commands sit in two
-# stages: the steps of one stage run concurrently (ADR-012).
+# the workspace): nothing is required in its repository (ADR-050, recette R3-64). Without commands the run warns
+# and succeeds (recette R-67: a pipeline that fails by construction is not a verdict on the project, and a quiet
+# success would claim a check that never ran); `none` is the project's declared choice and only says nothing ran.
+# The setup wizard writes `none` when it finds nothing to run. Only the nightly triggers this pipeline. The restore
+# and the commands sit in two stages: the steps of one stage run concurrently (ADR-012).
 name: application-qa-extended-template
 trigger: manual
 variables:
@@ -35,8 +37,17 @@ stages:
         shell: |
           set -eu
           if test -z "${APPLICATION_QA_EXTENDED_COMMANDS:-}"; then
-            echo "No extended QA command declared: set APPLICATION_QA_EXTENDED_COMMANDS in this pipeline." >&2
-            exit 1
+            echo "WARNING: no extended QA command is declared (APPLICATION_QA_EXTENDED_COMMANDS): nothing was run. Set it in this pipeline's variables, or to none when the project has none." >&2
+            # Same mechanism as the E2E suite of application-qa: the control plane puts the RUN_WARNING output on the run
+            # page and on the nightly that triggered it, said in the user's language through its name (resource
+            # LaunchProblem_RunWarning_QaExtendedCommandMissing).
+            echo "##aetheus[setvariable name=RUN_WARNING]No extended QA command is declared (APPLICATION_QA_EXTENDED_COMMANDS): nothing was run. Set it in this pipeline's variables, or to none when the project has none."
+            echo "##aetheus[setvariable name=RUN_WARNING_CODE]QaExtendedCommandMissing"
+            exit 0
+          fi
+          if test "$APPLICATION_QA_EXTENDED_COMMANDS" = none; then
+            echo "No extended QA command is declared for this project (APPLICATION_QA_EXTENDED_COMMANDS is none): nothing was run."
+            exit 0
           fi
           APPLICATION_PERFORMANCE_ENABLED="$(APPLICATION_PERFORMANCE_ENABLED)" \
             sh -eu -c "$APPLICATION_QA_EXTENDED_COMMANDS"

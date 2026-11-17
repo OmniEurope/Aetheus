@@ -19,8 +19,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// non-admin holding Write on the pipeline only, so the decision goes through the real role check; a
 /// reader (Read, no Write) is refused and nothing changes in the database.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture fixture)
+public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task ApproverApproves_RunResumesAndDispatchesItsGatedStage()
@@ -218,7 +217,7 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
         var project = new Project
         {
             Name = $"approval-{suffix}",
-            RepositoryUrl = $"https://git.example/{suffix}.git",
+            RepositoryUrl = $"http://localhost:5300/git/1/{suffix}.git",
             OrganizationId = organizationId
         };
         var runner = new Server
@@ -286,8 +285,8 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
     }
 
     /// <summary>
-    /// The project's repository (git.example) never resolves: like <c>PipelineTemplateRunIntegrationTests</c>,
-    /// only the Git remote boundary is replaced, answering "no pipeline file" so the stored definition runs.
+    /// The project names one of Aetheus's own clone URLs with no repository behind it (R-4: an external address is
+    /// read only through a project mirror), so the stored definition runs; only the Git remote boundary is replaced.
     /// </summary>
     private static WebApplicationFactory<Program> WithoutRemotePipelineFile(AetheusWebApplicationFactory factory) =>
         factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
@@ -297,11 +296,5 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
     {
         public Task<List<(string BranchName, string Version)>> ListReleaseBranchesAsync(string repositoryUrl, CancellationToken ct = default) =>
             Task.FromResult(new List<(string BranchName, string Version)>());
-
-        public Task<GitRemoteBranch> ResolveBranchCommitAsync(string repositoryUrl, string? branch, CancellationToken ct = default) =>
-            Task.FromResult(new GitRemoteBranch(branch ?? "main", new string('a', 40)));
-
-        public Task<string?> ReadPipelineYamlAsync(string repositoryUrl, string commit, string pipelineName, CancellationToken ct = default) =>
-            Task.FromResult<string?>(null);
     }
 }

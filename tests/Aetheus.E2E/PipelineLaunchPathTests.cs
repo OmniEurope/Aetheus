@@ -64,7 +64,7 @@ public class PipelineLaunchPathTests : E2ETestBase
         using var launch = await http.PostAsJsonAsync(
             $"{BackendUrl}/api/pipelines/{pipelineId}/run", new { });
 
-        // Refused, not accepted-then-failed: no run row should exist for a requirement that cannot be met.
+        // Refused at launch, not accepted-then-failed: the request answers 400 with every unmet requirement.
         Assert.That(
             (int)launch.StatusCode,
             Is.EqualTo(400),
@@ -84,11 +84,15 @@ public class PipelineLaunchPathTests : E2ETestBase
 
         var runs = await http.GetFromJsonAsync<JsonElement>(
             $"{BackendUrl}/api/pipelines/{pipelineId}/runs?page=1&pageSize=5");
+        // R-36 (user decision 2026-11-07): a launch refused at pre-check leaves one failed run carrying the
+        // reason, so the refusal shows in the runs table; it was never accepted, so it never started a step.
         Assert.That(
             runs.GetProperty("totalCount").GetInt32(),
-            Is.Zero,
-            "The refusal happens before the run row exists; a persisted run would mean the launch was "
-            + "accepted and then died, which is the behaviour the preflight replaced.");
+            Is.EqualTo(1),
+            "A launch refused at pre-check leaves exactly one failed run on the pipeline (R-36).");
+        var refused = runs.GetProperty("items").EnumerateArray().Single();
+        Assert.That(refused.GetProperty("status").GetString(), Is.EqualTo("Failed"),
+            $"The refused launch's run must be failed. The run was: {refused}");
     }
 
     private static HttpClient AuthenticatedClient()

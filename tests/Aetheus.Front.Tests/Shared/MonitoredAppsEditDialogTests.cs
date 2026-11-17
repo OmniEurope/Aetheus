@@ -36,21 +36,28 @@ public sealed class MonitoredAppsEditDialogTests : BunitContext
     private int AppReads() => _handler.Requests.Count(request => request.Url.Contains(AppsUrl, StringComparison.Ordinal));
 
     [Fact]
-    public async Task ASavedNewApplication_ReloadsTheList()
+    public async Task ASavedNewApplication_ShowsAtOnce_AndTheListIsReadBehindIt()
     {
-        // Add sits in the project header (R-109), so the list is rendered next to the header outlet the project layout gives it.
-        var cut = this.RenderWithPageHeader<MonitoredAppsList>(parameters => parameters.Add(list => list.ProjectId, 1));
+        // R-32: Add is an action of the project header menu, which the list fills through the cascaded section menu.
+        var menu = new ProjectSectionMenu();
+        var cut = Render<MonitoredAppsList>(parameters => parameters.Add(list => list.ProjectId, 1).AddCascadingValue(menu));
         cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
         var before = AppReads();
-        _dialogs.OpenResult = true;
+        // The read behind the row is held, so the row can only come from the answer of the dialog.
+        var gate = new TaskCompletionSource<List<MonitoredAppDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, AppsUrl, _ => gate.Task);
+        _dialogs.OpenResult = new MonitoredAppDto { Id = 9, ProjectId = 1, Name = "toto-added" };
 
-        await cut.Find(".test-outlet").QuerySelectorAll("button").First(button => button.TextContent.Contains("AddMonitoredApp", StringComparison.Ordinal)).ClickAsync(new());
+        await cut.InvokeAsync(() => menu.Actions.Single(action => action.Text == "AddMonitoredApp").Run());
 
         Assert.Equal(typeof(MonitoredAppFormDialog), _dialogs.LastComponent);
         Assert.Equal("AddMonitoredApp", _dialogs.LastTitle);
         Assert.Equal(1, _dialogs.LastParameters!["ProjectId"]);
         Assert.Null(_dialogs.LastParameters["App"]);
-        Assert.Equal(before + 1, AppReads());
+        // R-10: the added application shows from the dialog answer, the list is read again behind it.
+        Assert.Contains("toto-added", cut.Markup, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.Equal(before + 1, AppReads()));
+        gate.SetResult([new MonitoredAppDto { Id = 1, ProjectId = 1, Name = "toto-qa" }]);
     }
 
     [Fact]

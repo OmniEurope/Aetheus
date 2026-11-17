@@ -100,8 +100,12 @@ public sealed class PipelineRunNotificationPublisher(
 
     /// <summary>Notifies project subscribers when configuration checks refuse an automated launch,
     /// including its trigger and refusal reasons.</summary>
+    /// <param name="reasonProblems">The reason as problem codes: the inbox and the mail say them in the reader's
+    /// language (<c>ReasonProblems</c> of the payload). <c>Reason</c> stays the English sentence, which a row
+    /// stored before the codes existed carries alone.</param>
     public async Task PublishLaunchRefusedAsync(
-        Pipeline pipeline, string triggerSource, string reason, CancellationToken ct = default)
+        Pipeline pipeline, string triggerSource, string reason, IReadOnlyList<ProblemDto>? reasonProblems = null,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         var projectId = await repo.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false);
@@ -113,7 +117,8 @@ public sealed class PipelineRunNotificationPublisher(
                 PipelineName = pipeline.Name,
                 ProjectId = projectId,
                 TriggerSource = triggerSource,
-                Reason = reason
+                Reason = reason,
+                ReasonProblems = reasonProblems is { Count: > 0 } ? reasonProblems : null
             }),
             ct).ConfigureAwait(false);
     }
@@ -137,7 +142,7 @@ public sealed class PipelineRunNotificationPublisher(
                 PipelineId = targetPipelineId ?? upstreamRun.PipelineId,
                 PipelineName = targetName,
                 ProjectId = projectId,
-                TriggerSource = $"on_success:{upstreamRun.Pipeline?.Name}#{upstreamRun.Id}",
+                TriggerSource = $"on_success:{upstreamRun.Pipeline?.Name}#{upstreamRun.BuildNumber}",
                 Reason = reason
             }),
             ct).ConfigureAwait(false);

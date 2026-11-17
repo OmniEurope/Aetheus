@@ -47,6 +47,9 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
     /// <summary>R-30: days shown at first; the user drags the chart range handles to choose another range.</summary>
     internal const int DailyWindowDays = 7;
 
+    // Bumped by each push so the visitors list below re-reads its rows with the summary.
+    private int _visitorsRefresh;
+
     // Bound to the OE range navigator under the chart; null until the series is known.
     private int? _rangeStart;
     private int? _rangeEnd;
@@ -111,6 +114,7 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
             if (AppId != appId || summary is null) return;
             _summary = summary;
             _loadFailed = false;
+            _visitorsRefresh++;
             EnsureDefaultRange();
             StateHasChanged();
         }

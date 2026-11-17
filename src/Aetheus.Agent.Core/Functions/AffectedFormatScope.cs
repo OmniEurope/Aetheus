@@ -15,7 +15,7 @@ internal sealed record FormatScope(bool Full, IReadOnlyList<string> Files)
 /// The scope decision of the former <c>run-affected-dotnet-format.sh</c> script, fail-closed exactly as
 /// the script decides it: only a 40-hex head and a 40-hex baseline that Git knows, that is an ancestor
 /// of the head, and whose diff adds or modifies files only (no deletion, rename or copy, no path with
-/// whitespace, no formatting configuration, solution or project file) narrows the check to the added
+/// whitespace, no formatting configuration, global.json, solution or project file) narrows the check to the added
 /// and modified <c>.cs</c> and <c>.razor</c> files. Anything else checks the whole solution.
 /// </summary>
 internal sealed partial class AffectedFormatScope(IPipelineFunctionTools tools, PipelineFunctionContext context, string git, string workingDirectory)
@@ -29,7 +29,7 @@ internal sealed partial class AffectedFormatScope(IPipelineFunctionTools tools, 
     // Deliberate difference: the script's pattern ended its Directory.Build alternative at the dot
     // ("Directory\.Build\.)$"), so it never matched Directory.Build.props or .targets and a change to
     // them was formatted as affected. Here they force the whole solution, as the script intended.
-    [GeneratedRegex("(^|/)(\\.editorconfig|\\.globalconfig|Directory\\.Build\\.[^/]+|Directory\\.Packages\\.props|[^/]+\\.(slnx?|csproj))$")]
+    [GeneratedRegex("(^|/)(\\.editorconfig|\\.globalconfig|Directory\\.Build\\.[^/]+|Directory\\.Packages\\.props|global\\.json|[^/]+\\.(slnx?|csproj))$")]
     private static partial Regex ConfigurationPath();
 
     [GeneratedRegex("\\.(cs|razor)$")]

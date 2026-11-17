@@ -5,7 +5,7 @@
    The links open in a new tab (OmniLink NewTab), so the tile itself is a plain group. *@
 @if (Run.DeployedAddress is { } address)
 {
-    <OmniFactTile Title="@L["RunDeployedAddress"]" Class="run-deployed-tile">
+    <OmniFactTile Title="@L["RunDeployedAddress"]" Class="run-deployed-tile" TitleAlign="OmniAlignment.Start">
         <Icon><OmniIcon Name="OmniIconName.Globe" /></Icon>
         <ChildContent>
             <OmniFactTileRow Term="@L["Application"]"><Icon><OmniIcon Name="OmniIconName.Globe" /></Icon><ChildContent><OmniLink Href="@address.AppUrl" NewTab="true" Class="run-deployed-app-link">@address.AppUrl</OmniLink></ChildContent></OmniFactTileRow>

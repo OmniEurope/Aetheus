@@ -196,6 +196,58 @@ public class ApacheCollectorTests
     }
 
     [Fact]
+    public async Task CollectRunStateAsync_RunningWithPid_ReadsOnlyTheRunningState()
+    {
+        _shellMock.RunExecAsync("systemctl",
+                Arg.Is<IReadOnlyList<string>>(a => a.Contains("is-active") && a.Contains("apache2")), Arg.Any<CancellationToken>())
+            .Returns(Ok("active"));
+        _shellMock.RunExecAsync("pgrep", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Ok("1234"));
+
+        var state = await _sut.CollectRunStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ApacheRunState(true, 1234), state);
+        // The cheap read never walks the configuration (-S, -M) or the binaries.
+        await _shellMock.DidNotReceive().RunExecAsync("which", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
+        await _shellMock.DidNotReceive().RunExecAsync(Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<string>>(a => a.Contains("-S") || a.Contains("-M")), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CollectRunStateAsync_Inactive_ReportsStopped()
+    {
+        _shellMock.RunExecAsync("systemctl", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Ok("inactive"));
+
+        var state = await _sut.CollectRunStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ApacheRunState(false, null), state);
+    }
+
+    [Fact]
+    public async Task CollectRunStateAsync_ProbeThrows_ReturnsNullInsteadOfStopped()
+    {
+        _shellMock.RunExecAsync("systemctl", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        var state = await _sut.CollectRunStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(state);
+    }
+
+    [Fact]
+    public async Task CollectAsync_RunningStateProbeThrows_SurfacesTheFailureInsteadOfReportingStopped()
+    {
+        // A read that failed is not "stopped": the failure reaches the heartbeat's cache, which keeps the last state.
+        SetupInstalledApache();
+        _shellMock.RunExecAsync("systemctl", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.CollectAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task CollectAsync_WindowsRunningWithPid_ReturnsRunningState()
     {
         SetupInstalledApache(isWindows: true);

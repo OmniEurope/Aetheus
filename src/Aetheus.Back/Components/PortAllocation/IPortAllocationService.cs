@@ -22,6 +22,14 @@ public interface IPortAllocationService
     Task<List<VariableEntryDto>> AllocateIntoLibraryAsync(
         int libraryId, int serverId, IReadOnlyList<string> keys, CancellationToken ct = default);
 
+    /// <summary>Like <see cref="AllocateIntoLibraryAsync"/>, but a key that already holds a value gets a new
+    /// port instead of being refused, and the port it held is released for the library's project.</summary>
+    Task<List<VariableEntryDto>> ReallocateInLibraryAsync(
+        int libraryId, int serverId, IReadOnlyList<string> keys, CancellationToken ct = default);
+
+    /// <summary>The next free ports a reallocation would write, reserving nothing (what its confirmation lists).</summary>
+    Task<List<int>> PreviewFreePortsAsync(int libraryId, int serverId, int count, CancellationToken ct = default);
+
     /// <summary>The project the library belongs to, directly or through its environment or project server;
     /// null when it has none or does not exist.</summary>
     Task<int?> GetLibraryProjectIdAsync(int libraryId, CancellationToken ct = default);

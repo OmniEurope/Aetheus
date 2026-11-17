@@ -39,6 +39,7 @@ public partial class ServiceConnections : IAsyncDisposable
         RefreshCanWrite();
         try { await LoadData(new GridLoadArgs()); }
         catch (HttpRequestException) { } // 401 on expired JWT - redirect handled by AuthProvider
+        StateHasChanged(); // the rows show at once, not after the filter values and the live connection
         await LoadFilterValuesAsync();
         await StartRealtimeAsync();
     }
@@ -78,7 +79,6 @@ public partial class ServiceConnections : IAsyncDisposable
         _items = result.Items;
         _count = result.TotalCount;
         _loading = false;
-        StateHasChanged();
     }
 
     // Live changes refresh the current grid page while preserving its sort and filters.
@@ -87,7 +87,12 @@ public partial class ServiceConnections : IAsyncDisposable
         try
         {
             if (_grid is not null) await _grid.Refresh();
-            else await LoadData(new GridLoadArgs());
+            else
+            {
+                // A push, not a handler: no render follows, so the page draws the loaded rows itself.
+                await LoadData(new GridLoadArgs());
+                await InvokeAsync(StateHasChanged);
+            }
         }
         catch (HttpRequestException) { } // background refresh: a failed reload keeps the current grid
     }
@@ -170,11 +175,12 @@ public partial class ServiceConnections : IAsyncDisposable
             new Dictionary<string, object?> { ["ConnectionId"] = connection?.Id },
             new OmniDialogOptions { Width = "640px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
 
-        if (result is true)
+        // R-10: the dialog hands back what the save answered; the row shows it at once, the read behind it confirms.
+        if (result is ServiceConnectionDto saved)
         {
             _testResults.Clear(); // creds may have changed; drop stale badges
+            if (_grid is not null) await _grid.ShowRowAsync(saved);
             await LoadFilterValuesAsync();
-            await ReloadGridAsync();
         }
     }
 
@@ -188,7 +194,11 @@ public partial class ServiceConnections : IAsyncDisposable
         await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Settings.DeleteServiceConnectionAsync(connection.Id),
             "Deleted",
-            async () => { _testResults.Remove(connection.Id); await ReloadGridAsync(); },
+            async () =>
+            {
+                _testResults.Remove(connection.Id);
+                if (_grid is not null) await _grid.HideRowAsync(connection);
+            },
             errorKey: "DeleteFailed",
             successTitleKey: "Deleted"));
     }

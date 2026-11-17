@@ -18,7 +18,7 @@
         @* Recette R3-38: Scan is the main action of the zone (blue). R3-42: Logs joined the menu, so the zone has one
            button. R3-39: every
            entry of its menu carries its icon. *@
-        <OmniSplitButton Variant="OmniButtonVariant.Primary" Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
+        <OmniSplitButton Variant="OmniButtonVariant.Primary" Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || ActionBusy)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["RunScan"]</ChildContent></OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateDatabase))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateDatabase"]</ChildContent></OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateProperties))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["UpdateProperties"]</ChildContent></OmniMenuItem>
@@ -49,7 +49,7 @@
     }
 </OmniRow>
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="RKHunter" SettleOnHeartbeat="true" OnSettled="ReloadFromPushAsync" />
+<ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="RKHunter" SettleOnHeartbeat="true" OnSettled="ReloadFromPushAsync" />
 
 @if (Rk.IsInstalled)
 {

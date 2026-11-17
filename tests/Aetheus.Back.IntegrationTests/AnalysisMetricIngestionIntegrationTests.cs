@@ -16,7 +16,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>Publishes a large report twice on PostgreSQL and records timings while checking
 /// baseline resolution. Retention keeps totals, worst rows and threshold violations while
 /// preserving full-report grading.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AnalysisMetricIngestionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const int MetricCount = 39_240;

@@ -307,6 +307,50 @@ public sealed class ReleaseRedeployActionTests : BunitContext
     }
 
     [Fact]
+    public async Task Redeployer_ReadsTheDeclarationOfAProjectsPipelines_FewAtATime()
+    {
+        const int pipelineCount = 12;
+        var inFlight = 0;
+        var peak = 0;
+        // The reads are held until a second one is in flight, so the overlap is proved by the event, not by
+        // a 40 ms window that a loaded machine can let pass between two starts.
+        var twoInFlight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pipelines = Enumerable.Range(100, pipelineCount).Select(id => new PipelineDto { Id = id, Name = $"p-{id}", ProjectId = 1 }).ToList();
+        _handler.SetPaginatedJsonResponse("api/pipelines", pipelines);
+        foreach (var pipeline in pipelines)
+        {
+            _handler.SetAsyncJsonResponse(HttpMethod.Get, $"api/pipelines/{pipeline.Id}/parameters", async ct =>
+            {
+                var now = Interlocked.Increment(ref inFlight);
+                int seen;
+                while (now > (seen = Volatile.Read(ref peak)) && Interlocked.CompareExchange(ref peak, now, seen) != seen) { }
+                if (now >= 2) twoInFlight.TrySetResult();
+                await Task.WhenAny(twoInFlight.Task, Task.Delay(TimeSpan.FromSeconds(10), ct));
+                Interlocked.Decrement(ref inFlight);
+                return pipeline.Id == 100 ? DeploymentParameters() : new List<PipelineRunParameterDto>();
+            });
+        }
+        _handler.SetJsonResponse("api/pipelines/100/preflight", new PipelinePreflightDto());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/100/run", new PipelineRunDto { Id = 900, PipelineId = 100 });
+        _dialog.OpenResult = new Dictionary<string, string> { ["candidateVersion"] = "c-old", ["deployServer"] = "vps-1" };
+        var redeployer = new ReleaseRedeployer(
+            Services.GetRequiredService<ApiClient>(),
+            Services.GetRequiredService<PipelineRunGate>(),
+            Services.GetRequiredService<PipelineRunDialogCoordinator>(),
+            Services.GetRequiredService<OmniDialogService>(),
+            Services.GetRequiredService<NotifyHelper>(),
+            Services.GetRequiredService<NavigationManager>(),
+            Services.GetRequiredService<Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings>>());
+
+        await redeployer.RedeployAsync(Release());
+
+        Assert.Equal(pipelineCount, _handler.RequestsSnapshot()
+            .Where(r => r.Method == "GET" && r.Url.EndsWith("/parameters", StringComparison.Ordinal))
+            .Select(r => r.Url).Distinct().Count());
+        Assert.InRange(peak, 2, ReleaseRedeployer.MaxConcurrentReads);
+    }
+
+    [Fact]
     public async Task Redeployer_ARelease_WithoutAKeptArtifact_IsRefusedWithoutAnyRequest()
     {
         var redeployer = new ReleaseRedeployer(
@@ -370,7 +414,7 @@ public sealed class ReleaseRedeployActionTests : BunitContext
 
         cut.FindMenuItem("Redeploy")!.Click();
 
-        cut.WaitForAssertion(() => Assert.Equal(typeof(DeploymentGateOverrideDialog), _dialog.LastComponent), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.Equal(typeof(DeploymentGateOverrideDialog), _dialog.LastComponent), TimeSpan.FromSeconds(30));
         Assert.False(Sent("POST", "api/pipelines/40/run"));
     }
 

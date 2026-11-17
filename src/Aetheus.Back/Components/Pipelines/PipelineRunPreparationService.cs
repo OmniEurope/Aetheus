@@ -41,7 +41,6 @@ public sealed class PipelineRunPreparationService(
     IPipelineGitService pipelineGit,
     IPipelineTemplateResolver templateResolver,
     IPipelineRunParameterResolver parameterResolver,
-    IGitCliService gitCli,
     IPipelineWorkspaceSourceResolver workspaceSources,
     IConfiguration configuration,
     ILogger<PipelineRunPreparationService> logger) : IPipelineRunPreparationService
@@ -59,6 +58,7 @@ public sealed class PipelineRunPreparationService(
         int id, string? sourceBranch, string? yamlOverride, string? commitOverride, CancellationToken ct,
         string? workspaceCommitOverride = null)
     {
+        var timing = new PhaseTiming(TimeProvider.System);
         var pipeline = await repo.FindPipelineAsync(id, ct).ConfigureAwait(false);
         if (pipeline is null) return null;
         var mirroredDefinition = YamlParsingHelper.ParseAndValidate(pipeline.YamlDefinition, logger);
@@ -70,12 +70,15 @@ public sealed class PipelineRunPreparationService(
         if (effectiveProjectId is { } projectId && await repo.IsProjectDeletionPendingAsync(projectId, ct).ConfigureAwait(false))
             throw new ConflictException(
                 $"Pipeline '{pipeline.Name}' belongs to a deleted project that waits for its server cleanup: it can no longer run.");
+        timing.Mark("pipeline-and-project");
         var source = await ResolvePipelineSourceAsync(pipeline, effectiveProjectId, selectedBranch, ct).ConfigureAwait(false);
-        var (branch, commitHash) = await PinRevisionAsync(pipeline, source, selectedBranch, commitOverride, ct)
-            .ConfigureAwait(false);
+        timing.Mark("source");
+        var (branch, commitHash) = PinRevision(pipeline, source, selectedBranch, commitOverride);
+        timing.Mark("pin-revision");
         var repositoryUrl = ResolveRepositoryUrl(source, pipeline);
         var definitionYaml = await ResolveDefinitionYamlAsync(
-            pipeline, effectiveProjectId, branch, commitHash, yamlOverride, source is null, ct).ConfigureAwait(false);
+            pipeline, effectiveProjectId, branch, commitHash, yamlOverride, ct).ConfigureAwait(false);
+        timing.Mark("definition-yaml");
         // Keys this backend does not know are skipped by the parser; the run says so.
         var definitionWarnings = PipelineYamlDiagnostics.UnknownPropertyStoredWarnings(definitionYaml, logger);
         RejectNearMissKeys(definitionYaml);
@@ -85,8 +88,12 @@ public sealed class PipelineRunPreparationService(
         // R-63: the production environment's server is the default of the deployment's server, when the YAML names none.
         var definition = await PipelineProductionServerDefault.ApplyAsync(repo, resolution.Definition, effectiveProjectId, ct)
             .ConfigureAwait(false);
+        timing.Mark("templates-and-server-default");
         var effectiveStages = YamlParsingHelper.FlattenJobs(definition);
         ValidatePreparedDefinition(definition, effectiveStages);
+        // R-11: an imported external definition is checked again at every run: a catalogue template it extends may have changed.
+        if (pipeline.IsExternalImport)
+            ThrowIfValidationErrors(PipelineExternalImportPolicy.Validate(definition));
         var targetIds = await parameterResolver.ResolveCandidateTargetServerIdsAsync(
             definition, organizationId, effectiveProjectId, ct).ConfigureAwait(false);
         var preparation = await ApplyWorkspaceSourceAsync(new PipelineRunPreparation
@@ -104,14 +111,22 @@ public sealed class PipelineRunPreparationService(
             DefinitionWarnings = definitionWarnings
         }, source?.RepositoryId, workspaceCommitOverride, ct).ConfigureAwait(false);
         ValidateWorkspaceRequirements(definition, preparation.RepositoryUrl, preparation.CommitHash);
-        return preparation with
+        timing.Mark("targets-and-workspace");
+        var prepared = preparation with
         {
             ReleaseSeries = await ReadReleaseSeriesAsync(preparation, source?.RepositoryId, ct).ConfigureAwait(false)
         };
+        timing.Mark("release-series");
+        // R-17: the manual trigger prepares the run (source reads) before the launcher starts its own clock.
+        logger.Log(timing.LevelFor(configuration), "Preparation timing of pipeline {PipelineId}: {Timing}", id, timing.Describe());
+        return prepared;
     }
 
     /// <summary>
-    /// The series of the commit the run releases: the <c>major.minor</c> of the <c>VersionPrefix</c> of
+    /// R-33: a definition that declares <c>APPLICATION_VERSION_PREFIX</c> (a pipeline the setup wizard generates)
+    /// names its series itself, which wins over the repository; a malformed prefix refuses the launch, and an empty one
+    /// (R-18) names none, so the repository's series below applies.
+    /// Otherwise, the series of the commit the run releases: the <c>major.minor</c> of the <c>VersionPrefix</c> of
     /// its <c>Directory.Build.props</c>, read at the pinned commit so the number is counted in the same
     /// series the app-version function composes from the same file. A workspace taken from another
     /// repository (<c>source:</c> block) is not read here and counts in the empty series.
@@ -119,6 +134,8 @@ public sealed class PipelineRunPreparationService(
     private async Task<string> ReadReleaseSeriesAsync(
         PipelineRunPreparation preparation, int? sourceRepositoryId, CancellationToken ct)
     {
+        if (PipelineApplicationVersion.DeclaredSeries(preparation.Definition) is { } declared)
+            return declared;
         if (preparation.EffectiveProjectId is not { } projectId
             || preparation.Definition.Source is not null
             || !IsGitCommitHash(preparation.CommitHash))
@@ -142,20 +159,47 @@ public sealed class PipelineRunPreparationService(
         return branch;
     }
 
-    /// <summary>The branch and commit the run is pinned to: the commit override, else the mirrored
-    /// source's commit. A project may point straight at a public HTTPS repository without an internal
-    /// mirror: its selected branch is then pinned before creating a run, and the agent checks out this
-    /// exact SHA.</summary>
-    private async Task<(string? Branch, string? CommitHash)> PinRevisionAsync(
-        Pipeline pipeline, PipelineSourceDto? source, string? branch, string? commitOverride, CancellationToken ct)
+    /// <summary>The branch and commit the run is pinned to: the commit override, else the project
+    /// repository's commit (an internal repository, or the mirror of an external one).</summary>
+    private static (string? Branch, string? CommitHash) PinRevision(
+        Pipeline pipeline, PipelineSourceDto? source, string? branch, string? commitOverride)
     {
-        if (source is null && pipeline.Project?.RepositoryUrl is { Length: > 0 } externalUrl
-            && commitOverride is null)
-        {
-            var remote = await gitCli.ResolveBranchCommitAsync(externalUrl, branch, ct).ConfigureAwait(false);
-            return (remote.Branch, remote.Commit);
-        }
+        if (pipeline.IsExternalImport) return PinImportedRevision(pipeline, source, commitOverride);
+        ThrowIfExternalAddressWithoutMirror(pipeline, source);
         return (branch, commitOverride ?? source?.CommitHash);
+    }
+
+    /// <summary>
+    /// Recette R-4 (decision of 2026-11-10, option B): a project that names a repository address but has no repository in
+    /// Aetheus (no internal repository, no mirror) used to be read straight from that address (ls-remote, a fetch of the
+    /// pipeline file, an agent checkout of the raw URL). Every read of an external repository now goes through a project
+    /// mirror, so such a project is refused with a message that says to create the mirror, never read from the address.
+    /// </summary>
+    private static void ThrowIfExternalAddressWithoutMirror(Pipeline pipeline, PipelineSourceDto? source)
+    {
+        if (source is null && ExternalRepositoryAddress.IsUnmirrored(pipeline.Project?.RepositoryUrl))
+            throw ExternalRepositoryMirrorRequirement.Refusal();
+    }
+
+    /// <summary>
+    /// R-11 security review, finding 2 (decision of 2026-11-10): an imported pipeline runs the code of the commit it was
+    /// imported at, never the mirror's current head, so the reviewed definition and the code it builds are the same
+    /// revision. New code is taken only by an explicit re-import, which moves both. A commit override other than that
+    /// commit is refused, and so is a run whose mirror cannot be resolved (the workspace would otherwise fall back to
+    /// another repository URL).
+    /// </summary>
+    private static (string? Branch, string? CommitHash) PinImportedRevision(
+        Pipeline pipeline, PipelineSourceDto? source, string? commitOverride)
+    {
+        if (commitOverride is not null
+            && !string.Equals(commitOverride, pipeline.ExternalImportCommit, StringComparison.OrdinalIgnoreCase))
+            throw new BadRequestException(
+                $"Pipeline '{pipeline.Name}' was imported at commit {pipeline.ExternalImportCommit}: it runs that commit only. "
+                + "Import it again to run newer code.");
+        if (source is null || source.RepositoryId != pipeline.SourceRepositoryId)
+            throw new BadRequestException(
+                $"Pipeline '{pipeline.Name}' was imported from an external repository mirror that can no longer be read.");
+        return (pipeline.SourceBranch ?? source.Branch, pipeline.ExternalImportCommit);
     }
 
     /// <summary>A misspelled known key (a guard such as approval_timeout_minutes) is refused, never skipped.</summary>
@@ -198,17 +242,17 @@ public sealed class PipelineRunPreparationService(
         // Read the authoritative (git-first) definition the same way the trigger does, so the dialog
         // reflects what will actually run for a project-owned pipeline.
         var yaml = pipeline.YamlDefinition;
-        if (pipeline.ProjectId is { } projectId)
+        // R-11: an imported pipeline runs its stored, reviewed definition, never the mirror's current file.
+        if (pipeline.ProjectId is { } projectId && !pipeline.IsExternalImport)
         {
             var branch = sourceBranch ?? pipeline.SourceBranch ?? pipeline.Project?.DefaultBranch;
+            // R-4: the launch dialog of a project that names an external address without a mirror says so, as the launch
+            // does, rather than offering the parameters of a definition nothing will read.
+            if (ExternalRepositoryAddress.IsUnmirrored(pipeline.Project?.RepositoryUrl))
+                ThrowIfExternalAddressWithoutMirror(
+                    pipeline, await ResolvePipelineSourceAsync(pipeline, projectId, branch, ct).ConfigureAwait(false));
             var gitYaml = await pipelineGit.ReadProjectPipelineYamlAsync(projectId, pipeline.Name, ct,
                 branch, pipeline.SourceRepositoryId).ConfigureAwait(false);
-            if (pipeline.Project?.RepositoryUrl is { Length: > 0 } url
-                && await ResolvePipelineSourceAsync(pipeline, projectId, branch, ct).ConfigureAwait(false) is null)
-            {
-                var remote = await gitCli.ResolveBranchCommitAsync(url, branch, ct).ConfigureAwait(false);
-                gitYaml = await gitCli.ReadPipelineYamlAsync(url, remote.Commit, pipeline.Name, ct).ConfigureAwait(false);
-            }
             if (!string.IsNullOrWhiteSpace(gitYaml)) yaml = gitYaml;
         }
 
@@ -219,6 +263,9 @@ public sealed class PipelineRunPreparationService(
         var definition = await PipelineProductionServerDefault.ApplyAsync(repo, resolution.Definition, pipeline.ProjectId, ct)
             .ConfigureAwait(false);
 
+        // R-33: the version a launch without one takes is shown in its empty field.
+        var proposedVersion = await PipelineApplicationVersion.ProposeAsync(repo, definition, pipeline.ProjectId, ct)
+            .ConfigureAwait(false);
         return definition.Parameters
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => new PipelineRunParameterDto
@@ -232,7 +279,10 @@ public sealed class PipelineRunPreparationService(
                 DisplayNameFr = string.IsNullOrWhiteSpace(p.DisplayNameFr) ? null : p.DisplayNameFr,
                 DescriptionFr = string.IsNullOrWhiteSpace(p.DescriptionFr) ? null : p.DescriptionFr,
                 AllowedValues = p.AllowedValues,
-                Advanced = p.Advanced
+                Advanced = p.Advanced,
+                Placeholder = string.Equals(p.Name, PipelineApplicationVersion.ParameterName, StringComparison.OrdinalIgnoreCase)
+                    ? proposedVersion
+                    : null
             })
             .ToList();
     }
@@ -248,9 +298,11 @@ public sealed class PipelineRunPreparationService(
 
     private string? ResolveRepositoryUrl(PipelineSourceDto? source, Pipeline pipeline)
     {
-        return string.IsNullOrWhiteSpace(source?.CloneUrl)
-            ? pipeline.Project?.RepositoryUrl
-            : MirrorCloneUrl.Rehome(configuration, source.CloneUrl);
+        if (!string.IsNullOrWhiteSpace(source?.CloneUrl))
+            return MirrorCloneUrl.Rehome(configuration, source.CloneUrl);
+        // R-4: an external address is never handed to the agent as the workspace to clone; only Aetheus's own clone URLs are.
+        var projectUrl = pipeline.Project?.RepositoryUrl;
+        return ExternalRepositoryAddress.IsUnmirrored(projectUrl) ? null : MirrorCloneUrl.Rehome(configuration, projectUrl);
     }
 
     private async Task<string> ResolveDefinitionYamlAsync(
@@ -259,17 +311,13 @@ public sealed class PipelineRunPreparationService(
         string? branch,
         string? commitHash,
         string? yamlOverride,
-        bool externalSource,
         CancellationToken ct)
     {
+        // R-11: an imported pipeline runs its stored, reviewed definition (a dry run of unsaved YAML included), never
+        // the mirror's current file: what runs is what a user with WRITE on the project imported.
+        if (pipeline.IsExternalImport) return pipeline.YamlDefinition;
         if (yamlOverride is not null || projectId is not { } gitProjectId)
             return yamlOverride ?? pipeline.YamlDefinition;
-        if (externalSource && pipeline.Project?.RepositoryUrl is { Length: > 0 } externalUrl
-            && !string.IsNullOrWhiteSpace(commitHash))
-        {
-            var externalYaml = await gitCli.ReadPipelineYamlAsync(externalUrl, commitHash, pipeline.Name, ct).ConfigureAwait(false);
-            return externalYaml ?? pipeline.YamlDefinition;
-        }
         var gitYaml = !string.IsNullOrWhiteSpace(commitHash)
             ? await pipelineGit.ReadProjectPipelineYamlAtRevisionAsync(
                 gitProjectId, pipeline.Name, commitHash, ct, pipeline.SourceRepositoryId).ConfigureAwait(false)

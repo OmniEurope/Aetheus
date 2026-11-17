@@ -62,7 +62,9 @@ public class SecretScopingTests
 
         var scoped = PipelineRunHelpers.ScopeStepEnvironment(legVars, secretKeys, step);
 
-        Assert.True(scoped.ContainsKey("AETHEUS_PACKAGE_TOKEN"));
+        // R-57: the registry credential is minted per run by the server; a vault value of that name is no
+        // longer forwarded to the step.
+        Assert.False(scoped.ContainsKey("AETHEUS_PACKAGE_TOKEN"));
         Assert.True(scoped.ContainsKey("AETHEUS_NUGET_SIGNING_PFX_PASSWORD"));
         Assert.True(scoped.ContainsKey("AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT"));
         Assert.False(scoped.ContainsKey("UNRELATED_SECRET"));

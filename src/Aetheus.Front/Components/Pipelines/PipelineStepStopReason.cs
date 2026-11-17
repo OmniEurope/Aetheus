@@ -20,6 +20,21 @@ internal static class PipelineStepStopReason
     public static bool Applies(PipelineStepRunDto step) =>
         step.Status is TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout or TaskExecutionStatus.Cancelled;
 
+    /// <summary>
+    /// R-21: the real error of a step, which the classified headline does not carry ("compilation failed" says
+    /// nothing of <c>NETSDK1045</c>): the last line logged at Error level, else the last line that says "error".
+    /// Null when the log holds neither, or is not loaded.
+    /// </summary>
+    public static string? LastErrorLine(PipelineStepRunDto step, IReadOnlyDictionary<int, List<TaskLogDto>> logs)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+        ArgumentNullException.ThrowIfNull(logs);
+        if (!Applies(step) || step.TaskId is not { } taskId || !logs.TryGetValue(taskId, out var lines)) return null;
+        var line = lines.LastOrDefault(l => l.Level == TaskLogLevel.Error && !string.IsNullOrWhiteSpace(l.Message))
+                   ?? lines.LastOrDefault(l => l.Message.Contains("error", StringComparison.OrdinalIgnoreCase));
+        return line is null ? null : OmniAnsi.Strip(line.Message).Trim();
+    }
+
     public static View? For(PipelineStepRunDto step, IStringLocalizer<AppStrings> l)
     {
         ArgumentNullException.ThrowIfNull(step);

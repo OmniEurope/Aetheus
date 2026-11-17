@@ -8,8 +8,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class AnalysisProjectSummaryRepositoryIntegrationTests(PostgresFixture fixture)
+public sealed class AnalysisProjectSummaryRepositoryIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task GetAsync_UsesAtMostThreePostgresCommands()
@@ -138,6 +137,96 @@ public sealed class AnalysisProjectSummaryRepositoryIntegrationTests(PostgresFix
             Assert.Empty(currentNew.Items);
             Assert.Single(currentExisting.Items);
         }
+    }
+
+    [Fact]
+    public async Task GetGradesAsync_ReadsTheDeployedReleaseAndTheOpenFindingsInOneCommand()
+    {
+        await fixture.ResetAsync();
+        var seedOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+        int graded;
+        int ungraded;
+        await using (var seed = new AppDbContext(seedOptions))
+        {
+            await seed.Database.MigrateAsync(TestContext.Current.CancellationToken);
+            var organizationId = await seed.Organizations.OrderBy(item => item.Id)
+                .Select(item => item.Id)
+                .FirstAsync(TestContext.Current.CancellationToken);
+            var now = DateTime.UtcNow;
+            var gradedProject = new Project { Name = "Graded", OrganizationId = organizationId };
+            var ungradedProject = new Project { Name = "Ungraded", OrganizationId = organizationId };
+            seed.Projects.AddRange(gradedProject, ungradedProject);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+            graded = gradedProject.Id;
+            ungraded = ungradedProject.Id;
+
+            Release NewRelease(string version, ReleaseStatus status, DateTime publishedAt, AnalysisGrade grade) => new()
+            {
+                ProjectId = graded,
+                Version = version,
+                BranchName = "main",
+                Status = status,
+                DetectedAt = publishedAt,
+                PublishedAt = publishedAt,
+                AssuranceGrade = grade,
+                Deployable = true
+            };
+            seed.Releases.AddRange(
+                NewRelease("rolled-back", ReleaseStatus.RolledBack, now.AddDays(-3), AnalysisGrade.C),
+                NewRelease("deployed", ReleaseStatus.Deployed, now.AddDays(-1), AnalysisGrade.A),
+                NewRelease("not-deployed", ReleaseStatus.Published, now, AnalysisGrade.F));
+
+            AnalysisFinding NewFinding(string fingerprint, AnalysisSeverity severity, AnalysisFindingStatus status) => new()
+            {
+                OrganizationId = organizationId,
+                ProjectId = graded,
+                Fingerprint = fingerprint.PadRight(64, '0'),
+                RuleId = "rule",
+                Category = AnalysisCategory.Sast,
+                Severity = severity,
+                Confidence = AnalysisConfidence.High,
+                Title = fingerprint,
+                Message = fingerprint,
+                Status = status,
+                FirstSeenAt = now,
+                LastSeenAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            seed.AnalysisFindings.AddRange(
+                NewFinding("a1", AnalysisSeverity.Critical, AnalysisFindingStatus.Open),
+                NewFinding("a2", AnalysisSeverity.High, AnalysisFindingStatus.Open),
+                NewFinding("a3", AnalysisSeverity.High, AnalysisFindingStatus.Open),
+                NewFinding("a4", AnalysisSeverity.High, AnalysisFindingStatus.Accepted),
+                NewFinding("a5", AnalysisSeverity.Low, AnalysisFindingStatus.Fixed),
+                NewFinding("a6", AnalysisSeverity.Info, AnalysisFindingStatus.Open),
+                NewFinding("a7", AnalysisSeverity.None, AnalysisFindingStatus.Open));
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var counter = new CommandCounter();
+        var measuredOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .AddInterceptors(counter)
+            .Options;
+        await using var measured = new AppDbContext(measuredOptions);
+
+        var grades = await new AnalysisProjectSummaryRepository(measured).GetGradesAsync(
+            [graded, ungraded], TestContext.Current.CancellationToken);
+
+        var grade = Assert.Single(grades).Value;
+        Assert.Equal(graded, Assert.Single(grades).Key);
+        Assert.Equal("deployed", grade.Qualification!.ReleaseVersion);
+        var counts = grade.Findings!.Counts;
+        Assert.Equal(1, counts.Critical);
+        Assert.Equal(2, counts.High);
+        Assert.Equal(0, counts.Medium);
+        Assert.Equal(0, counts.Low);
+        Assert.Equal(2, counts.Info);
+        // The deployed release and the open findings share one command; the analysis evaluations are the other.
+        Assert.InRange(counter.Count, 1, 2);
     }
 
     private sealed class CommandCounter : DbCommandInterceptor

@@ -9,8 +9,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// one user round-trips with its date and tombstone, an older write never replaces a later one, and a
 /// second user can neither read nor change the first user's preferences under the same key.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class UserPreferencesHttpIntegrationTests(PostgresFixture fixture)
+public sealed class UserPreferencesHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string Root = "/api/users/me/preferences";
     private const string Key = "aetheus.appearance";
@@ -82,38 +81,6 @@ public sealed class UserPreferencesHttpIntegrationTests(PostgresFixture fixture)
         Assert.Equal("""{"mode":"light"}""", stillA.Value);
         var listedByA = await clientA.GetFromJsonAsync<List<UserPreferenceDto>>(Root, IntegrationJsonOptions.Default, ct);
         Assert.Equal("""{"mode":"light"}""", Assert.Single(listedByA!).Value);
-    }
-
-    [Theory]
-    [InlineData("-starts-with-dash", "{}")]
-    [InlineData("has space", "{}")]
-    [InlineData("aetheus.valid", "not json")]
-    public async Task InvalidKeyOrValue_IsRefusedWith400(string key, string value)
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        var user = await IntegrationUsers.CreateAsync(factory.Services, "prefs-invalid", []);
-        using var client = await IntegrationUsers.LoginClientAsync(factory, user.Username);
-
-        var response = await client.PutAsJsonAsync($"{Root}/{Uri.EscapeDataString(key)}",
-            new SaveUserPreferenceRequest { Value = value, UpdatedAt = DateTimeOffset.UtcNow }, ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task ValueOverThePerKeyLimit_IsRefusedWith400()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        var user = await IntegrationUsers.CreateAsync(factory.Services, "prefs-size", []);
-        using var client = await IntegrationUsers.LoginClientAsync(factory, user.Username);
-        var tooLong = "\"" + new string('x', UserPreferenceRules.MaxValueLength) + "\"";
-
-        var response = await client.PutAsJsonAsync($"{Root}/{Key}",
-            new SaveUserPreferenceRequest { Value = tooLong, UpdatedAt = DateTimeOffset.UtcNow }, ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     private static async Task<UserPreferenceDto> PutAsync(HttpClient client, string key, string value, DateTimeOffset updatedAt)

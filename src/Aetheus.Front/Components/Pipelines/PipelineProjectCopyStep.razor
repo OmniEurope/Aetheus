@@ -45,24 +45,26 @@
     <OmniStack Gap="OmniSpacing.Large" Class="pipeline-setup-step">
         @StartFrom
         <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineCopyProjectsTitle"]</OmniHeading>
-        <OmniFormField Label="@L["PipelineCopyTargetProject"]" Class="omni-u-w-100" For="pipeline-copy-target">
-            <OmniDropDown Id="pipeline-copy-target" TValue="int?" Options="@(Flow.Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
-                          Value="@Flow.TargetProjectId" ValueChanged="@((int? id) => Flow.SetTargetProject(id))"
-                          ValueExpression="@(() => Flow.TargetProjectId)" Class="omni-u-w-100" />
-        </OmniFormField>
-        <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-prefix">
-            <OmniTextBox Id="pipeline-copy-prefix" Value="@Flow.Prefix" ValueChanged="@((string value) => Flow.SetPrefix(value))"
-                         ValueExpression="@(() => Flow.Prefix)" Class="omni-u-w-100" />
-        </OmniFormField>
-        <OmniFormField Label="@L["PipelineCopySourceProject"]" Class="omni-u-w-100" For="pipeline-copy-source">
-            <OmniDropDown Id="pipeline-copy-source" TValue="int?" Options="@(Flow.SourceProjects.ToOptions(item => (int?)item.Id, item => item.Name))"
-                          Value="@Flow.SourceProjectId" ValueChanged="@((int? id) => Flow.SetSourceProject(id))"
-                          ValueExpression="@(() => Flow.SourceProjectId)" Class="omni-u-w-100" />
-        </OmniFormField>
-        <OmniFormField Label="@L["PipelineCopySourcePrefix"]" Help="@L["PipelineCopySourcePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-source-prefix">
-            <OmniTextBox Id="pipeline-copy-source-prefix" Value="@Flow.SourcePrefix" ValueChanged="@((string value) => Flow.SetSourcePrefix(value))"
-                         ValueExpression="@(() => Flow.SourcePrefix)" Class="omni-u-w-100" />
-        </OmniFormField>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniFormField Label="@L["PipelineCopyTargetProject"]" Class="omni-u-w-100" For="pipeline-copy-target">
+                <OmniDropDown Id="pipeline-copy-target" TValue="int?" Options="@(Flow.Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
+                              Value="@Flow.TargetProjectId" ValueChanged="@((int? id) => Flow.SetTargetProject(id))"
+                              ValueExpression="@(() => Flow.TargetProjectId)" Class="omni-u-w-100" />
+            </OmniFormField>
+            <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-prefix">
+                <OmniTextBox Id="pipeline-copy-prefix" Value="@Flow.Prefix" ValueChanged="@((string value) => Flow.SetPrefix(value))"
+                             ValueExpression="@(() => Flow.Prefix)" Class="omni-u-w-100" />
+            </OmniFormField>
+            <OmniFormField Label="@L["PipelineCopySourceProject"]" Class="omni-u-w-100" For="pipeline-copy-source">
+                <OmniDropDown Id="pipeline-copy-source" TValue="int?" Options="@(Flow.SourceProjects.ToOptions(item => (int?)item.Id, item => item.Name))"
+                              Value="@Flow.SourceProjectId" ValueChanged="@((int? id) => Flow.SetSourceProject(id))"
+                              ValueExpression="@(() => Flow.SourceProjectId)" Class="omni-u-w-100" />
+            </OmniFormField>
+            <OmniFormField Label="@L["PipelineCopySourcePrefix"]" Help="@L["PipelineCopySourcePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-source-prefix">
+                <OmniTextBox Id="pipeline-copy-source-prefix" Value="@Flow.SourcePrefix" ValueChanged="@((string value) => Flow.SetSourcePrefix(value))"
+                             ValueExpression="@(() => Flow.SourcePrefix)" Class="omni-u-w-100" />
+            </OmniFormField>
+        </OmniStack>
         @if (Flow.SourceBranchMissing)
         {
             <OmniAlert Severity="OmniSeverity.Warning" data-testid="pipeline-copy-source-branch-missing">@L["PipelineSourceBranchMissing"]</OmniAlert>
@@ -76,7 +78,7 @@ else if (Step == 1)
         <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineCopyPipelinesTitle"]</OmniHeading>
         @if (Flow.PlanLoading)
         {
-            <AetheusLoader Size="OmniControlSize.Small" />
+            <ZoneVeil />
         }
         else if (Flow.PlanFailed || Flow.Plan is null)
         {

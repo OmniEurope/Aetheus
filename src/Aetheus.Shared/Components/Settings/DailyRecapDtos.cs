@@ -28,7 +28,10 @@ public enum DailyRecapSection
     Findings = 6,
 
     /// <summary>The mail servers: Postfix, Dovecot and the queue.</summary>
-    Mail = 7
+    Mail = 7,
+
+    /// <summary>Known vulnerabilities (CVE) the watch holds against the projects' dependencies, and the sources it owes attribution to.</summary>
+    Cve = 8
 }
 
 /// <summary>The language the recap e-mail is written in.</summary>

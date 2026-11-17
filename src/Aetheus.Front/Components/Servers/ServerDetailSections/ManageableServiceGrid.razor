@@ -42,7 +42,7 @@
 @* R-509: on the module grid a click on the row opens the service's module; the checkbox, the
    buttons and the task link keep their own click and key (SITE-FUNC-HOME-CAPABILITY-001). *@
 <OmniDataGrid @ref="_grid" ShowFooterBar="true" BarButtonSize="OmniControlSize.Medium" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@Services.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
-    RowRender="@OnRowRenderInternal" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="@Installed" MaxHeight="@(Installed ? null : AetheusGrid.ScrollMaxHeight)"
+    RowRender="@OnRowRenderInternal" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.TenRowsMaxHeight"
     OnRowClick="@OnRowClickedAsync" Class="@(OpensModuleOnRowClick ? "aetheus-clickable-rows" : null)">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="ServiceInfoDto" Key="SelectService" Title="@L["SelectAll"]" Width="2.875rem" Sortable="false" Filterable="false">

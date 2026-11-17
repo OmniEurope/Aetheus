@@ -19,7 +19,19 @@ internal sealed class PipelineSetupDeployChain
     public (string Name, Func<bool> Get, Action<bool> Set) Choice =>
         (SkipOption, () => !RunAfterCandidate, skipped => RunAfterCandidate = !skipped);
 
-    /// <summary>True when the tile is offered: the candidate and the production deployment are both created.</summary>
-    public static bool IsOffered(IReadOnlyCollection<string> createdSuffixes) =>
-        createdSuffixes.Contains(PipelineSetupRoles.Candidate) && createdSuffixes.Contains(PipelineSetupRoles.DeployProd);
+    /// <summary>R-36: the candidate and the production deployment are both created in this pass and the candidate starts it. The
+    /// deployment is then given no server at launch, so the choice is made in the summary, before the creation.</summary>
+    public bool NeedsServer(IReadOnlyCollection<string> createdSuffixes) => RunAfterCandidate && IsOffered(createdSuffixes);
+
+    /// <summary>True when the tile is offered: the candidate is created and the production deployment is created too, or already
+    /// held by the project (<paramref name="deployProdHeld"/>, R-36: a candidate created in a second pass is chained to it).</summary>
+    public static bool IsOffered(IReadOnlyCollection<string> createdSuffixes, bool deployProdHeld = false) =>
+        createdSuffixes.Contains(PipelineSetupRoles.Candidate)
+        && (createdSuffixes.Contains(PipelineSetupRoles.DeployProd) || deployProdHeld);
+
+    /// <summary><see cref="IsOffered(IReadOnlyCollection{string}, bool)"/> where the deployment pipeline is held when the project's
+    /// <paramref name="existingPipelines"/> name <c>{prefix}-deploy-prod</c>.</summary>
+    public static bool IsOffered(
+        IReadOnlyCollection<string> createdSuffixes, IReadOnlySet<string> existingPipelines, string prefix) =>
+        IsOffered(createdSuffixes, existingPipelines.Contains($"{prefix}-{PipelineSetupRoles.DeployProd}"));
 }

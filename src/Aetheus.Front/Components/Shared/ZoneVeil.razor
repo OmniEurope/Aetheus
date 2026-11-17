@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* Loading level 3 (docs/architecture/omnieurope-ui-customizations.md, "Niveaux de chargement"): everything is loaded
+   except this component, so only this component is veiled. OE's OmniPageVeil with Scope Parent covers the host below
+   (the component's own area), the site's plane at its centre, in the same drawing and size as the splash and the
+   content-area veil. The host keeps a minimum height so the plane stays whole while the content is not there yet.
+   Declare it where the content will appear: <ZoneVeil Busy="@_loading" />, or <ZoneVeil /> in the branch that waits. *@
+<div class="zone-veil-host">
+    <OmniPageVeil Scope="OmniPageVeilScope.Parent" Busy="Busy" Label="@(Label ?? L["Loading"])">
+        <Logo><AetheusMark /></Logo>
+    </OmniPageVeil>
+</div>

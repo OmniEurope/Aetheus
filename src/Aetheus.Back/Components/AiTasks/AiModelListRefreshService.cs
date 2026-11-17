@@ -20,7 +20,7 @@ public sealed class AiModelListRefreshService(
     AiModelListReader reader,
     TimeProvider timeProvider,
     ILogger<AiModelListRefreshService> logger,
-    IPostgresLeaderLease? leaderLease = null)
+    IPostgresLeaderLease leaderLease)
     : PeriodicBackgroundService(CheckInterval, leaderLease, "aetheus:ai-model-list-refresh", timeProvider)
 {
     internal static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(15);

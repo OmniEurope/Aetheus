@@ -35,6 +35,7 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
     private readonly IGitLightRepository _repos = Substitute.For<IGitLightRepository>();
     private readonly GitProcessRunner _runner = new(NullLogger<GitProcessRunner>.Instance);
     private readonly GitSmartHttpService _sut;
+    private readonly GitInternalRepo _repository;
 
     public GitPullRequestPushGuardTests()
     {
@@ -47,7 +48,7 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
         RunGit(_work, "config user.name Tester");
         GitFixtureGuard.AssertOwnedBy(_work, _root);
 
-        var repository = new GitInternalRepo { Id = 1, ProjectId = ProjectId, Slug = Slug, Name = "Guarded" };
+        var repository = _repository = new GitInternalRepo { Id = 1, ProjectId = ProjectId, Slug = Slug, Name = "Guarded" };
         _repos.FindBySlugAsync(ProjectId, Slug, Arg.Any<CancellationToken>()).Returns(repository);
         _repos.GetByProjectAsync(ProjectId, Arg.Any<CancellationToken>()).Returns([repository]);
         Rules(Rule("main", BranchProtectionLevel.ProtectedExceptPipelines));
@@ -233,6 +234,49 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
         Assert.Contains(response.UpdatedRefs, update => update.Reference == "refs/heads/main");
         Assert.Equal(GitBranchAdvanceOutcome.Advanced, result.Outcome);
         Assert.Equal(third, ReadBareRef("refs/heads/main"));
+    }
+
+    /// <summary>Decision 2026-11-10: the mirror of an external repository is read-only. A push to it, on a branch no
+    /// rule protects, is refused with a 403 before git runs, at the advertisement and at the push itself, and leaves
+    /// no ref behind; a clone and a fetch of the mirror keep working.</summary>
+    [Fact]
+    public async Task Decision20261110_PushToAnExternalMirror_IsRefused_CloneAndFetchAreUnchanged()
+    {
+        Rules();
+        var first = CommitAndSeed("one");
+        var second = Commit("two");
+        _repository.GitConnection = new GitConnection { Id = 5, ProjectId = ProjectId, ProviderType = GitProviderType.GitHub };
+        var ct = TestContext.Current.CancellationToken;
+
+        var advertisement = await Assert.ThrowsAsync<BadHttpRequestException>(
+            () => _sut.GetInfoRefsAsync(ProjectId, Slug, "git-receive-pack", ct));
+        var push = await Assert.ThrowsAsync<BadHttpRequestException>(
+            () => PushAsync(Zero, second, "refs/heads/feature", basis: first));
+
+        Assert.All(new[] { advertisement, push }, refused =>
+        {
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.StatusCode);
+            Assert.Contains("read-only and updated from the external repository", refused.Message, StringComparison.Ordinal);
+        });
+        Assert.Null(TryReadBareRef("refs/heads/feature"));
+        var cloneAdvertisement = await _sut.GetInfoRefsAsync(ProjectId, Slug, "git-upload-pack", ct);
+        Assert.NotNull(cloneAdvertisement);
+        Assert.Contains(first, Encoding.ASCII.GetString(cloneAdvertisement.Value.Body), StringComparison.Ordinal);
+    }
+
+    /// <summary>An Aetheus-hosted connection is not a mirror: the project's own repository still takes a push.</summary>
+    [Fact]
+    public async Task Decision20261110_AnAetheusHostedConnection_StillTakesAPush()
+    {
+        Rules();
+        var first = CommitAndSeed("one");
+        var second = Commit("two");
+        _repository.GitConnection = new GitConnection { Id = 5, ProjectId = ProjectId, ProviderType = GitProviderType.AetheusGit };
+
+        var response = await PushAsync(Zero, second, "refs/heads/feature", basis: first);
+
+        Assert.NotNull(response);
+        Assert.Equal(second, ReadBareRef("refs/heads/feature"));
     }
 
     private GitBranchAdvanceService Advance() => new(

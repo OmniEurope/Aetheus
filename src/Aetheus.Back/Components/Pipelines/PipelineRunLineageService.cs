@@ -30,17 +30,28 @@ public sealed class PipelineRunLineageService(
         var until = (window.CompletedAt ?? timeProvider.GetUtcNow().UtcDateTime) + LaunchSlack;
         var downstream = await lineage.GetDownstreamRunsAsync(runId, window.StartedAt, until, ct).ConfigureAwait(false);
         // The launcher audits every run it starts ("Triggered", PipelineRun, run id) under the caller's
-        // name; the entry is the only record of who pressed the button.
-        var launches = await audit.GetLogsPagedAsync(
-            1, 1, action: "Triggered", entityType: "PipelineRun", entityId: runId,
-            dateFrom: window.StartedAt - LaunchSlack, dateTo: window.StartedAt + LaunchSlack, ct: ct).ConfigureAwait(false);
-        var actor = launches.Items.FirstOrDefault()?.Username;
+        // name; the entry is the only record of who pressed the button. A refused launch starts nothing: its
+        // failed run is audited "LaunchRefused", under the caller who asked for it (R-36), or the system.
+        var actor = await ActorAsync(TriggeredAction, runId, window, ct).ConfigureAwait(false)
+            ?? await ActorAsync(LaunchRefusedAction, runId, window, ct).ConfigureAwait(false);
         return new PipelineRunLineageDto
         {
             TriggeredBy = string.IsNullOrWhiteSpace(actor) || string.Equals(actor, SystemActor, StringComparison.OrdinalIgnoreCase)
                 ? null
                 : actor,
+            UpstreamBuildNumber = await lineage.GetUpstreamBuildNumberAsync(runId, ct).ConfigureAwait(false),
             Downstream = downstream
         };
+    }
+
+    private const string TriggeredAction = "Triggered";
+    private const string LaunchRefusedAction = "LaunchRefused";
+
+    private async Task<string?> ActorAsync(string action, int runId, PipelineRunWindow window, CancellationToken ct)
+    {
+        var entries = await audit.GetLogsPagedAsync(
+            1, 1, action: action, entityType: "PipelineRun", entityId: runId,
+            dateFrom: window.StartedAt - LaunchSlack, dateTo: window.StartedAt + LaunchSlack, ct: ct).ConfigureAwait(false);
+        return entries.Items.FirstOrDefault()?.Username;
     }
 }

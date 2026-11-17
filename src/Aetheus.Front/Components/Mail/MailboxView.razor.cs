@@ -29,6 +29,9 @@ public partial class MailboxView : IDisposable
     private List<MailboxMessageSummaryDto> _messages = [];
     private MailboxMessageDto? _message;
     private string _folder = Inbox;
+    // F-FRONT-015: bumped whenever the open message stops being the one the reader asked for (another folder,
+    // another read, a lock): a read that comes back under an older number is dropped, never shown.
+    private int _readGeneration;
     private int _total;
     private bool _loading;
     private bool _loadingImages;
@@ -76,9 +79,8 @@ public partial class MailboxView : IDisposable
         if (result is not MailboxAccessDto access) return;
         _access = access;
         _folder = Inbox;
-        _message = null;
+        CloseMessage();
         await LoadFoldersAsync();
-        StateHasChanged();
     }
 
     internal async Task LockAsync()
@@ -96,7 +98,7 @@ public partial class MailboxView : IDisposable
     internal async Task SelectFolderAsync(string path)
     {
         _folder = path;
-        _message = null;
+        CloseMessage();
         if (_grid is not null) await _grid.GoToPage(0, forceReload: true);
     }
 
@@ -145,33 +147,49 @@ public partial class MailboxView : IDisposable
 
     internal async Task ToggleReadAsync()
     {
-        if (_message is null) return;
-        var isRead = !_message.IsRead;
-        var result = await Api.Mailbox.SetReadAsync(ServerId, AccountId, _folder, _message.Uid, isRead);
+        if (_message is not { } target) return;
+        var folder = _folder;
+        var generation = _readGeneration;
+        var isRead = !target.IsRead;
+        var result = await Api.Mailbox.SetReadAsync(ServerId, AccountId, folder, target.Uid, isRead);
         Handle(result);
         if (!result.Ok) return;
         Toast.Success(isRead ? "MailboxMarkRead" : "MailboxMarkUnread");
-        _message = _message with { IsRead = isRead };
-        await RefreshAsync();
+        // The reader may have opened another folder or message while the call ran: that one is not the target.
+        if (generation == _readGeneration && _message is not null) _message = _message with { IsRead = isRead };
+        // R-10: the row shows the new state at once (the server's answer only says Ok); the read behind it confirms.
+        await LoadFoldersAsync();
+        if (folder != _folder) return;
+        var listed = _messages.Find(item => item.Uid == target.Uid);
+        if (listed is not null && _grid is not null) await _grid.ShowRowAsync(listed with { IsRead = isRead });
+        else if (_grid is not null) await _grid.Reload();
     }
 
     internal async Task DeleteAsync()
     {
-        if (_message is null) return;
-        var inTrash = _folders.Any(folder => folder.Path == _folder && folder.Role == MailboxFolderRole.Trash);
+        if (_message is not { } message) return;
+        var folder = _folder;
+        var generation = _readGeneration;
+        var inTrash = _folders.Any(listedFolder => listedFolder.Path == folder && listedFolder.Role == MailboxFolderRole.Trash);
         if (inTrash)
         {
             var confirmed = await Dialog.Confirm(L["MailboxDeletePermanentlyConfirm"].Value, L["Delete"].Value,
                 new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
-            if (confirmed != true) return;
+            // The confirmation may have outlasted a folder or message change: it was given for the message
+            // that was open, so the delete never goes to the same UID of the folder now shown.
+            if (confirmed != true || generation != _readGeneration) return;
         }
-        var message = _message;
         await Veil.RunAsync(async () =>
         {
-            if (Handle(await Api.Mailbox.DeleteAsync(ServerId, AccountId, _folder, message.Uid)) is not { } deleted) return;
+            if (Handle(await Api.Mailbox.DeleteAsync(ServerId, AccountId, folder, message.Uid)) is not { } deleted) return;
             Toast.Success(deleted.Permanent ? "MailboxDeletedPermanently" : "MailboxMovedToTrash");
-            _message = null;
-            await RefreshAsync();
+            if (generation == _readGeneration) CloseMessage();
+            // R-10: the message leaves the list at once; the read behind it confirms.
+            await LoadFoldersAsync();
+            if (folder != _folder) return;
+            var listed = _messages.Find(item => item.Uid == message.Uid);
+            if (listed is not null && _grid is not null) await _grid.HideRowAsync(listed);
+            else if (_grid is not null) await _grid.Reload();
         });
     }
 
@@ -225,8 +243,8 @@ public partial class MailboxView : IDisposable
 
     internal async Task DownloadAsync(MailboxAttachmentDto attachment)
     {
-        if (_message is null) return;
-        var bytes = await Api.Mailbox.GetAttachmentAsync(ServerId, AccountId, _folder, _message.Uid, attachment.Index);
+        if (_message is not { } message) return;
+        var bytes = await Api.Mailbox.GetAttachmentAsync(ServerId, AccountId, _folder, message.Uid, attachment.Index);
         if (bytes is null) return;
         await Js.InvokeVoidAsync("downloadFileFromBytes", bytes, attachment.FileName, attachment.ContentType);
     }
@@ -260,7 +278,13 @@ public partial class MailboxView : IDisposable
 
     private async Task ReadAsync(uint uid, bool loadImages)
     {
-        if (Handle(await Api.Mailbox.GetMessageAsync(ServerId, AccountId, _folder, uid, loadImages)) is not { } message) return;
+        // F-FRONT-015: the read is for this account, folder and UID; its answer is shown only while it is still
+        // the latest read of that folder (a slower answer for another folder or message is dropped).
+        var (serverId, accountId, folder) = (ServerId, AccountId, _folder);
+        var generation = ++_readGeneration;
+        var read = await Api.Mailbox.GetMessageAsync(serverId, accountId, folder, uid, loadImages);
+        if (generation != _readGeneration || (serverId, accountId, folder) != (ServerId, AccountId, _folder)) return;
+        if (Handle(read) is not { } message) return;
         _message = message;
         var listed = _messages.FindIndex(item => item.Uid == uid);
         if (listed >= 0 && !_messages[listed].IsRead)
@@ -275,7 +299,17 @@ public partial class MailboxView : IDisposable
         if (Handle(await Api.Mailbox.GetFoldersAsync(ServerId, AccountId)) is not { } folders) return;
         _folders = folders;
         if (_folders.Count > 0 && _folders.All(folder => folder.Path != _folder))
+        {
             _folder = _folders.FirstOrDefault(folder => folder.Role == MailboxFolderRole.Inbox)?.Path ?? _folders[0].Path;
+            CloseMessage();
+        }
+    }
+
+    /// <summary>No message is open any more, and a read still in flight no longer counts.</summary>
+    private void CloseMessage()
+    {
+        _readGeneration++;
+        _message = null;
     }
 
     /// <summary>The value of a successful call; on a 409 the page goes back to its locked state.</summary>
@@ -291,7 +325,7 @@ public partial class MailboxView : IDisposable
         _folders = [];
         _messages = [];
         _total = 0;
-        _message = null;
+        CloseMessage();
     }
 
     private void OnPermissionsChanged()

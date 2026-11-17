@@ -28,6 +28,7 @@ public class TaskServiceOperationTests
         encryption.EncryptValue(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
         var taskQueueNotifier = new TaskQueueNotifier(
             serverHub,
+            encryption,
             Substitute.For<Microsoft.Extensions.Logging.ILogger<TaskQueueNotifier>>());
 
         // No orchestration port any more: the run advances by domain event, so the spy is the

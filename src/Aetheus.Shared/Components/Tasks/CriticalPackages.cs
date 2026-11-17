@@ -6,11 +6,14 @@ namespace Aetheus.Shared.Components.Tasks;
 /// not silently touch. A single source of truth shared by the backend (surfacing the policy) and the
 /// agent (last-line defence: the <c>SystemPackageUpgrade</c> executor runs the dry-run first and ABORTS
 /// honestly if any blocked package would be upgraded - never a fake success). Matching is by exact name
-/// or by family prefix (kernel images, libc, openssl variants) so a versioned package like
-/// <c>linux-image-6.8.0-51-generic</c> is caught.
+/// or by family prefix (libc, openssl variants, database server versions) so a versioned package like
+/// <c>libssl3t64</c> is caught.
 /// <para>Rationale: upgrading these in an unattended window is the most likely way to break a running
-/// app's ABI or the box itself (OpenSSL/libc), or to require a reboot (kernel). An operator upgrades
-/// them deliberately, in a maintenance window, not via the fleet button.</para>
+/// app's ABI or the box itself (OpenSSL/libc). An operator upgrades them deliberately, in a maintenance
+/// window, not via the fleet button.</para>
+/// <para>The kernel packages (<c>linux-image-*</c>, <c>linux-generic</c>, ...) are deliberately NOT listed
+/// (2026-11-10): the fleet upgrade runs with <c>--with-new-pkgs</c> so it installs a new kernel (it only runs
+/// after a reboot, which the upgrade log reports); blocking it would abort every upgrade that has a kernel pending.</para>
 /// </summary>
 public static class CriticalPackages
 {
@@ -26,7 +29,6 @@ public static class CriticalPackages
     /// <summary>Package-name prefixes (family match) that must never be auto-upgraded.</summary>
     private static readonly string[] FamilyPrefixes =
     [
-        "linux-image", "linux-headers", "linux-generic", "linux-modules",
         "libc6-", "libssl", "postgresql-", "mysql-", "mariadb-",
     ];
 

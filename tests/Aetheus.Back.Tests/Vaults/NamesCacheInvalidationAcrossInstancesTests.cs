@@ -66,5 +66,6 @@ public sealed class NamesCacheInvalidationAcrossInstancesTests
 
     private static VariableLibraryService NewLibraryService(IVariableLibraryRepository repo, IMemoryCache cache) =>
         new(repo, Substitute.For<IDbTransactionScope>(), Substitute.For<IAuditService>(),
-            Substitute.For<IEntityChangeNotifier>(), TimeProvider.System, cache);
+            Substitute.For<IEntityChangeNotifier>(), TimeProvider.System, cache,
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>());
 }

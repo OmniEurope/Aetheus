@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Data;
+using System.Diagnostics;
 using Npgsql;
 
 namespace Aetheus.Back.Services;
@@ -35,6 +36,10 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long a database that cannot be reached is told at information level before it becomes a warning
+    /// (R-1): the host restarts nightly and its database is back within a minute or two, which is not an incident.</summary>
+    internal static readonly TimeSpan OutageWarningAfter = TimeSpan.FromMinutes(2);
+
     /// <summary>Consecutive reserve readings before a leader yields: one switch can be in flight.</summary>
     internal const int StandbyBeatsBeforeYield = 3;
 
@@ -42,6 +47,7 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
     private readonly ILogger<PostgresLeaderLease> _logger;
     private readonly TimeSpan _retryDelay;
     private readonly TimeSpan _heartbeatInterval;
+    private readonly TimeSpan _outageWarningAfter;
     private readonly ILiveInstanceProbe? _liveProbe;
 
     public PostgresLeaderLease(
@@ -57,7 +63,8 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
         ILogger<PostgresLeaderLease> logger,
         TimeSpan retryDelay,
         ILiveInstanceProbe? liveProbe = null,
-        TimeSpan? heartbeatInterval = null)
+        TimeSpan? heartbeatInterval = null,
+        TimeSpan? outageWarningAfter = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retryDelay, TimeSpan.Zero);
         _configuration = configuration;
@@ -65,6 +72,7 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
         _retryDelay = retryDelay;
         _liveProbe = liveProbe;
         _heartbeatInterval = heartbeatInterval ?? HeartbeatInterval;
+        _outageWarningAfter = outageWarningAfter ?? OutageWarningAfter;
     }
 
     private bool InReserve => _liveProbe?.State == InstanceServingState.Standby;
@@ -95,7 +103,7 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
         }
         finally
         {
-            await ReleaseLeaseAsync(connection, operationName).ConfigureAwait(false);
+            await ReleaseLeaseAsync(connection, operationName, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -110,6 +118,8 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
         var connectionString = _configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("ConnectionStrings:Default is required for hosted-service leader leases.");
 
+        LeaderInterruption? lastInterruption = null;
+        var outage = new DatabaseOutage();
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -126,10 +136,14 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
 
                 if (!await TryAcquireAsync(connection, leaseName, stoppingToken).ConfigureAwait(false))
                 {
+                    _logger.LogDebug(
+                        "PostgreSQL leader lease {LeaseName} is held by another session; trying again in {RetryDelay}", leaseName, _retryDelay);
                     await Task.Delay(_retryDelay, stoppingToken).ConfigureAwait(false);
                     continue;
                 }
 
+                lastInterruption = null;
+                outage = new DatabaseOutage();
                 _logger.LogInformation("Acquired PostgreSQL leader lease {LeaseName}", leaseName);
                 using var leaseLost = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
                 var work = leaderWork(leaseLost.Token);
@@ -149,7 +163,7 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
                 }
                 finally
                 {
-                    await ReleaseLeaseAsync(connection, leaseName).ConfigureAwait(false);
+                    await ReleaseLeaseAsync(connection, leaseName, stoppingToken).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -158,13 +172,96 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                _logger.LogCritical(
-                    ex,
-                    "Leader worker {LeaseName} failed; its lease was released and the worker will restart without stopping the backend",
-                    leaseName);
-                await Task.Delay(_retryDelay, stoppingToken).ConfigureAwait(false);
+                var interruption = LeaderInterruptionClassifier.Classify(ex, stoppingToken);
+                if (interruption == LeaderInterruption.DatabaseUnavailable)
+                    outage.StartedAt ??= Stopwatch.GetTimestamp();
+                LogInterruption(leaseName, ex, interruption, repeated: lastInterruption == interruption, outage);
+                lastInterruption = interruption;
+                // The backend is stopping: there is nothing to restart.
+                if (interruption == LeaderInterruption.HostStopping)
+                    return;
+                // Stopping while the database is down lands in this wait, outside the try above: it is a clean stop.
+                try { await Task.Delay(_retryDelay, stoppingToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             }
         }
+    }
+
+    /// <summary>
+    /// A worker that restarts because the backend or the database stopped is not a failure (decision of
+    /// 2026-10-29): it is told at information level with its reason. A database that cannot be reached is a
+    /// warning, said once per outage (the retries that follow are debug lines). Anything else stays critical,
+    /// with the exception's type and message in the line so an export carries the cause.
+    /// </summary>
+    private void LogInterruption(
+        string leaseName, Exception ex, LeaderInterruption interruption, bool repeated, DatabaseOutage outage)
+    {
+        var retrySeconds = (int)_retryDelay.TotalSeconds;
+        switch (interruption)
+        {
+            case LeaderInterruption.HostStopping:
+                _logger.LogInformation(
+                    "Leader worker {LeaseName} stopped: the backend is stopping ({Reason})", leaseName, ex.GetType().Name);
+                break;
+            case LeaderInterruption.DatabaseStoppedSession:
+                _logger.LogInformation(
+                    "Leader worker {LeaseName} restarts in {RetrySeconds} s: the database server ended its session on administrator command (a restart or maintenance of the database)",
+                    leaseName, retrySeconds);
+                break;
+            case LeaderInterruption.DatabaseUnavailable when repeated:
+                if (!outage.Warned && Stopwatch.GetElapsedTime(outage.StartedAt!.Value) >= _outageWarningAfter)
+                {
+                    outage.Warned = true;
+                    _logger.LogWarning(
+                        "Leader worker {LeaseName} still cannot reach the database after {OutageSeconds} s: {Reason}",
+                        leaseName, (int)Stopwatch.GetElapsedTime(outage.StartedAt!.Value).TotalSeconds, ex.Message);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "Leader worker {LeaseName} still cannot reach the database: {Reason}", leaseName, ex.Message);
+                }
+
+                break;
+            case LeaderInterruption.DatabaseUnavailable:
+                _logger.LogInformation(
+                    "Leader worker {LeaseName} lost the database ({ExceptionType}: {Reason}); it retries every {RetrySeconds} s until the database answers, and a warning follows if it is still down after {WarnAfterSeconds} s",
+                    leaseName, ex.GetType().Name, ex.Message, retrySeconds, (int)_outageWarningAfter.TotalSeconds);
+                break;
+            default:
+                _logger.LogCritical(
+                    ex,
+                    "Leader worker {LeaseName} failed ({ExceptionType}: {Reason}); its lease was released and the worker will restart without stopping the backend",
+                    leaseName, ex.GetType().Name, ex.Message);
+                break;
+        }
+    }
+
+    /// <summary>One leader worker's current database outage: when it began (a <see cref="Stopwatch"/> timestamp) and
+    /// whether its warning was told.</summary>
+    private sealed class DatabaseOutage
+    {
+        public long? StartedAt { get; set; }
+
+        public bool Warned { get; set; }
+    }
+
+    /// <summary>
+    /// Takes the named advisory lock for the caller's own transaction (<c>pg_advisory_xact_lock</c>, audit E4):
+    /// PostgreSQL releases it at that transaction's commit or rollback, so it covers work that joins an outer
+    /// transaction committed after the caller returns, which <see cref="RunSerializedAsync"/>'s own connection
+    /// cannot. It never outlives the transaction, so no failed unlock can leave it on a pooled connection.
+    /// </summary>
+    internal static async Task LockForTransactionAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, string lockName, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentException.ThrowIfNullOrWhiteSpace(lockName);
+        await using var acquire = new NpgsqlCommand(
+            "SELECT pg_advisory_xact_lock(hashtextextended(@name, 0))", connection, transaction);
+        acquire.Parameters.AddWithValue("name", lockName);
+        await acquire.ExecuteScalarAsync(ct).ConfigureAwait(false);
     }
 
     private static async Task<bool> TryAcquireAsync(NpgsqlConnection connection, string leaseName, CancellationToken ct)
@@ -205,7 +302,7 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
         return true;
     }
 
-    private async Task ReleaseLeaseAsync(NpgsqlConnection connection, string leaseName)
+    private async Task ReleaseLeaseAsync(NpgsqlConnection connection, string leaseName, CancellationToken stoppingToken)
     {
         try
         {
@@ -231,7 +328,15 @@ public sealed class PostgresLeaderLease : IPostgresLeaderLease
             // If the explicit unlock cannot be proven, invalidate the pool so this physical session is
             // closed on disposal and PostgreSQL releases all of its session-scoped advisory locks.
             NpgsqlConnection.ClearPool(connection);
-            _logger.LogWarning(ex, "Could not explicitly release PostgreSQL leader lease {LeaseName}; invalidated its connection pool", leaseName);
+            // A session the database ended, or a database that cannot be reached, holds no lock any more: the
+            // server released it with the session. That is an expected end, said at information level; any other
+            // reason a release failed stays a warning.
+            if (LeaderInterruptionClassifier.Classify(ex, stoppingToken) == LeaderInterruption.Failure)
+                _logger.LogWarning(ex, "Could not explicitly release PostgreSQL leader lease {LeaseName}; invalidated its connection pool", leaseName);
+            else
+                _logger.LogInformation(
+                    "PostgreSQL leader lease {LeaseName} needed no explicit release: its database session had already ended ({ExceptionType}); invalidated its connection pool",
+                    leaseName, ex.GetType().Name);
         }
     }
 }

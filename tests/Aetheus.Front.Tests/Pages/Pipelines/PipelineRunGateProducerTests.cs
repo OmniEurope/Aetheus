@@ -46,6 +46,7 @@ public sealed class PipelineRunGateProducerTests : BunitContext
         var qa = new PipelineRunDto
         {
             Id = 2638,
+            BuildNumber = 18,
             PipelineName = "aetheus-qa",
             Status = PipelineStatus.Success,
             Steps =
@@ -157,7 +158,7 @@ public sealed class PipelineRunGateProducerTests : BunitContext
 
         var lines = cut.FindAll(".run-blocking-test");
         Assert.Equal(2, lines.Count);
-        Assert.Contains("currentIntegration : échec, étape « Test V integration » du run #2638 (aetheus-qa)", lines[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("currentIntegration : échec, étape « Test V integration » du run #18 (aetheus-qa)", lines[0].TextContent, StringComparison.Ordinal);
         var link = lines[0].QuerySelector("a")!;
         Assert.Equal("/pipelines/runs/2638?tab=logs&step=50", link.GetAttribute("href"));
         Assert.Contains("Ouvrir les logs", link.TextContent, StringComparison.Ordinal);

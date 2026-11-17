@@ -122,6 +122,41 @@ public sealed class PortRegistryObservationTests : IDisposable
             claim.ObservedAt);
     }
 
+    /// <summary>R-2: the same sighting every 30 s used to rewrite every observed row (23 UPDATEs per heartbeat
+    /// measured on the local instance); an unchanged row is now rewritten once per refresh interval.</summary>
+    [Fact]
+    public async Task ReplaceObservedAsync_UnchangedSighting_WritesNothingUntilTheStampIsOld()
+    {
+        await _sut.ReplaceObservedAsync(7, [Observed(80), Observed(443)], FirstScan, Ct);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await _sut.ReplaceObservedAsync(7, [Observed(80), Observed(443)], SecondScan, Ct);
+
+        var unchanged = await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct);
+        Assert.All(unchanged, row => Assert.Equal(FirstScan, row.ObservedAt));
+        Assert.All(unchanged, row => Assert.Equal(Origin, row.UpdatedAt));
+
+        var late = FirstScan + PortObservationWriter.ObservedStampRefresh;
+        _clock.Advance(PortObservationWriter.ObservedStampRefresh);
+        await _sut.ReplaceObservedAsync(7, [Observed(80), Observed(443)], late, Ct);
+
+        Assert.All(await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct),
+            row => Assert.Equal(late, row.ObservedAt));
+        Assert.Equal(late, (await _db.Servers.AsNoTracking().SingleAsync(s => s.Id == 7, Ct)).PortsObservedAt);
+    }
+
+    [Fact]
+    public async Task ReplaceObservedAsync_ANewHolderIsWrittenAtOnce()
+    {
+        await _sut.ReplaceObservedAsync(7, [Observed(80, "nginx")], FirstScan, Ct);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        await _sut.ReplaceObservedAsync(7, [Observed(80, "apache2")], SecondScan, Ct);
+
+        var row = Assert.Single(await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal("apache2", row.OwnerLabel);
+        Assert.Equal(SecondScan, row.ObservedAt);
+    }
+
     [Fact]
     public async Task ReplaceObservedAsync_SamePortTwice_CollapsesToOneRow()
     {

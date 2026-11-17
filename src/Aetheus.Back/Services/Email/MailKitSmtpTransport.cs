@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
@@ -64,7 +65,7 @@ public sealed class MailKitSmtpTransport : ISmtpTransport
                 if (client.IsConnected)
                     await client.DisconnectAsync(quit: true).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is IOException or MailKit.ProtocolException or SmtpCommandException)
+            catch (Exception exception) when (exception is IOException or ProtocolException or SmtpCommandException)
             {
                 // Mandatory: the messages are already accepted or refused; a failed QUIT changes neither.
             }

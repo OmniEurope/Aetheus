@@ -16,6 +16,7 @@ internal static class PackageRegistryPublishFinalizer
         string auditDetails,
         CancellationToken ct)
     {
+        repository.MarkPublished(package);
         try
         {
             await repository.SaveChangesAsync(ct).ConfigureAwait(false);

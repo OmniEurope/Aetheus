@@ -76,6 +76,9 @@ public interface IPipelineRepository
     /// Returns 0 when the pipeline no longer exists.</summary>
     Task<int> ReserveNextBuildNumberAsync(int pipelineId, CancellationToken ct = default);
 
+    /// <summary>R-8: the number a person reads for each run, by technical key.</summary>
+    Task<IReadOnlyDictionary<int, int>> GetRunNumbersAsync(IEnumerable<int> runIds, CancellationToken ct = default);
+
     /// <summary>Tracks a step run on the change tracker. Caller must invoke <see cref="IPipelineUnitOfWork.SaveChangesAsync"/> to flush.</summary>
     void TrackPipelineStepRun(PipelineStepRun stepRun);
 
@@ -111,6 +114,22 @@ public interface IPipelineRepository
     /// <summary>Project owning a pipeline (direct ProjectId, or via Environment→ProjectId,
     /// or via ProjectServer→ProjectId). Null if unresolvable (legacy orphan).</summary>
     Task<int?> GetPipelineProjectIdAsync(Pipeline pipeline, CancellationToken ct = default);
+
+    /// <summary>BACK-002 (user decision): a pipeline's artifacts follow it when it moves to another
+    /// project. Stamps <paramref name="projectId"/> on every artifact of the pipeline that names another
+    /// project (or none), on tracked entities, so the caller's next save writes them with the move.
+    /// Returns how many artifacts were reassigned.</summary>
+    Task<int> ReassignPipelineArtifactsAsync(int pipelineId, int projectId, CancellationToken ct = default);
+
+    /// <summary>BACK-002 follow-up: the releases a pipeline published follow it to
+    /// <paramref name="projectId"/>, exactly like its artifacts, on tracked entities so the caller's next
+    /// save writes them with the move. The publishing pipeline is the one of the run in
+    /// <c>CreatedByPipelineRunId</c> (the run that first published the release); <c>PipelineRunId</c> is not
+    /// used because a deployment overwrites it with another pipeline's run. A release whose version already
+    /// exists in the destination project, or that is the live (Deployed) release while the destination
+    /// already has one, stays where it is, because the unique indexes of the Releases table forbid the move.
+    /// Returns how many releases moved and how many stayed.</summary>
+    Task<(int Moved, int Skipped)> ReassignPipelineReleasesAsync(int pipelineId, int projectId, CancellationToken ct = default);
 
     /// <summary>The release a deployment names, read inside the run's own project (a numeric
     /// selector is a release id, anything else an exact version, newest first - the selection the
@@ -155,7 +174,7 @@ public interface IPipelineRepository
 
     Task<List<PipelineRun>> GetRunsAsync(int pipelineId, int count, CancellationToken ct = default);
     Task<(List<PipelineRunDto> Items, int TotalCount)> GetRunsPagedAsync(int pipelineId, int page, int pageSize, PipelineRunPaginationRequest? request = null, CancellationToken ct = default);
-    Task<List<PipelineRunDto>> GetActiveRunsAsync(List<int>? accessiblePipelineIds = null, int? projectId = null, CancellationToken ct = default);
+    Task<List<PipelineRunDto>> GetActiveRunsAsync(List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null, CancellationToken ct = default);
     Task<List<PipelineRunDto>> GetRecentRunsAsync(List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null, CancellationToken ct = default);
 
     /// <summary>The run with its pipeline, project and steps. no result rows; the test results are
@@ -184,6 +203,10 @@ public interface IPipelineRepository
     /// <summary>The steps of a run that ended Failed, blocking ones first then in run order, at most <paramref name="max"/>:
     /// the cause the result mail names (recette R1-9).</summary>
     Task<List<StepFailureProjection>> GetFailedStepsAsync(int runId, int max, CancellationToken ct = default);
+
+    /// <summary>The step that stopped a run (Failed or Timeout first, then Cancelled; blocking before swallowed, then run order), or null.
+    /// What a parent trigger step reports about its child (recette R-21).</summary>
+    Task<StepStopProjection?> GetFirstStoppedStepAsync(int runId, CancellationToken ct = default);
 
     Task<PipelineRun?> GetPipelineRunWithPipelineAsync(int runId, CancellationToken ct = default);
 
@@ -252,20 +275,30 @@ public interface IPipelineRepository
     /// cref="PipelineStatus.Partial"/> unless all such failures are advisory AI steps.</summary>
     Task<List<PipelineStepRun>> GetContinuableFailedStepsInRunAsync(int runId, CancellationToken ct = default);
 
+    /// <summary>One read of the failed and timed-out steps of a run, for the end of the run: whether one of them
+    /// blocks (no <c>continue_on_error</c>, what <see cref="HasAnyFailedStepInRunAsync"/> answers) and the ones that
+    /// may continue (what <see cref="GetContinuableFailedStepsInRunAsync"/> returns).</summary>
+    Task<PipelineRunFailures> GetRunFailuresAsync(int runId, CancellationToken ct = default);
+
     /// <summary>Checks that the named stages executed at least one step and all their steps
     /// succeeded, allowing rollback completion to be recognized.</summary>
     Task<bool> DidStagesAllSucceedAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default);
 
     Task<bool> HasAnySucceededStepInRunAsync(int runId, CancellationToken ct = default);
 
-    Task<List<string>> GetCompletedStageNamesAsync(int runId, CancellationToken ct = default);
-
-    /// <summary>Stages whose steps have all reached a terminal status, including hard failures.
-    /// Used to release <c>always()</c>/<c>failed()</c> handlers and the system cleanup without
-    /// treating failed stages as successful dependencies for ordinary stages.</summary>
-    Task<List<string>> GetTerminalStageNamesAsync(int runId, CancellationToken ct = default);
+    /// <summary>One read of the run's steps for both stage sets: the completed stages (every step terminal and
+    /// passed, cancelled or allowed to continue on error) and the terminal stages (every step terminal, hard
+    /// failures included, used to release <c>always()</c>/<c>failed()</c> handlers and the system cleanup without
+    /// treating failed stages as successful dependencies for ordinary stages).</summary>
+    Task<PipelineStageProgress> GetStageProgressAsync(int runId, CancellationToken ct = default);
 
     Task<bool> IsRunStillRunningAsync(int runId, CancellationToken ct = default);
+
+    /// <summary>Whether a cancellation was requested on the run's variables. Reads that one column: the check
+    /// needs neither the run's pipeline, its project nor their YAML, which
+    /// <see cref="GetPipelineRunWithPipelineAsync"/> loads with it. Always read live, never from a run loaded
+    /// earlier in the pass: a cancellation can land at any time.</summary>
+    Task<bool> IsRunCancellationRequestedAsync(int runId, CancellationToken ct = default);
 
     Task<bool> HasAnyRunningStepInRunAsync(int runId, CancellationToken ct = default);
 
@@ -274,7 +307,11 @@ public interface IPipelineRepository
     /// <summary>True while post-stage artifact collection is pending or executing.</summary>
     Task<bool> HasActiveArtifactCollectionAsync(int runId, CancellationToken ct = default);
 
-    Task UpdatePipelineRunStatusAsync(int runId, PipelineStatus status, CancellationToken ct = default);
+    /// <param name="artifactCollectionFailed">What the caller has just read from
+    /// <see cref="HasFailedArtifactCollectionAsync"/> for this run, so that the terminal status is not decided
+    /// on a second identical read; null when the caller has not read it.</param>
+    Task UpdatePipelineRunStatusAsync(
+        int runId, PipelineStatus status, CancellationToken ct = default, bool? artifactCollectionFailed = null);
     Task<bool> TryTransitionPipelineRunStatusAsync(int runId, PipelineStatus expectedStatus, PipelineStatus newStatus, CancellationToken ct = default);
 
     /// <summary>Appends warnings to a run's <c>WarningsJson</c> via a tracked entity and persists immediately.
@@ -310,6 +347,18 @@ public interface IPipelineRepository
         int runId,
         IReadOnlyCollection<string> preservedStages,
         CancellationToken ct = default);
+
+    /// <summary>R-12: counts the run's tasks cancelled while an agent was running them (they had started)
+    /// whose agent has not acknowledged the stop. A task cancelled at or before
+    /// <paramref name="timedOutBefore"/> is counted as timed out instead of awaiting.</summary>
+    Task<CancelledTaskStopWait> GetCancelledTaskStopWaitAsync(
+        int runId, DateTime timedOutBefore, CancellationToken ct = default);
+
+    /// <summary>R-12: records that the wait for the stop acknowledgement of the run's cancelled tasks
+    /// (cancelled at or before <paramref name="timedOutBefore"/>) ended without one, so later passes neither
+    /// wait for them nor count them again. It is not an acknowledgement. Returns how many tasks it settled.</summary>
+    Task<int> MarkCancelledTaskStopWaitExpiredAsync(
+        int runId, DateTime timedOutBefore, DateTime expiredAt, CancellationToken ct = default);
 
     /// <summary>Resets every <c>Failed</c> step run of a run back to <c>Pending</c> and re-opens the
     /// run (Status → Running, CompletedAt → null) so the scheduler reruns only the failed steps.

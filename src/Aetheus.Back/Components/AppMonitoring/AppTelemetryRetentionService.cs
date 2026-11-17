@@ -14,7 +14,7 @@ public sealed class AppTelemetryRetentionService(
     IConfiguration configuration,
     ILogger<AppTelemetryRetentionService> logger,
     TimeProvider timeProvider,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, LeaseName)
 {
     private static readonly Meter Meter = new("Aetheus.AppMonitoring.Retention", "1.0.0");
     private static readonly Histogram<double> Duration =
@@ -28,15 +28,7 @@ public sealed class AppTelemetryRetentionService(
     /// purging.</summary>
     internal const string LeaseName = "aetheus:app-telemetry-retention";
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync(LeaseName, RunLeaderLoopAsync, stoppingToken).ConfigureAwait(false);
-    }
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(BackendRuntimeDefaults.MaintenanceInterval);
 

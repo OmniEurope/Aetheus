@@ -1,0 +1,24 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* The Aetheus plane, animated by the CSS keyframes of app.css (.p-ship, .p-drift, .p-roll, .p-jet). It fills
+   the box its container gives it and carries no wait semantics of its own: the veils (splash, content area,
+   component) and AetheusLoader wrap it. The splash in wwwroot/index.html inlines the same drawing. *@
+<svg class="aetheus-loader-logo" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+    <g class="p-ship">
+        <g class="p-drift">
+            <g transform="translate(80,80) scale(0.92) translate(-80,-80)">
+                <g transform="translate(102,58) rotate(45)">
+                    <g class="p-roll">
+                        <path d="M0,-69 L62,69 L0,22 L-62,69 Z" fill="#1D4ED8"/>
+                        <path d="M0,-44 L0,14" stroke="#93C5FD" stroke-width="5" stroke-linecap="round" fill="none"/>
+                        <g stroke="#60A5FA" stroke-width="5" stroke-linecap="round" fill="none">
+                            <line class="p-jet" x1="0" y1="36" x2="0" y2="100"/>
+                            <line class="p-jet p-jet-left" x1="-31" y1="48" x2="-44" y2="88"/>
+                            <line class="p-jet p-jet-right" x1="31" y1="48" x2="44" y2="88"/>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

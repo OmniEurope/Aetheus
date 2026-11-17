@@ -19,6 +19,10 @@ internal static class LaunchProblemText
 
     public const string ChainParameter = "chain";
 
+    private const string SourceParameter = "source";
+
+    private const string SourceKeyPrefix = "LaunchProblemSource_";
+
     private static readonly Regex Placeholder = new(@"\{(?<name>[A-Za-z][A-Za-z0-9]*)\}", RegexOptions.CultureInvariant);
 
     public static string? Describe(IReadOnlyList<ProblemDto>? problems, IStringLocalizer<AppStrings> localizer)
@@ -70,7 +74,9 @@ internal static class LaunchProblemText
         // One pass over the template: a value that itself contains "{x}" is never substituted again.
         var sentence = Placeholder.Replace(
             template.Value,
-            match => parameters.TryGetValue(match.Groups["name"].Value, out var value) ? value : match.Value);
+            match => parameters.TryGetValue(match.Groups["name"].Value, out var value)
+                ? Localized(match.Groups["name"].Value, value, localizer)
+                : match.Value);
         return parameters.TryGetValue(ChainParameter, out var chain) && !string.IsNullOrWhiteSpace(chain)
             ? Placeholder.Replace(
                 localizer[InChainKey].Value,
@@ -81,5 +87,14 @@ internal static class LaunchProblemText
                     _ => match.Value
                 })
             : sentence;
+    }
+
+    /// <summary>The automated launch sources the back names with a fixed word ("Scheduler", "Webhook") are said in
+    /// the user's language (resource <c>LaunchProblemSource_{value}</c>); any other value is data and stays as it is.</summary>
+    private static string Localized(string name, string value, IStringLocalizer<AppStrings> localizer)
+    {
+        if (name != SourceParameter) return value;
+        var word = localizer[SourceKeyPrefix + value];
+        return word.ResourceNotFound ? value : word.Value;
     }
 }

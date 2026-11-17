@@ -208,12 +208,9 @@ public class AdminSettingsExtendedTests : BunitContext
             new RegistrationTokenDto { Id = 2, Token = "tok-bbb", ExpiresAt = DateTime.UtcNow.AddHours(48), IsUsed = true }
         ]);
 
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/admin/settings?tab=tokens");
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50);
 
-        var tokens = (List<RegistrationTokenDto>)typeof(AdminSettings)
-            .GetField("_tokens", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance)!;
-        Assert.Equal(2, tokens.Count);
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("code.token-code").Count));
     }
 }

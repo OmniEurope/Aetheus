@@ -30,13 +30,19 @@ public sealed class EnsureDotnetSdkFunction : IPipelineFunction
             return PipelineFunctionResult.Failure("The workspace is not set.");
 
         var globalJson = context.Parameters.GetValueOrDefault("global_json");
+        var projectRoot = context.Parameters.GetValueOrDefault("project_root");
         var resolution = await _sdk
-            .ResolveAsync(context, context.Workspace, string.IsNullOrWhiteSpace(globalJson) ? "global.json" : globalJson, cancellationToken)
+            .ResolveAsync(
+                context,
+                context.Workspace,
+                string.IsNullOrWhiteSpace(globalJson) ? "global.json" : globalJson,
+                cancellationToken,
+                string.IsNullOrWhiteSpace(projectRoot) ? null : projectRoot)
             .ConfigureAwait(false);
         if (resolution.Executable is null)
             return PipelineFunctionResult.Failure(resolution.Error!);
 
-        await context.Log($"Pinned .NET SDK: {resolution.Executable}").ConfigureAwait(false);
+        await context.Log($".NET SDK: {resolution.Executable}").ConfigureAwait(false);
         context.SetOutput("DOTNET", resolution.Executable);
         return PipelineFunctionResult.Success();
     }

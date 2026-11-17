@@ -135,6 +135,53 @@ public sealed class ServerHeartbeatDifferentialUpdateTests
             Arg.Is<List<ServiceInfo>>(services => services.Single().Status == "stopped"), Arg.Any<CancellationToken>());
     }
 
+    private static ServerHeartbeatDto WithContainer(string image, string status, double cpu, double memory) =>
+        Inventory() with
+        {
+            Docker = Inventory().Docker with
+            {
+                Containers =
+                [
+                    new DockerContainerDto
+                    {
+                        ContainerId = "c1", Name = "app", Image = image, State = "running",
+                        Status = status, CpuPercent = cpu, MemoryUsageMb = memory
+                    }
+                ]
+            }
+        };
+
+    /// <summary>R-2: "Up 3 minutes", the CPU and the memory of a healthy container change on almost every beat;
+    /// they used to count as a change of the container list, so its rows were deleted and inserted again.</summary>
+    [Fact]
+    public async Task ContainerUptimeCpuAndMemory_AreRefreshedInPlace_NotByRewritingTheContainerList()
+    {
+        await BeatAsync(WithContainer("app:1", "Up 3 minutes", 0.4, 120));
+        _time.Advance(TimeSpan.FromSeconds(30));
+
+        await BeatAsync(WithContainer("app:1", "Up 4 minutes", 1.7, 131));
+
+        Assert.Equal(1, Calls(nameof(IServerHeartbeatRepository.ReplaceDockerContainersAsync)));
+        await _heartbeatRepo.Received(1).UpdateDockerContainerLiveFieldsAsync(_server.Id,
+            Arg.Is<List<DockerContainer>>(containers => containers.Single().ContainerId == "c1"
+                && containers.Single().Status == "Up 4 minutes"
+                && containers.Single().CpuPercent == 1.7
+                && containers.Single().MemoryUsageMb == 131),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AChangedContainerImage_StillRewritesTheContainerList()
+    {
+        await BeatAsync(WithContainer("app:1", "Up 3 minutes", 0.4, 120));
+        _time.Advance(TimeSpan.FromSeconds(30));
+
+        await BeatAsync(WithContainer("app:2", "Up 3 minutes", 0.4, 120));
+
+        Assert.Equal(2, Calls(nameof(IServerHeartbeatRepository.ReplaceDockerContainersAsync)));
+        Assert.Equal(0, Calls(nameof(IServerHeartbeatRepository.UpdateDockerContainerLiveFieldsAsync)));
+    }
+
     [Fact]
     public async Task ChangedPortsentry_ReadsThePreviousCountersAndStillAlerts()
     {

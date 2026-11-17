@@ -20,6 +20,15 @@ public partial class PipelineRunVariablesDialog
         key.StartsWith("BUILD_", StringComparison.OrdinalIgnoreCase) ||
         key.StartsWith("SYSTEM_", StringComparison.OrdinalIgnoreCase);
 
+    // R-31: the back publishes these two with its own clone address; the agent that runs a stage replaces their host and
+    // port with the address it reaches the back with before cloning, which the back does not know. They are named as the
+    // back's address, never presented as the address the agent cloned from.
+    internal static bool IsBackCloneAddress(string key) =>
+        string.Equals(key, "REPOSITORY_URL", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "BUILD_REPOSITORY_URI", StringComparison.OrdinalIgnoreCase);
+
+    private bool HasBackCloneAddress => Variables.Any(variable => IsBackCloneAddress(variable.Key) && variable.Value.Length > 0);
+
     // S-UX-26: copy every resolved variable as KEY=VALUE lines.
     private async Task CopyAllAsync()
     {

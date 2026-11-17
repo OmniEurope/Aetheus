@@ -13,8 +13,9 @@ public partial class AdministrationOrganizationSwitcher
     [Inject] private AdministrationScopeService Scope { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
-    /// <summary>The organization key the page's API resolves its scope with; only organizations holding it are listed.</summary>
-    [Parameter, EditorRequired] public string PermissionKey { get; set; } = string.Empty;
+    /// <summary>The organization key the page's API resolves its scope with; only organizations holding it are listed.
+    /// Null on a site Admin's page whose rows each belong to an organization (R-12): every organization is listed.</summary>
+    [Parameter] public string? PermissionKey { get; set; }
 
     /// <summary>Offers the "all" entry (value 0); without it the switcher always names one organization.</summary>
     [Parameter] public bool OfferAll { get; set; } = true;

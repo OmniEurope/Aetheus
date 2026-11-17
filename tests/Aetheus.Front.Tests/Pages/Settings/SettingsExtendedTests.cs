@@ -197,22 +197,62 @@ public class SettingsExtendedTests : BunitContext
         Assert.False(enabled); // was already false - unchanged
     }
 
-    [Fact]
-    public async Task DisableTotp_WithPassword_ApiReturns_ResetsBusy()
+    // R-50: the disable form, driven through its rendered fields (password, second factor) and its button.
+    private IRenderedComponent<SettingsPage> RenderSecurityWithTotpOn()
     {
-        StubDefaults();
-        _handler.SetJsonResponse("api/auth/totp/disable", true);
+        _handler.SetJsonResponse("api/users/me", AuthenticatedUser() with { TotpEnabled = true });
+        var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "security"));
+        cut.WaitForElement("button[title='Disable2FA']");
+        return cut;
+    }
 
-        var cut = Render<SettingsPage>();
-        typeof(SettingsPage).GetField("_disablePassword", InstPriv)!.SetValue(cut.Instance, "mypassword");
+    private static bool DisableRequested((string Method, string Url) request)
+        => request.Url.Contains("api/auth/totp/disable", StringComparison.Ordinal);
 
-        var method = typeof(SettingsPage).GetMethod("DisableTotp", InstPriv)!;
-        await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [])!);
+    [Fact]
+    public void DisableTotp_WithPasswordAndCode_AdoptsTheNewSessionAndTurnsTheFlagOff()
+    {
+        _handler.SetJsonResponse("api/auth/totp/disable", new LoginResponse { Token = "new-token", RefreshToken = "new-refresh" });
+        var cut = RenderSecurityWithTotpOn();
 
-        var busy = (bool)typeof(SettingsPage)
-            .GetField("_totpBusy", InstPriv)!
-            .GetValue(cut.Instance)!;
-        Assert.False(busy);
+        cut.Find("#oe-formfield-pages-settings-settings-4").Input("mypassword");
+        cut.Find("#oe-formfield-pages-settings-settings-7").Input(" 123456 ");
+        cut.Find("button[title='Disable2FA']").Click();
+
+        // The page turns to the not-enabled state and keeps the session the server issued.
+        cut.WaitForAssertion(() => Assert.Contains("TotpNotEnabled", cut.Markup, StringComparison.Ordinal));
+        Assert.Equal("new-token", Services.GetRequiredService<AuthStateProvider>().Token);
+        var body = _handler.RequestDetails.Single(r => DisableRequested((r.Method, r.Url))).Body;
+        Assert.Contains("\"password\":\"mypassword\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"code\":\"123456\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"useRecoveryCode\":false", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DisableTotp_PasswordWithoutCode_CallsNothing()
+    {
+        var cut = RenderSecurityWithTotpOn();
+
+        cut.Find("#oe-formfield-pages-settings-settings-4").Input("mypassword");
+        cut.Find("button[title='Disable2FA']").Click();
+
+        Assert.DoesNotContain(_handler.RequestsSnapshot(), DisableRequested);
+        Assert.Contains("TotpDisableHint", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DisableTotp_Refused_KeepsTheFlagOnAndTheSession()
+    {
+        _handler.SetResponse("api/auth/totp/disable", System.Net.HttpStatusCode.BadRequest);
+        var cut = RenderSecurityWithTotpOn();
+        var tokenBefore = Services.GetRequiredService<AuthStateProvider>().Token;
+
+        cut.Find("#oe-formfield-pages-settings-settings-4").Input("mypassword");
+        cut.Find("#oe-formfield-pages-settings-settings-7").Input("000000");
+        cut.Find("button[title='Disable2FA']").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestsSnapshot(), DisableRequested));
+        Assert.Contains("TotpDisableHint", cut.Markup, StringComparison.Ordinal);
+        Assert.Equal(tokenBefore, Services.GetRequiredService<AuthStateProvider>().Token);
     }
 }

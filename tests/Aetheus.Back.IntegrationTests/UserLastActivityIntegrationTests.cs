@@ -11,8 +11,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// authenticated (set at login, empty before), and an administrator cannot switch off their own
 /// account from the grid toggle (the server refuses it, not only the page).
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class UserLastActivityIntegrationTests(PostgresFixture fixture)
+public sealed class UserLastActivityIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task LastActivityAt_IsEmptyBeforeTheFirstLogin_AndSetByIt()

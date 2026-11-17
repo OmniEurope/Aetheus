@@ -109,6 +109,7 @@ internal sealed class PipelineCoreRepository(
                 RecentRuns = p.Runs.OrderByDescending(r => r.StartedAt).Take(5).Select(r => new PipelineRunSummaryDto
                 {
                     Id = r.Id,
+                    BuildNumber = r.BuildNumber,
                     Status = r.Status,
                     StartedAt = r.StartedAt,
                     CompletedAt = r.CompletedAt,
@@ -170,6 +171,9 @@ internal sealed class PipelineCoreRepository(
 
     public Task<int> ReserveNextBuildNumberAsync(int pipelineId, CancellationToken ct = default)
         => _buildNumbers.ReserveNextAsync(pipelineId, ct);
+
+    public Task<IReadOnlyDictionary<int, int>> GetRunNumbersAsync(IEnumerable<int> runIds, CancellationToken ct = default)
+        => Aetheus.Back.Components.Shared.PipelineRunNumbers.ReadAsync(db, runIds, ct);
 
     public async Task<(PipelineRun Run, bool Created)> GetOrAddPipelineRunAsync(
         PipelineRun run, CancellationToken ct = default)
@@ -235,6 +239,8 @@ internal sealed class PipelineCoreRepository(
         items = await PipelineAdvisorySteps.ApplyToListAsync(db, items, ct).ConfigureAwait(false);
         items = await PipelineRunGradeAggregation.ApplyAsync(db, items, ct).ConfigureAwait(false);
         items = await PipelineRunRepositoryLinks.ApplyAsync(db, items, ct).ConfigureAwait(false);
+        items = await PipelineRunDeployedReleases.ApplyAsync(db, items, ct).ConfigureAwait(false);
+        items = await PipelineRunApprovalWaits.ApplyAsync(db, items, ct).ConfigureAwait(false);
         return (items, total);
     }
 
@@ -269,6 +275,23 @@ internal sealed class PipelineCoreRepository(
                 s.Task != null && s.Task.FailureCode != null ? s.Task.FailureCode : s.FailureCode,
                 s.Task != null && s.Task.FailureReason != null ? s.Task.FailureReason : s.FailureReason))
             .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<StepStopProjection?> GetFirstStoppedStepAsync(int runId, CancellationToken ct = default)
+    {
+        return await db.PipelineStepRuns
+            .AsNoTracking()
+            .Where(s => s.PipelineRunId == runId
+                && (s.Status == TaskExecutionStatus.Failed || s.Status == TaskExecutionStatus.Timeout
+                    || s.Status == TaskExecutionStatus.Cancelled))
+            .OrderBy(s => s.Status == TaskExecutionStatus.Cancelled)
+            .ThenBy(s => s.ContinueOnError)
+            .ThenBy(s => s.Order)
+            .Select(s => new StepStopProjection(
+                s.StageName, s.StepName, s.MatrixLeg, s.Status, s.ExitCode,
+                s.Task != null && s.Task.FailureCode != null ? s.Task.FailureCode : s.FailureCode,
+                s.Task != null && s.Task.FailureReason != null ? s.Task.FailureReason : s.FailureReason))
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<PipelineRun?> GetPipelineRunWithPipelineAsync(int runId, CancellationToken ct = default)
@@ -366,6 +389,18 @@ internal sealed class PipelineCoreRepository(
             .ConfigureAwait(false);
     }
 
+    public async Task<PipelineRunFailures> GetRunFailuresAsync(int runId, CancellationToken ct = default)
+    {
+        var failed = await db.PipelineStepRuns.AsNoTracking()
+            .Where(s => s.PipelineRunId == runId
+                && (s.Status == TaskExecutionStatus.Failed || s.Status == TaskExecutionStatus.Timeout))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return new PipelineRunFailures(
+            failed.Any(step => !step.ContinueOnError),
+            [.. failed.Where(step => step.ContinueOnError)]);
+    }
+
     public async Task<bool> HasAnySucceededStepInRunAsync(int runId, CancellationToken ct = default)
     {
         return await db.PipelineStepRuns
@@ -375,14 +410,8 @@ internal sealed class PipelineCoreRepository(
     }
 
     // Completed = every step terminal AND each one passed, was cancelled or may continue on error.
-    public Task<List<string>> GetCompletedStageNamesAsync(int runId, CancellationToken ct = default) =>
-        GetStageNamesAsync(runId, requirePassedOrContinuable: true, ct);
-
-    public Task<List<string>> GetTerminalStageNamesAsync(int runId, CancellationToken ct = default) =>
-        GetStageNamesAsync(runId, requirePassedOrContinuable: false, ct);
-
-    private async Task<List<string>> GetStageNamesAsync(
-        int runId, bool requirePassedOrContinuable, CancellationToken ct)
+    // Terminal = every step terminal. One GROUP BY answers both.
+    public async Task<PipelineStageProgress> GetStageProgressAsync(int runId, CancellationToken ct = default)
     {
         var allStageSteps = await db.PipelineStepRuns
             .Where(s => s.PipelineRunId == runId)
@@ -400,10 +429,9 @@ internal sealed class PipelineCoreRepository(
             })
             .ToListAsync(ct).ConfigureAwait(false);
 
-        return allStageSteps
-            .Where(s => s.AllTerminal && (!requirePassedOrContinuable || s.AllPassedOrContinuable))
-            .Select(s => s.StageName)
-            .ToList();
+        return new PipelineStageProgress(
+            [.. allStageSteps.Where(s => s.AllTerminal && s.AllPassedOrContinuable).Select(s => s.StageName)],
+            [.. allStageSteps.Where(s => s.AllTerminal).Select(s => s.StageName)]);
     }
 
     public Task<bool> HasActiveArtifactCollectionAsync(
@@ -425,9 +453,21 @@ internal sealed class PipelineCoreRepository(
             .ConfigureAwait(false);
     }
 
-    public async Task UpdatePipelineRunStatusAsync(int runId, PipelineStatus status, CancellationToken ct = default)
+    public async Task<bool> IsRunCancellationRequestedAsync(int runId, CancellationToken ct = default)
     {
-        status = await _runStatusRepository.ResolveTerminalStatusAsync(runId, status, ct)
+        var variables = await db.PipelineRuns
+            .AsNoTracking()
+            .Where(r => r.Id == runId)
+            .Select(r => r.AdditionalVariablesJson)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return PipelineRunHelpers.HasCancellationRequest(variables);
+    }
+
+    public async Task UpdatePipelineRunStatusAsync(
+        int runId, PipelineStatus status, CancellationToken ct = default, bool? artifactCollectionFailed = null)
+    {
+        status = await _runStatusRepository.ResolveTerminalStatusAsync(runId, status, artifactCollectionFailed, ct)
             .ConfigureAwait(false);
 
         // Atomic update: only transition from Running to a terminal status.
@@ -501,6 +541,14 @@ internal sealed class PipelineCoreRepository(
         IReadOnlyCollection<string> preservedStages,
         CancellationToken ct = default)
         => _cancellation.CancelOrphanedRunningStepRunsExceptStagesAsync(runId, preservedStages, ct);
+
+    public Task<CancelledTaskStopWait> GetCancelledTaskStopWaitAsync(
+        int runId, DateTime timedOutBefore, CancellationToken ct = default)
+        => _cancellation.GetCancelledTaskStopWaitAsync(runId, timedOutBefore, ct);
+
+    public Task<int> MarkCancelledTaskStopWaitExpiredAsync(
+        int runId, DateTime timedOutBefore, DateTime expiredAt, CancellationToken ct = default)
+        => _cancellation.MarkCancelledTaskStopWaitExpiredAsync(runId, timedOutBefore, expiredAt, ct);
 
     public Task<int?> GetRunProjectIdAsync(int runId, CancellationToken ct = default) =>
         db.PipelineRuns.AsNoTracking()

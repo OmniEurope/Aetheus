@@ -141,9 +141,10 @@ public sealed class SettingsApi(HttpClient http) : ApiClientBase(http)
     public async Task<PaginatedResult<PluginRegistrationDto>> GetPluginsPageAsync(
         int page = 1, int pageSize = 25, string? search = null,
         string? sortBy = null, bool sortDescending = false, CancellationToken ct = default,
-        IReadOnlyList<GridFilter>? filters = null)
+        IReadOnlyList<GridFilter>? filters = null, int? organizationId = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
+        AddOrganization(query, organizationId);
         // The list's column header filters.
         return await GetJsonAsync<PaginatedResult<PluginRegistrationDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/plugins", query), filters), ct).ConfigureAwait(false) ?? new();

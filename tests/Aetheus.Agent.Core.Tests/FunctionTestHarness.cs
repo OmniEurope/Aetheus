@@ -98,14 +98,15 @@ internal sealed class FunctionTestHarness : IDisposable
     }
 
     public async Task<(ExecutorResult Result, Dictionary<string, string> Variables)> RunAsync(
-        IPipelineFunction function, IDictionary<string, string> environment, int timeoutSeconds = 30)
+        IPipelineFunction function, IDictionary<string, string> environment, int timeoutSeconds = 30,
+        CancellationToken? cancellationToken = null)
     {
         var env = new Dictionary<string, string>(environment) { [PipelineFunctionRequest.WorkspaceVariable] = Workspace };
         var executor = new PipelineFunctionOperationExecutor([function]);
         var result = await executor.ExecuteAsync(
             PipelineFunctionCatalog.Find(function.Name)?.Operation ?? OperationKind.PipelineFunction, function.Name, env,
             timeoutSeconds, Capture,
-            TestContext.Current.CancellationToken);
+            cancellationToken ?? TestContext.Current.CancellationToken);
         var variables = Log
             .Select(entry => entry.Line)
             .Where(line => line.StartsWith(SetVariablePrefix, StringComparison.Ordinal))

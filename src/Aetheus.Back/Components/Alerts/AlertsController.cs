@@ -42,6 +42,11 @@ public class AlertsController(
     public async Task<ActionResult<AlertRuleDto>> CreateAlertRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
+        // A rule without a server is excluded from metric evaluation and would never fire.
+        if (request.ServerId is not { } serverId)
+            return BadRequest(new ApiError { Message = "A server is required to create an alert rule." });
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Read, ct))
+            return Forbid();
         var rule = await alertService.CreateAlertRuleAsync(request, ct);
         return CreatedAtAction(nameof(GetAlertRule), new { id = rule.Id }, rule);
     }
@@ -50,6 +55,11 @@ public class AlertsController(
     public async Task<ActionResult<AlertRuleDto>> UpdateAlertRule(
         int id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
+        // Same rule as creation: a server is required, and the caller must be able to read it.
+        if (request.ServerId is not { } targetServerId)
+            return BadRequest(new ApiError { Message = "A server is required for an alert rule." });
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, targetServerId, Permission.Read, ct))
+            return Forbid();
         var rule = await alertService.UpdateAlertRuleAsync(id, request, ct);
         if (rule is null) return NotFound();
         return Ok(rule);

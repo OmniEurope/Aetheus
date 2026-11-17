@@ -6,8 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class AppVisitorRepositoryIntegrationTests(PostgresFixture fixture)
+public sealed class AppVisitorRepositoryIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task DailyCounts_TranslateAndExecuteOnProductionPostgresProvider()

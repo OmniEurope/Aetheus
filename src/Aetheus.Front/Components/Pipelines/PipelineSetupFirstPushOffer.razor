@@ -1,0 +1,38 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-20: after the Git repository was created, the optional first push. One block, three states: the commands to copy and
+   the choice (offered), the wait for the push (waiting), the reception (received). One main action; skipping is in its menu. *@
+@if (State.Phase is PipelineSetupFirstPushPhase.Offered or PipelineSetupFirstPushPhase.Waiting)
+{
+    var waiting = State.Waiting;
+    <OmniAlert Severity="OmniSeverity.Info" Title="@L["PipelineSetupFirstPushTitle"]" data-testid="setup-first-push">
+        <OmniStack Gap="OmniSpacing.Small">
+            <span>@L[waiting ? "PipelineSetupFirstPushWaiting" : "PipelineSetupFirstPushHint"]</span>
+            <OmniCodeBlock Code="@State.Commands" Language="bash" Wrap="true" data-testid="setup-first-push-commands" />
+            @* R-52: the address alone, with its own Copy button, to paste into a Git client or a `git remote add`. *@
+            <OmniFormField Label="@L["PipelineSetupFirstPushUrl"]" Class="omni-u-w-100" For="setup-first-push-url">
+                <OmniTextBox Id="setup-first-push-url" Value="@State.CloneUrl" ValueExpression="@(() => State.CloneUrl)" ReadOnly="true" ShowCopy="true" CopyIconOnly="true" Type="OmniTextBoxType.Url"
+                             Class="omni-u-w-100" data-testid="setup-first-push-url" />
+            </OmniFormField>
+            <div>
+                @if (waiting)
+                {
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Skip" data-testid="setup-first-push-stop"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["PipelineSetupFirstPushStop"]</span></ChildContent></OmniButton>
+                }
+                else
+                {
+                    <OmniSplitButton Text="@L["PipelineSetupFirstPushAccept"]" Variant="OmniButtonVariant.Primary" OnClick="@Accept"
+                                     data-testid="setup-first-push-accept">
+                        <Icon><OmniIcon Name="OmniIconName.Upload" /></Icon>
+                        <ChildContent>
+                            <OmniMenuItem OnClick="@Skip" Class="setup-first-push-skip">@L["PipelineSetupFirstPushSkip"]</OmniMenuItem>
+                        </ChildContent>
+                    </OmniSplitButton>
+                }
+            </div>
+        </OmniStack>
+    </OmniAlert>
+}
+else if (State.Phase == PipelineSetupFirstPushPhase.Received)
+{
+    <OmniAlert Severity="OmniSeverity.Success" data-testid="setup-first-push-received">@L["PipelineSetupFirstPushReceived"]</OmniAlert>
+}

@@ -1,0 +1,203 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-15: the CVE watch tab of the quality page. Tiles that filter the list, a list by CVE then by project, the
+   freshness of the sources and the projects the watch cannot vouch for. Everything is read through the caller's own
+   reach: a project it may not read is in no row and no count. *@
+<div class="cve-watch" data-testid="cve-watch">
+    @if (_loadFailed)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger">
+            @L["LoadFailed"]
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ReloadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+        </OmniAlert>
+    }
+
+    @if (StaleSources.Count > 0)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@L["CveWatchStaleTitle"]" data-testid="cve-watch-stale">
+            @string.Format(L["CveWatchStaleText"], string.Join(", ", StaleSources.Select(source => source.Source)))
+        </OmniAlert>
+    }
+
+    <OmniTileGrid Columns="4" MinColumnWidth="9rem" Class="cve-watch-tiles" role="group" aria-label="@L["CveWatchTab"]">
+        <OmniStatTile Value="@Count(_overview?.CriticalCount)" Title="@L["CveWatchTileCritical"]" OnClick="@(() => ToggleSeverityAsync(AnalysisSeverity.Critical))"
+                      aria-pressed="@PressedText(_severity == AnalysisSeverity.Critical)" data-testid="cve-tile-critical">
+            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@Count(_overview?.ExploitedCount)" Title="@L["CveWatchTileExploited"]" OnClick="@ToggleExploitedAsync"
+                      aria-pressed="@PressedText(_exploitedOnly)" data-testid="cve-tile-exploited">
+            <Icon><OmniIcon Name="OmniIconName.Lightning" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@Count(_overview?.WithoutFixCount)" Title="@L["CveWatchTileNoFix"]" OnClick="@ToggleWithoutFixAsync"
+                      aria-pressed="@PressedText(_withoutFixOnly)" data-testid="cve-tile-nofix">
+            <Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon>
+        </OmniStatTile>
+        <OmniStatTile Value="@Count(_overview?.UncoveredProjects.Count)" Title="@L["CveWatchTileUncovered"]" Detail="@L["CveWatchTileUncoveredDetail"]" data-testid="cve-tile-uncovered">
+            <Icon><OmniIcon Name="OmniIconName.EyeSlash" /></Icon>
+        </OmniStatTile>
+    </OmniTileGrid>
+
+    <OmniCard Class="cve-watch-list-card">
+        <HeaderContent>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="cve-watch-filters">
+                <OmniDropDown TValue="AnalysisSeverity?" @bind-Value="_severity" @bind-Value:after="FilterAsync" Options="@_severityOptions"
+                              AllowEmpty="true" Placeholder="@L["CveWatchAllSeverities"]" Label="@L["Severity"]" />
+                <OmniDropDown TValue="int?" @bind-Value="_organizationId" @bind-Value:after="OnOrganizationChangedAsync" Options="@OrganizationOptions"
+                              AllowEmpty="true" Placeholder="@L["AllOrganizations"]" Label="@L["Organization"]" />
+                <OmniDropDown TValue="int?" @bind-Value="_projectId" @bind-Value:after="FilterAsync" Options="@ProjectOptions"
+                              AllowEmpty="true" Placeholder="@L["AllProjects"]" Label="@L["Project"]" />
+                <OmniSwitch TValue="bool" @bind-Value="_exploitedOnly" @bind-Value:after="FilterAsync">@L["CveWatchExploitedOnly"]</OmniSwitch>
+                <OmniSwitch TValue="bool" @bind-Value="_withoutFixOnly" @bind-Value:after="FilterAsync">@L["CveWatchWithoutFixOnly"]</OmniSwitch>
+                <OmniSwitch TValue="bool" @bind-Value="_includeClosed" @bind-Value:after="FilterAsync">@L["CveWatchIncludeClosed"]</OmniSwitch>
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    <OmniMenuItem OnClick="ReloadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["CveWatchRefresh"]</ChildContent></OmniMenuItem>
+                </OmniOverflowMenu>
+            </OmniStack>
+        </HeaderContent>
+        <ChildContent>
+            <VeilHold Busy="@_busy" />
+            <OmniDataGrid TItem="CveWatchAdvisoryGroupDto" Items="@_groups" KeyOf="@(group => group.AdvisoryId)" ExpandMode="OmniDataGridRowMode.Single"
+                          @bind-ExpandedKeys="_expandedKeys" ExportTitle="@ExportContext.Title(L["CveWatchTab"])" ExportFields="@ExportContext.Fields()"
+                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" Density="OmniDensity.Compact" Class="cve-watch-grid">
+                <EmptyContent>
+                    @* No sentence before the answer: "no CVE" is a conclusion, drawn only once both reads ended well. *@
+                    @if (Settled)
+                    {
+                        <EmptyState Icon="@EmptyIcon" Title="@EmptyTitle" Description="@EmptyDescription" />
+                    }
+                </EmptyContent>
+                <DetailTemplate Context="group">
+                    <div class="cve-watch-detail" data-testid="cve-detail">
+                        <div class="cve-watch-detail-text">
+                            <OmniHeading Level="OmniHeadingLevel.H6">@L["CveWatchAdvisory"]</OmniHeading>
+                            @if (!string.IsNullOrWhiteSpace(group.Summary))
+                            {
+                                <OmniText Class="cve-watch-summary">@group.Summary</OmniText>
+                            }
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CveWatchAdvisoryAttribution"]</OmniText>
+                            <OmniHeading Level="OmniHeadingLevel.H6">@L["CveWatchProjects"]</OmniHeading>
+                            <OmniSelectableCardGroup TValue="long" TSelection="long?" Columns="1" Label="@L["CveWatchProjects"]"
+                                                     Value="@SelectedMatch(group).MatchId" ValueExpression="@(() => _pickedMatchId)" ValueChanged="@PickMatch">
+                                @foreach (var match in group.Matches)
+                                {
+                                    <OmniSelectableCard @key="match.MatchId" Choice="@match.MatchId" Title="@match.ProjectName"
+                                                        Description="@($"{match.PackageName} {match.Version}")" data-testid="cve-project">
+                                        @if (match.FixedVersion is { } fix)
+                                        {
+                                            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.ArrowUp))" Fill="OmniFill.Tonal" Tone="OmniTone.Success">@fix</OmniBadge>
+                                        }
+                                        else
+                                        {
+                                            <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["CveWatchNoFix"]</OmniBadge>
+                                        }
+                                        <OmniBadge Icon="@(BadgeIcon.ForState(MatchTone(match)))" Fill="OmniFill.Tonal" Tone="@MatchTone(match)">@MatchText(match)</OmniBadge>
+                                    </OmniSelectableCard>
+                                }
+                            </OmniSelectableCardGroup>
+                        </div>
+                        <div class="cve-watch-detail-timeline">
+                            @{ var selected = SelectedMatch(group); }
+                            <OmniHeading Level="OmniHeadingLevel.H6">@string.Format(L["CveWatchTimelineOf"], selected.ProjectName)</OmniHeading>
+                            <OmniTimeline Label="@L["CveWatchTimeline"]">
+                                <OmniTimelineItem Date="@AsDate(selected.FirstMatchedAt)" Title="@string.Format(L["CveWatchDetectedIn"], selected.ProjectName)" Level="OmniHeadingLevel.H6" />
+                                @if (selected.ExploitedSince is { } since)
+                                {
+                                    <OmniTimelineItem Date="@AsDate(since)" Title="@L["CveWatchExploitedByCisa"]" Level="OmniHeadingLevel.H6" />
+                                }
+                                @if (selected.NotifiedAt is { } notified)
+                                {
+                                    <OmniTimelineItem Date="@AsDate(notified)" Title="@L["CveWatchMailSent"]" Level="OmniHeadingLevel.H6" />
+                                }
+                                else
+                                {
+                                    <OmniTimelineItem Title="@L["CveWatchMailNotSent"]" Level="OmniHeadingLevel.H6" />
+                                }
+                                @if (selected.FindingId is { } findingId)
+                                {
+                                    <OmniTimelineItem Level="OmniHeadingLevel.H6" Title="@(selected.FindingStatus is { } findingStatus ? string.Format(L["CveWatchFinding"], findingId, L.Localize(findingStatus)) : null)">
+                                        <OmniLink Href="@($"analysis/findings/{findingId}")">@L["CveWatchOpenFinding"]</OmniLink>
+                                    </OmniTimelineItem>
+                                }
+                                @if (selected.ClosedAt is { } closedAt)
+                                {
+                                    <OmniTimelineItem Date="@AsDate(closedAt)" Title="@L["CveWatchClosed"]" Level="OmniHeadingLevel.H6" />
+                                }
+                            </OmniTimeline>
+                        </div>
+                    </div>
+                </DetailTemplate>
+                <Columns>
+                    <OmniDataGridColumn TItem="CveWatchAdvisoryGroupDto" Sortable="false" Title="@L["Severity"]" Width="12rem" ExportValue="@SeverityExport">
+                        <Template Context="group">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniBadge Icon="@(BadgeIcon.ForSeverity(SeverityTone(group.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityTone(group.Severity)">@L.Localize(group.Severity)</OmniBadge>
+                                @if (!group.SeverityPublished)
+                                {
+                                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Question))" Fill="OmniFill.Outline" Tone="OmniTone.Neutral" title="@L["CveWatchSeverityAssumedHint"]">@L["CveWatchSeverityAssumed"]</OmniBadge>
+                                }
+                                @if (group.ExploitedSince is not null)
+                                {
+                                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lightning))" Fill="OmniFill.Solid" Tone="OmniTone.Danger" title="@L["CveWatchExploitedHint"]">@L["CveWatchExploited"]</OmniBadge>
+                                }
+                            </OmniStack>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchAdvisoryGroupDto" Property="CveId" Title="@L["CveWatchAdvisory"]" Filterable="false">
+                        <Template Context="group">
+                            <div class="cve-watch-advisory">
+                                <span class="cve-watch-cve-id">@(group.CveId ?? group.AdvisoryId)</span>
+                                @if (group.CveId is not null)
+                                {
+                                    <span class="cve-watch-advisory-id">@group.AdvisoryId</span>
+                                }
+                                <span class="cve-watch-advisory-summary">@group.Summary</span>
+                            </div>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchAdvisoryGroupDto" Sortable="false" Title="@L["Package"]" ExportValue="@PackagesExport">
+                        <Template Context="group">@PackagesText(group)</Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchAdvisoryGroupDto" Sortable="false" Title="@L["Projects"]" Width="9rem" ExportValue="@ProjectsExport">
+                        <Template Context="group">@ProjectsText(group)</Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="CveWatchAdvisoryGroupDto" Sortable="false" Title="@L["CveWatchFixedIn"]" Width="10rem" ExportValue="@FixExport">
+                        <Template Context="group">@FixText(group)</Template>
+                    </OmniDataGridColumn>
+                </Columns>
+            </OmniDataGrid>
+            @if (_total > PageSize)
+            {
+                <OmniPager Page="@_page" PageCount="@Math.Max(1, (int)Math.Ceiling(_total / (double)PageSize))"
+                           PageChanged="@OnPageChangedAsync" PageSize="@PageSize" Class="omni-u-mt-md" />
+            }
+        </ChildContent>
+    </OmniCard>
+
+    <CveWatchServerFindings Severity="@_severity" OrganizationId="@_organizationId" ExploitedOnly="@_exploitedOnly" WithoutFixOnly="@_withoutFixOnly" />
+
+    <div class="cve-watch-side">
+        <CveWatchSourcesCard Sources="@(_overview?.Sources ?? [])" Pending="@(_overview is null)" />
+        <OmniCard Class="cve-watch-uncovered-card" data-testid="cve-uncovered">
+            <HeaderContent><OmniHeading Level="OmniHeadingLevel.H5">@L["CveWatchTileUncovered"]</OmniHeading></HeaderContent>
+            <ChildContent>
+                @* Nothing is said until the overview answered (or failed): "all covered" is a conclusion too. *@
+                @if (_overview is { UncoveredProjects.Count: 0 })
+                {
+                    <OmniText Tone="OmniTextTone.Muted">@L["CveWatchAllCovered"]</OmniText>
+                }
+                else if (_overview is not null)
+                {
+                    <OmniDataList TItem="CveWatchUncoveredProjectDto" Items="@_overview.UncoveredProjects" Class="cve-watch-source-list">
+                        <ItemTemplate Context="project">
+                            <div class="cve-watch-source">
+                                <span class="cve-watch-source-name"><OmniLink Href="@($"projects/{project.ProjectId}/quality")">@project.ProjectName</OmniLink></span>
+                                <span class="cve-watch-source-date">@project.OrganizationName</span>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(project.Coverage == ProjectInventoryCoverage.None ? OmniTone.Warning : OmniTone.Neutral))" Fill="OmniFill.Tonal"
+                                           Tone="@(project.Coverage == ProjectInventoryCoverage.None ? OmniTone.Warning : OmniTone.Neutral)">@L.Localize(project.Coverage)</OmniBadge>
+                            </div>
+                        </ItemTemplate>
+                    </OmniDataList>
+                }
+            </ChildContent>
+        </OmniCard>
+    </div>
+</div>

@@ -1,0 +1,9 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Servers.ServerDetailSections
+@inject IStringLocalizer<AppStrings> L
+
+@* Recette R-14: why a file sits under a domain, how to retire an old one, and what Aetheus cannot touch. A question
+   mark with an OE tooltip, readable by keyboard and by screen readers, in the heading of each list of sites. *@
+<OmniTooltip Text="@L["ApacheSiteFilesHelp"]" Focusable="true" MaxWidth="OmniTooltipWidth.Wide" CompactLength="0">
+    <span role="img" aria-label="@L["ApacheSiteFilesHelp"]" data-testid="apache-site-files-help"><OmniIcon Name="OmniIconName.Question" Class="omni-u-text-muted" aria-hidden="true" /></span>
+</OmniTooltip>

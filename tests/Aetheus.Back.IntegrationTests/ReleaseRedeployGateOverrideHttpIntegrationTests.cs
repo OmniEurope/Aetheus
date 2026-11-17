@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Aetheus.Back.Components.Git;
+using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -17,32 +18,12 @@ namespace Aetheus.Back.IntegrationTests;
 /// release that keeps no artifact is refused even with it; the override takes Server.Admin on the targets (like
 /// any launch) and Write on the project; it is recorded on the run and in the audit log.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixture fixture)
+public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string Ungraded = "1.0.0-ungraded";
     private const string NoArtifact = "1.0.1-noartifact";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
-    [Fact]
-    public async Task AReleaseWithoutAGrade_IsRefusedWithoutTheOverride()
-    {
-        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        await using var factory = WithoutRemotePipelineFile(baseFactory);
-        var seed = await SeedAsync(factory);
-        var deployer = await DeployerAsync(factory, seed);
-        using var client = await IntegrationUsers.LoginClientAsync(factory, deployer.Username);
-
-        var response = await RunAsync(client, seed.PipelineId, Ungraded, gateOverride: false);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var run = await ReadRunAsync(factory, await RunIdAsync(response));
-        Assert.Equal(PipelineStatus.Failed, run.Status);
-        Assert.Contains("no sealed assurance grade", run.WarningsJson, StringComparison.Ordinal);
-        Assert.Null(run.GateOverrideBy);
-        Assert.Null(run.GateOverrideAt);
-    }
 
     [Fact]
     public async Task AReleaseWithoutAGrade_IsDeployedWithTheOverride_AndTheOverrideIsRecorded()
@@ -57,6 +38,7 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var runId = await RunIdAsync(response);
+        await FirstDispatchEndedAsync(factory);
         var run = await ReadRunAsync(factory, runId);
         Assert.NotEqual(PipelineStatus.Failed, run.Status);
         Assert.DoesNotContain("no sealed assurance grade", run.WarningsJson ?? string.Empty, StringComparison.Ordinal);
@@ -93,7 +75,14 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("GateOverrideNoArtifact", await response.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
-        Assert.Equal(0, await RunCountAsync(factory, seed.PipelineId));
+        // R-36: a launch refused at pre-check leaves one failed run carrying the reason, and nothing is dispatched.
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var refused = Assert.Single(await db.PipelineRuns.AsNoTracking()
+            .Where(run => run.PipelineId == seed.PipelineId && run.Status != PipelineStatus.Success).ToListAsync(Ct));
+        Assert.Equal(PipelineStatus.Failed, refused.Status);
+        Assert.Contains("GateOverrideNoArtifact", refused.WarningsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(0, await TaskCountAsync(factory, refused.Id));
     }
 
     [Fact]
@@ -136,10 +125,33 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
         // Without the override the launch is the ordinary one, and the gate refuses it as before.
         var ordinary = await RunAsync(client, seed.PipelineId, Ungraded, gateOverride: false);
         Assert.Equal(HttpStatusCode.Created, ordinary.StatusCode);
+        await FirstDispatchEndedAsync(factory);
         Assert.Equal(PipelineStatus.Failed, (await ReadRunAsync(factory, await RunIdAsync(ordinary))).Status);
     }
 
     private sealed record Seed(int ProjectId, int PipelineId, int RunnerId);
+
+    /// <summary>R-4: the run's workspace is pinned to a real commit of the project's own repository (an external address
+    /// is no longer resolved straight from its remote). The repository holds no <c>.pipeline/</c> file, so the stored
+    /// definition runs.</summary>
+    private static async Task SeedRepositoryAsync(AsyncServiceScope scope, int projectId, string suffix)
+    {
+        var gitLight = scope.ServiceProvider.GetRequiredService<IGitLightService>();
+        var repository = await gitLight.CreateRepositoryAsync(new CreateGitLightRepoRequest
+        {
+            ProjectId = projectId,
+            Name = $"redeploy-repo-{suffix}",
+            DefaultBranch = "main"
+        }, Ct);
+        var (success, _, error) = await scope.ServiceProvider.GetRequiredService<IGitLightCliService>().CommitFilesAsync(
+            gitLight.ResolveDiskPath(projectId, repository.Slug), "main", [("README.md", "redeploy")],
+            "chore: seed", "seed", "seed@example.com", Ct);
+        Assert.True(success, error);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.GitInternalRepos.SingleAsync(item => item.Id == repository.Id, Ct);
+        row.IsEmpty = false;
+        await db.SaveChangesAsync(Ct);
+    }
 
     private static Task<(int Id, string Username)> DeployerAsync(WebApplicationFactory<Program> factory, Seed seed) =>
         IntegrationUsers.CreateAsync(factory.Services, "deployer",
@@ -172,7 +184,7 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
         var project = new Project
         {
             Name = $"redeploy-{suffix}",
-            RepositoryUrl = $"https://git.example/{suffix}.git",
+            RepositoryUrl = $"http://localhost:5300/git/1/{suffix}.git",
             OrganizationId = organizationId
         };
         var runner = new Server
@@ -188,6 +200,7 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
         };
         db.AddRange(project, runner);
         await db.SaveChangesAsync(Ct);
+        await SeedRepositoryAsync(scope, project.Id, suffix);
 
         var pipeline = new Pipeline
         {
@@ -251,6 +264,11 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
         return new Seed(project.Id, pipeline.Id, runner.Id);
     }
 
+    /// <summary>R-7: a manual launch answers before its first stage dispatch (the gate's refusal, the tasks, the
+    /// run's end all happen there, in the background). The test reads their effect only once that dispatch ended.</summary>
+    private static Task FirstDispatchEndedAsync(WebApplicationFactory<Program> factory) =>
+        factory.Services.GetRequiredService<IPipelineDeferredFirstDispatch>().WhenIdleAsync();
+
     private static async Task<PipelineRun> ReadRunAsync(WebApplicationFactory<Program> factory, int runId)
     {
         await using var scope = factory.Services.CreateAsyncScope();
@@ -274,8 +292,8 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
             .CountAsync(run => run.PipelineId == pipelineId && run.Status != PipelineStatus.Success, Ct);
     }
 
-    /// <summary>The project's repository (git.example) never resolves: only the Git remote boundary is replaced,
-    /// answering "no pipeline file" so the stored definition runs (as in PipelineApprovalDecisionHttpIntegrationTests).</summary>
+    /// <summary>The project names one of Aetheus's own clone URLs with no repository behind it (R-4), so the stored
+    /// definition runs; only the Git remote boundary is replaced (as in PipelineApprovalDecisionHttpIntegrationTests).</summary>
     private static WebApplicationFactory<Program> WithoutRemotePipelineFile(AetheusWebApplicationFactory factory) =>
         factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddSingleton<IGitCliService, NoPipelineFileGitCli>()));
@@ -284,11 +302,5 @@ public sealed class ReleaseRedeployGateOverrideHttpIntegrationTests(PostgresFixt
     {
         public Task<List<(string BranchName, string Version)>> ListReleaseBranchesAsync(string repositoryUrl, CancellationToken ct = default) =>
             Task.FromResult(new List<(string BranchName, string Version)>());
-
-        public Task<GitRemoteBranch> ResolveBranchCommitAsync(string repositoryUrl, string? branch, CancellationToken ct = default) =>
-            Task.FromResult(new GitRemoteBranch(branch ?? "main", new string('a', 40)));
-
-        public Task<string?> ReadPipelineYamlAsync(string repositoryUrl, string commit, string pipelineName, CancellationToken ct = default) =>
-            Task.FromResult<string?>(null);
     }
 }

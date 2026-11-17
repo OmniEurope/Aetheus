@@ -67,33 +67,66 @@ public class AlertsControllerTests
     [Fact]
     public async Task CreateAlertRule_ReturnsCreatedAtAction()
     {
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 5, Permission.Read, Arg.Any<CancellationToken>()).Returns(true);
         _serviceMock.CreateAlertRuleAsync(Arg.Any<CreateAlertRuleRequest>(), Arg.Any<CancellationToken>())
             .Returns(new AlertRuleDto { Id = 1, Name = "New" });
 
-        var result = await _sut.CreateAlertRule(new CreateAlertRuleRequest { Name = "New", Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
+        var result = await _sut.CreateAlertRule(new CreateAlertRuleRequest { Name = "New", ServerId = 5, Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(1, ((AlertRuleDto)created.Value!).Id);
     }
 
     [Fact]
+    public async Task CreateAlertRule_WithoutServerId_ReturnsBadRequest_AndCreatesNothing()
+    {
+        var result = await _sut.CreateAlertRule(new CreateAlertRuleRequest { Name = "New", Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.False(string.IsNullOrWhiteSpace(Assert.IsType<ApiError>(bad.Value).Message));
+        await _serviceMock.DidNotReceive().CreateAlertRuleAsync(Arg.Any<CreateAlertRuleRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAlertRule_ServerNotReadable_ReturnsForbid_AndCreatesNothing()
+    {
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 5, Permission.Read, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _sut.CreateAlertRule(new CreateAlertRuleRequest { Name = "New", ServerId = 5, Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().CreateAlertRuleAsync(Arg.Any<CreateAlertRuleRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task UpdateAlertRule_Found_ReturnsOk()
     {
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 5, Permission.Read, Arg.Any<CancellationToken>()).Returns(true);
         _serviceMock.UpdateAlertRuleAsync(1, Arg.Any<UpdateAlertRuleRequest>(), Arg.Any<CancellationToken>())
             .Returns(new AlertRuleDto { Id = 1, Name = "Updated" });
 
-        var result = await _sut.UpdateAlertRule(1, new UpdateAlertRuleRequest { Name = "Updated", Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
+        var result = await _sut.UpdateAlertRule(1, new UpdateAlertRuleRequest { Name = "Updated", ServerId = 5, Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
 
     [Fact]
+    public async Task UpdateAlertRule_WithoutServerId_ReturnsBadRequest_AndUpdatesNothing()
+    {
+        var result = await _sut.UpdateAlertRule(1, new UpdateAlertRuleRequest { Name = "Updated", Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan, Threshold = 90 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await _serviceMock.DidNotReceive().UpdateAlertRuleAsync(Arg.Any<int>(), Arg.Any<UpdateAlertRuleRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task UpdateAlertRule_NotFound_ReturnsNotFound()
     {
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 5, Permission.Read, Arg.Any<CancellationToken>()).Returns(true);
         _serviceMock.UpdateAlertRuleAsync(999, Arg.Any<UpdateAlertRuleRequest>(), Arg.Any<CancellationToken>())
             .Returns((AlertRuleDto?)null);
 
-        var result = await _sut.UpdateAlertRule(999, new UpdateAlertRuleRequest { Name = "X", Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan }, TestContext.Current.CancellationToken);
+        var result = await _sut.UpdateAlertRule(999, new UpdateAlertRuleRequest { Name = "X", ServerId = 5, Metric = MetricType.Cpu, Operator = ComparisonOperator.GreaterThan }, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFoundResult>(result.Result);
     }

@@ -5,14 +5,15 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Audit;
 
-public class AuditService(IAuditRepository repo, IHttpContextAccessor httpContextAccessor, IAuditChainService chainService, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier? adminNotifier = null) : IAuditService
+public class AuditService(IAuditRepository repo, IHttpContextAccessor httpContextAccessor, IAuditChainService chainService, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier? adminNotifier = null, IAuditActor? actor = null) : IAuditService
 {
     private static readonly SemaphoreSlim ChainLock = new(1, 1);
     private const int MaxChainRaceRetries = 3;
 
     public async Task LogAsync(string action, string entityType, int? entityId = null, string? details = null, CancellationToken ct = default)
     {
-        var username = httpContextAccessor.HttpContext?.User?.Identity?.Name ?? "system";
+        // R-7: work moved off a request names the person captured in it (IAuditActor), not "system".
+        var username = actor?.Username ?? httpContextAccessor.HttpContext?.User?.Identity?.Name ?? "system";
 
         await ChainLock.WaitAsync(ct).ConfigureAwait(false);
         try

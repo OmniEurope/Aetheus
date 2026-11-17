@@ -15,10 +15,20 @@
             {
                 <OmniFactTileRow Term="@L["Branch"]" Href="@branch.Href"><Icon><OmniIcon Name="OmniIconName.Graph" /></Icon><ChildContent>@branch.Name</ChildContent></OmniFactTileRow>
             }
-            @if (!string.IsNullOrEmpty(CommitSha))
+            @if (!string.IsNullOrEmpty(CommitSha) && DeployedRelease is null)
             {
-                @* CommitHref is null only for a run with neither repository nor project. *@
+                @* CommitHref is null only for a run with neither repository nor project. R-34/R-36: for a deployment
+                   run the commit the run checked out is the head of its source branch, not what production gets, so
+                   only the deployed release and its commit are shown. *@
                 <OmniFactTileRow Term="@L["Commit"]"><Icon><OmniIcon Name="OmniIconName.GitCommit" /></Icon><ChildContent><ShortId Value="@CommitSha" Href="@CommitHref" Copyable="false" Class="cross-link-sha" /></ChildContent></OmniFactTileRow>
+            }
+            @if (DeployedRelease is { } deployed)
+            {
+                <OmniFactTileRow Term="@L["DeployedRelease"]" Class="run-deployed-release"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><ShortId Value="@deployed.Version" Href="@($"/releases/{deployed.ReleaseId}")" Copyable="false" Class="release-version" /></ChildContent></OmniFactTileRow>
+                @if (!string.IsNullOrEmpty(deployed.CommitHash))
+                {
+                    <OmniFactTileRow Term="@L["DeployedCommit"]" Class="run-deployed-commit"><Icon><OmniIcon Name="OmniIconName.GitCommit" /></Icon><ChildContent><ShortId Value="@deployed.CommitHash" Href="@DeployedCommitHref" Copyable="false" Class="cross-link-sha" /></ChildContent></OmniFactTileRow>
+                }
             }
         </ChildContent>
     </OmniFactTile>

@@ -1,0 +1,9 @@
+<Project>
+  <!-- Stops the properties of an enclosing repository from applying to this standalone application. -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- A lock file, as the delivery configuration check asks of every project in the repository. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>

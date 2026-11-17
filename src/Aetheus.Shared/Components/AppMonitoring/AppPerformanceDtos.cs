@@ -15,6 +15,9 @@ public sealed record AppPerformanceReportDto
     /// and does not say.</summary>
     public DateTime? WindowSince { get; init; }
 
+    /// <summary>R-27: why no measure ever arrived, set only while <see cref="MeasuredAt"/> is null.</summary>
+    public AppNoMeasureDto? NoMeasure { get; init; }
+
     /// <summary>One line per route and method, slowest 95th percentile first.</summary>
     public List<AppRouteTimingDto> Routes { get; init; } = [];
 }

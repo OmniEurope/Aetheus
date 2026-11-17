@@ -291,11 +291,7 @@ public static class OtlpJsonParser
         return dict;
     }
 
-    private static string? ReadAttributes(JsonElement owner)
-    {
-        var dict = ReadAttributeDict(owner);
-        if (dict.Count == 0) return null;
-        var json = JsonSerializer.Serialize(dict);
-        return json.Length > 1024 ? json[..1024] : json;
-    }
+    // BACK-005: bounded structurally, never cut mid-text, so the stored set stays valid JSON.
+    private static string? ReadAttributes(JsonElement owner) =>
+        OtlpAttributeJson.Serialize(ReadAttributeDict(owner));
 }

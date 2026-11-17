@@ -30,6 +30,10 @@ public sealed record GitLightRepoDto
     /// repository a pipeline definition is read from by default.</summary>
     public bool IsAdditionalSource { get; init; }
 
+    /// <summary>True for the internal mirror of an external Git repository, whether it is the project's own source or an
+    /// additional one (<see cref="IsAdditionalSource"/>).</summary>
+    public bool IsExternalMirror { get; init; }
+
     /// <summary>True for the repository of the project's system configuration files (ADR-057): not its
     /// source, so a pipeline definition, a workspace or a push trigger never takes it for one.</summary>
     public bool IsConfiguration { get; init; }

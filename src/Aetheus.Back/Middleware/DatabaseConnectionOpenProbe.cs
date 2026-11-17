@@ -101,17 +101,12 @@ internal sealed class DatabaseConnectionOpenProbeService(
     BackgroundWorkTracker background,
     TimeProvider time,
     ILogger<DatabaseConnectionOpenProbeService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:db-connection-probe")
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(15);
 
-    // Only the live colour serves the traffic whose pauses are being explained, so only it probes.
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunProbeLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:db-connection-probe", RunProbeLoopAsync, stoppingToken);
-
-    private async Task RunProbeLoopAsync(CancellationToken stoppingToken)
+    // Only the live colour serves the traffic whose pauses are being explained, so only it probes (the leader).
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         var interval = options.Value.ConnectionProbeInterval;
         var connectionString = configuration.GetConnectionString("Default");

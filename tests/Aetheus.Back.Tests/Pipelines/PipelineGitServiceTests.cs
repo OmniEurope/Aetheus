@@ -21,6 +21,9 @@ public class PipelineGitServiceTests
     public PipelineGitServiceTests()
     {
         _senderResolverMock.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderResolution());
+        // R-38: a write on the default branch looks for the repository's develop branch; these repositories have none.
+        _cliMock.GetBranchesAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new List<GitLightBranchDto>());
         _sut = new PipelineGitService(
             _gitServiceMock,
             _cliMock,
@@ -35,7 +38,7 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task ReadProjectPipelineYamlAsync_NoRepo_ReturnsNull()
     {
-        _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>())
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(1), Arg.Any<CancellationToken>())
             .Returns(new List<GitLightRepoDto>());
 
         var result = await _sut.ReadProjectPipelineYamlAsync(1, "deploy", ct: TestContext.Current.CancellationToken);
@@ -46,7 +49,7 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task ReadProjectPipelineYamlAsync_EmptyRepo_ReturnsNull()
     {
-        _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>())
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(1), Arg.Any<CancellationToken>())
             .Returns([new GitLightRepoDto { Id = 1, ProjectId = 1, Slug = "my-repo", IsEmpty = true }]);
 
         var result = await _sut.ReadProjectPipelineYamlAsync(1, "deploy", ct: TestContext.Current.CancellationToken);
@@ -145,10 +148,66 @@ public class PipelineGitServiceTests
         Assert.Equal((10, "develop", "c755999fc0"), (source.RepositoryId, source.Branch, source.CommitHash));
     }
 
+    /// <summary>Decision 2026-11-10 (point 4): the mirror of an external repository is never a definition source,
+    /// named as the pipeline's source repository or as the project's only repository, at a branch or at an exact
+    /// commit. The mirror holds a valid file of the same name: it is never read, the caller keeps its stored YAML.</summary>
+    [Fact]
+    public async Task Decision20261110_AnExternalMirror_IsNeverReadForADefinition_NamedOrByDefault()
+    {
+        const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(7), Arg.Any<CancellationToken>()).Returns(
+            [new GitLightRepoDto { Id = 70, ProjectId = 7, Slug = "oe1-mirror", DefaultBranch = "main", IsExternalMirror = true }]);
+        var tempDir = Directory.CreateTempSubdirectory("pgs-test-mirror-").FullName;
+        _gitServiceMock.ResolveDiskPath(7, "oe1-mirror").Returns(tempDir);
+        _cliMock.GetBlobAsync(tempDir, Arg.Any<string>(), ".pipeline/deploy.yaml", Arg.Any<CancellationToken>())
+            .Returns(new GitLightBlobDto { Content = "name: deploy\nstages: []", Path = ".pipeline/deploy.yaml" });
+        var ct = TestContext.Current.CancellationToken;
+
+        var named = await _sut.ReadProjectPipelineYamlAsync(7, "deploy", ct, sourceRepositoryId: 70);
+        var byDefault = await _sut.ReadProjectPipelineYamlAsync(7, "deploy", ct);
+        var namedAtCommit = await _sut.ReadProjectPipelineYamlAtRevisionAsync(7, "deploy", commit, ct, sourceRepositoryId: 70);
+        var byDefaultAtCommit = await _sut.ReadProjectPipelineYamlAtRevisionAsync(7, "deploy", commit, ct);
+
+        Assert.All(new[] { named, byDefault, namedAtCommit, byDefaultAtCommit }, Assert.Null);
+        await _cliMock.DidNotReceiveWithAnyArgs().GetBlobAsync(default!, default!, default!, ct);
+        await _cliMock.DidNotReceiveWithAnyArgs().GetTreeAsync(default!, default!, default, ct);
+        Assert.True(await _sut.IsExternalMirrorDefinitionSourceAsync(7, 70, ct));
+        Assert.True(await _sut.IsExternalMirrorDefinitionSourceAsync(7, null, ct));
+        // The mirror stays the workspace: only the definition source changed.
+        Assert.Equal(70, (await _sut.GetPipelineSourceAsync(7, "deploy", ct, sourceRepositoryId: 70))!.RepositoryId);
+    }
+
+    /// <summary>Decision 2026-11-10: beside a mirror, a pipeline with no named source reads the project's internal
+    /// repository; one that names the mirror keeps its stored YAML, as its writes do (R-12, NoRepo).</summary>
+    [Fact]
+    public async Task Decision20261110_AnInternalRepositoryBesideAMirror_IsTheDefaultDefinitionSource()
+    {
+        const string yaml = "name: deploy\ntrigger: manual\nstages: []";
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(8), Arg.Any<CancellationToken>()).Returns(
+        [
+            new GitLightRepoDto { Id = 80, ProjectId = 8, Slug = "internal", DefaultBranch = "main" },
+            new GitLightRepoDto { Id = 81, ProjectId = 8, Slug = "mirror", DefaultBranch = "main", IsExternalMirror = true }
+        ]);
+        var internalDir = Directory.CreateTempSubdirectory("pgs-test-internal-").FullName;
+        var mirrorDir = Directory.CreateTempSubdirectory("pgs-test-mirror-").FullName;
+        _gitServiceMock.ResolveDiskPath(8, "internal").Returns(internalDir);
+        _gitServiceMock.ResolveDiskPath(8, "mirror").Returns(mirrorDir);
+        _cliMock.GetBlobAsync(internalDir, "main", ".pipeline/deploy.yaml", Arg.Any<CancellationToken>())
+            .Returns(new GitLightBlobDto { Content = yaml, Path = ".pipeline/deploy.yaml" });
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.Equal(yaml, await _sut.ReadProjectPipelineYamlAsync(8, "deploy", ct));
+        Assert.Null(await _sut.ReadProjectPipelineYamlAsync(8, "deploy", ct, sourceRepositoryId: 81));
+        await _cliMock.DidNotReceive().GetBlobAsync(mirrorDir, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Assert.False(await _sut.IsExternalMirrorDefinitionSourceAsync(8, null, ct));
+        Assert.False(await _sut.IsExternalMirrorDefinitionSourceAsync(8, 80, ct));
+        Assert.True(await _sut.IsExternalMirrorDefinitionSourceAsync(8, 81, ct));
+    }
+
     [Fact]
     public async Task ReadProjectPipelineYamlAsync_MultipleRepositoriesWithoutSelection_IsRejected()
     {
-        _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>()).Returns(
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(1), Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightRepoDto { Id = 10, ProjectId = 1, Slug = "first", DefaultBranch = "main" },
             new GitLightRepoDto { Id = 20, ProjectId = 1, Slug = "second", DefaultBranch = "main" }
@@ -167,7 +226,7 @@ public class PipelineGitServiceTests
     public async Task ReadProjectConfigAtRevisionAsync_SelectedRepository_UsesExactCommitAndSafePath()
     {
         const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
-        _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>()).Returns(
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(1), Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightRepoDto { Id = 10, ProjectId = 1, Slug = "first", DefaultBranch = "main" },
             new GitLightRepoDto { Id = 20, ProjectId = 1, Slug = "second", DefaultBranch = "develop" }
@@ -192,11 +251,44 @@ public class PipelineGitServiceTests
             secondPath, commit, ".pipeline/configs/apache/site.conf", Arg.Any<CancellationToken>());
     }
 
+    /// <summary>Decision 2026-11-10: a deployment configuration never comes from untrusted content. The mirror of an
+    /// external repository holds a template at the run's commit: it is never read, named as the source or as the
+    /// project's only repository; beside it, the project's internal repository is still read by default.</summary>
+    [Fact]
+    public async Task Decision20261110_AnExternalMirror_IsNeverReadForAConfigurationTemplate()
+    {
+        const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
+        const string path = ".pipeline/configs/apache/site.conf";
+        var ct = TestContext.Current.CancellationToken;
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(7), Arg.Any<CancellationToken>()).Returns(
+            [new GitLightRepoDto { Id = 70, ProjectId = 7, Slug = "oe1-mirror", DefaultBranch = "main", IsExternalMirror = true }]);
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(8), Arg.Any<CancellationToken>()).Returns(
+        [
+            new GitLightRepoDto { Id = 80, ProjectId = 8, Slug = "internal", DefaultBranch = "main" },
+            new GitLightRepoDto { Id = 81, ProjectId = 8, Slug = "mirror", DefaultBranch = "main", IsExternalMirror = true }
+        ]);
+        var onlyMirrorDir = Directory.CreateTempSubdirectory("pgs-test-cfg-mirror-").FullName;
+        var internalDir = Directory.CreateTempSubdirectory("pgs-test-cfg-internal-").FullName;
+        var mirrorDir = Directory.CreateTempSubdirectory("pgs-test-cfg-mirror-").FullName;
+        _gitServiceMock.ResolveDiskPath(7, "oe1-mirror").Returns(onlyMirrorDir);
+        _gitServiceMock.ResolveDiskPath(8, "internal").Returns(internalDir);
+        _gitServiceMock.ResolveDiskPath(8, "mirror").Returns(mirrorDir);
+        _cliMock.GetBlobAsync(Arg.Any<string>(), commit, path, Arg.Any<CancellationToken>())
+            .Returns(call => new GitLightBlobDto { Content = $"from {call.ArgAt<string>(0)}", Path = path });
+
+        Assert.Null(await _sut.ReadProjectConfigAtRevisionAsync(7, path, commit, ct, 70));
+        Assert.Null(await _sut.ReadProjectConfigAtRevisionAsync(7, path, commit, ct));
+        Assert.Null(await _sut.ReadProjectConfigAtRevisionAsync(8, path, commit, ct, 81));
+        Assert.Equal($"from {internalDir}", await _sut.ReadProjectConfigAtRevisionAsync(8, path, commit, ct));
+        await _cliMock.DidNotReceive().GetBlobAsync(onlyMirrorDir, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _cliMock.DidNotReceive().GetBlobAsync(mirrorDir, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ReadVersionPropsAtRevisionAsync_ReadsTheRootPropsAtTheExactCommit()
     {
         const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
-        _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>()).Returns(
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(1), Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightRepoDto { Id = 10, ProjectId = 1, Slug = "first", DefaultBranch = "main" }
         ]);
@@ -301,6 +393,58 @@ public class PipelineGitServiceTests
         Assert.Equal(GitWriteOutcome.Failed, outcome);
         Assert.Equal("conflict", error);
         await _commitRecorderMock.DidNotReceive().RecordCommitAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R12_AnExternalMirror_IsNeverWrittenTo_WhetherItIsTheProjectsSourceOrNamedExplicitly()
+    {
+        var mirrorDir = Directory.CreateTempSubdirectory("pgs-test-r12-").FullName;
+        _gitServiceMock.ResolveDiskPath(7, "oe1-mirror").Returns(mirrorDir);
+        _gitServiceMock.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(
+        [
+            new GitLightRepoDto { Id = 70, ProjectId = 7, Slug = "oe1-mirror", DefaultBranch = "main", IsExternalMirror = true }
+        ]);
+        var location = new PipelineGitDefinitionLocation(7, "oe1-deploy-prod", "main");
+
+        var bySource = await _sut.ApplyProjectPipelineChangeAsync(
+            location, location, "name: oe1-deploy-prod", "admin", TestContext.Current.CancellationToken);
+        var named = await _sut.ApplyProjectPipelineChangeAsync(
+            location with { SourceRepositoryId = 70 }, location with { SourceRepositoryId = 70 },
+            "name: oe1-deploy-prod", "admin", TestContext.Current.CancellationToken);
+        var direct = await _sut.WriteProjectPipelineYamlAsync(
+            7, "oe1-deploy-prod", "name: oe1-deploy-prod", "admin", TestContext.Current.CancellationToken, "main");
+
+        Assert.Equal((GitWriteOutcome.NoRepo, GitWriteOutcome.NoRepo, GitWriteOutcome.NoRepo),
+            (bySource.Outcome, named.Outcome, direct.Outcome));
+        await _cliMock.DidNotReceiveWithAnyArgs().CommitFileChangesAsync(
+            default!, default!, default!, default!, default!, default!, default!, TestContext.Current.CancellationToken);
+        await _cliMock.DidNotReceiveWithAnyArgs().CommitFileAsync(
+            default!, default!, default!, default!, default!, default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task R12_AnInternalRepositoryBesideAnExternalMirror_StillTakesTheWrite()
+    {
+        _gitServiceMock.GetRepositoriesAsync(8, Arg.Any<CancellationToken>()).Returns(
+        [
+            new GitLightRepoDto { Id = 80, ProjectId = 8, Slug = "own", DefaultBranch = "main" },
+            new GitLightRepoDto { Id = 81, ProjectId = 8, Slug = "mirror", DefaultBranch = "main", IsExternalMirror = true }
+        ]);
+        var ownDir = Directory.CreateTempSubdirectory("pgs-test-r12b-").FullName;
+        _gitServiceMock.ResolveDiskPath(8, "own").Returns(ownDir);
+        _cliMock.CommitFileChangesAsync(
+                Arg.Any<string>(), "main", Arg.Any<IReadOnlyList<(string RelativePath, string Content)>>(),
+                Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((true, "abc", (string?)null));
+        var location = new PipelineGitDefinitionLocation(8, "deploy", "main");
+
+        var result = await _sut.ApplyProjectPipelineChangeAsync(
+            location, location, "name: deploy", "admin", TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitWriteOutcome.Committed, result.Outcome);
+        await _cliMock.Received(1).CommitFileChangesAsync(
+            ownDir, "main", Arg.Any<IReadOnlyList<(string RelativePath, string Content)>>(),
+            Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -506,7 +650,7 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task GetHeadCommitShaAsync_AnEmptyRepositoryOrNoRepository_HasNoHead()
     {
-        _gitServiceMock.GetRepositoriesAsync(32, Arg.Any<CancellationToken>())
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(32), Arg.Any<CancellationToken>())
             .Returns([new GitLightRepoDto { Id = 1, ProjectId = 32, Slug = "empty", IsEmpty = true }]);
 
         Assert.Null(await _sut.GetHeadCommitShaAsync(32, TestContext.Current.CancellationToken));
@@ -516,7 +660,7 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task GetHeadCommitShaAsync_AFailingRead_IsAnUnresolvedSource()
     {
-        _gitServiceMock.GetRepositoriesAsync(34, Arg.Any<CancellationToken>())
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(34), Arg.Any<CancellationToken>())
             .Returns<List<GitLightRepoDto>>(_ => throw new IOException("repository store unavailable"));
 
         Assert.Null(await _sut.GetHeadCommitShaAsync(34, TestContext.Current.CancellationToken));
@@ -527,11 +671,16 @@ public class PipelineGitServiceTests
     {
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
-        _gitServiceMock.GetRepositoriesAsync(35, Arg.Any<CancellationToken>())
+        _gitServiceMock.GetAccessibleRepositoriesAsync(StoredReadOf(35), Arg.Any<CancellationToken>())
             .Returns<List<GitLightRepoDto>>(_ => throw new OperationCanceledException(cancelled.Token));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _sut.GetHeadCommitShaAsync(35, cancelled.Token));
     }
+
+    /// <summary>The stored repositories of one project: what a read of a definition asks for (a write asks for the
+    /// detecting list instead).</summary>
+    private static List<int>? StoredReadOf(int projectId) =>
+        Arg.Is<List<int>?>(ids => ids != null && ids.SequenceEqual(new[] { projectId }));
 
     private void SetupRepoWithDiskPath(int projectId, string slug, string defaultBranch)
     {

@@ -58,6 +58,40 @@ public sealed class PipelineRefusedLaunchRecorderTests
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>R-36: a caller that tells the subscribers itself (an on_success follow-up) or that is in front of the
+    /// refusal (a manual launch) records the run without a second notification.</summary>
+    [Fact]
+    public async Task R36_WithoutSubscribersToTell_TheRunIsRecordedAndNobodyIsNotified()
+    {
+        _repo.GetPipelineProjectIdAsync(_pipeline, Arg.Any<CancellationToken>()).Returns(7);
+
+        await Build().RecordAsync(
+            _pipeline, null, "on_success:oe1-candidate#3119", "refused", null, TestContext.Current.CancellationToken,
+            notifySubscribers: false);
+
+        await _repo.Received(1).AddPipelineRunAsync(
+            Arg.Is<PipelineRun>(run => run.Status == PipelineStatus.Failed
+                && run.WarningsJson!.Contains("on_success:oe1-candidate#3119")),
+            Arg.Any<CancellationToken>());
+        await _audit.Received(1).LogAsync("LaunchRefused", "PipelineRun", Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _notifications.DidNotReceive().RecordProjectEventAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R36_AManualLaunch_IsStoredAsAManualRefusal_NotAnAutomatedOne()
+    {
+        await Build().RecordAsync(
+            _pipeline, null, PipelineLaunchSources.Manual, "Parameter x is required.", null,
+            TestContext.Current.CancellationToken, notifySubscribers: false);
+
+        await _repo.Received(1).AddPipelineRunAsync(
+            Arg.Is<PipelineRun>(run => run.Status == PipelineStatus.Failed
+                && run.WarningsJson!.Contains(PipelineProblemCodes.ManualLaunchRefused)
+                && !run.WarningsJson.Contains("automated launch")
+                && run.WarningsJson.Contains("The manual launch was refused: Parameter x is required.")),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task R1_3_TheSameRefusalAgain_CountsOnTheLastRefusedRun_WithoutANewRun()
     {
@@ -67,6 +101,9 @@ public sealed class PipelineRefusedLaunchRecorderTests
             Id = 40,
             PipelineId = 1,
             Status = PipelineStatus.Failed,
+            // Refused a minute ago: the burst R1-3 groups.
+            StartedAt = DateTime.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTime.UtcNow.AddMinutes(-1),
             WarningsJson = System.Text.Json.JsonSerializer.Serialize(new[] { PipelineRefusedLaunchRecorder.BuildReason("Scheduler", "locked") })
         };
         _repo.GetLatestRunTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(refused);
@@ -81,9 +118,40 @@ public sealed class PipelineRefusedLaunchRecorderTests
         Assert.Equal("LaunchRefusedRepeated", StoredProblem.CodeOf(warnings[1]));
         Assert.Equal("3", StoredProblem.ParameterOf(warnings[1], "count"));
         Assert.NotNull(refused.CompletedAt);
-        // Each refusal stays audited; the subscribers were told the first time only.
+        // Each refusal stays audited; a burst inside the hour tells nobody again (R-30 keeps this for bursts only).
         await _audit.Received(2).LogAsync("LaunchRefused", "PipelineRun", 40, Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _notifications.DidNotReceive().RecordProjectEventAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R30_ARepeatOnANewNight_MovesTheRunToToday_AndTellsTheFollowersAgain()
+    {
+        // The nightly of 2026-10-30 to 2026-11-03: one run, refused every night, and nobody told after the first.
+        var firstNight = DateTime.UtcNow.AddDays(-1);
+        var refused = new PipelineRun
+        {
+            Id = 3038,
+            PipelineId = 1,
+            Status = PipelineStatus.Failed,
+            StartedAt = firstNight,
+            CompletedAt = firstNight,
+            WarningsJson = System.Text.Json.JsonSerializer.Serialize(new[] { PipelineRefusedLaunchRecorder.BuildReason("Scheduler", "ports") })
+        };
+        _repo.GetLatestRunTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(refused);
+        _repo.GetPipelineProjectIdAsync(_pipeline, Arg.Any<CancellationToken>()).Returns(7);
+
+        await Build().RecordAsync(_pipeline, null, "Scheduler", "ports", null, TestContext.Current.CancellationToken);
+
+        await _repo.DidNotReceive().AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+        // The list sorts on the start: the run now carries the last refusal, with its count.
+        Assert.True(refused.StartedAt > firstNight.AddHours(23));
+        Assert.Equal(refused.StartedAt, refused.CompletedAt);
+        var warnings = System.Text.Json.JsonSerializer.Deserialize<string[]>(refused.WarningsJson!)!;
+        Assert.Equal("2", StoredProblem.ParameterOf(warnings[1], "count"));
+        await _notifications.Received(1).RecordProjectEventAsync(
+            Aetheus.Shared.Components.Notifications.NotificationEventTypes.PipelineLaunchRefused,
+            Arg.Is<string>(payload => payload.Contains("\"ProjectId\":7", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -1,0 +1,13 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/servers/quality"
+@inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
+
+<PageTitle>@L["ServerQualityTitle"] - Aetheus</PageTitle>
+
+@* R-7: the quality of the host systems of every server the user may read, in the Servers menu. *@
+<OmniPageHeader Title="@L["ServerQualityTitle"]" Subtitle="@Breadcrumb.Subtitle()">
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("shield")" /></Icon>
+</OmniPageHeader>
+
+<Aetheus.Front.Components.Servers.ServerDetailSections.ServerQualitySection />

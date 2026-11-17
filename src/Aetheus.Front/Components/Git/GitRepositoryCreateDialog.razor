@@ -2,7 +2,7 @@
 
 <OmniTemplateForm TModel="CreateGitLightRepoRequest" Model="@_request" OnValidSubmit="@Submit">
     <OmniDataAnnotationsValidator Localizer="@L" />
-    <OmniStack Gap="OmniSpacing.Large">
+    <OmniStack Gap="OmniSpacing.Small">
         <OmniFormField Label="@L["Name"]" Class="omni-u-w-100" For="Name">
             <OmniTextBox @bind-Value="_request.Name"
 

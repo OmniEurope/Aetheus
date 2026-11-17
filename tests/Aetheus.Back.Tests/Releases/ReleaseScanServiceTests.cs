@@ -29,7 +29,7 @@ public class ReleaseScanServiceTests
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var config = new ConfigurationBuilder().Build();
         var logger = Substitute.For<ILogger<ReleaseScanService>>();
-        return (new ReleaseScanService(scopeFactory, config, logger), projectRepo, releaseService, proxy);
+        return (new ReleaseScanService(scopeFactory, config, logger, leaderLease: LeaderLeaseDouble.Leader()), projectRepo, releaseService, proxy);
     }
 
     [Fact]

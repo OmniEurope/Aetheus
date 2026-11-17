@@ -11,7 +11,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// the same organization. The organization filter alone let the first project's prod host serve the
 /// second project's stage, for runners, deployment targets and the authorization candidate set alike.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineServerEnvironmentScopeIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

@@ -15,7 +15,7 @@ public sealed class ApacheOperationExecutor(
     private readonly AetheusAgentOptions _options = options.Value;
 
     internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    internal Func<string, bool> LogFileExists { get; init; } = File.Exists;
+    internal Func<string, LogFileAccess> ProbeLogFile { get; init; } = ApacheLogFileProbe.Probe;
     internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
         RunProcessWithLoggerAsync
     { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
@@ -137,14 +137,22 @@ public sealed class ApacheOperationExecutor(
     private Task<ExecutorResult> ExecuteSiteOperationAsync(
         OperationKind kind, string siteFile, int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
-        => new ApacheSiteOperations(
-                SitesAvailablePath,
-                SitesEnabledPath,
-                CreateSiteSymbolicLink,
-                RunPrivilegedOperationAsync,
-                ReadLinkTarget,
-                IsLinux)
-            .ExecuteAsync(kind, siteFile, Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds), onOutput, ct);
+        => SiteOperations().ExecuteAsync(kind, siteFile, Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds), onOutput, ct);
+
+    /// <summary>Recette R-26: removes several sites (disabled, then deleted) with one configuration test and one reload,
+    /// for the project deletion; see <see cref="ApacheSiteOperations.RemoveManyAsync"/>. Null for a site that is gone,
+    /// the reason it stays otherwise.</summary>
+    internal Task<IReadOnlyDictionary<string, string?>> RemoveSitesAsync(
+        IReadOnlyList<string> siteFiles, int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+        => SiteOperations().RemoveManyAsync(siteFiles, Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds), onOutput, ct);
+
+    private ApacheSiteOperations SiteOperations() => new(
+        SitesAvailablePath,
+        SitesEnabledPath,
+        CreateSiteSymbolicLink,
+        RunPrivilegedOperationAsync,
+        ReadLinkTarget,
+        IsLinux);
 
     /// <summary>
     /// type: apache-proxy - applies a reverse-proxy vhost on the host in one step: write the rendered
@@ -259,7 +267,7 @@ public sealed class ApacheOperationExecutor(
 
         // Item #8 - log reading is a separate code path: we don't go through apache2ctl, we
         // read the log file directly with `tail` (argv-only, no shell, no allow-list dance).
-        // Falls back to /var/log/httpd/* when the Debian-style path is missing.
+        // Falls back to /var/log/httpd/* when the Debian-style path cannot be read.
         if (kind == OperationKind.ApacheGetLogs)
             return await GetLogsAsync(target, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
 
@@ -534,8 +542,10 @@ public sealed class ApacheOperationExecutor(
 
     /// <summary>
     /// Tails the Apache <c>error.log</c> or <c>access.log</c>. Resolves the platform path
-    /// (Debian vs RHEL) using <see cref="File.Exists"/> rather than a shell <c>||</c> chain so
-    /// the operation stays inside the typed-op envelope (no allow-list bypass surface).
+    /// (Debian vs RHEL) by opening each candidate (<see cref="ApacheLogFileProbe"/>) rather than a shell
+    /// <c>||</c> chain so the operation stays inside the typed-op envelope (no allow-list bypass surface).
+    /// Recette R-19: when no candidate is readable, a stable <see cref="ApacheLogDiagnostic"/> line tells a
+    /// missing log (empty success) from one the agent account may not read (a failure).
     /// </summary>
     private async Task<ExecutorResult> GetLogsAsync(
         string target,
@@ -553,15 +563,16 @@ public sealed class ApacheOperationExecutor(
         };
         var altFileName = fileName.Replace(".log", "_log"); // RHEL convention: error_log / access_log
 
-        string? logPath =
-            LogFileExists($"/var/log/apache2/{fileName}") ? $"/var/log/apache2/{fileName}"
-            : LogFileExists($"/var/log/httpd/{altFileName}") ? $"/var/log/httpd/{altFileName}"
-            : null;
+        var resolution = ApacheLogFileProbe.Resolve(
+            [$"/var/log/apache2/{fileName}", $"/var/log/httpd/{altFileName}"], ProbeLogFile);
 
-        if (logPath is null)
+        if (resolution is not { ReadablePath: { } logPath })
         {
-            await onOutput($"No Apache {target} log found at /var/log/apache2/ or /var/log/httpd/", TaskLogLevel.Warning).ConfigureAwait(false);
-            return new ExecutorResult(0, false); // empty success - not a failure, just nothing to show
+            // A missing log is an empty success (nothing to show); a log the agent may not read is a failure.
+            var outcome = resolution.Failure ?? ApacheLogReadOutcome.ReadError;
+            var missing = outcome == ApacheLogReadOutcome.NotFound;
+            await onOutput(ApacheLogDiagnostic.Format(outcome, resolution.Paths), missing ? TaskLogLevel.Warning : TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(missing ? 0 : -1, false);
         }
 
         var psi = new ProcessStartInfo

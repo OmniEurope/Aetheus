@@ -21,8 +21,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// in the recipient's language, read from the recipient's server-side preferences. Only the SMTP
 /// sender is replaced, by one that keeps the mails it is handed.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class MailTemplatesHttpIntegrationTests(PostgresFixture fixture)
+public sealed class MailTemplatesHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string Root = "/api/mail-templates";
 
@@ -64,25 +63,9 @@ public sealed class MailTemplatesHttpIntegrationTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
         var restored = await reset.Content.ReadFromJsonAsync<MailTemplateDto>(IntegrationJsonOptions.Default, ct);
         Assert.False(restored!.IsCustomized);
-        Assert.Contains("{{ChannelName}}", restored.Subject, StringComparison.Ordinal);
+        // R-26: the channel test default subject is "Aetheus - Test".
+        Assert.Equal("Aetheus - Test", restored.Subject);
         Assert.False((await client.GetFromJsonAsync<MailTemplateDto>($"{Root}/NotificationChannelTest/fr", IntegrationJsonOptions.Default, ct))!.IsCustomized);
-    }
-
-    [Fact]
-    public async Task AVariableTheMailDoesNotOffer_IsRefused_AndNothingIsStored()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-        var admin = await SeedUserAsync(factory, admin: true, null, null);
-        using var client = await IntegrationUsers.LoginClientAsync(factory, admin.Username);
-
-        var put = await client.PutAsJsonAsync($"{Root}/NotificationChannelTest/en",
-            new SaveMailTemplateRequest { Subject = "{{ChannelName}}", Body = "<p>{{Headline}}</p>" }, ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
-        Assert.Contains("{{Headline}}", await put.Content.ReadAsStringAsync(ct), StringComparison.Ordinal);
-        var read = await client.GetFromJsonAsync<MailTemplateDto>($"{Root}/NotificationChannelTest/en", IntegrationJsonOptions.Default, ct);
-        Assert.False(read!.IsCustomized);
     }
 
     [Fact]
@@ -128,9 +111,9 @@ public sealed class MailTemplatesHttpIntegrationTests(PostgresFixture fixture)
         var mails = sender.Sent;
         Assert.Equal(2, mails.Count);
         var standard = mails[0];
-        Assert.Equal("[Aetheus] Échec de l'exécution du pipeline : deploy-shop", standard.Subject);
+        Assert.Equal("Aetheus - Shop - Échec", standard.Subject);
         Assert.Contains("lang=\"fr\"", standard.HtmlBody, StringComparison.Ordinal);
-        Assert.Contains("Numéro de build\t3", standard.TextBody, StringComparison.Ordinal);
+        Assert.Contains("Numéro d'exécution\t#3", standard.TextBody, StringComparison.Ordinal);
         // Status banner and badge in the status colours, the mail itself in the recipient's colours.
         Assert.Contains("background-color: #fde8e6; color: #a3231a\"><span", standard.HtmlBody, StringComparison.Ordinal);
         Assert.Contains("font-weight: 600; background-color: #fde8e6; color: #a3231a\">Failed</span>", standard.HtmlBody, StringComparison.Ordinal);

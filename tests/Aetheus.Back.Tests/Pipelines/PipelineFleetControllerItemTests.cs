@@ -18,7 +18,7 @@ public sealed class PipelineFleetControllerItemTests
 
     public PipelineFleetControllerItemTests()
     {
-        _sut = new PipelineFleetController(_fleet, _authz, Substitute.For<IPipelineTemplateService>())
+        _sut = new PipelineFleetController(_fleet, _authz, Substitute.For<IPipelineTemplateService>(), Substitute.For<IPipelineFleetBulkUpdateService>())
         {
             ControllerContext = new ControllerContext
             {

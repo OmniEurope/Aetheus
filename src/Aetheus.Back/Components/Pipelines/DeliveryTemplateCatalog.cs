@@ -12,6 +12,10 @@ internal static class DeliveryTemplateCatalog
     /// extends them from there.</summary>
     internal const string PlatformOrganizationSlug = "aetheus";
 
+    /// <summary>True when every file of the template is a generic one (a single version synchronized from its file).</summary>
+    internal static bool IsGeneric(IEnumerable<string> resources) =>
+        resources.All(resource => resource.StartsWith("generic/", StringComparison.Ordinal));
+
     internal static readonly IReadOnlyDictionary<string, (string Description, string Category, string[] Resources)> Definitions =
         new Dictionary<string, (string, string, string[])>(StringComparer.Ordinal)
         {
@@ -22,7 +26,7 @@ internal static class DeliveryTemplateCatalog
             ["application-candidate"] = (
                 "Reusable build-once candidate orchestration with production baseline, QA and immutable release.",
                 "Application Delivery",
-                ["application-candidate-v1.yaml", "application-candidate-v2.yaml", "application-candidate-v3.yaml", "application-candidate-v4.yaml"]),
+                ["application-candidate-v1.yaml", "application-candidate-v2.yaml", "application-candidate-v3.yaml", "application-candidate-v4.yaml", "application-candidate-v5.yaml"]),
             ["application-promotion"] = (
                 "Reusable promotion orchestration deploying and verifying an already-qualified candidate.",
                 "Application Delivery",
@@ -67,10 +71,18 @@ internal static class DeliveryTemplateCatalog
                 "Return traffic to the colour a blue-green commit kept in reserve (N-1), in seconds.",
                 "Application Delivery",
                 ["host-bluegreen-revert-v1.yaml"]),
+            ["application-deploy-prod-core"] = (
+                "The common core of the production deployment templates, which extend it: not used by a project directly.",
+                "Application Delivery",
+                ["generic/application-deploy-prod-core-v1.yaml"]),
             ["application-deploy-prod"] = (
-                "Restore an immutable candidate and deploy it: by default with Docker Compose on the project's production server; the project's own deployment commands, declared in its pipeline, replace that default.",
+                "Restore an immutable candidate and deploy a monolith (one host for the interface and the API): by default with Docker Compose on the project's production server; the project's own deployment commands, declared in its pipeline, replace that default.",
                 "Application Delivery",
                 ["generic/application-deploy-prod.yaml"]),
+            ["application-deploy-prod-front-back"] = (
+                "Restore an immutable candidate and deploy a front and an API (a host, a certificate and virtual hosts for each): by default with Docker Compose on the project's production server; the project's own deployment commands, declared in its pipeline, replace that default.",
+                "Application Delivery",
+                ["generic/application-deploy-prod-front-back.yaml"]),
             ["application-release-fast"] = (
                 "Check out and deploy directly, without a candidate: by default with Docker Compose on the project's production server; the project's own fast release commands, declared in its pipeline, replace that default.",
                 "Application Delivery",

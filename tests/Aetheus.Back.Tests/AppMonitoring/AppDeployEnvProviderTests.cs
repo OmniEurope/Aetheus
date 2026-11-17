@@ -23,7 +23,7 @@ public class AppDeployEnvProviderTests : IDisposable
     private readonly IAuditService _audit = Substitute.For<IAuditService>();
     private readonly IVaultService _vaults = Substitute.For<IVaultService>();
     private readonly IngestKeyHasher _hasher =
-        new(Options.Create(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }));
+        new(new TokenHashKeys(new JwtOptions { SigningKey = "unit-test-signing-key-least-32-bytes!!" }));
 
     public AppDeployEnvProviderTests()
     {
@@ -218,7 +218,7 @@ public class AppDeployEnvProviderTests : IDisposable
 
     private async Task<int?> ResolveAsync(string plaintext, DateTimeOffset at) =>
         (await new AppMonitoringRepository(_db).ResolveIngestKeyHashAsync(
-            _hasher.Hash(plaintext), at.UtcDateTime, TestContext.Current.CancellationToken))?.AppId;
+            _hasher.HashCandidates(plaintext), at.UtcDateTime, TestContext.Current.CancellationToken))?.AppId;
 
     [Fact]
     public async Task R2_013_TheIdleColourKey_StaysValid_WhileTheNextRunRotates()

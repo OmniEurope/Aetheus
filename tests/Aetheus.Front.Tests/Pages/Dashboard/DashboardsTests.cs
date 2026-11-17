@@ -23,19 +23,19 @@ public class DashboardsTests : BunitContext
     [Fact]
     public void Renders_Loading_Initially()
     {
-        // FRONTTEST-004: the answer is held back, so the product loader is observed while the list is
+        // FRONTTEST-004: the answer is held back, so the content-area veil is observed while the list is
         // pending, then replaced by the empty state once the empty list has arrived.
         var answer = new TaskCompletionSource<List<DashboardDto>>();
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/dashboards", _ => answer.Task);
         var cut = Render<Dashboards>();
-        Assert.Single(cut.FindComponents<AetheusLoader>());
+        Assert.True(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy, "the page holds the content-area veil while its list is read");
         Assert.DoesNotContain("NoRecords", cut.Markup);
 
         answer.SetResult([]);
 
         // Loaded-machine ceiling: the page has no hub and renders once its list is read, so a failure left
         // here was only the answer's thread-pool hop not yet back (bUnit "Check count: 0" or 1).
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindComponents<AetheusLoader>()));
+        cut.WaitForAssertion(() => Assert.False(Services.GetRequiredService<Aetheus.Front.Components.Shared.BusyVeil>().IsBusy));
         Assert.Contains("NoRecords", cut.Markup);
     }
 

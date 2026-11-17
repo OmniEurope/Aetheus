@@ -62,6 +62,15 @@ public partial class ServerCertbotSection : ServerActionSectionBase
     private bool ShowOutputTail => Certbot.RenewalCheckOutputTail.Count > 0
         && (Certbot.RenewalCheckFailures.Count == 0 || Certbot.RenewalCheckFailures.Any(failure => failure.Reason.Length == 0));
 
+    // Recette R-19: the "test the failed ones again" action is offered while the last test left a failed certificate
+    // that still exists (the server applies the same rule when it builds the task).
+    private bool HasFailedCertificates => Certbot.RenewalCheckSucceeded == false
+        && Certbot.RenewalCheckFailures.Any(failure => Certbot.Certificates.Any(c => c.Name == failure.Name));
+
+    // Recette R-19: the helper of an older release ignores certificate names and would test every certificate; the server
+    // refuses such a request too, so the targeted tests are not offered as available to it.
+    private bool HelperTakesCertificateNames => Certbot.HelperVersion >= CertbotHelperVersion.TargetedRenewalCheck;
+
     private string OutputTailText => string.Join('\n', Certbot.RenewalCheckOutputTail);
 
     /// <summary>The condition the helper writes before a proxying rule it can protect; the fix the box shows.</summary>
@@ -118,8 +127,8 @@ public partial class ServerCertbotSection : ServerActionSectionBase
     private static string ConventionDetail(CertbotCertificateDto cert) =>
         string.IsNullOrEmpty(cert.WebrootPath) ? cert.Authenticator : $"{cert.Authenticator}: {cert.WebrootPath}";
 
-    // R-56: every confirmed action here goes through ExecuteActionAsync, which makes the follower veil the section
-    // for the whole task; no second, page-wide veil.
+    // R-56, R-19: every confirmed action here goes through ExecuteActionAsync, which the follower follows in one progress
+    // block (a one-off action veils nothing); no page-wide veil either.
     protected override bool VeilsConfirmedActionOnPage => false;
 
     private async Task ExecuteActionAsync(CertbotAction action, string? certName = null, string? domainName = null)
@@ -137,13 +146,31 @@ public partial class ServerCertbotSection : ServerActionSectionBase
     private string FollowTitle(CertbotAction action, string? certName, string? domainName) => action switch
     {
         CertbotAction.Normalize => L["CertbotNormalize"],
-        CertbotAction.RenewalCheck => L["CertbotRenewalCheck"],
+        CertbotAction.RenewalCheck => certName is null ? L["CertbotRenewalCheck"] : $"{L["CertbotRenewalCheck"]} {certName}",
+        CertbotAction.RenewalCheckFailed => L["CertbotRetestFailed"],
         CertbotAction.RenewAll => L["RenewAllCerts"],
         CertbotAction.Renew => $"{L["Renew"]} {certName}",
         CertbotAction.RevokeAndDelete => $"{L["Revoke"]} {certName}",
         CertbotAction.RemoveDomain => string.Format(L["CertbotRemoveDomainFollow"], domainName, certName),
         _ => L[action.ToString()]
     };
+
+    /// <summary>Recette R-12: the name a task found again on arrival ("Certbot RenewalCheck - a.example.org", as the backend
+    /// names it) carries for the user, the one the page gives the task it launches itself. A name this page does not know
+    /// is left to the follower, which shows it as it is.</summary>
+    internal string? AdoptedTitle(string taskName)
+    {
+        var rest = taskName.StartsWith(ServerTaskNames.CertbotPrefix, StringComparison.OrdinalIgnoreCase)
+            ? taskName[ServerTaskNames.CertbotPrefix.Length..].Trim()
+            : taskName;
+        var parts = rest.Split(" - ", 3, StringSplitOptions.TrimEntries);
+        var verb = parts[0].Split(' ')[0];
+        var certName = parts.Length > 1 ? parts[1] : null;
+        if (verb.Equals("create", StringComparison.OrdinalIgnoreCase))
+            return parts.Length > 1 ? $"{L["NewCertificate"]} {parts[1]}" : L["NewCertificate"].Value;
+        if (!Enum.TryParse<CertbotAction>(verb, out var action)) return null;
+        return FollowTitle(action, certName, parts.Length > 2 ? parts[2] : null);
+    }
 
     /// <summary>Recette R-12: a certificate can drop one of its names, never its last one (the helper refuses it
     /// too); certbot reissues it in place, nothing is deleted.</summary>

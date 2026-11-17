@@ -38,8 +38,9 @@ public sealed class PipelineFunctionOperationExecutorTests
         new[] { BuildFunction, DeploymentFunction, UnimplementedFunction }
             .FirstOrDefault(function => function.Name == name);
 
+    // A short stop grace: a function that ignores its token is waited for this long after a timeout.
     private PipelineFunctionOperationExecutor Executor(params IPipelineFunction[] functions) =>
-        new(functions, Find);
+        new(functions, Find, TimeSpan.FromMilliseconds(200));
 
     private Task Capture(string line, TaskLogLevel level)
     {

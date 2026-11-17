@@ -53,6 +53,10 @@ public partial class AppPerformanceView
         }
     }
 
+    /// <summary>R-27: why no timing ever arrived, as the server read it; the general hint when it gave no cause.</summary>
+    private string? NoDataDescription =>
+        AppNoMeasureText.Describe(L, _report?.NoMeasure, AppMeasureSignal.Performance);
+
     /// <summary>Expose the last time the application sent its figures so the summary can show their
     /// freshness.</summary>
     private string LastSentText => _report?.MeasuredAt is { } measuredAt

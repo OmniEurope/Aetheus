@@ -402,4 +402,114 @@ public sealed class ReleaseServiceLifecycleTests
         await _repository.DidNotReceive().GetDeployedProjectReleasesAsync(
             Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
+
+    // ---------- demotion gives the throne back to the release this run superseded ----------
+
+    /// <summary>The project's releases as the substituted repository sees them, so a status written by
+    /// the service is what the next query reads, as with the real database.</summary>
+    private List<Release> Seed(params Release[] releases)
+    {
+        var store = releases.ToList();
+        _repository.FindByVersionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => store.FirstOrDefault(r => r.Version == (string)call[1]));
+        _repository.FindReleaseAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => store.FirstOrDefault(r => r.Id == (int)call[0]));
+        _repository.GetDeployedProjectReleasesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => store.Where(r => r.Status == ReleaseStatus.Deployed).ToList());
+        _repository.AddReleaseAsync(Arg.Any<Release>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var added = (Release)call[0];
+                added.Id = 100 + store.Count;
+                store.Add(added);
+                return Task.CompletedTask;
+            });
+        return store;
+    }
+
+    private Task Record(string version, int run, bool deployed) =>
+        _service.CreateReleaseFromPipelineAsync(
+            projectId: 10, pipelineRunId: run, version: version, changelog: null, deployed: deployed, ct: Ct);
+
+    [Fact]
+    public async Task DemotingTheReleaseARunRecorded_PutsBackTheReleaseThatSameRunSuperseded()
+    {
+        // Deploy 1.0.3 over the live 1.0.2, fail, roll back to 1.0.2 on the host: 1.0.2 must be
+        // Deployed again, otherwise no release of the project is Deployed while 1.0.2 serves.
+        var live = Release(1, "1.0.2", ReleaseStatus.Deployed, pipelineRunId: 40);
+        var store = Seed(live);
+
+        await Record("1.0.3", run: 50, deployed: true);
+        var candidate = store.Single(r => r.Version == "1.0.3");
+        Assert.Equal(ReleaseStatus.Deployed, candidate.Status);
+        Assert.Equal(ReleaseStatus.Superseded, live.Status);
+
+        await Record("1.0.3", run: 50, deployed: false);
+
+        Assert.Equal(ReleaseStatus.Published, candidate.Status);
+        Assert.Equal(ReleaseStatus.Deployed, live.Status);
+        await _audit.Received(1).LogAsync("ReleaseStatusRestored", "Release", live.Id,
+            Arg.Is<string>(d => d.Contains("version=1.0.2") && d.Contains("run=50")), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DemotingTwice_DoesNotRestoreTwiceNorTouchWhatBecameDeployedMeanwhile()
+    {
+        var live = Release(1, "1.0.2", ReleaseStatus.Deployed, pipelineRunId: 40);
+        var store = Seed(live);
+        await Record("1.0.3", run: 50, deployed: true);
+        await Record("1.0.3", run: 50, deployed: false);
+        Assert.Equal(ReleaseStatus.Deployed, live.Status);
+
+        // A later deployment moves on; replaying the old demotion must leave it alone.
+        await Record("1.0.4", run: 60, deployed: true);
+        Assert.Equal(ReleaseStatus.Superseded, live.Status);
+        await Record("1.0.3", run: 50, deployed: false);
+
+        Assert.Equal(ReleaseStatus.Superseded, live.Status);
+        Assert.Equal(ReleaseStatus.Deployed, store.Single(r => r.Version == "1.0.4").Status);
+    }
+
+    [Fact]
+    public async Task DemotingARun_DoesNotTouchAReleaseAnotherRunSuperseded()
+    {
+        // 1.0.1 was superseded by a different run than the one that recorded 1.0.3: not ours to restore.
+        var old = Release(2, "1.0.1", ReleaseStatus.Superseded, pipelineRunId: 30);
+        var live = Release(1, "1.0.2", ReleaseStatus.Deployed, pipelineRunId: 40);
+        Seed(old, live);
+        await Record("1.0.3", run: 50, deployed: true);
+
+        await Record("1.0.3", run: 50, deployed: false);
+
+        Assert.Equal(ReleaseStatus.Superseded, old.Status);
+        Assert.Equal(ReleaseStatus.Deployed, live.Status);
+    }
+
+    [Fact]
+    public async Task DemotingARun_LeavesTheSupersededReleaseAloneWhenSomethingElseIsDeployedNow()
+    {
+        var live = Release(1, "1.0.2", ReleaseStatus.Deployed, pipelineRunId: 40);
+        var other = Release(3, "1.0.9", ReleaseStatus.Published, pipelineRunId: 45);
+        Seed(live, other);
+        await Record("1.0.3", run: 50, deployed: true);
+        other.Status = ReleaseStatus.Deployed;
+
+        await Record("1.0.3", run: 50, deployed: false);
+
+        Assert.Equal(ReleaseStatus.Superseded, live.Status);
+        Assert.Equal(ReleaseStatus.Deployed, other.Status);
+    }
+
+    [Fact]
+    public async Task DemotingARunThatDidNotSupersedeAnything_RestoresNothing()
+    {
+        var store = Seed();
+        await Record("1.0.3", run: 50, deployed: true);
+
+        await Record("1.0.3", run: 50, deployed: false);
+
+        Assert.Equal(ReleaseStatus.Published, store.Single().Status);
+        await _audit.DidNotReceive().LogAsync("ReleaseStatusRestored", Arg.Any<string>(), Arg.Any<int>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 }

@@ -10,6 +10,7 @@ internal static class AnalysisPortfolioQuery
 {
     internal static readonly GridQueryMap<AnalysisReport> Columns = new GridQueryMap<AnalysisReport>()
         .Number("pipelineRunId", report => report.PipelineRunId)
+        .Number("pipelineRunNumber", report => report.PipelineRun != null ? report.PipelineRun.BuildNumber : (int?)null)
         .Text("organizationName", report => report.Organization.Name)
         .Text("projectName", report => report.Project.Name)
         .Text("pipelineName", report => report.PipelineRun == null ? null : report.PipelineRun.Pipeline.Name)

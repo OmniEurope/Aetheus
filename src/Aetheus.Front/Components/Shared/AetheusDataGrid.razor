@@ -30,7 +30,7 @@
                   ShowLoadingBar="true" Busy="@EffectiveBusy"
                   Page="@_currentPage" PageChanged="OnPageChangedAsync" PageSize="@PageSize"
                   ScrollMode="@(EffectiveVirtualize ? OmniDataGridScrollMode.Virtual : OmniDataGridScrollMode.Paged)" AllowSorting="@AllowSorting"
-                  Filterable="@AllowFiltering" FilterMode="@FilterMode" ShowHeaderFilterMenu="@ShowHeaderFilterMenu"
+                  Filterable="@AllowFiltering" FilterMode="@FilterMode" FilterPlacement="@FilterPlacement"
                   AllowAlternatingRows="@AllowAlternatingRows" HighlightRowOnHover="true"
                   SelectionMode="@SelectionMode" AllowRowSelectOnRowClick="@AllowRowSelectOnRowClick"
                   Value="@Value" ValueChanged="@ValueChanged"

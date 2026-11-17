@@ -11,6 +11,7 @@ public static class DailyRecapModuleExtensions
         services.AddScoped<DailyRecapMailTimeZoneProvider>();
         services.AddScoped<MailTimeZoneResolver>(provider => provider.GetRequiredService<DailyRecapMailTimeZoneProvider>().GetAsync);
         services.AddScoped<DailyRecapCollector>();
+        services.AddScoped<DailyRecapRecipientScope>();
         services.AddScoped<DailyRecapService>();
         services.AddScoped<IDailyRecapService>(provider => provider.GetRequiredService<DailyRecapService>());
         services.AddHostedService<DailyRecapSchedulerService>();

@@ -87,7 +87,7 @@ public class ServerApacheSectionTests : BunitContext
         {
             Assert.Equal(Aetheus.Front.Components.Shared.AetheusGrid.TenRowsMaxHeight, grid.Instance.MaxHeight);
             Assert.False(grid.Instance.FillAvailableHeight, "neither sites grid takes the whole remaining height");
-            Assert.False(grid.Instance.ShowHeaderFilterMenu, "the filter row sits under the header");
+            Assert.Equal(OmniDataGridFilterPlacement.Row, grid.Instance.FilterPlacement); // the filter row sits under the header
         });
     }
 
@@ -219,6 +219,25 @@ public class ServerApacheSectionTests : BunitContext
     }
 
     [Fact]
+    public async Task R19_HandleTaskCompleted_ApacheLogsTheAgentMayNotRead_ShowsTheLocalizedSentence_NotTheAgentLine()
+    {
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/servers/1/apache?tab=logs");
+        var cut = RenderSection();
+        var notification = new TaskCompletedNotification
+        {
+            TaskName = "Apache logs - error",
+            Status = TaskExecutionStatus.Failed,
+            Output = "[apache-log] AccessDenied /var/log/apache2/error.log"
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(notification)));
+
+        cut.WaitForAssertion(() => Assert.Contains("ApacheLogAccessDenied", cut.Find("[data-testid='apache-log-diagnostic']").TextContent));
+        Assert.DoesNotContain("[apache-log]", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".apache-log-output"));
+    }
+
+    [Fact]
     public async Task HandleTaskCompleted_ApacheConfig_SetsContent()
     {
         var cut = RenderSection();
@@ -227,7 +246,7 @@ public class ServerApacheSectionTests : BunitContext
         var model = new ApacheConfigEditorModel { SiteName = "example.com", Loading = true };
         typeof(ServerApacheSection).GetField("_configEditor", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, model);
 
-        var notification = new TaskCompletedNotification { TaskName = "Apache config read", Output = "<VirtualHost>...</VirtualHost>" };
+        var notification = new TaskCompletedNotification { TaskName = "Apache config - example.com", Output = "<VirtualHost>...</VirtualHost>" };
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(notification)));
 
         Assert.Equal("<VirtualHost>...</VirtualHost>", model.Content);

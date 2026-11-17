@@ -1,9 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# aetheus-certbot-helper-version: 9
+# aetheus-certbot-helper-version: 11
 # Aetheus Agent certbot-manage helper - root-owned, invoked via /etc/sudoers.d/aetheus-certbot.
 # Args: $1 = verb (renew|renew-all|delete|revoke|normalize|renewal-check|remove-name), $2 = cert lineage name
 # (only for renew, delete, revoke and remove-name), $3 = the name remove-name takes out of the certificate.
+# renewal-check takes no name (every lineage) or one or more lineage names (only those, one after the other).
 set -eu
 ACME_WEBROOT=#{ACME_WEBROOT}#
 RENEWAL_DIR=/etc/letsencrypt/renewal
@@ -381,8 +382,100 @@ record_unprotected_rewrite_rules() {
     mv -f "$rur_work/out" "$STATE_DIR/acme-proxy-rules"
     rm -rf "$rur_work"
 }
+# Recette R-13: certbot writes its full account of a run (the ACME error type and detail, the traceback) to its
+# own log, not to the output the task shows. This prints, to the task log, the warning and error entries of that
+# log with the lines that continue them, plus the entries that name a failed challenge or a traceback, so the cause can be
+# read in the interface without a shell on the server. certbot starts a fresh letsencrypt.log on every run, so
+# this is the run that has just ended. At most 60 lines, the last ones, each at most 400 characters.
+CERTBOT_LOG=/var/log/letsencrypt/letsencrypt.log
+certbot_log_detail() {
+    if [ ! -r "$CERTBOT_LOG" ]; then
+        echo "certbot's own log $CERTBOT_LOG is not readable: no detail from it."
+        return 0
+    fi
+    cld_lines="$(awk '
+        /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9:,]+:[A-Z]+:/ {
+            keep = ($0 ~ /:(ERROR|CRITICAL|WARNING):/ || $0 ~ /Challenge failed|Failed authorization|Some challenges|Failed to renew|Traceback was|Type: |Detail: /)
+            if (keep) print
+            next
+        }
+        keep { print }
+    ' "$CERTBOT_LOG" | tr -d '\000-\010\013-\037' | tail -n 60 | cut -c 1-400)"
+    echo "--- certbot's own log ($CERTBOT_LOG), relevant lines of this run ---"
+    if [ -n "$cld_lines" ]; then printf '%s\n' "$cld_lines"; else echo "(no warning, error or failed-challenge entry)"; fi
+    echo "--- end of certbot's own log ---"
+}
+# Recette R-13 and R-19: the dry run of the named lineages only, one after the other (certbot renew --dry-run
+# --cert-name). The result is merged into the recorded state, never written over it: the failures of the
+# lineages not retested stay, a retested lineage that passes leaves the failure list, one that fails stays
+# (or joins it). The verdict is "passed" only when no failure remains, a failed earlier run that named no
+# lineage still counting as one. With no earlier record there is nothing to merge into: a pass is then only
+# in the task log (a few lineages alone are not the server's verdict), a failure is recorded. $@ = lineage names.
+renewal_check_names() {
+    rcn_state="$STATE_DIR/renewal-check"
+    rcn_work="$(mktemp -d)"
+    : > "$rcn_work/failed"
+    : > "$rcn_work/output"
+    rcn_rc=0
+    for rcn_name in "$@"; do
+        rcn_started=$(date +%s)
+        rcn_run=0
+        certbot renew --dry-run --cert-name "$rcn_name" --non-interactive >"$rcn_work/run.log" 2>&1 || rcn_run=$?
+        rcn_ended=$(date +%s)
+        cat "$rcn_work/run.log"
+        if [ "$rcn_run" -eq 0 ]; then
+            echo "renewal-check $rcn_name: the dry run passed."
+            continue
+        fi
+        rcn_rc="$rcn_run"
+        echo "renewal-check $rcn_name: the dry run failed (certbot exit code $rcn_run)."
+        certbot_log_detail
+        tr -d '\000-\010\013-\037' < "$rcn_work/run.log" | renewal_record "$rcn_run" "$((rcn_ended - rcn_started))" > "$rcn_work/record"
+        grep '^failed=' "$rcn_work/record" > "$rcn_work/run-failed" || true
+        # The retested lineage stays in the list even when certbot named no failure for it.
+        if ! awk -F '\t' -v wanted="failed=$rcn_name" '$1 == wanted { found = 1 } END { exit !found }' "$rcn_work/run-failed"; then
+            printf 'failed=%s\t\n' "$rcn_name" >> "$rcn_work/run-failed"
+        fi
+        cat "$rcn_work/run-failed" >> "$rcn_work/failed"
+        grep '^output=' "$rcn_work/record" > "$rcn_work/output" || true
+    done
+    finished=$(date +%s)
+    have_prior=0
+    prior_rc=0
+    prior_named=0
+    : > "$rcn_work/prior-failed"
+    : > "$rcn_work/prior-output"
+    if [ -f "$rcn_state" ]; then
+        have_prior=1
+        prior_rc="$(sed -n 's/^exit_code=//p' "$rcn_state" | head -n 1 | tr -cd '0-9')"
+        prior_rc="${prior_rc:-0}"
+        prior_named="$(grep -c '^failed=' "$rcn_state" || true)"
+        awk -F '\t' -v names=" $* " '/^failed=/ { n = substr($1, 8); if (index(names, " " n " ") == 0) print }' "$rcn_state" > "$rcn_work/prior-failed"
+        grep '^output=' "$rcn_state" > "$rcn_work/prior-output" || true
+    fi
+    if [ "$have_prior" -eq 0 ] && [ "$rcn_rc" -eq 0 ]; then
+        echo "No earlier full dry run is recorded: this result covers only the lineages named above and is not recorded as the server's verdict."
+        rm -rf "$rcn_work"
+        exit 0
+    fi
+    remaining=0
+    if [ -s "$rcn_work/prior-failed" ]; then remaining=1; fi
+    if [ "$prior_rc" -ne 0 ] && [ "$prior_named" -eq 0 ]; then remaining=1; fi
+    record_rc="$rcn_rc"
+    if [ "$rcn_rc" -eq 0 ] && [ "$remaining" -eq 1 ]; then record_rc=1; fi
+    {
+        printf 'checked_at=%s\nexit_code=%s\n' "$finished" "$record_rc"
+        cat "$rcn_work/prior-failed" "$rcn_work/failed"
+        if [ "$rcn_rc" -ne 0 ]; then cat "$rcn_work/output"; elif [ "$remaining" -eq 1 ]; then cat "$rcn_work/prior-output"; fi
+    } > "$STATE_DIR/renewal-check.tmp"
+    rm -rf "$rcn_work"
+    chmod 644 "$STATE_DIR/renewal-check.tmp"
+    mv -f "$STATE_DIR/renewal-check.tmp" "$rcn_state"
+    record_unprotected_rewrite_rules || true
+    exit "$rcn_rc"
+}
 # Prints the helper version before anything else, so it answers on a host where certbot is missing too.
-[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 9"; exit 0; }
+[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 11"; exit 0; }
 command -v certbot >/dev/null 2>&1 || { echo "certbot not installed" >&2; exit 1; }
 verb="${1:-}"
 case "$verb" in
@@ -425,8 +518,13 @@ case "$verb" in
     exit "$failed" ;;
   renewal-check)
     # A real renewal rehearsal against the staging CA; its outcome is recorded for the agent collector.
+    # With lineage names, only those are rehearsed, one after the other, and merged into the recorded state.
+    shift
+    [ "$#" -le 64 ] || { echo "too many cert names (64 at most)" >&2; exit 2; }
+    for rc_name in "$@"; do valid_name "$rc_name" || { echo "invalid cert name" >&2; exit 2; }; done
     mkdir -p "$STATE_DIR"
     chmod 755 "$STATE_DIR"
+    [ "$#" -eq 0 ] || renewal_check_names "$@"
     rc=0
     # Recette R3-56 and R1-7: certbot's output is kept (and still printed, for the journal) so each lineage
     # that fails the rehearsal is recorded with its reason, one "failed=<name><TAB><reason>" line, for the
@@ -437,6 +535,8 @@ case "$verb" in
     certbot renew --dry-run --non-interactive >"$log" 2>&1 || rc=$?
     finished=$(date +%s)
     cat "$log"
+    # Recette R-13: certbot's own log, so the cause of a failure reads in the task without a shell on the server.
+    if [ "$rc" -ne 0 ]; then certbot_log_detail; fi
     {
         printf 'checked_at=%s\nexit_code=%s\n' "$finished" "$rc"
         # Control characters other than tab and line feed (carriage return, escape) are dropped first.
@@ -468,7 +568,31 @@ case "$verb" in
             exit 0
         fi
     fi
-    certbot delete --cert-name "$name" --non-interactive ;;
+    # Recette R-48: certbot takes one global lock per host, so a delete started during a dry run failed with a bare
+    # exit code 1. A held lock is waited for (AETHEUS_CERTBOT_LOCK_WAIT_SECONDS, 60 by default, every
+    # AETHEUS_CERTBOT_LOCK_RETRY_SECONDS, 5 by default); when it is still held the certificate is untouched and the helper
+    # exits 75 (busy), so the caller can say so and the cleanup can be run again. A lineage certbot does not know
+    # exits 76. Certbot's own output goes to stderr in every failure case, so the task log carries the cause.
+    lock_wait="${AETHEUS_CERTBOT_LOCK_WAIT_SECONDS:-60}"; lock_retry="${AETHEUS_CERTBOT_LOCK_RETRY_SECONDS:-5}"
+    case "$lock_wait" in ''|*[!0-9]*) lock_wait=60 ;; esac
+    case "$lock_retry" in ''|*[!0-9]*|0) lock_retry=5 ;; esac
+    del_out="$(mktemp)"
+    waited=0
+    while :; do
+        del_rc=0
+        certbot delete --cert-name "$name" --non-interactive >"$del_out" 2>&1 || del_rc=$?
+        if [ "$del_rc" -eq 0 ]; then cat "$del_out"; rm -f "$del_out"; exit 0; fi
+        if grep -qi 'another instance of certbot is already running' "$del_out"; then
+            if [ "$waited" -lt "$lock_wait" ]; then sleep "$lock_retry"; waited=$((waited + lock_retry)); continue; fi
+            cat "$del_out" >&2; rm -f "$del_out"
+            echo "certbot is still busy after $waited seconds: certificate $name was not touched." >&2
+            exit 75
+        fi
+        cat "$del_out" >&2
+        if grep -qi 'no certificate found with name' "$del_out"; then rm -f "$del_out"; exit 76; fi
+        rm -f "$del_out"
+        exit "$del_rc"
+    done ;;
   revoke)
     name="${2:-}"; valid_name "$name" || { echo "invalid cert name" >&2; exit 2; }
     certbot revoke --cert-name "$name" --delete-after-revoke --non-interactive ;;

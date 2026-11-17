@@ -27,7 +27,7 @@ else
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniStack Gap="OmniSpacing.Large">
         <div class="form-narrow">
-        <OmniStack Gap="OmniSpacing.Large">
+        <OmniStack Gap="OmniSpacing.Small">
             <OmniFormField For="user-create-username"><LabelContent>@L["Username"]</LabelContent><ChildContent>
                 <OmniTextBox @bind-Value="_model.Username" Id="user-create-username" />
                 <ValidationMessage For="@(() => _model.Username)" />

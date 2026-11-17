@@ -9,10 +9,11 @@ public interface IPasswordSetupRepository
     Task AddAsync(PasswordSetupToken token, CancellationToken ct = default);
 
     /// <summary>
-    /// Spends the token with that hash if it is unused, unexpired and its account active, in one conditional
+    /// Spends the token stored under one of those hashes (R-53: per-purpose, then legacy) if it is unused,
+    /// unexpired and its account active, in one conditional
     /// write so two simultaneous uses cannot both win. Returns the account's id, or null when refused.
     /// </summary>
-    Task<int?> TryClaimAsync(string tokenHash, DateTime now, CancellationToken ct = default);
+    Task<int?> TryClaimAsync(IReadOnlyCollection<string> tokenHashes, DateTime now, CancellationToken ct = default);
 
     /// <summary>Voids every unused token of the account.</summary>
     Task VoidOpenAsync(int userId, DateTime now, CancellationToken ct = default);
@@ -39,10 +40,10 @@ public sealed class PasswordSetupRepository(AppDbContext db) : IPasswordSetupRep
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<int?> TryClaimAsync(string tokenHash, DateTime now, CancellationToken ct = default)
+    public async Task<int?> TryClaimAsync(IReadOnlyCollection<string> tokenHashes, DateTime now, CancellationToken ct = default)
     {
         var candidate = await db.PasswordSetupTokens.AsNoTracking()
-            .Where(t => t.TokenHash == tokenHash && t.UsedAt == null && t.ExpiresAt > now && t.User.IsActive)
+            .Where(t => tokenHashes.Contains(t.TokenHash) && t.UsedAt == null && t.ExpiresAt > now && t.User.IsActive)
             .Select(t => new { t.Id, t.UserId })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (candidate is null) return null;

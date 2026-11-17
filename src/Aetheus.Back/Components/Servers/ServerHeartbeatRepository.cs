@@ -90,6 +90,21 @@ public sealed class ServerHeartbeatRepository(AppDbContext db) : IServerHeartbea
             db.DockerContainers.AddRange(containers);
     }
 
+    public async Task UpdateDockerContainerLiveFieldsAsync(int serverId, List<DockerContainer> reported, CancellationToken ct = default)
+    {
+        var stored = await db.DockerContainers.Where(c => c.ServerId == serverId).ToListAsync(ct).ConfigureAwait(false);
+        var byId = stored.GroupBy(c => c.ContainerId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        foreach (var container in reported)
+        {
+            // Only values that moved are assigned, so only those rows (and columns) are written.
+            if (!byId.TryGetValue(container.ContainerId, out var row)) continue;
+            if (row.Status != container.Status) row.Status = container.Status;
+            if (row.CpuPercent != container.CpuPercent) row.CpuPercent = container.CpuPercent;
+            if (row.MemoryUsageMb != container.MemoryUsageMb) row.MemoryUsageMb = container.MemoryUsageMb;
+        }
+    }
+
     public async Task ReplaceDockerImagesAsync(int serverId, List<DockerImage> images, CancellationToken ct = default)
     {
         if (db.Database.IsRelational())

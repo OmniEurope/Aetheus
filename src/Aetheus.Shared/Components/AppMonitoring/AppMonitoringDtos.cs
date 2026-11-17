@@ -179,6 +179,15 @@ public sealed record AppWebAnalyticsPageDto
     public long PageViews { get; init; }
 }
 
+/// <summary>One daily visitor: a short prefix of the daily pseudonym, the UTC instant of its first event of the
+/// day and the normalized route of its first page view (null when none was recorded). No IP, no user agent.</summary>
+public sealed record AppWebAnalyticsVisitorDto
+{
+    public string Visitor { get; init; } = string.Empty;
+    public DateTime FirstSeenAtUtc { get; init; }
+    public string? EntryRoute { get; init; }
+}
+
 public sealed record AppWebAnalyticsSummaryDto
 {
     public int UniqueVisitorsToday { get; init; }
@@ -355,6 +364,10 @@ public sealed record AppProbeConfigDto
     public int ProbeIntervalSeconds { get; init; }
     public int ProbeTimeoutSeconds { get; init; }
     public int ExpectedStatusCode { get; init; }
+
+    /// <summary>R-29: a user asked for an immediate probe at that time; the agent probes at once when it is later than
+    /// the last probe it ran. Null when none is pending.</summary>
+    public DateTime? ProbeRequestedAt { get; init; }
 }
 
 /// <summary>A probe result reported by an agent (or produced by the backend prober).</summary>
@@ -421,6 +434,13 @@ public sealed record AppAudienceTotalsDto
     public int ApplicationCount { get; init; }
     /// <summary>Sessions seen in the last five minutes.</summary>
     public int OnlineVisitors { get; init; }
+
+    /// <summary>R-23: whether <see cref="OnlineVisitors"/> was measured (some application ingested in the window or
+    /// shows visitors) or every application is still waiting for data, so a total of zero is not shown as measured.</summary>
+    public OnlineAudienceState OnlineVisitorState { get; init; } = OnlineAudienceState.Unavailable;
+
+    /// <summary>R-23: the latest web analytics ingestion of the counted applications (UTC); null when none ever ingested.</summary>
+    public DateTime? OnlineVisitorLastEventAt { get; init; }
     public int VisitorsToday { get; init; }
     public int VisitorsThisWeek { get; init; }
     public int VisitorsThisMonth { get; init; }
@@ -441,8 +461,26 @@ public sealed record MonitoredAppStatusDto
     /// <summary>Distinct sessions seen in the active window; null when web analytics is unavailable.</summary>
     public int? OnlineVisitorCount { get; init; }
 
+    /// <summary>R-13/R-23: whether <see cref="OnlineVisitorCount"/> was measured, is waiting for data (no
+    /// web analytics event ingested in the window), or is unavailable (web analytics not enabled).</summary>
+    public OnlineAudienceState OnlineVisitorState { get; init; } = OnlineAudienceState.Unavailable;
+
+    /// <summary>R-23: when web analytics last ingested an event for this application (UTC); null when it never did.</summary>
+    public DateTime? OnlineVisitorLastEventAt { get; init; }
+
     /// <summary>The latest telemetry of any kind received from the app (OTLP or web analytics);
     /// null when nothing ever arrived. It is what tells "collected, then stopped" apart from "never
     /// configured".</summary>
     public DateTime? LastEventAt { get; init; }
+}
+
+/// <summary>R-47: where the telemetry of a project stands after the pipeline wizard configured it. <see cref="Requested"/>: the
+/// wizard configured it (a monitored application carries the request). <see cref="PackagesDetected"/>: the repository inventory
+/// already stored lists the telemetry NuGet package. It is pending, and the overview warns, while the first is true and the
+/// second is not.</summary>
+public sealed record AppTelemetrySetupDto
+{
+    public bool Requested { get; init; }
+    public bool PackagesDetected { get; init; }
+    public bool Pending => Requested && !PackagesDetected;
 }

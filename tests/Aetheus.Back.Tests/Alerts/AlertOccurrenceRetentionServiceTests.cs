@@ -27,7 +27,8 @@ public sealed class AlertOccurrenceRetentionServiceTests : IDisposable
         _service = new AlertOccurrenceRetentionService(
             _provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<AlertOccurrenceRetentionService>.Instance,
-            new FakeTimeProvider(new DateTimeOffset(Now)));
+            new FakeTimeProvider(new DateTimeOffset(Now)),
+            leaderLease: LeaderLeaseDouble.Leader());
     }
 
     public void Dispose() => _provider.Dispose();

@@ -1,0 +1,24 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* User decision 2026-11-10: a project grade below A says, in parentheses, what lowers it: the pipeline run of the
+   seal (pipeline icon, pipeline name, run number, linked to the run's Gate tab) or the project itself (project icon, its
+   name, linked to its Quality page). An A, or a grade without a cause, shows nothing. *@
+@if (Pipeline)
+{
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="project-grade-cause"
+               title="@L["ProjectGradeCausePipeline"]" data-testid="project-grade-cause" data-cause="pipeline">
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">(</OmniText>
+        <OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" Label="@L["Pipeline"]" />
+        <OmniLink Href="@($"/pipelines/runs/{RunId}?projectId={ProjectId}&tab=gate")" Class="project-grade-cause-link">@PipelineLabel</OmniLink>
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">)</OmniText>
+    </OmniStack>
+}
+else if (ProjectCause)
+{
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="project-grade-cause"
+               title="@L["ProjectGradeCauseProject"]" data-testid="project-grade-cause" data-cause="project">
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">(</OmniText>
+        <OmniIcon Name="@MaterialIconMap.Resolve("folder")" Label="@L["Project"]" />
+        <OmniLink Href="@($"/projects/{ProjectId}/quality")" Class="project-grade-cause-link">@ProjectName</OmniLink>
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">)</OmniText>
+    </OmniStack>
+}

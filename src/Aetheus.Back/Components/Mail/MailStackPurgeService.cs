@@ -56,7 +56,7 @@ public sealed class MailStackPurgeService(
         if (await mailRepo.HasOpenTaskAsync(serverId, StackRebuildKinds, ct).ConfigureAwait(false))
             throw new ConflictException("A mail setup or reinstall is already running on this server.");
 
-        var task = ServerTaskFactory.Operation(serverId, "Mail - erase the mail stack (reinstall)",
+        var task = ServerTaskFactory.Operation(serverId, ServerTaskNames.MailPurge,
             OperationKind.MailPurge, "-", TimeoutSeconds);
         await TaskQueuePersistence.PersistAndNotifyAsync(mailRepo.AddTaskAsync, taskService, task, ct).ConfigureAwait(false);
 

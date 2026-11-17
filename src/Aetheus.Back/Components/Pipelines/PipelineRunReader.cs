@@ -39,7 +39,9 @@ public sealed class PipelineRunReader(
             CoverageSummary = results.Coverage,
             LintSummary = results.Lint,
             Metrics = results.Metrics,
-            Artifacts = results.Artifacts
+            Artifacts = results.Artifacts,
+            // R-34: the release the run delivers, which is not the source head it checked out.
+            DeployedRelease = await repo.GetDeployedReleaseAsync(runId, includeAlreadyDeployed: false, ct).ConfigureAwait(false)
         };
         dto = await DropResolvedWarningsAsync(run, dto, ct).ConfigureAwait(false);
         // A candidate run owns no evaluation of its own (it delegates every analysis to a child

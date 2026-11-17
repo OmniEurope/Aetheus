@@ -56,7 +56,8 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
             Substitute.For<ILogger<TaskTimeoutService>>(),
             options,
             hub,
-            new FakeTimeProvider(Now));
+            new FakeTimeProvider(Now),
+            leaderLease: LeaderLeaseDouble.Leader());
 
         return (sut, repo);
     }

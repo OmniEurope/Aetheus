@@ -4,9 +4,9 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Front.Tests.Architecture;
 
 /// <summary>
-/// R-99: a deletion, or any action started from a destructive confirmation, shows OE's veil while it runs. A page or
-/// section runs it through the shared <c>BusyVeil</c> (<c>Veil.RunAsync(</c>, the page body takes <c>omni-busy</c>);
-/// a dialog that runs the action itself veils its own content (<c>omni-busy</c> in its markup, bound to its busy flag).
+/// R-99: a deletion, or any action started from a destructive confirmation, holds the one page veil (OE's OmniPageVeil) while it runs. A page or
+/// section runs it through the shared <c>BusyVeil</c> (<c>Veil.RunAsync(</c>, the page veil is up);
+/// a dialog that runs the action itself holds the page veil while it runs (<c>VeilHold</c> in its markup, bound to its busy flag).
 /// The guard counts, per source, the destructive confirmations it builds (<c>Destructive = true</c>,
 /// <c>ConfirmDeleteAsync(</c>, <c>ConfirmOptions(destructive...)</c>) and the <c>Veil.RunAsync(</c> calls it makes: it needs at
 /// least one call per confirmation. A confirmation that is deliberately not veiled is listed in <see cref="Exempt"/> with
@@ -32,7 +32,7 @@ public sealed class DestructiveConfirmationVeilGuardTests
         ["Components/Pipelines/VisualPipelineEditor.razor.cs"] =
             (1, "Removing a stage from the draft in the editor: local state only, the pipeline is saved later by the page."),
         ["Components/Pipelines/PipelineEdit.razor.cs"] =
-            (1, "R-98: the pipeline page veils itself with its own _deleting flag (omni-busy on pipeline-detail-page in the markup)."),
+            (1, "R-98: the pipeline page holds the veil with its own _deleting flag (VeilHold in the markup)."),
     };
 
     [Fact]
@@ -52,8 +52,8 @@ public sealed class DestructiveConfirmationVeilGuardTests
         }
 
         Assert.True(violations.Count == 0,
-            "R-99: a destructive confirmation runs its action under OE's veil (Veil.RunAsync from a page or a section, "
-            + "omni-busy on the zone of a dialog that runs the action itself), or is exempted with its reason:\n  "
+            "R-99: a destructive confirmation runs its action under the page veil (Veil.RunAsync from a page or a section, "
+            + "VeilHold in a dialog that runs the action itself), or is exempted with its reason:\n  "
             + string.Join("\n  ", violations));
     }
 
@@ -74,7 +74,7 @@ public sealed class DestructiveConfirmationVeilGuardTests
     }
 
     [Fact]
-    public void EveryDialogThatRunsADestructiveAction_VeilsItsOwnContent()
+    public void EveryDialogThatRunsADestructiveAction_HoldsThePageVeil()
     {
         var dialogs = Sources()
             .Where(s => s.Relative.EndsWith("Dialog.razor.cs", StringComparison.Ordinal)
@@ -83,12 +83,12 @@ public sealed class DestructiveConfirmationVeilGuardTests
         Assert.True(dialogs.Count >= 4, "The scan found fewer than the 4 known dialogs that run a destructive action: it is broken.");
 
         var violations = dialogs
-            .Where(dialog => !PairedMarkup(dialog.Path).Contains("omni-busy", StringComparison.Ordinal))
+            .Where(dialog => !PairedMarkup(dialog.Path).Contains("<VeilHold", StringComparison.Ordinal))
             .Select(dialog => dialog.Relative)
             .ToList();
 
         Assert.True(violations.Count == 0,
-            "R-99: a dialog that runs a destructive action itself veils its own content (omni-busy + aria-busy on its zone):\n  "
+            "R-99: a dialog that runs a destructive action itself holds the page veil (VeilHold in its markup):\n  "
             + string.Join("\n  ", violations));
     }
 
@@ -147,9 +147,9 @@ public sealed class DestructiveConfirmationVeilGuardTests
                 var code = File.ReadAllText(file);
                 var delegated = code.Split('\n').Count(line => !Definition.IsMatch(line) && DelegatedConfirmCall.IsMatch(line));
                 var confirmations = CountConfirmations(code);
-                // A dialog that runs the action itself veils its own zone: its markup's omni-busy stands for the call.
+                // A dialog that runs the action itself holds the veil: its markup's VeilHold stands for the call.
                 var ownZone = file.EndsWith("Dialog.razor.cs", StringComparison.Ordinal)
-                              && PairedMarkup(file).Contains("omni-busy", StringComparison.Ordinal);
+                              && PairedMarkup(file).Contains("<VeilHold", StringComparison.Ordinal);
                 return new Source(
                     file,
                     Path.GetRelativePath(front, file).Replace('\\', '/'),

@@ -256,6 +256,64 @@ public sealed class PipelineSetupSourceBranchTests : BunitContext
         AssertEveryPipelineReads("release", created);
     }
 
+    private (string Method, string Url, string? Body)[] DefaultBranchWrites() => _handler.RequestDetails
+        .Where(request => request.Method == HttpMethod.Put.Method
+            && request.Url.EndsWith("api/projects/7/default-branch", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    /// <summary>R-31: the branch chosen in the wizard is also written to the project's default branch, not only to the
+    /// <c>source_branch:</c> of the pipelines.</summary>
+    [Fact]
+    public async Task R31_TheBranchTheUserPicks_IsAlsoWrittenToTheProjectDefaultBranch()
+    {
+        Arrange("develop", "main", "develop");
+        var cut = Open();
+        await PickAsync(cut, "main");
+        await ToSummaryAsync(cut);
+
+        var created = await FinishAsync(cut);
+
+        AssertEveryPipelineReads("main", created);
+        cut.WaitForAssertion(() =>
+        {
+            var write = Assert.Single(DefaultBranchWrites());
+            Assert.Equal("main", JsonSerializer.Deserialize<SetProjectDefaultBranchRequest>(write.Body!, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Branch);
+        });
+    }
+
+    [Fact]
+    public async Task R31_TheProposedDevelop_IsAlsoWrittenToTheProjectDefaultBranch()
+    {
+        Arrange("main", "main", "develop");
+        var cut = Open();
+        await ToSummaryAsync(cut);
+
+        await FinishAsync(cut);
+
+        cut.WaitForAssertion(() =>
+        {
+            var write = Assert.Single(DefaultBranchWrites());
+            Assert.Equal("develop", JsonSerializer.Deserialize<SetProjectDefaultBranchRequest>(write.Body!, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Branch);
+        });
+    }
+
+    [Fact]
+    public async Task R31_WhenTheServerRefusesTheDefaultBranch_ThePipelinesAreRolledBackAndNoSuccessIsClaimed()
+    {
+        Arrange("main", "main", "develop");
+        _handler.SetResponse(HttpMethod.Put, "api/projects/7/default-branch", System.Net.HttpStatusCode.Forbidden);
+        _handler.SetResponse(HttpMethod.Delete, "api/pipelines/91", System.Net.HttpStatusCode.NoContent);
+        var cut = Open();
+        await ToSummaryAsync(cut);
+
+        await FinishAsync(cut);
+
+        cut.WaitForAssertion(() => Assert.Equal(7, _handler.RequestDetails.Count(request =>
+            request.Method == HttpMethod.Delete.Method
+            && request.Url.EndsWith("api/pipelines/91", StringComparison.OrdinalIgnoreCase))));
+        Assert.DoesNotContain("/projects/7", Services.GetRequiredService<NavigationManager>().Uri, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task TheBranchTheUserPicks_TravelsInTheSummaryAddress()
     {
@@ -302,7 +360,7 @@ public sealed class PipelineSetupSourceBranchTests : BunitContext
         .. new[]
         {
             "application-ci", "application-quality", "application-security", "application-qa",
-            "application-candidate", "application-nightly", "application-deploy-prod"
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
         }.Select(name => new PipelineTemplateSummaryDto { Id = name.GetHashCode(StringComparison.Ordinal), Name = name, Version = 1 })
     ];
 }

@@ -529,3 +529,6 @@ src/Aetheus.Agent.Windows/appsettings.Development.json
 # Raw shard dumps of the security audit; its Markdown registers are the canonical record.
 /.claude/audit-secu/raw/
 /.claude/audit-secu/raw2/
+
+# NuGet per-user data written under the repo root by dotnet tooling (HOME redirected), never tracked
+/.local/

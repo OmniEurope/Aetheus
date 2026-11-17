@@ -73,6 +73,31 @@ public class ProjectsController(
         return Ok(project);
     }
 
+    /// <summary>R-31: the pipeline setup wizard writes the branch it chose to the project's default branch. Same
+    /// permission as editing the project.</summary>
+    [HttpPut("{id:int}/default-branch")]
+    public async Task<ActionResult<ProjectDto>> SetDefaultBranch(int id, [FromBody] SetProjectDefaultBranchRequest request, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Write, ct))
+            return Forbid();
+
+        var project = await projectService.SetDefaultBranchAsync(id, request.Branch, ct);
+        if (project is null) return NotFound();
+        return Ok(project);
+    }
+
+    /// <summary>R-13: turns the project's expand/contract model (its migration gate) on or off, from the pipeline setup wizard or
+    /// the project's settings. Same permission as editing the project.</summary>
+    [HttpPut("{id:int}/migration-gate")]
+    public async Task<IActionResult> SetMigrationGate(int id, [FromBody] SetProjectMigrationGateRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Write, ct))
+            return Forbid();
+
+        return await projectService.SetMigrationGateEnabledAsync(id, request.Enabled, ct) ? NoContent() : NotFound();
+    }
+
     /// <summary>What deleting the project would remove, counted per kind, for the confirmation to
     /// say before anything is deleted. Same permission as the deletion itself.</summary>
     [HttpGet("{id:int}/deletion-preview")]

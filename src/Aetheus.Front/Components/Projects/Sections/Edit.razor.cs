@@ -34,6 +34,9 @@ public partial class Edit
         Nav.NavigateTo($"/projects/{Id}/overview");
     }
 
+    // R-13: the migration gate setting shows or hides the overview's expand/contract tab: reload the shared project, stay here.
+    private Task OnMigrationGateChanged() => Loader.ForceReloadAsync(Id);
+
     // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
     private async Task DeleteAsync()
     {

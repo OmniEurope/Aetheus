@@ -2,7 +2,7 @@
 @inherits ProjectPagedSectionBase<ServerTaskDto>
 @if (_result is null)
 {
-    <AetheusLoader />
+    <ZoneVeil />
 }
 else
 {
@@ -22,7 +22,7 @@ else
                 <Template Context="task">
                     @if (task.PipelineRunId is { } pipelineRunId)
                     {
-                        <OmniLink Href="@($"/pipelines/runs/{pipelineRunId}")">@($"{L["PipelineRun"]} #{pipelineRunId}")</OmniLink>
+                        <OmniLink Href="@($"/pipelines/runs/{pipelineRunId}")">@PipelineRunPresentation.Label(L["PipelineRun"].Value, task.PipelineRunNumber)</OmniLink>
                     }
                     else
                     {

@@ -15,6 +15,14 @@ public interface IExternalRepoService
     /// </summary>
     Task<ExternalRepoDto> AttachAsync(AttachExternalRepoRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Recette R-4: creates the project mirror of the public HTTPS address the project names (an anonymous read), through
+    /// <see cref="AttachAsync"/>, so the project's pipelines, workspace and releases read the mirror, never the address.
+    /// Throws <c>ConflictException</c> when the project has a repository or a mirror already, <c>BadRequestException</c>
+    /// when the address is not a public HTTPS repository address or cannot be reached.
+    /// </summary>
+    Task<ExternalRepoDto> MirrorRepositoryAddressAsync(int projectId, CancellationToken ct = default);
+
     /// <summary>Triggers an immediate mirror refresh for the project's external source.</summary>
     Task<ExternalRepoDto?> SyncNowAsync(int projectId, CancellationToken ct = default);
 

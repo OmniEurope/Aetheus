@@ -23,17 +23,26 @@
 }
 else if (_report is null)
 {
-    <AetheusLoader />
+    <VeilHold Busy="true" />
 }
 else
 {
     @* Show the measurement window in the first key-figure tile and in each table export header so
        figures retain their time context. *@
-    <OmniTileGrid Columns="4">
-        <OmniStatTile Class="app-performance-tile" Value="@SampleCountText" Title="@L["PerformanceTileRequests"]" Detail="@WindowText" data-testid="performance-window" />
-        <OmniStatTile Class="app-performance-tile" Value="@RoutesCountText" Title="@L["AppPerformanceRoutes"]" />
-        <OmniStatTile Class="app-performance-tile" Value="@SlowestP95Text" Title="@L["AppPerformanceSlowestRoute"]" Detail="@SlowestRouteText" />
-        <OmniStatTile Class="app-performance-tile" Value="@SlowestCallText" Title="@L["PerformanceTileSlowestCall"]" Detail="@SlowestCallRouteText" />
+    <OmniTileGrid Columns="@TileColumns" Class="tiles-above-grid tiles-scroll-row performance-key-figures">
+        <OmniStatTile Size="OmniControlSize.Small" Class="app-performance-tile" Value="@SampleCountText" Title="@L["PerformanceTileRequests"]" Detail="@WindowText" data-testid="performance-window" />
+        <OmniStatTile Size="OmniControlSize.Small" Class="app-performance-tile" Value="@RoutesCountText" Title="@L["AppPerformanceRoutes"]" />
+        <OmniStatTile Size="OmniControlSize.Small" Class="app-performance-tile" Value="@SlowestP95Text" Title="@L["AppPerformanceSlowestRoute"]" Detail="@SlowestRouteText" />
+        <OmniStatTile Size="OmniControlSize.Small" Class="app-performance-tile" Value="@SlowestCallText" Title="@L["PerformanceTileSlowestCall"]" Detail="@SlowestCallRouteText" />
+        @* ADR-060: the proof the backfill ended, read here because a production server is never reached by SSH. *@
+        @if (_taskIdentity is not null)
+        {
+            <OmniStatTile Size="OmniControlSize.Small" Class="app-performance-tile" Value="@TaskIdentityRemainingText" Title="@L["TaskIdentityBackfillRemaining"]" Detail="@TaskIdentityDetailText" data-testid="task-identity-backfill" />
+        }
+        @if (_runIdentity is not null)
+        {
+            <OmniStatTile Size="OmniControlSize.Small" Class="app-performance-tile" Value="@RunIdentityRemainingText" Title="@L["PipelineRunIdentityBackfillRemaining"]" Detail="@RunIdentityDetailText" data-testid="pipeline-run-identity-backfill" />
+        }
     </OmniTileGrid>
 
     @* The three tables in tabs, all rendered so a push refreshes every grid. *@
@@ -41,7 +50,7 @@ else
         <Tabs>
             <OmniTabsItem Key="slowest" Title="@L["PerformanceSlowestCalls"]"><Icon><OmniIcon Name="OmniIconName.Hourglass" /></Icon><ChildContent>
                 @* No pager, the slowest calls scroll in a virtualized, bounded grid. *@
-                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_slowestGrid" ExportName="@L["PerformanceSlowestCalls"]" ExportFields="@ExportFields" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
+                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_slowestGrid" ExportName="@L["PerformanceSlowestCalls"]" ExportFields="@ExportFields" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]">
                     <Columns>
                         @* Recette R1-96: the export writes whole milliseconds under a title that names the unit,
                            not the raw double the template formats on screen. *@
@@ -60,7 +69,7 @@ else
                 </AetheusDataGrid>
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="routes" Title="@L["PerformanceByRoute"]"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon><ChildContent>
-                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_endpointsGrid" ExportName="@L["PerformanceByRoute"]" ExportFields="@ExportFields" Data="@_report.Endpoints" TItem="ApiEndpointTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
+                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_endpointsGrid" ExportName="@L["PerformanceByRoute"]" ExportFields="@ExportFields" Data="@_report.Endpoints" TItem="ApiEndpointTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ApiEndpointTimingDto" Property="Method" Title="@L["Method"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                         <OmniDataGridColumn TItem="ApiEndpointTimingDto" Property="Route" Title="@L["Route"]" Filterable="true" >
@@ -95,6 +104,27 @@ else
                         <OmniDataGridColumn TItem="ClientApiCall" Property="StatusCode" Title="@L["Status"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                         <OmniDataGridColumn TItem="ClientApiCall" Property="Bytes" Title="@L["Size"]" Width="7rem" TextAlign="OmniAlignment.End" Filterable="true" >
                             <Template Context="call">@(call.Bytes is { } bytes ? FormatBytes(bytes) : string.Empty)</Template>
+                        </OmniDataGridColumn>
+                    </Columns>
+                </AetheusDataGrid>
+            </ChildContent></OmniTabsItem>
+            @* R-6: the real volume of each table, to choose which keys move to UUID v7 from production figures. *@
+            <OmniTabsItem Key="tables" Title="@L["PerformanceDatabaseTables"]"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon><ChildContent>
+                <AetheusDataGrid FullHeight="true" Data="@_tables" TItem="DatabaseTableVolumeDto" KeyProperty="Name" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" data-testid="database-tables">
+                    <Columns>
+                        <OmniDataGridColumn Frozen="true" TItem="DatabaseTableVolumeDto" Property="Name" Title="@L["Name"]" Filterable="true" />
+                        <OmniDataGridColumn TItem="DatabaseTableVolumeDto" Property="EstimatedRows" Title="@L["DatabaseTableRows"]" Width="9rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+                            <Template Context="table">@NumberText(table.EstimatedRows)</Template>
+                        </OmniDataGridColumn>
+                        <OmniDataGridColumn TItem="DatabaseTableVolumeDto" Property="TotalBytes" Title="@L["Size"]" Width="8rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+                            <Template Context="table">@FormatBytes(table.TotalBytes)</Template>
+                        </OmniDataGridColumn>
+                        <OmniDataGridColumn TItem="DatabaseTableVolumeDto" Property="KeyType" Title="@L["DatabaseTableKeyType"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
+                        <OmniDataGridColumn TItem="DatabaseTableVolumeDto" Property="MaxKey" Title="@L["DatabaseTableMaxKey"]" Width="10rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+                            <Template Context="table">@NumberText(table.MaxKey)</Template>
+                        </OmniDataGridColumn>
+                        <OmniDataGridColumn TItem="DatabaseTableVolumeDto" Property="KeyLimitPercent" Title="@L["DatabaseTableKeyPercent"]" Width="9rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+                            <Template Context="table">@KeyPercentText(table.KeyLimitPercent)</Template>
                         </OmniDataGridColumn>
                     </Columns>
                 </AetheusDataGrid>

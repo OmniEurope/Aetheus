@@ -6,7 +6,13 @@ namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 using Aetheus.Front.Components.Analysis;
 public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
 {
-    private static readonly string[] QualitySectionSlugs = ["overview", "findings"];
+    private static readonly string[] QualitySectionSlugs = ["overview", "findings", "fixed", "cve"];
+    private const int FindingsSectionIndex = 1;
+    private const int FixedSectionIndex = 2;
+    private const int CveSectionIndex = 3;
+
+    /// <summary>The fact tiles are smaller than the tiles of a run overview (14rem).</summary>
+    private const string QualityTileMinColumnWidth = "9.5rem";
 
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -56,6 +62,8 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     private int? _loadedProjectId;
     private int _qualitySectionIndex;
     private FindingQuery? _lastFindingQueryKey;
+    private FindingQuery? _runningFindingQuery;
+    private Task _runningFindingRead = Task.CompletedTask;
     private string? _findingSortBy;
     private bool _findingSortDescending;
 
@@ -68,11 +76,35 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     /// <summary>A chart alone spans the card (wide and low), two share the row.</summary>
     private double ChartAspectRatio => ChartLargeSpan == 12 ? 4 : 2;
 
+    /// <summary>The Findings and Fixed tabs are one grid over the project's findings; the Fixed one is
+    /// held on the Fixed status (R-26), whatever the column headers say.</summary>
+    private bool ShowsFindingsGrid => _qualitySectionIndex is FindingsSectionIndex or FixedSectionIndex;
+
+    private bool OnFixedTab => _qualitySectionIndex == FixedSectionIndex;
+
+    /// <summary>Changing tab starts the findings read again: the two grids do not share their rows.</summary>
+    private void SetSectionIndex(int index)
+    {
+        if (index != _qualitySectionIndex) _lastFindingQueryKey = null;
+        _qualitySectionIndex = index;
+    }
+
+    private bool HasCountTiles => _summary.OpenCount > 0 || _summary.NewCount > 0 || _summary.CriticalCount > 0 || _summary.HighCount > 0;
+
+    /// <summary>R-25: the short application version ("1.5.24"); the shortened identifier when the release
+    /// carries no application version, never the long one.</summary>
+    private string LatestReleaseText => _summary.LatestReleaseApplicationVersion is { Length: > 0 } version
+        ? version
+        : ShortId.Shorten(_summary.LatestReleaseVersion);
+
+    /// <summary>Where the commit and date tiles lead: the commit page, else the analysis run.</summary>
+    private string? CommitTileHref => GradeCommitHref ?? (_summary.LastAnalysisRunId is { } runId ? $"/pipelines/runs/{runId}" : null);
+
     private string LastAnalysisText => _summary.LastAnalysisAt?.ToString("g") ?? L["Never"];
 
     protected override async Task OnParametersSetAsync()
     {
-        _qualitySectionIndex = QualitySectionIndexFromUri();
+        SetSectionIndex(QualitySectionIndexFromUri());
 
         // Query-only tab navigation must not replay the overview requests. The findings grid is
         // server-rendered only when its tab is active and performs its own single paged request.
@@ -87,7 +119,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
             await Task.WhenAll(trendTask, summaryTask);
             _trend = await trendTask;
             _summary = await summaryTask;
-            if (_qualitySectionIndex == 1) await EnsureFindingsLoadedAsync();
+            if (ShowsFindingsGrid) await EnsureFindingsLoadedAsync();
         }
         catch (HttpRequestException)
         {
@@ -95,25 +127,28 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         }
 
         _coverage = _trend.Coverage
-            .Select(c => new CoveragePoint($"#{c.RunId}", Math.Round(c.LineRate * 100, 1), Math.Round(c.BranchRate * 100, 1)))
+            .Select(c => new CoveragePoint(PipelineRunPresentation.TrendLabel(c.PipelineName, c.RunNumber), Math.Round(c.LineRate * 100, 1), Math.Round(c.BranchRate * 100, 1)))
             .ToList();
         _tests = _trend.Tests
-            .Select(t => new TestPoint($"#{t.RunId}", t.Passed, t.Failed))
+            .Select(t => new TestPoint(PipelineRunPresentation.TrendLabel(t.PipelineName, t.RunNumber), t.Passed, t.Failed))
             .ToList();
         _complexity = _trend.Complexity
             .Where(c => c.CrapAvg.HasValue)
-            .Select(c => new ComplexityPoint($"#{c.RunId}", Math.Round(c.CrapAvg!.Value, 1), Math.Round(c.AvgCyclomatic, 1)))
+            .Select(c => new ComplexityPoint(PipelineRunPresentation.TrendLabel(c.PipelineName, c.RunNumber), Math.Round(c.CrapAvg!.Value, 1), Math.Round(c.AvgCyclomatic, 1)))
             .ToList();
 
         _loadedProjectId = ProjectId;
         _loading = false;
+        // The hub only refreshes the page: it is drawn from what was read, never after the hub has started
+        // (a start that stalls kept the section on its loader).
+        StateHasChanged();
         if (_realtime is null && !_disposed) await StartRealtimeAsync();
     }
 
     private async Task OnQualitySectionChangedAsync(int index)
     {
-        _qualitySectionIndex = Math.Clamp(index, 0, QualitySectionSlugs.Length - 1);
-        if (_qualitySectionIndex == 1) await EnsureFindingsLoadedAsync();
+        SetSectionIndex(Math.Clamp(index, 0, QualitySectionSlugs.Length - 1));
+        if (ShowsFindingsGrid) await EnsureFindingsLoadedAsync();
         PublishMenuActions();
     }
 
@@ -127,8 +162,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     {
         var query = QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
         return query.TryGetValue("tab", out var tab)
-            && string.Equals(tab.ToString(), QualitySectionSlugs[1], StringComparison.OrdinalIgnoreCase)
-            ? 1
+            ? Math.Max(0, Array.FindIndex(QualitySectionSlugs, slug => string.Equals(slug, tab.ToString(), StringComparison.OrdinalIgnoreCase)))
             : 0;
     }
 
@@ -176,7 +210,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
                 await InvokeAsync(async () =>
                 {
                     _summary = await Api.Analysis.GetAnalysisSummaryAsync(ProjectId, token);
-                    if (_qualitySectionIndex == 1 && _findingsGrid is not null)
+                    if (ShowsFindingsGrid && _findingsGrid is not null)
                     {
                         _lastFindingQueryKey = null;
                         await _findingsGrid.Reload();
@@ -201,13 +235,42 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         var queryKey = FindingQueryKey(args);
         if (queryKey == _lastFindingQueryKey) return;
 
-        var (page, size) = Page(args);
-        var result = await FetchFindingsAsync(page, size, Sort(args), Descending(args));
-        _findings = result.Items;
-        _findingCount = result.TotalCount;
-        _findingSortBy = Sort(args);
-        _findingSortDescending = Descending(args);
-        _lastFindingQueryKey = queryKey;
+        // The section's first read and the grid's own load ask the same page within the same moment:
+        // they share one request (the grid's answer waits for the read already on its way).
+        if (queryKey == _runningFindingQuery)
+        {
+            await _runningFindingRead;
+            return;
+        }
+
+        _runningFindingQuery = queryKey;
+        var read = ReadFindingPageAsync(args, queryKey);
+        if (queryKey == _runningFindingQuery) _runningFindingRead = read;
+        await read;
+    }
+
+    private async Task ReadFindingPageAsync(GridLoadArgs args, FindingQuery queryKey)
+    {
+        try
+        {
+            var (page, size) = Page(args);
+            var result = await FetchFindingsAsync(page, size, Sort(args), Descending(args));
+            // A read overtaken by a newer query leaves the rows to it, whatever the order of the answers.
+            if (queryKey != _runningFindingQuery) return;
+            _findings = result.Items;
+            _findingCount = result.TotalCount;
+            _findingSortBy = Sort(args);
+            _findingSortDescending = Descending(args);
+            _lastFindingQueryKey = queryKey;
+        }
+        finally
+        {
+            if (queryKey == _runningFindingQuery)
+            {
+                _runningFindingQuery = null;
+                _runningFindingRead = Task.CompletedTask;
+            }
+        }
     }
 
     /// <summary> One page of the findings export, every page read from the API with the sort and
@@ -226,7 +289,9 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         _findingSearch = args.ColumnFilter(nameof(AnalysisFindingDto.Title)) ?? args.ColumnFilter(nameof(AnalysisFindingDto.RuleId));
         _findingCategories = args.ColumnFilterValues<AnalysisCategory>(nameof(AnalysisFindingDto.Category));
         _findingSeverities = args.ColumnFilterValues<AnalysisSeverity>(nameof(AnalysisFindingDto.Severity));
-        _findingStatuses = args.ColumnFilterValues<AnalysisFindingStatus>(nameof(AnalysisFindingDto.Status));
+        _findingStatuses = OnFixedTab
+            ? [AnalysisFindingStatus.Fixed]
+            : args.ColumnFilterValues<AnalysisFindingStatus>(nameof(AnalysisFindingDto.Status));
         _findingResponsible = args.ColumnFilter(nameof(AnalysisFindingDto.Responsible));
         _findingIsNew = bool.TryParse(args.ColumnFilter(FindingColumnDefaults.IsNewColumn), out var isNew) ? isNew : null;
         _findingIdRange = args.ColumnWholeNumberRange(nameof(AnalysisFindingDto.Id));
@@ -304,6 +369,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         _findingSortBy = null;
         _findingSortDescending = false;
         _lastFindingQueryKey = null;
+        _runningFindingQuery = null;
     }
 
     private static (int Page, int Size) Page(GridLoadArgs args)

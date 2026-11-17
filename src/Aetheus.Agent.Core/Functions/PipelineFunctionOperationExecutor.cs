@@ -21,6 +21,10 @@ public sealed class PipelineFunctionOperationExecutor : EnvironmentOperationExec
     public const string FunctionNotImplemented = "function-not-implemented";
     public const string FunctionError = "function-error";
 
+    // How long a cancelled or timed-out function is given to end before the step stops waiting for it.
+    private static readonly TimeSpan DefaultStopGrace = TimeSpan.FromSeconds(10);
+
+    private readonly TimeSpan _stopGrace;
     private readonly Dictionary<string, IPipelineFunction> _functions;
     private readonly Func<string?, PipelineFunctionDescriptor?> _findFunction;
 
@@ -33,9 +37,11 @@ public sealed class PipelineFunctionOperationExecutor : EnvironmentOperationExec
     /// catalog, so tests can describe contracts (a required parameter, a deployment function) the
     /// catalog does not hold yet.</summary>
     internal PipelineFunctionOperationExecutor(
-        IEnumerable<IPipelineFunction> functions, Func<string?, PipelineFunctionDescriptor?> findFunction)
+        IEnumerable<IPipelineFunction> functions, Func<string?, PipelineFunctionDescriptor?> findFunction,
+        TimeSpan? stopGrace = null)
     {
         ArgumentNullException.ThrowIfNull(functions);
+        _stopGrace = stopGrace ?? DefaultStopGrace;
         _findFunction = findFunction ?? throw new ArgumentNullException(nameof(findFunction));
         _functions = new Dictionary<string, IPipelineFunction>(StringComparer.Ordinal);
         foreach (var function in functions)
@@ -74,7 +80,7 @@ public sealed class PipelineFunctionOperationExecutor : EnvironmentOperationExec
 
     /// <summary>Runs the function under the timeout. Returns null on success, the failed result
     /// otherwise; an external cancellation is rethrown.</summary>
-    private static async Task<ExecutorResult?> RunAsync(
+    private async Task<ExecutorResult?> RunAsync(
         IPipelineFunction function, PipelineFunctionContext context, int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken cancellationToken)
     {
@@ -82,19 +88,35 @@ public sealed class PipelineFunctionOperationExecutor : EnvironmentOperationExec
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(0, timeoutSeconds)));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         PipelineFunctionResult result;
+        Task<PipelineFunctionResult>? call = null;
         try
         {
-            // WaitAsync bounds a function that ignores its token: the step ends on time either way,
-            // and the closed context drops whatever the abandoned call still tries to write.
-            result = await function.ExecuteAsync(context, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
+            // WaitAsync lets the step answer a cancellation without waiting for a function that ignores
+            // its token, but the answer is never "stopped" while the call still runs: after a cancellation
+            // the call is given a grace to end, and what has not ended by then is reported as such (below).
+            call = function.ExecuteAsync(context, linked.Token);
+            result = await call.WaitAsync(linked.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            var ended = await EndedWithinGraceAsync(call).ConfigureAwait(false);
             context.Close();
+            if (!ended)
+                await onOutput(
+                    $"Function '{function.Name}' did not end within {_stopGrace.TotalSeconds:0.##}s of its cancellation; it may still be running.",
+                    TaskLogLevel.Error).ConfigureAwait(false);
             await onOutput(
                 $"Function '{function.Name}' exceeded its timeout of {timeoutSeconds}s; no output was published.",
                 TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The external cancellation is acknowledged as a stop only once the function really ended
+            // (its mutations ended or were cancelled); otherwise the agent must not report the task stopped.
+            if (!await EndedWithinGraceAsync(call).ConfigureAwait(false))
+                throw new PipelineFunctionNotStoppedException(function.Name, cancellationToken);
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -113,6 +135,24 @@ public sealed class PipelineFunctionOperationExecutor : EnvironmentOperationExec
             ? null
             : await FailAsync(onOutput, FunctionError, $"Function '{function.Name}' failed: {result.FailureReason}")
                 .ConfigureAwait(false);
+    }
+
+    /// <summary>Whether the function call has ended (in any way) within the stop grace. A null call
+    /// never started, so there is nothing left running. A call that outlives the grace has its later
+    /// failure observed, so it never surfaces as an unobserved task exception.</summary>
+    private async Task<bool> EndedWithinGraceAsync(Task? call)
+    {
+        if (call is null || call.IsCompleted)
+            return true;
+
+        using var grace = new CancellationTokenSource();
+        var winner = await Task.WhenAny(call, Task.Delay(_stopGrace, grace.Token)).ConfigureAwait(false);
+        await grace.CancelAsync().ConfigureAwait(false);
+        if (winner == call)
+            return true;
+
+        _ = call.ContinueWith(static task => task.Exception, TaskContinuationOptions.OnlyOnFaulted);
+        return false;
     }
 
     /// <summary>Publishes the outputs of a successful function. Every declared output must be set: a

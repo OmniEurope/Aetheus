@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Globalization;
+using Aetheus.Back.Components.VariableLibraries.Events;
 using Aetheus.Back.Data;
 
 namespace Aetheus.Back.Components.PortAllocation;
@@ -126,4 +127,82 @@ public class PortAllocationRepository(AppDbContext db) : IPortAllocationReposito
 
     public async Task<bool> ServerExistsAsync(int serverId, CancellationToken ct = default) =>
         await db.Servers.AnyAsync(server => server.Id == serverId, ct).ConfigureAwait(false);
+
+    public async Task<LibraryScope> ResolveScopeAsync(
+        int libraryId, string libraryName, LibraryPortScope scope, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        var projectId = scope.ProjectId;
+        if (projectId is null && scope.EnvironmentId is { } environmentId)
+        {
+            projectId = await db.Environments.AsNoTracking()
+                .Where(environment => environment.Id == environmentId)
+                .Select(environment => environment.ProjectId)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
+
+        int? hostId = null;
+        if (scope.ProjectServerId is { } projectServerId)
+        {
+            var projectServer = await db.ProjectServers.AsNoTracking()
+                .Where(candidate => candidate.Id == projectServerId)
+                .Select(candidate => new { candidate.ProjectId, candidate.ServerId })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            projectId ??= projectServer?.ProjectId;
+            hostId = projectServer?.ServerId;
+        }
+
+        return new LibraryScope(
+            libraryId, libraryName, projectId, scope.EnvironmentId, scope.ProjectServerId, hostId);
+    }
+
+    public async Task<bool> IsPortHeldByProjectEntryAsync(int projectId, int port, CancellationToken ct = default)
+    {
+        var value = port.ToString(CultureInfo.InvariantCulture);
+        return await db.VariableLibraryEntries.AsNoTracking()
+            .AnyAsync(entry => entry.Key.StartsWith(PortRegistryLimits.PortKeyPrefix)
+                && entry.Value.Trim() == value
+                && (entry.VariableLibrary.ProjectId == projectId
+                    || entry.VariableLibrary.Environment!.ProjectId == projectId
+                    || entry.VariableLibrary.ProjectServer!.ProjectId == projectId), ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<List<LibraryPortSource>> GetPortLibrariesAsync(int? projectId = null, CancellationToken ct = default)
+    {
+        var rows = await db.VariableLibraryEntries.AsNoTracking()
+            .Where(entry => entry.Key.StartsWith(PortRegistryLimits.PortKeyPrefix))
+            .Where(entry => projectId == null
+                || entry.VariableLibrary.ProjectId == projectId
+                || entry.VariableLibrary.Environment!.ProjectId == projectId
+                || entry.VariableLibrary.ProjectServer!.ProjectId == projectId)
+            .Select(entry => new
+            {
+                entry.VariableLibraryId,
+                LibraryName = entry.VariableLibrary.Name,
+                entry.VariableLibrary.ProjectId,
+                entry.VariableLibrary.EnvironmentId,
+                entry.VariableLibrary.ProjectServerId,
+                entry.Key,
+                entry.Value
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. rows.GroupBy(row => row.VariableLibraryId)
+                .Select(group => new LibraryPortSource(
+                    group.Key,
+                    group.First().LibraryName,
+                    new LibraryPortScope(group.First().ProjectId, group.First().EnvironmentId, group.First().ProjectServerId),
+                    [.. group.Select(row => LibraryPortEntry.TryRead(row.Key, row.Value, out var port) ? port : null)
+                        .OfType<LibraryPortEntry>()]))
+                .Where(source => source.Entries.Count > 0)
+                .OrderBy(source => source.LibraryId)
+        ];
+    }
 }

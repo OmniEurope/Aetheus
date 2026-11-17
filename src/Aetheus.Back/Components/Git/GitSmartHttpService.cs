@@ -209,7 +209,17 @@ public class GitSmartHttpService(
     {
         if (!AllowedServices.Contains(service)) return null;
         var repository = await lightRepo.FindBySlugAsync(projectId, slug, ct).ConfigureAwait(false);
-        return repository is null ? null : ResolveSafeRepositoryPath(projectId, slug);
+        if (repository is null) return null;
+        // Decision 2026-11-10: the mirror of an external repository is read-only. A push would be erased by the next
+        // forced fetch, and meanwhile fire the project's push pipelines on content the external repository never held.
+        // Refused at the advertisement and at the push itself, before git starts; a clone or fetch is unchanged.
+        if (string.Equals(service, "git-receive-pack", StringComparison.Ordinal)
+            && repository.GitConnection is { ProviderType: not GitProviderType.AetheusGit })
+            throw new BadHttpRequestException(
+                $"Repository '{slug}' is the mirror of an external repository: it is read-only and updated from the "
+                + "external repository. Push to the external repository instead.",
+                StatusCodes.Status403Forbidden);
+        return ResolveSafeRepositoryPath(projectId, slug);
     }
 
     private string? ResolveSafeRepositoryPath(int projectId, string slug)

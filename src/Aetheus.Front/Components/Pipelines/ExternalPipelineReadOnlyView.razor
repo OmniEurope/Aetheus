@@ -1,0 +1,20 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Pipelines
+@* R-11: what the pipeline page shows instead of its edit form, visual editor and settings form when the pipeline
+   was imported read-only from an external repository: where it comes from, and its definition as stored. *@
+<OmniStack>
+    <OmniAlert Severity="OmniSeverity.Info">
+        @L["ExternalPipelineReadOnlyNotice", Pipeline.ExternalImportPath ?? string.Empty]
+        <ShortId Value="@(Pipeline.ExternalImportCommit ?? string.Empty)" Href="@CommitHref" />.
+        @L["ExternalPipelineReadOnlyAdvice"]
+    </OmniAlert>
+    @if (ShowDefinition)
+    {
+        <div class="run-yaml-code" data-testid="external-pipeline-definition">
+            @foreach (var line in PipelineYamlLines.Parse(Pipeline.YamlDefinition))
+            {
+                <div class="yaml-line">@line.Text</div>
+            }
+        </div>
+    }
+</OmniStack>

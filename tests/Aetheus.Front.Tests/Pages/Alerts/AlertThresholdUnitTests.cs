@@ -52,6 +52,8 @@ public sealed class AlertThresholdUnitTests : BunitContext
     {
         var alert = new AlertRuleDto { Id = 3, Name = "Cache", Metric = MetricType.BuildCache, Operator = ComparisonOperator.GreaterThan, Threshold = 50, SustainedSeconds = 60 };
 
+        _handler.SetJsonResponse("api/servers?page=1&pageSize=100", new PaginatedResult<ServerDto> { Items = [], TotalCount = 0, Page = 1, PageSize = 100 });
+
         var cut = Render<AlertEditDialog>(p => p.Add(x => x.Alert, alert));
 
         Assert.Contains("Threshold (Go)", cut.Find("label[for=oe-pages-alerts-alerteditdialog-numeric-1]").TextContent, StringComparison.Ordinal);

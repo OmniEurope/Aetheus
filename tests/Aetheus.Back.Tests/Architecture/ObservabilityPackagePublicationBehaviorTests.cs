@@ -277,10 +277,12 @@ public sealed class ObservabilityPackagePublicationBehaviorTests
 
         public async Task WaitForCurlAsync()
         {
-            var deadline = DateTime.UtcNow.AddSeconds(5);
+            // Starting a shell script and its fake curl takes as long as the host allows: a generous deadline
+            // costs nothing when the marker appears at once, and a loaded machine no longer fails the test.
+            var deadline = DateTime.UtcNow.AddSeconds(60);
             while (!File.Exists(_marker) && DateTime.UtcNow < deadline)
                 await Task.Delay(20, TestContext.Current.CancellationToken);
-            Assert.True(File.Exists(_marker), "The fake curl process did not start.");
+            Assert.True(File.Exists(_marker), "The fake curl process did not start within 60 s.");
         }
 
         public void AssertTemporaryArtifactsRemoved()

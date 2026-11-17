@@ -113,6 +113,7 @@ public sealed class ClientErrorsControllerTests
 
     [Theory]
     [InlineData(ClientErrorLogLevels.Warning, LogLevel.Warning)]
+    [InlineData(ClientErrorLogLevels.Information, LogLevel.Information)]
     [InlineData(ClientErrorLogLevels.Error, LogLevel.Error)]
     [InlineData(null, LogLevel.Error)]
     public void R1_89_Report_IsLoggedAtTheRequestedLevel_AndNoLevelStaysAnError(string? level, LogLevel expected)
@@ -132,6 +133,7 @@ public sealed class ClientErrorsControllerTests
     [InlineData(null, true)]
     [InlineData(ClientErrorLogLevels.Error, true)]
     [InlineData(ClientErrorLogLevels.Warning, true)]
+    [InlineData(ClientErrorLogLevels.Information, true)]
     [InlineData("warning", false)]
     [InlineData("Critical", false)]
     [InlineData("", false)]

@@ -65,6 +65,25 @@ public sealed class StepStatusBadgeTests : BunitContext
     }
 
     [Fact]
+    public void ACheckoutTheRunPreparationAlreadyMade_ReadsSkippedWithItsOwnReason_NotAnArtifactMessage()
+    {
+        var step = new PipelineStepRunDto
+        {
+            Status = TaskExecutionStatus.Success,
+            SkippedReason = PipelineStepSkipReasons.CheckoutDoneByPreparation
+        };
+
+        var badge = RenderFor(step).Find(".omni-badge");
+
+        Assert.Contains("omni-badge--neutral", badge.ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-badge--success", badge.ClassName, StringComparison.Ordinal);
+        Assert.Contains("StepSkippedCheckoutPrepared", badge.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("StepSkippedArtifactMissing", badge.TextContent, StringComparison.Ordinal);
+        Assert.Equal("StepSkippedCheckoutPreparedHint", badge.GetAttribute("title"));
+        Assert.Equal(PipelineRunFormatting.SkippedIcon, PipelineRunFormatting.StepBadgeIcon(step));
+    }
+
+    [Fact]
     public void AStepSkippedByItsCondition_ReadsSkipped_WithAnIcon_AndTheCondition()
     {
         // Stored as Cancelled (the enum has no Skipped value), told apart by the condition.

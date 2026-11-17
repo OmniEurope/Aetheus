@@ -89,8 +89,11 @@ public sealed class PipelineRunResourcesTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".run-parameters-tile")));
         var tile = cut.Find(".run-parameters-tile");
-        Assert.Contains("shared-build, registry, extra-library", tile.QuerySelector("[data-testid=run-used-libraries]")!.TextContent, StringComparison.Ordinal);
-        Assert.Contains("deploy-secrets", tile.QuerySelector("[data-testid=run-used-vaults]")!.TextContent, StringComparison.Ordinal);
+        // R-61: numbers, not names (the names are in the dialog).
+        Assert.Equal("3", tile.QuerySelector("[data-testid=run-used-libraries] .omni-fact-tile__value")!.TextContent.Trim());
+        Assert.Equal("1", tile.QuerySelector("[data-testid=run-used-vaults] .omni-fact-tile__value")!.TextContent.Trim());
+        Assert.DoesNotContain("shared-build", tile.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("deploy-secrets", tile.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

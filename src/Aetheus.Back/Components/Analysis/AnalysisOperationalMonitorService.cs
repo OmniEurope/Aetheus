@@ -11,17 +11,13 @@ public sealed class AnalysisOperationalMonitorService(
     IOptions<AnalysisPlatformOptions> options,
     TimeProvider timeProvider,
     ILogger<AnalysisOperationalMonitorService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:analysis-operational-monitor")
 {
     private readonly AnalysisPlatformOptions _options = options.Value;
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastSent = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _firstSeen = new(StringComparer.Ordinal);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        leaderLease is null
-            ? RunLeaderLoopAsync(stoppingToken)
-            : leaderLease.RunAsLeaderAsync("aetheus:analysis-operational-monitor", RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         await RunCycleSafelyAsync(stoppingToken).ConfigureAwait(false);
         using var timer = new PeriodicTimer(
@@ -69,8 +65,14 @@ public sealed class AnalysisOperationalMonitorService(
         var repository = scope.ServiceProvider.GetRequiredService<IAnalysisRepository>();
         var notifications = scope.ServiceProvider.GetRequiredService<INotificationService>();
         var snapshot = await repository.GetOperationalSnapshotAsync(now.UtcDateTime.AddDays(-1), ct).ConfigureAwait(false);
-        foreach (var issue in DetectIssues(snapshot, ScannerManifestCatalog.Default, _options, now))
+        var issues = DetectIssues(snapshot, ScannerManifestCatalog.Default, _options, now);
+        var grace = TimeSpan.FromMinutes(Math.Clamp(_options.ScannerUnavailableGraceMinutes, 0, 1440));
+        foreach (var gone in _firstSeen.Keys.Where(key => issues.All(issue => issue.Key != key)).ToList())
+            _firstSeen.TryRemove(gone, out _);
+        foreach (var issue in issues)
         {
+            if (IsStillSettling(issue, now, grace))
+                continue;
             var cooldown = TimeSpan.FromHours(Math.Clamp(_options.OperationalAlertCooldownHours, 1, 168));
             if (_lastSent.TryGetValue(issue.Key, out var lastSent) && now - lastSent < cooldown) continue;
             await notifications.SendEventAsync(issue.EventType, new
@@ -85,6 +87,27 @@ public sealed class AnalysisOperationalMonitorService(
             _lastSent[issue.Key] = now;
             logger.LogWarning("Analysis operational alert {EventType}: {Message}", issue.EventType, issue.Message);
         }
+    }
+
+    /// <summary>
+    /// A scanner that reports unavailable right after a host or Docker restart is not an incident yet (R-1, the
+    /// daily reboot of the server: the cycle that runs when the backend comes back reads Docker still down). The
+    /// first sight is told at information level and the alert waits for a later cycle that still finds it, once
+    /// <paramref name="grace"/> has passed. Other issues alert at once.
+    /// </summary>
+    private bool IsStillSettling(AnalysisOperationalIssue issue, DateTimeOffset now, TimeSpan grace)
+    {
+        if (grace <= TimeSpan.Zero || issue.EventType != "analysis.operational.scanner-unavailable")
+            return false;
+        if (_firstSeen.TryAdd(issue.Key, now))
+        {
+            logger.LogInformation(
+                "Analysis operational issue {EventType} seen for the first time, alerted if it is still there after {GraceMinutes} min: {Message}",
+                issue.EventType, (int)grace.TotalMinutes, issue.Message);
+            return true;
+        }
+
+        return now - _firstSeen[issue.Key] < grace;
     }
 
     internal static IReadOnlyList<AnalysisOperationalIssue> DetectIssues(

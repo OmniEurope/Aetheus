@@ -39,6 +39,11 @@ public interface IPipelineRunScheduler
     /// <summary>Periodic reconcile pass for a run whose completions may have been missed.</summary>
     Task ReconcileRunAsync(int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
+    /// <summary>R-12: an agent reported that a task the run had cancelled has stopped. Re-drives the run
+    /// (cleanup, always() stages) the scheduler had held back while that task was still dying.</summary>
+    Task ContinueAfterCancelledTaskStoppedAsync(
+        int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct);
+
     /// <summary>Resumes a run once its post-stage artifact collection settled.</summary>
     Task ContinueAfterArtifactCollectionAsync(
         int pipelineRunId, TaskExecutionStatus collectionStatus,
@@ -84,6 +89,17 @@ public sealed class PipelineRunScheduler(
     TimeProvider timeProvider,
     ILogger<PipelineRunScheduler> logger) : IPipelineRunScheduler
 {
+    /// <summary>
+    /// How long a run waits for the agent to report that a server-cancelled task has stopped (its process
+    /// tree is gone) before the cleanup and the always() stages are dispatched anyway. The agent notices
+    /// the cancellation on its next reconcile pass (a few seconds while it works) and then terminates the
+    /// tree, waiting at most 10 s for it; 2 minutes covers that with a wide margin. An agent that is
+    /// offline, restarted, or too old to report never answers: the run must not hang on it, so past this
+    /// delay the scheduler proceeds and logs that the stop was not acknowledged. The periodic scheduler
+    /// recovery pass (every minute) is what notices the delay elapsing.
+    /// </summary>
+    public static readonly TimeSpan CancelledTaskStopMaxWait = TimeSpan.FromMinutes(2);
+
     private readonly PipelineResumeWindow _resumeWindow = new(repo, pipelineHub, timeProvider, logger);
 
     public async Task AdvanceStageAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
@@ -156,7 +172,7 @@ public sealed class PipelineRunScheduler(
                     : TaskFailureCodes.ToolError;
                 var failureReason = childCompleted
                     ? null
-                    : $"Triggered run {step.TriggeredRunId} completed with status {childStatus}.";
+                    : await PipelineTriggerFailureMessage.DescribeAsync(repo, logger, step.TriggeredRunId, childStatus, lockToken).ConfigureAwait(false);
                 resolved = await repo.TryResolveTriggeredStepAsync(
                     step.Id,
                     status,
@@ -170,8 +186,9 @@ public sealed class PipelineRunScheduler(
                     return;
 
                 logger.LogInformation(
-                    "Trigger step {StepId} (run {ParentRun}) resolved {Status} from child run {ChildRun}",
-                    step.Id, step.PipelineRunId, status, step.TriggeredRunId);
+                    "Trigger step {StepId} (run {ParentRun}) resolved {Status} from child run {ChildRun}{Detail}",
+                    step.Id, step.PipelineRunId, status, step.TriggeredRunId,
+                    failureReason is null ? string.Empty : $": {failureReason}");
                 await AdvanceStageLockedAsync(step.PipelineRunId, step.StageName, launcher, lockToken).ConfigureAwait(false);
             },
             ct).ConfigureAwait(false);
@@ -205,12 +222,67 @@ public sealed class PipelineRunScheduler(
             ct).ConfigureAwait(false);
     }
 
+    public async Task ContinueAfterCancelledTaskStoppedAsync(
+        int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    {
+        await operationLock.RunSerializedAsync(
+            $"pipeline-run-advance:{pipelineRunId}",
+            async lockToken =>
+            {
+                using var runLock = await RunAdvanceLock.Shared.AcquireAsync(pipelineRunId, lockToken).ConfigureAwait(false);
+                if (!await repo.IsRunStillRunningAsync(pipelineRunId, lockToken).ConfigureAwait(false)) return;
+                // Another step of the run is still working: its own completion advances the run.
+                if (await repo.HasAnyRunningStepInRunAsync(pipelineRunId, lockToken).ConfigureAwait(false)) return;
+                await AdvanceToNextStageOrCompleteAsync(pipelineRunId, launcher, lockToken).ConfigureAwait(false);
+            },
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// R-12: true while an agent may still be killing the process tree of a task this run cancelled. The
+    /// cleanup and the always() stages share the run's workspace and resource locks with that task, so they
+    /// are not dispatched beside it: the run waits for the agent's stop acknowledgement
+    /// (<see cref="ServerTask.StopAcknowledgedAt"/>), at most <see cref="CancelledTaskStopMaxWait"/>.
+    /// Whoever re-drives the run later is the acknowledgement itself or the periodic recovery pass.
+    /// </summary>
+    private async Task<bool> MustWaitForCancelledTaskToStopAsync(int pipelineRunId, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var timedOutBefore = now - CancelledTaskStopMaxWait;
+        var wait = await repo.GetCancelledTaskStopWaitAsync(pipelineRunId, timedOutBefore, ct)
+            .ConfigureAwait(false);
+        if (wait.Awaiting > 0)
+        {
+            logger.LogInformation(
+                "Run {RunId}: {Count} cancelled task(s) not yet reported stopped by their agent; the next stage waits (at most {MaxWait})",
+                pipelineRunId, wait.Awaiting, CancelledTaskStopMaxWait);
+            return true;
+        }
+
+        if (wait.TimedOut > 0)
+        {
+            // Recorded on the tasks, so this passes once per task: later passes of the run (recovery sweep,
+            // retries) neither wait for them nor warn again. Not an acknowledgement, and not recorded as one.
+            var settled = await repo.MarkCancelledTaskStopWaitExpiredAsync(pipelineRunId, timedOutBefore, now, ct)
+                .ConfigureAwait(false);
+            if (settled > 0)
+            {
+                logger.LogWarning(
+                    "Run {RunId}: {Count} cancelled task(s) were not reported stopped within {MaxWait}; the next stage proceeds without the acknowledgement",
+                    pipelineRunId, settled, CancelledTaskStopMaxWait);
+            }
+        }
+
+        return false;
+    }
+
     private Task AdvanceStageLockedAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct) =>
         StopRunIfRefusedAsync(pipelineRunId, () => AdvanceStageCoreAsync(pipelineRunId, completedStageName, launcher, ct), ct);
 
     private async Task AdvanceStageCoreAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         if (!await repo.IsRunStillRunningAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
+        if (await MustWaitForCancelledTaskToStopAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
 
         var allDone = await repo.AreAllStepsInStageCompletedAsync(pipelineRunId, completedStageName, ct).ConfigureAwait(false);
         if (!allDone) return;
@@ -244,10 +316,15 @@ public sealed class PipelineRunScheduler(
         // consumer resolve an artifact that has not been collected yet ("could not resolve the artifact",
         // run #51). So when a collection task is dispatched, WAIT: the next stage is advanced only once
         // that task completes, routed back through ContinueAfterArtifactCollectionAsync.
-        if (await DispatchPostStageArtifactCollectionAsync(pipelineRunId, completedStageName, launcher, ct).ConfigureAwait(false))
+        // One read of the run (with its pipeline and project, YAML included) serves the artifact check and the
+        // advance that follows it: both run in this locked pass, and the fields they read (snapshot, pipeline)
+        // do not change within a run. The run still being Running was checked at the top of the pass.
+        var run = await repo.GetPipelineRunWithPipelineAsync(pipelineRunId, ct).ConfigureAwait(false);
+        if (await DispatchPostStageArtifactCollectionAsync(run, completedStageName, launcher, ct).ConfigureAwait(false))
             return;
 
-        await AdvanceToNextStageOrCompleteAsync(pipelineRunId, launcher, ct).ConfigureAwait(false);
+        await StopRunIfRefusedAsync(
+            pipelineRunId, () => AdvanceToNextStageCoreAsync(pipelineRunId, launcher, ct, run), ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -450,22 +527,22 @@ public sealed class PipelineRunScheduler(
         var pendingSteps = await repo.GetPendingStepRunsAsync(run.Id, ct).ConfigureAwait(false);
         // Same redundancy as in AdvanceToNextStageOrCompleteAsync: the caller hands us the run, so its
         // pipeline id is already here when the navigation is loaded.
-        var pipelineIdForRun = run.Pipeline?.Id
-            ?? await repo.GetPipelineIdForRunAsync(run.Id, ct).ConfigureAwait(false);
-        var organizationId = pipelineIdForRun is null
-            ? null
-            : await repo.GetPipelineOrganizationIdAsync(pipelineIdForRun.Value, ct).ConfigureAwait(false);
-        await planner.CreateTasksForNextStageAsync(run.Id, definition, resolvedVars, pendingSteps, organizationId, secretKeys, launcher, ct).ConfigureAwait(false);
+        var organizationId = await OrganizationOfAsync(run, ct).ConfigureAwait(false);
+        await planner.CreateTasksForNextStageAsync(run.Id, definition, resolvedVars, pendingSteps, organizationId, secretKeys, launcher, ct, run.Pipeline?.ProjectId, run).ConfigureAwait(false);
     }
 
     public Task AdvanceToNextStageOrCompleteAsync(
         int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct) =>
         StopRunIfRefusedAsync(pipelineRunId, () => AdvanceToNextStageCoreAsync(pipelineRunId, launcher, ct), ct);
 
+    /// <param name="loadedRun">The run (with its pipeline) the caller read earlier in the same locked pass, or
+    /// null to read it here.</param>
     private async Task AdvanceToNextStageCoreAsync(
-        int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct)
+        int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct, PipelineRun? loadedRun = null)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(pipelineRunId, ct).ConfigureAwait(false);
+        if (await MustWaitForCancelledTaskToStopAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
+
+        var run = loadedRun ?? await repo.GetPipelineRunWithPipelineAsync(pipelineRunId, ct).ConfigureAwait(false);
         if (run?.Pipeline is null) return;
 
         var definition = definitions.Parse(run);
@@ -490,8 +567,7 @@ public sealed class PipelineRunScheduler(
 
         // A360-15: the run was loaded WITH its pipeline three lines above, so asking the database which
         // pipeline this run belongs to was a round trip for a value already in hand.
-        var organizationId = await repo
-            .GetPipelineOrganizationIdAsync(run.Pipeline.Id, ct).ConfigureAwait(false);
+        var organizationId = await OrganizationOfAsync(run, ct).ConfigureAwait(false);
 
         // Loop: CreateTasksForNextStageAsync may cancel stages (condition=false), which unblocks
         // downstream stages. Keep re-evaluating until either a task is dispatched or no pending
@@ -516,7 +592,7 @@ public sealed class PipelineRunScheduler(
                 return;
             }
 
-            var hadCancelled = await planner.CreateTasksForNextStageAsync(pipelineRunId, definition, resolution.Resolved, pendingSteps, organizationId, resolution.SecretKeys, launcher, ct).ConfigureAwait(false);
+            var hadCancelled = await planner.CreateTasksForNextStageAsync(pipelineRunId, definition, resolution.Resolved, pendingSteps, organizationId, resolution.SecretKeys, launcher, ct, run.Pipeline.ProjectId, run).ConfigureAwait(false);
             if (!hadCancelled) return;
         }
     }
@@ -525,20 +601,22 @@ public sealed class PipelineRunScheduler(
     private async Task CompleteRunWithNothingPendingAsync(PipelineRun run, PipelineYamlDefinition definition, CancellationToken ct)
     {
         var pipelineRunId = run.Id;
-        var continuableFailures =
-            await repo.GetContinuableFailedStepsInRunAsync(pipelineRunId, ct).ConfigureAwait(false) ?? [];
+        var failures = await repo.GetRunFailuresAsync(pipelineRunId, ct).ConfigureAwait(false);
+        var continuableFailures = failures.Continuable;
         // A step that only went on because of "run to end" fails the run all the same: the
         // mode tests everything, it never turns a failure into a Partial or a Success.
-        var blockingFailure = await repo.HasAnyFailedStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false)
-            || continuableFailures.Any(step => step.ContinueOnErrorForced)
-            || await repo.HasFailedArtifactCollectionAsync(pipelineRunId, ct).ConfigureAwait(false);
+        var blockingFailure = failures.HasBlocking || continuableFailures.Any(step => step.ContinueOnErrorForced);
+        // Read once, handed to the completion below: the terminal status is checked against the same fact,
+        // and reading it again there was a second identical query of the same run in the same pass.
+        bool? artifactCollectionFailed = blockingFailure ? null : await repo.HasFailedArtifactCollectionAsync(pipelineRunId, ct).ConfigureAwait(false);
+        blockingFailure |= artifactCollectionFailed == true;
         var finalStatus = DecideFinalStatus(
             cancelled: HasCancellationRequest(run.AdditionalVariablesJson),
             blockingFailure: blockingFailure,
             swallowedFailure: HasNonAdvisoryFailure(continuableFailures, AdvisoryStepKeys(definition)),
             rolledBack: blockingFailure && await WasRolledBackAsync(pipelineRunId, definition, ct).ConfigureAwait(false),
             rejected: !blockingFailure && await WasRejectedAsync(pipelineRunId, definition, ct).ConfigureAwait(false));
-        await finalizer.CompleteRunAsync(pipelineRunId, finalStatus, ct).ConfigureAwait(false);
+        await finalizer.CompleteRunAsync(pipelineRunId, finalStatus, ct, artifactCollectionFailed).ConfigureAwait(false);
         if (finalStatus == PipelineStatus.Success)
             await pipelineHub.Clients.Groups(HubGroups.PipelineRunUpdates(pipelineRunId, run.Pipeline!.Id)).SendAsync("PipelineRunCompleted", pipelineRunId, PipelineStatus.Success, ct).ConfigureAwait(false);
     }
@@ -641,10 +719,10 @@ public sealed class PipelineRunScheduler(
     /// <returns><c>true</c> if an artifact-collection task was dispatched (the caller must then wait for it
     /// before advancing, S-TECH-ARCR) or the run was failed because its producer is unavailable (BACK-019);
     /// <c>false</c> if the stage has no artifacts or no step that produced them.</returns>
-    private async Task<bool> DispatchPostStageArtifactCollectionAsync(int runId, string stageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    private async Task<bool> DispatchPostStageArtifactCollectionAsync(PipelineRun? run, string stageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         if (run?.Pipeline is null) return false;
+        var runId = run.Id;
 
         var definition = definitions.Parse(run);
         if (definition is null) return false;
@@ -652,7 +730,7 @@ public sealed class PipelineRunScheduler(
         var stageDef = YamlParsingHelper.FlattenJobs(definition).FirstOrDefault(s => s.Name == stageName);
         if (stageDef is null || stageDef.Artifacts.Count == 0) return false;
 
-        var organizationId = await repo.GetPipelineOrganizationIdAsync(run.Pipeline.Id, ct).ConfigureAwait(false);
+        var organizationId = await OrganizationOfAsync(run, ct).ConfigureAwait(false);
         var producerServerId = await repo.GetStageProducerServerIdAsync(runId, stageName, ct).ConfigureAwait(false);
         if (producerServerId is null) return false;
         var server = await repo.FindOnlineServerByIdAsync(producerServerId.Value, ct: ct).ConfigureAwait(false);
@@ -739,6 +817,17 @@ public sealed class PipelineRunScheduler(
                 PipelineProblemCodes.ArtifactProducerUnavailable, reason,
                 ("stage", stageDef.Name), ("server", producerServerId)),
             launcher, ct).ConfigureAwait(false);
+    }
+
+    // The organization of the run's pipeline. A pipeline owned by a project already carries it on that project
+    // (GetPipelineRunWithPipelineAsync includes it); only a pipeline owned through an environment or a project
+    // server, or a run handed over without its pipeline, asks the repository (two round trips for the owner
+    // chain and the organization).
+    private async Task<int?> OrganizationOfAsync(PipelineRun run, CancellationToken ct)
+    {
+        if (run.Pipeline is { ProjectId: not null, Project: { } project }) return project.OrganizationId;
+        var pipelineId = run.Pipeline?.Id ?? await repo.GetPipelineIdForRunAsync(run.Id, ct).ConfigureAwait(false);
+        return pipelineId is null ? null : await repo.GetPipelineOrganizationIdAsync(pipelineId.Value, ct).ConfigureAwait(false);
     }
 
     // --- Variable resolution (delegated to the injected IPipelineVariableResolver) ---

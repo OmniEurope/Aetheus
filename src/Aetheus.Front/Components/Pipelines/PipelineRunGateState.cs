@@ -7,6 +7,11 @@ internal sealed class PipelineRunGateState
     public AnalysisRunGateDto? Result { get; private set; }
     public bool HasResult => Result is not null;
     public IReadOnlyList<int> FailedRunIds { get; private set; } = [];
+
+    /// <summary>R-8: the failed runs as a person reads them.</summary>
+    public IEnumerable<int> FailedRunNumbers => FailedRunIds.Select(id => _runNumbers[id]);
+
+    private Dictionary<int, int> _runNumbers = [];
     public bool IsIncomplete => FailedRunIds.Count > 0;
 
     /// <summary>The runs of the tree whose analysis the gate merges; the Gate tab pages through
@@ -28,6 +33,7 @@ internal sealed class PipelineRunGateState
         CancellationToken ct = default)
     {
         var runs = childRuns.Append(rootRun).DistinctBy(run => run.Id).ToList();
+        _runNumbers = runs.ToDictionary(run => run.Id, run => run.BuildNumber);
         var loads = await Task.WhenAll(runs.Select(run => LoadOneAsync(api, run, pageCache, ct)));
         FailedRunIds = loads.Where(load => load.Failed).Select(load => load.RunId).Order().ToList();
         var gates = loads.Where(load => load.Gate is not null && HasEvidence(load.Gate)).ToList();
@@ -143,6 +149,7 @@ internal sealed class PipelineRunGateState
             // Merge grades domain by domain to match the backend's run-tree grading.
             Grade = grades.Count == 0 ? null : AnalysisGradeMerge.MergeRuns(grades, rootRunId),
             MissingProducers = gates.SelectMany(gate => gate.MissingProducers).Distinct().ToList(),
+            ErrorCauses = gates.SelectMany(gate => gate.ErrorCauses).Distinct().ToList(),
             Reports = reports,
             Findings = findings,
             Violations = gates.SelectMany(gate => gate.Violations)

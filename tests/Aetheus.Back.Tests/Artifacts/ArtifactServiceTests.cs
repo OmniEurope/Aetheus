@@ -30,6 +30,7 @@ public class ArtifactServiceTests
             _retentionMock,
             config,
             NullLogger<ArtifactService>.Instance,
+            LeaderLeaseDouble.Leader(),
             _transactionMock);
     }
 

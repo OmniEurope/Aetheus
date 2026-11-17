@@ -7,11 +7,12 @@ internal static class HostUrlExtensions
     {
         // Configured value wins - deployments should set Aetheus:PublicApiBaseUrl in the
         // backend appsettings to the canonical API URL (e.g. https://aetheus-api.example.com).
-        var configured = config["Aetheus:PublicApiBaseUrl"];
+        var configured = config[Aetheus.Back.Configuration.StartupSecrets.PublicApiBaseUrlKey];
         if (!string.IsNullOrWhiteSpace(configured))
             return configured.TrimEnd('/');
 
-        // Dev fallback only: use the incoming request host.
+        // Development only: outside Development the host refuses to start without the configured value
+        // (StartupSecrets), so the request host, which the client controls, is never used there.
         return $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
     }
 }

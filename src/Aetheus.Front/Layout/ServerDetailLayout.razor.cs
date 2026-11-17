@@ -25,6 +25,7 @@ public partial class ServerDetailLayout : IDisposable
     {
         Loader.OnChanged += OnLoaderChanged;
         Nav.LocationChanged += OnLocationChanged;
+        Breadcrumb.OnChanged += OnBreadcrumbChanged;
         // MainLayout loads permissions in parallel with route activation, so a section page can
         // mount BEFORE Permissions.IsLoaded - capturing _canWrite=false would strand the
         // Contact/Update/Edit/Delete buttons as permanently disabled. Subscribe so they
@@ -49,6 +50,20 @@ public partial class ServerDetailLayout : IDisposable
     {
         ReassertBreadcrumb();
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// OE's trail service resets the trail to the route fallback (server crumb loading) on a path change, and its
+    /// handler can run after this layout has mounted and named the server: a page that redirects from another
+    /// layout to a server section while the loader already holds the server (the old /servers/{id}/updates address)
+    /// mounts this layout inside the navigation, and the reset then lands on top of the name. The layout named the
+    /// server once and would never do it again, so the crumb stayed a skeleton. A trail whose server crumb is still
+    /// loading while the loader holds the server is named again.
+    /// </summary>
+    private void OnBreadcrumbChanged()
+    {
+        if (Loader.Server is not null && Breadcrumb.Items is [_, { IsLoading: true }, ..])
+            ReassertBreadcrumb();
     }
 
     /// <summary>Where the server stands, for OE's detail frame.</summary>
@@ -89,6 +104,7 @@ public partial class ServerDetailLayout : IDisposable
             "logs" => "receipt_long",
             "mail" => "mail",
             "updates" => "system_update",
+            "quality" => "shield",
             _ => "dns",
         };
     }
@@ -258,6 +274,7 @@ public partial class ServerDetailLayout : IDisposable
     {
         Loader.OnChanged -= OnLoaderChanged;
         Nav.LocationChanged -= OnLocationChanged;
+        Breadcrumb.OnChanged -= OnBreadcrumbChanged;
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
     }
 }

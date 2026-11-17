@@ -2,8 +2,11 @@
 namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>The versioned files a production deployment renders with the project's variables: the text of the environment
-/// sample (null when the branch holds none) and of each Apache template.</summary>
-internal sealed record ProductionTemplates(string? EnvSample, IReadOnlyList<string> ApacheTemplates);
+/// sample (null when the branch holds none) and of each Apache template. <c>Complete</c> is false when a listing or a file
+/// of those could not be read (R-7): their absence is then no proof that the branch holds none, and the setup must not go on
+/// as if it held none.</summary>
+internal sealed record ProductionTemplates(
+    string? EnvSample, IReadOnlyList<string> ApacheTemplates, bool Complete = true, IReadOnlyList<string>? ApachePaths = null);
 
 /// <summary>
 /// Recette R-66 and R-68: the variables the production setup creates are not only the ones the Compose file reads. The

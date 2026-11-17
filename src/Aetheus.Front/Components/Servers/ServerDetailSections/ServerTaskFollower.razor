@@ -3,20 +3,34 @@
 @implements IDisposable
 
 @* Recette R3-37: what became of the task a server page just launched, in place of a lone "Task created"
-   toast: waiting, running, done or failed with the cause, and a link to the task itself. *@
+   toast: waiting, running, done or failed with the cause, and a link to the task itself.
+   Recette R-19: ONE block per zone, never one per task. While work is in progress it carries the indeterminate loader (AetheusLoader) and
+   names the task when it is alone, or says "N tasks running" when several run; a one-off action veils nothing. *@
 @if (_state != ServerTaskFollowState.Idle)
 {
+    var running = RunningCount;
     <OmniAlert Severity="@Severity" Class="server-task-follower" aria-live="polite">
         <Icon><OmniIcon Name="@Icon" /></Icon>
         <ChildContent>
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
-                <OmniText Element="OmniTextElement.Strong">@_title</OmniText>
-                <OmniText Element="OmniTextElement.Span">@L[StatusKey]</OmniText>
+                @if (Progressing)
+                {
+                    <AetheusLoader Size="OmniControlSize.Small" Centered="false" Class="server-task-progress" />
+                }
+                @if (running > 1)
+                {
+                    <OmniText Element="OmniTextElement.Strong" Class="server-task-count">@L["ServerTasksRunning", running]</OmniText>
+                }
+                else
+                {
+                    <OmniText Element="OmniTextElement.Strong">@_title</OmniText>
+                    <OmniText Element="OmniTextElement.Span">@L[StatusKey]</OmniText>
+                }
                 @if (_group is { } group)
                 {
                     <OmniText Element="OmniTextElement.Span" Class="server-task-group-progress">@L["ServerTaskGroupProgress", group.Finished, group.Count]</OmniText>
                 }
-                @if (_taskId is { } taskId)
+                @if (_taskId is { } taskId && running <= 1)
                 {
                     <OmniLink Href="@($"/tasks/{taskId}")">@L["ServerTaskOpen", taskId]</OmniLink>
                 }

@@ -11,6 +11,15 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     [SupplyParameterFromQuery(Name = "ref")] public string? FileRef { get; set; }
     [SupplyParameterFromQuery(Name = "path")] public string? FilePath { get; set; }
     [SupplyParameterFromQuery(Name = "line")] public int? FileLine { get; set; }
+
+    /// <summary>R-31: where the back button leads when the page was opened from another one (the setup
+    /// of a pipeline, the project's checklist); validated as a local path, history otherwise.</summary>
+    [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
+
+    /// <summary>R-31: the commands that send a local project to this (empty) repository; null when it has no address.</summary>
+    private string? PushCommands => string.IsNullOrEmpty(_repo?.CloneUrl)
+        ? null
+        : $"git remote add origin {_repo.CloneUrl}\ngit push -u origin {(string.IsNullOrWhiteSpace(_repo.DefaultBranch) ? "main" : _repo.DefaultBranch)}";
     [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -291,11 +300,11 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     }
     private async Task ShowCreateBranchDialog()
     {
-        if (await Actions.CreateBranchAsync(Id)) await ReloadBranchesAsync();
+        if (await Actions.CreateBranchAsync(Id)) await GitRepositoryGrids.RefreshOrLoadAsync(_grids.Branches, LoadBranches);
     }
     private async Task DeleteBranch(GitLightBranchDto branch)
     {
-        if (await Actions.DeleteBranchAsync(Id, branch)) await ReloadBranchesAsync();
+        if (await Actions.DeleteBranchAsync(Id, branch)) await GitRepositoryGrids.HideOrLoadAsync(_grids.Branches, branch, LoadBranches);
     }
     // ── Tags ─────────────────────────────────────────────────────────
     private Task LoadTags() => LoadTagsPageAsync(1, 25);
@@ -313,11 +322,11 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     }
     private async Task ShowCreateTagDialog()
     {
-        if (await Actions.CreateTagAsync(Id)) await ReloadTagsAsync();
+        if (await Actions.CreateTagAsync(Id)) await GitRepositoryGrids.RefreshOrLoadAsync(_grids.Tags, LoadTags);
     }
     private async Task DeleteTag(GitLightTagDto tag)
     {
-        if (await Actions.DeleteTagAsync(Id, tag)) await ReloadTagsAsync();
+        if (await Actions.DeleteTagAsync(Id, tag)) await GitRepositoryGrids.HideOrLoadAsync(_grids.Tags, tag, LoadTags);
     }
     // ── File browser ─────────────────────────────────────────────────
     // The README is rendered to a MarkupString: the pipeline that builds it keeps raw HTML out.
@@ -461,15 +470,15 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     }
     private async Task ShowCreatePrDialog()
     {
-        if (await Actions.CreatePullRequestAsync(Id)) await ReloadPrsAsync();
+        if (await Actions.CreatePullRequestAsync(Id)) await GitRepositoryGrids.RefreshOrLoadAsync(_grids.PullRequests, LoadPrs);
     }
     private async Task MergePr(InternalPullRequestDto pr)
     {
-        if (await Actions.MergePullRequestAsync(Id, pr)) await ReloadPrsAsync();
+        if (await Actions.MergePullRequestAsync(Id, pr)) await GitRepositoryGrids.RefreshOrLoadAsync(_grids.PullRequests, LoadPrs);
     }
     private async Task ClosePr(InternalPullRequestDto pr)
     {
-        if (await Actions.ClosePullRequestAsync(Id, pr)) await ReloadPrsAsync();
+        if (await Actions.ClosePullRequestAsync(Id, pr)) await GitRepositoryGrids.RefreshOrLoadAsync(_grids.PullRequests, LoadPrs);
     }
     // ── Commit Graph ───────────────────────────────────────────────
     private async Task LoadGraph()
@@ -512,17 +521,17 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     }
     private async Task ShowAddProtectionRuleDialog()
     {
-        if (await Actions.AddProtectionRuleAsync(Id)) await ReloadProtectionRulesAsync();
+        if (await Actions.AddProtectionRuleAsync(Id)) await GitRepositoryGrids.RefreshOrLoadAsync(_grids.Protection, LoadProtectionRules);
     }
     private async Task DeleteProtectionRule(BranchProtectionRuleDto rule)
     {
-        if (await Actions.DeleteProtectionRuleAsync(Id, rule)) await ReloadProtectionRulesAsync();
+        if (await Actions.DeleteProtectionRuleAsync(Id, rule)) await GitRepositoryGrids.HideOrLoadAsync(_grids.Protection, rule, LoadProtectionRules);
     }
     private async Task UpdateProtectionRule(BranchProtectionRuleDto rule, bool? preventDeletion = null, bool? preventForcePush = null, BranchProtectionLevel? protectionLevel = null)
     {
         if (await Actions.UpdateProtectionRuleAsync(
             Id, rule, preventDeletion, preventForcePush, protectionLevel))
-            await ReloadProtectionRulesAsync();
+            await GitRepositoryGrids.RefreshOrLoadAsync(_grids.Protection, LoadProtectionRules);
     }
     private bool IsBranchProtected(string branchName)
     {

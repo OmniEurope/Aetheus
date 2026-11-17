@@ -180,7 +180,11 @@ public class ServersController(
         // read between the request's arrival and the reply does not bias the estimate, only the
         // interval it excludes from the round trip.
         var receivedAt = timeProvider.GetUtcNow().UtcDateTime;
-        await heartbeats.ProcessHeartbeatAsync(id, heartbeat, ct);
+        // Presence, metrics and inventories are rebuilt by the next beat: their commit need not wait for the host's
+        // disk (R-1, 9 of the 133 slow requests of the 2026-11-03 export were heartbeats). The agent's token roll
+        // below stays a durable write: the agent holds the new token once answered.
+        using (RelaxedCommitDurability.Begin())
+            await heartbeats.ProcessHeartbeatAsync(id, heartbeat, ct);
 
         // Roll the agent's token while it's authenticated and healthy so a
         // long-lived agent never hits the hard 365-day expiry wall. Best-effort:

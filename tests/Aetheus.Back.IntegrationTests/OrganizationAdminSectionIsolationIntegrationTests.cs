@@ -15,8 +15,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// everything of B is refused (403 or 404), by id guessing too; it never grants the site Admin role nor makes
 /// a role of every organization, nor changes a built-in role; its roles are A's. The site Admin is unchanged.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class OrganizationAdminSectionIsolationIntegrationTests(PostgresFixture fixture)
+public sealed class OrganizationAdminSectionIsolationIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static readonly HttpStatusCode[] Refused = [HttpStatusCode.Forbidden, HttpStatusCode.NotFound];
@@ -302,6 +301,93 @@ public sealed class OrganizationAdminSectionIsolationIntegrationTests(PostgresFi
         var usersOfB = await ReadAsync<PaginatedResult<UserDto>>(admin, $"/api/users?page=1&pageSize=200&organizationId={s.B.OrganizationId}");
         Assert.Equal([s.MemberOfB.Id], usersOfB.Items.Select(user => user.Id));
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/mail-templates?organizationId={s.B.OrganizationId}", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task OrganizationAdmin_SeesNoMembersEmail_NorGuessesItBySearchSortOrFilter()
+    {
+        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        var s = await SeedAsync(factory, "eml");
+        int readerRole;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            readerRole = await db.Roles.Where(role => role.OrganizationId == null && role.Name == RoleNames.Reader)
+                .Select(role => role.Id).SingleAsync(Ct);
+        }
+        using var client = await IntegrationUsers.LoginClientAsync(factory, s.AdminOfA.Username);
+        var created = await client.PostAsJsonAsync("/api/roles",
+            new CreateRoleRequest { Name = $"eml-a-{Guid.NewGuid():N}"[..30], OrganizationId = s.A.OrganizationId },
+            IntegrationJsonOptions.Default, Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var roleOfA = (await created.Content.ReadFromJsonAsync<RoleDto>(IntegrationJsonOptions.Default, Ct))!.Id;
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync($"/api/roles/{roleOfA}/users",
+            new AddUserToRoleRequest { UserId = s.MemberOfA.Id, OrganizationId = s.A.OrganizationId }, IntegrationJsonOptions.Default, Ct)).StatusCode);
+
+        // Every seeded address ends with "@rbac.test" and no username holds "rbac": a match on it is a match on the e-mail.
+        const string AddressPart = "rbac.test";
+        const string EmailFilter = "&Filters[0].Field=email&Filters[0].Operator=StartsWith&Filters[0].Value=no-such-address";
+        var holderLists = new[] { $"/api/roles/{roleOfA}/users", $"/api/roles/{readerRole}/users" };
+        foreach (var list in holderLists)
+        {
+            var holders = await ReadAsync<PaginatedResult<RoleUserDto>>(client, $"{list}?page=1&pageSize=200");
+            Assert.Contains(holders.Items, user => user.UserId == s.MemberOfA.Id);
+            Assert.All(holders.Items, user => Assert.Null(user.Email));
+            Assert.DoesNotContain((await ReadAsync<PaginatedResult<RoleUserDto>>(client, $"{list}?page=1&pageSize=200&search={AddressPart}")).Items,
+                user => user.UserId == s.MemberOfA.Id);
+            // A filter on the e-mail is ignored, not applied: the member stays listed.
+            Assert.Contains((await ReadAsync<PaginatedResult<RoleUserDto>>(client, $"{list}?page=1&pageSize=200{EmailFilter}")).Items,
+                user => user.UserId == s.MemberOfA.Id);
+            Assert.Contains((await ReadAsync<PaginatedResult<RoleUserDto>>(client, $"{list}?page=1&pageSize=200&sortBy=email")).Items,
+                user => user.UserId == s.MemberOfA.Id);
+        }
+
+        var available = await ReadAsync<PaginatedResult<RoleUserDto>>(client, $"/api/roles/{roleOfA}/available-users?page=1&pageSize=200");
+        Assert.Contains(available.Items, user => user.UserId == s.MemberOfA.Id);
+        Assert.All(available.Items, user => Assert.Null(user.Email));
+        Assert.DoesNotContain((await ReadAsync<PaginatedResult<RoleUserDto>>(client,
+            $"/api/roles/{roleOfA}/available-users?page=1&pageSize=200&search={AddressPart}")).Items, user => user.UserId == s.MemberOfA.Id);
+
+        // The users list: the same rules for its search, its e-mail filter and its sort.
+        Assert.DoesNotContain((await ReadAsync<PaginatedResult<UserDto>>(client, $"/api/users?page=1&pageSize=200&search={AddressPart}")).Items,
+            user => user.Id == s.MemberOfA.Id);
+        Assert.Contains((await ReadAsync<PaginatedResult<UserDto>>(client, $"/api/users?page=1&pageSize=200{EmailFilter}")).Items,
+            user => user.Id == s.MemberOfA.Id);
+        var sorted = await ReadAsync<PaginatedResult<UserDto>>(client, "/api/users?page=1&pageSize=200&sortBy=email");
+        Assert.Contains(sorted.Items, user => user.Id == s.MemberOfA.Id);
+        Assert.All(sorted.Items, user => Assert.Null(user.Email));
+
+        // The site Admin keeps the addresses, and finds the member by its address.
+        using var admin = await IntegrationUsers.AdminClientAsync(factory);
+        var forAdmin = await ReadAsync<PaginatedResult<RoleUserDto>>(admin, $"/api/roles/{roleOfA}/users?page=1&pageSize=200&search={AddressPart}");
+        Assert.Contains(forAdmin.Items, user => user.UserId == s.MemberOfA.Id && user.Email is not null);
+        Assert.Contains((await ReadAsync<PaginatedResult<UserDto>>(admin,
+            $"/api/users?page=1&pageSize=200&organizationId={s.A.OrganizationId}&search={AddressPart}")).Items,
+            user => user.Id == s.MemberOfA.Id && user.Email is not null);
+    }
+
+    [Fact]
+    public async Task MailTemplates_TheTestMail_IsRefusedForAnotherOrganization_AndForAPlatformOnlyKind()
+    {
+        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        var s = await SeedAsync(factory, "mtt");
+        using var client = await IntegrationUsers.LoginClientAsync(factory, s.AdminOfA.Username);
+        var kind = MailTemplateKind.NotificationEvent;
+        var draft = new SaveMailTemplateRequest { Subject = "Test {{Event}}", Body = "<p>{{Summary}}</p>" };
+
+        // B's version, and the platform's: refused.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(
+            $"/api/mail-templates/{kind}/en/test?organizationId={s.B.OrganizationId}", draft, IntegrationJsonOptions.Default, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(
+            $"/api/mail-templates/{kind}/en/test", draft, IntegrationJsonOptions.Default, Ct)).StatusCode);
+        // A kind no organization owns: refused for its organization too, as reading or saving it is. The draft
+        // names no variable, so only the kind check can refuse it.
+        var plain = new SaveMailTemplateRequest { Subject = "Test", Body = "<p>Test</p>" };
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            $"/api/mail-templates/{MailTemplateKind.DailyRecap}/en/test?organizationId={s.A.OrganizationId}", plain, IntegrationJsonOptions.Default, Ct)).StatusCode);
+        // Its own organization's kind: accepted (the outcome is the sender's).
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
+            $"/api/mail-templates/{kind}/en/test?organizationId={s.A.OrganizationId}", draft, IntegrationJsonOptions.Default, Ct)).StatusCode);
     }
 
     private static async Task<T> ReadAsync<T>(HttpClient client, string url)

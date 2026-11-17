@@ -52,7 +52,7 @@ public sealed class PersonalAccessTokensController(IPersonalAccessTokenService s
     /// a token must never be able to create or revoke tokens.</summary>
     private bool RejectPatPrincipal(out ActionResult forbid)
     {
-        if (User.HasClaim(c => c.Type == PatConstants.ScopeClaimType))
+        if (PatPrincipalCheck.IsPatPrincipal(User))
         {
             forbid = StatusCode(StatusCodes.Status403Forbidden,
                 new { error = "Personal access tokens cannot manage tokens; use an interactive session." });

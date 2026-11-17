@@ -64,6 +64,26 @@ internal sealed class ProjectReleaseNumberRepository(AppDbContext db, TimeProvid
         return run is null ? null : new ReleaseNumberAssignment(run.ReleaseSeries, run.ReleaseNumber!.Value);
     }
 
+    /// <summary>R-33: the number <see cref="AllocateNextAsync"/> would hand out now, without taking it, or null when the project does not exist.</summary>
+    public async Task<int?> PeekNextAsync(int projectId, string series, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(series);
+        var projectExists = await db.Projects.AsNoTracking().AnyAsync(project => project.Id == projectId, ct).ConfigureAwait(false);
+        if (!projectExists) return null;
+        var start = await db.ProjectReleaseSeries.AsNoTracking()
+            .Where(row => row.ProjectId == projectId && row.Series == series)
+            .Select(row => (int?)row.NextNumber)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return await FirstFreeNumberAsync(projectId, series, start ?? 0, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>R-33: a release of the project already carries this version, whatever its status.</summary>
+    public Task<bool> ReleaseVersionExistsAsync(int projectId, string version, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        return db.Releases.AsNoTracking().AnyAsync(release => release.ProjectId == projectId && release.Version == version, ct);
+    }
+
     public async Task<List<ProjectReleaseSeriesDto>?> GetSeriesAsync(int projectId, CancellationToken ct)
     {
         var projectExists = await db.Projects.AsNoTracking().AnyAsync(project => project.Id == projectId, ct).ConfigureAwait(false);
@@ -180,4 +200,7 @@ internal sealed class ProjectReleaseNumberRepository(AppDbContext db, TimeProvid
 
     Task<int?> IPipelineReleaseNumberRepository.GetLatestReleaseNumberAsync(int projectId, string series, CancellationToken ct)
         => GetLatestAsync(projectId, series, ct);
+
+    Task<int?> IPipelineReleaseNumberRepository.PeekNextReleaseNumberAsync(int projectId, string series, CancellationToken ct)
+        => PeekNextAsync(projectId, series, ct);
 }

@@ -69,6 +69,14 @@ public sealed class BadgeIconRuleRenderTests : BunitContext
     }
 
     [Fact]
+    public void SeverityIcon_OfTheDangerTone_IsAShieldCrossedOut_NotABareCross()
+    {
+        Assert.Equal(OmniIconName.ShieldX, BadgeIcon.SeverityNameFor(OmniTone.Danger));
+        Assert.Equal(OmniIconName.Close, BadgeIcon.NameFor(OmniTone.Danger));
+        Assert.Equal(BadgeIcon.StateNameFor(OmniTone.Warning), BadgeIcon.SeverityNameFor(OmniTone.Warning));
+    }
+
+    [Fact]
     public void NumberBadge_HasNoIcon()
     {
         var cut = Render<NumberBadge>(p => p

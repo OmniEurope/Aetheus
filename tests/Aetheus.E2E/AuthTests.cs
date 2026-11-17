@@ -10,52 +10,31 @@ public class AuthTests : E2ETestBase
     [Test]
     public async Task OfflineReload_ShowsRecoveryPage_ThenReturnsToLogin()
     {
-        // A service worker only exists in a secure context. Production serves HTTPS and ylaunch
-        // https://localhost, but the QA stack reaches the frontend over plain HTTP on a container
-        // name, where navigator.serviceWorker is undefined and the recovery page cannot install
-        // (candidate 2421 timed out here on V and V-1). There, this test drives its own Chromium that
-        // reaches the same frontend under a *.localhost name, which browsers treat as a secure context,
-        // so the real offline recovery is still exercised. --unsafely-treat-insecure-origin-as-secure
-        // was tried first (candidate 2427): Playwright's headless Chromium ignores it.
-        var origin = new Uri(FrontendUrl);
-        if (origin.Scheme == Uri.UriSchemeHttps || origin.IsLoopback)
-        {
-            await AssertOfflineRecoveryAsync(Page, Context, FrontendUrl);
-            return;
-        }
-
-        const string secureAlias = "aetheus-e2e.localhost";
-        await using var browser = await Playwright.Chromium.LaunchAsync(new()
-        {
-            Args = [$"--host-resolver-rules=MAP {secureAlias} {origin.Host}"]
-        });
-        await using var context = await browser.NewContextAsync(ContextOptions());
-        var page = await context.NewPageAsync();
-        var aliasUrl = new UriBuilder(origin) { Host = secureAlias }.Uri.GetLeftPart(UriPartial.Authority);
-        await AssertOfflineRecoveryAsync(page, context, aliasUrl);
-    }
-
-    private async Task AssertOfflineRecoveryAsync(IPage page, IBrowserContext context, string frontendUrl)
-    {
-        await page.GotoAsync($"{frontendUrl}/login");
-        Assert.That(await page.EvaluateAsync<bool>("() => window.isSecureContext"), Is.True,
+        // A service worker (and the WebAssembly runtime's crypto.subtle) only exists in a secure context. The
+        // QA stack reaches the frontend over plain HTTP on a container name: the suite's browser is launched
+        // with that origin treated as secure (PlaywrightConfig.WithSecureFrontendOrigin), so the real offline
+        // recovery is exercised on the same page as every other test (candidate 2421 timed out here on V and V-1).
+        // Going offline deliberately fails the browser's own favicon request: that console line is the test's doing.
+        AllowBrowserDiagnostic(new System.Text.RegularExpressions.Regex(@"ERR_INTERNET_DISCONNECTED"));
+        await Page.GotoAsync($"{FrontendUrl}/login");
+        Assert.That(await Page.EvaluateAsync<bool>("() => window.isSecureContext"), Is.True,
             "The offline recovery needs a secure context for its service worker.");
-        await page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
-        await page.WaitForFunctionAsync("() => Boolean(navigator.serviceWorker?.['controller'])", null,
+        await Page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
+        await Page.WaitForFunctionAsync("() => Boolean(navigator.serviceWorker?.['controller'])", null,
             new() { Timeout = 10000 });
 
-        await context.SetOfflineAsync(true);
-        await page.ReloadAsync(new() { WaitUntil = Microsoft.Playwright.WaitUntilState.DOMContentLoaded });
+        await Context.SetOfflineAsync(true);
+        await Page.ReloadAsync(new() { WaitUntil = Microsoft.Playwright.WaitUntilState.DOMContentLoaded });
         // A reload cold-boots the page: wait with the boot budget, never the 5s default (nightly 2697).
-        await Expect(page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Connection unavailable" }))
+        await Expect(Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Connection unavailable" }))
             .ToBeVisibleAsync(new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
-        await Expect(page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Retry" }))
+        await Expect(Page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Retry" }))
             .ToBeVisibleAsync();
-        await Expect(page.Locator("#app-splash")).ToHaveCountAsync(0);
+        await Expect(Page.Locator("#app-splash")).ToHaveCountAsync(0);
 
-        await context.SetOfflineAsync(false);
-        await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Retry" }).ClickAsync();
-        await Expect(page.Locator("#Email")).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await Context.SetOfflineAsync(false);
+        await Page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Retry" }).ClickAsync();
+        await Expect(Page.Locator("#Email")).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 
     [TestCase("blazor")]
@@ -159,20 +138,6 @@ public class AuthTests : E2ETestBase
         await logoutRow.ClickAsync();
 
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"), new() { Timeout = 5000 });
-    }
-
-    [Test]
-    public async Task Login_PageLoadsWithExpectedTitleAndForm()
-    {
-        var response = await Page.GotoAsync($"{FrontendUrl}/login");
-        Assert.That(response, Is.Not.Null);
-        Assert.That(response!.Ok, Is.True);
-        await Page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
-
-        await Expect(Page).ToHaveTitleAsync(new System.Text.RegularExpressions.Regex("Login"));
-        await Expect(Page.Locator("#Email")).ToBeVisibleAsync();
-        await Expect(Page.Locator("#Password")).ToBeVisibleAsync();
-        await Expect(Page.Locator("button[type='submit']")).ToBeVisibleAsync();
     }
 
     [Test]

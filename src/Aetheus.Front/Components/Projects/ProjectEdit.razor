@@ -14,7 +14,7 @@
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField For="oe-pages-projects-projectedit-1"><LabelContent>@L["Name"]</LabelContent><ChildContent>
                         <OmniTextBox @bind-Value="_model.Name" Id="oe-pages-projects-projectedit-1" />
                         <ValidationMessage For="@(() => _model.Name)" />
@@ -25,7 +25,7 @@
                 </OmniStack>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Gap="OmniSpacing.Large">
+                <OmniStack Gap="OmniSpacing.Small">
                     <OmniFormField For="oe-pages-projects-projectedit-3" Class="omni-u-w-100"><LabelContent>@L["RepositoryUrl"]</LabelContent><ChildContent>
                         <OmniTextBox @bind-Value="_model.RepositoryUrl"
                             Placeholder="@L["PlaceholderRepositoryUrl"]"

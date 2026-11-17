@@ -63,6 +63,9 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
         CancellationToken ct = default)
         => await _reports.GetFindingsByFingerprintsAsync(projectId, fingerprints, ct).ConfigureAwait(false);
 
+    public Task<HashSet<string>> GetFingerprintsOfEarlierReportsAsync(int runId, int reportId, CancellationToken ct = default)
+        => _reports.GetFingerprintsOfEarlierReportsAsync(runId, reportId, ct);
+
     public async Task AddReportAsync(AnalysisReport report, CancellationToken ct = default)
         => await _reports.AddReportAsync(report, ct).ConfigureAwait(false);
 
@@ -344,6 +347,7 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
                 report.PipelineRun == null ? null : report.PipelineRun.PipelineId,
                 report.PipelineRun == null ? null : report.PipelineRun.Pipeline.Name,
                 report.PipelineRunId,
+                report.PipelineRun == null ? null : report.PipelineRun.BuildNumber,
                 report.BranchName,
                 report.CommitHash,
                 report.Category,
@@ -361,7 +365,8 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
                 report.Evaluation == null ? 0 : report.Evaluation.WarningCount,
                 report.CompletedAt,
                 report.PipelineRun == null ? null : report.PipelineRun.RepositoryUrl,
-                null))
+                null,
+                report.ScannerKey))
             .ToListAsync(ct).ConfigureAwait(false);
         var repositoryIds = await PipelineRunRepositoryLinks
             .ResolveAsync(db, items.Select(item => item.RepositoryUrl), ct).ConfigureAwait(false);
@@ -430,6 +435,12 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
         DateTime sentAt,
         CancellationToken ct = default) =>
         _governance.MarkExpirationNotificationSentAsync(kind, id, sentAt, ct);
+
+    public Task<List<AnalysisDecisionExpired>> EndExpiredFindingDecisionsAsync(
+        DateTime now,
+        int take,
+        CancellationToken ct = default) =>
+        _governance.EndExpiredFindingDecisionsAsync(now, take, ct);
 
     public Task<List<AnalysisPolicy>> GetPoliciesAsync(int projectId, CancellationToken ct = default) =>
         _governance.GetPoliciesAsync(projectId, ct);

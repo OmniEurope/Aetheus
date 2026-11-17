@@ -22,6 +22,9 @@ public partial class PersonalAccessTokens
     private bool _loading = true;
     private bool _creating;
 
+    /// <summary>R-22: the creation form is folded by default; a validation error leaves it open, a created token folds it.</summary>
+    private bool _formExpanded;
+
     // The column header filters, each a real column filter of the endpoint.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private Func<string, string>? _scopeText;
@@ -125,8 +128,11 @@ public partial class PersonalAccessTokens
             _form.Name = string.Empty;
             _form.Scope = PatScope.ReadOnly;
             _form.ExpirationDays = 30;
+            _formExpanded = false;
             Toast.Success("PatCreated", "PatCreated");
-            await LoadAsync();
+            // R-10: the new token shows at once from the answer; the quiet read behind it confirms.
+            if (_grid is not null) await _grid.ShowRowAsync(created.Token);
+            else await LoadAsync();
         }
         finally
         {
@@ -152,7 +158,9 @@ public partial class PersonalAccessTokens
             if (status.Success)
             {
                 Toast.Success("PatRevoked", "PatRevoked");
-                await LoadAsync();
+                // The revocation answers no token: the list is read again behind the rows, quietly (no bar).
+                if (_grid is not null) await _grid.RestoreRowsAsync();
+                else await LoadAsync();
             }
             else
             {

@@ -73,9 +73,8 @@ public sealed class ServerPackageInventoryTests : BunitContext
         cut.Find("button.package-inventory-load").Click();
 
         cut.WaitForAssertion(() => Assert.True(cut.Instance.Busy));
-        var card = cut.Find(".server-package-inventory");
-        Assert.Contains("omni-busy", card.ClassList);
-        Assert.Equal("true", card.GetAttribute("aria-busy"));
+        Assert.NotNull(cut.Find(".server-package-inventory"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Contains("/tasks/400", cut.Markup, StringComparison.Ordinal);
 
         await CompleteAsync(400, TaskExecutionStatus.Success);

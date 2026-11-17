@@ -115,7 +115,7 @@ public static class RouteAccessPolicy
         // FRONT-022: a task's detail and live log (offered by every task list). The API checks Server
         // Read on the task's own server (GET api/tasks/{id}, api/logs/task/{id}); which server that is
         // is unknown before the load, so the route asks for Server Read somewhere and the API decides.
-        if (Matches(path, "tasks", out var taskTail) && int.TryParse(taskTail, out _))
+        if (Matches(path, "tasks", out var taskTail) && (int.TryParse(taskTail, out _) || Guid.TryParse(taskTail, out _)))
             return permissions.CanReadAny(ResourceType.Server);
 
         // FRONT-022: Supervision, offered by the menu to Project readers. Its summary
@@ -143,6 +143,7 @@ public static class RouteAccessPolicy
         || path.Equals("help", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("help/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("account/change-password", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("account/setup", StringComparison.OrdinalIgnoreCase)
         || path.Equals("not-found", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAdminPath(string path) =>

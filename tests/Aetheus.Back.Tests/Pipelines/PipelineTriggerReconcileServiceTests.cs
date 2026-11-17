@@ -4,7 +4,6 @@ using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 
@@ -17,6 +16,7 @@ public class PipelineTriggerReconcileServiceTests
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
     private readonly IPipelineRunService _runService = Substitute.For<IPipelineRunService>();
     private readonly IPipelineApprovalService _approvalService = Substitute.For<IPipelineApprovalService>();
+    private readonly RecordingLogger<PipelineTriggerReconcileService> _logger = new();
     private readonly PipelineTriggerReconcileService _sut;
 
     public PipelineTriggerReconcileServiceTests()
@@ -46,9 +46,10 @@ public class PipelineTriggerReconcileServiceTests
 
         _sut = new PipelineTriggerReconcileService(
             scopeFactory,
-            NullLogger<PipelineTriggerReconcileService>.Instance,
+            _logger,
             Options.Create(new BackgroundServicesOptions()),
-            TimeProvider.System);
+            TimeProvider.System,
+            leaderLease: LeaderLeaseDouble.Leader());
     }
 
     private static PipelineStepRun TriggerStep(int childRunId) => new()
@@ -195,6 +196,38 @@ public class PipelineTriggerReconcileServiceTests
 
         await _runService.Received(1).ReconcileRunAsync(220, Arg.Any<CancellationToken>());
         await _runService.DidNotReceive().FailStuckRunAsync(220, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Pass2_RunWithRecordedWait_IsRedrivenAndLoggedAsAWaitNotAWarning()
+    {
+        _repo.GetStalledSchedulableRunIdsAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns([220]);
+        _repo.GetPipelineRunWithPipelineAsync(220, Arg.Any<CancellationToken>())
+            .Returns(new PipelineRun { Id = 220, WaitingReason = "Stage 'deploy' waits for a free runner." });
+
+        await _sut.ReconcileAsync(CancellationToken.None);
+
+        await _runService.Received(1).ReconcileRunAsync(220, Arg.Any<CancellationToken>());
+        var entry = Assert.Single(_logger.Entries, e => e.Message.Contains("220"));
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Information, entry.Level);
+        Assert.Contains("Stage 'deploy' waits for a free runner.", entry.Message);
+    }
+
+    [Fact]
+    public async Task Pass2_RunWithoutRecordedWait_IsRedrivenAndWarned()
+    {
+        _repo.GetStalledSchedulableRunIdsAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns([221]);
+        _repo.GetPipelineRunWithPipelineAsync(221, Arg.Any<CancellationToken>())
+            .Returns(new PipelineRun { Id = 221, WaitingReason = null });
+
+        await _sut.ReconcileAsync(CancellationToken.None);
+
+        await _runService.Received(1).ReconcileRunAsync(221, Arg.Any<CancellationToken>());
+        var entry = Assert.Single(_logger.Entries, e => e.Message.Contains("221"));
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Warning, entry.Level);
+        Assert.Contains("no recorded wait", entry.Message);
     }
 
     [Fact]

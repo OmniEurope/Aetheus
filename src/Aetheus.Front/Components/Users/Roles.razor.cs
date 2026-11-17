@@ -125,19 +125,6 @@ public partial class Roles : IAsyncDisposable
         }
     }
 
-    private async Task RefreshSilentlyAsync()
-    {
-        _silentRefreshDepth++;
-        try
-        {
-            await LoadAsync();
-        }
-        finally
-        {
-            _silentRefreshDepth--;
-        }
-    }
-
     private static (string? SortBy, bool Descending) ResolveSort(GridLoadArgs args)
     {
         if (string.IsNullOrWhiteSpace(args.OrderBy)) return ("Name", false);
@@ -178,7 +165,9 @@ public partial class Roles : IAsyncDisposable
             var success = await Api.Auth.DeleteRoleAsync(role.Id);
             if (success)
             {
-                await RefreshSilentlyAsync();
+                // R-10: the role is out of the grid at once, the read behind it confirms.
+                if (_grid is not null) await _grid.HideRowAsync(role);
+                else await LoadAsync();
                 Toast.Success("Deleted", "Deleted");
             }
             else

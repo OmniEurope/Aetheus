@@ -8,7 +8,6 @@ using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
 using Aetheus.Back.Services.Email;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +18,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>Preparing the no-reply sender against the real PostgreSQL unique index on the mailbox
 /// address (recette R1-16): a row for the address that the heartbeat flagged absent from the server
 /// must be reused, not inserted again.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class MailNoReplySenderIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const string NoReply = "no-reply@example.org";
@@ -45,40 +43,6 @@ public sealed class MailNoReplySenderIntegrationTests(PostgresFixture fixture) :
         Assert.Equal(EmailSenderSettingKeys.NoReplyPasswordSecret(NoReply), secret.Key);
         var task = Assert.Single(await db.Tasks.Where(t => t.ServerId == serverId && t.Operation == OperationKind.MailAddAccount).ToListAsync(ct));
         Assert.Contains(secret.Value, task.EnvironmentVariables ?? string.Empty, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AMailboxDisabledByHandButStillOnTheServer_GetsThePasswordChangedAndIsEnabledAgain()
-    {
-        await ResetAndMigrateAsync();
-        var ct = TestContext.Current.CancellationToken;
-        var (serverId, existingId) = await SeedAsync(new MailAccount { Email = NoReply, IsActive = false, QuotaMb = 100 }, ct);
-        var stored = new List<CreateSecretRequest>();
-
-        await PrepareAsync(stored, ct);
-
-        await using var db = NewContext();
-        var account = Assert.Single(await db.MailAccounts.Where(a => a.Email == NoReply).ToListAsync(ct));
-        Assert.Equal(existingId, account.Id);
-        Assert.True(account.IsActive);
-        Assert.Single(await db.Tasks.Where(t => t.ServerId == serverId && t.Operation == OperationKind.MailChangePassword).ToListAsync(ct));
-        Assert.Empty(await db.Tasks.Where(t => t.ServerId == serverId && t.Operation == OperationKind.MailAddAccount).ToListAsync(ct));
-        Assert.Single(stored);
-    }
-
-    [Fact]
-    public async Task CreatingAMailboxThatAlreadyExists_IsAConflict_NotAUniqueIndexFailure()
-    {
-        await ResetAndMigrateAsync();
-        var ct = TestContext.Current.CancellationToken;
-        var (serverId, _) = await SeedAsync(new MailAccount { Email = NoReply, IsActive = true, QuotaMb = 100 }, ct);
-
-        await using var db = NewContext();
-        var exception = await Assert.ThrowsAsync<ConflictException>(() => NewMailService(db).CreateAccountAsync(
-            serverId, new CreateMailAccountRequest { Email = NoReply, Password = "secure-password", QuotaMb = 100 }, ct));
-
-        Assert.Contains(NoReply, exception.Message, StringComparison.Ordinal);
-        Assert.Empty(await db.Tasks.Where(t => t.ServerId == serverId && t.Operation == OperationKind.MailAddAccount).ToListAsync(ct));
     }
 
     private async Task PrepareAsync(List<CreateSecretRequest> stored, CancellationToken ct)

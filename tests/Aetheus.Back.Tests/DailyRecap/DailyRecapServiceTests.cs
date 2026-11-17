@@ -5,6 +5,7 @@ using Aetheus.Back.Components.DailyRecap;
 using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
 using Aetheus.Back.Services.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -70,7 +71,7 @@ public sealed class DailyRecapServiceTests : IDisposable
         var compatibility = Substitute.For<IAgentCompatibilityPolicy>();
         compatibility.Evaluate(Arg.Any<ServerDto>()).Returns(new AgentCompatibilityDto());
         var collector = new DailyRecapCollector(repo, compatibility, new ConfigurationBuilder().Build());
-        return new DailyRecapService(repo, collector, _sender, templates ?? NotificationMailKit.Templates(), Substitute.For<IAuditService>(), _clock,
+        return new DailyRecapService(repo, collector, new DailyRecapRecipientScope(repo, Substitute.For<IResourceAuthorizationService>()), _sender, templates ?? NotificationMailKit.Templates(), Substitute.For<IAuditService>(), _clock,
             configuration ?? new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Cors:Origins:0"] = "https://app.example.org" }).Build(),
             NullLogger<DailyRecapService>.Instance);
     }

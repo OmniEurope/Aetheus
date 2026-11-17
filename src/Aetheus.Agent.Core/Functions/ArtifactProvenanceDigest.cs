@@ -135,7 +135,8 @@ internal sealed partial class ArtifactProvenanceDigest(string root)
 
     /// <summary>One declared archive: a file name, a size that is a safe non-negative integer
     /// (<c>Number.isSafeInteger</c>) and a 64-character SHA-256, else the script's refusal.</summary>
-    private static JsonObject DeclaredArchive(JsonNode? archive)
+    // Returns JsonNode, not JsonObject: the typed JsonArray.Add<T> is reflection-based (IL2026 in the trimmed aetheus-fn).
+    private static JsonNode DeclaredArchive(JsonNode? archive)
     {
         if (archive is JsonObject entry
             && Text(entry["fileName"]) is { Length: > 0 } fileName

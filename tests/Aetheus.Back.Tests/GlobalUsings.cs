@@ -50,5 +50,6 @@ global using Aetheus.Shared.Components.TestManagement;
 global using Aetheus.Shared.Components.Users;
 global using Aetheus.Shared.Components.VariableLibraries;
 global using Aetheus.Shared.Components.Vaults;
+global using Aetheus.Shared.Components.VulnerabilityWatch;
 global using Aetheus.Shared.Components.Webhooks;
 global using Aetheus.Shared.Components.WorkItems;

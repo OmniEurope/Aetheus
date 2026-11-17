@@ -26,6 +26,23 @@ public interface IUserNotificationService
     Task<List<NotificationPreferenceDto>> UpdatePreferencesAsync(
         int userId, UpdateNotificationPreferencesRequest request, CancellationToken ct = default);
 
+    /// <summary>Whether the user is e-mailed when the pipeline fails: their saved choice, else on, except for a
+    /// pipeline a schedule starts (off). Null when the pipeline does not exist. The caller checks that the user
+    /// can read the pipeline.</summary>
+    Task<PipelineFailureMailPreferenceDto?> GetPipelineFailureMailPreferenceAsync(
+        int userId, int pipelineId, CancellationToken ct = default);
+
+    /// <summary>Saves the user's own choice for the pipeline's failure e-mail and returns the effective preference;
+    /// null when the pipeline does not exist. The in-app notification is not concerned. The caller checks that the
+    /// user can read the pipeline.</summary>
+    Task<PipelineFailureMailPreferenceDto?> SetPipelineFailureMailPreferenceAsync(
+        int userId, int pipelineId, bool isEnabled, CancellationToken ct = default);
+
+    /// <summary>The pipelines the user saved a failure-mail choice for; null <paramref name="readablePipelineIds"/>
+    /// means every pipeline is readable, otherwise a pipeline outside it is left out.</summary>
+    Task<List<PipelineFailureMailChoiceDto>> GetPipelineFailureMailChoicesAsync(
+        int userId, IReadOnlyCollection<int>? readablePipelineIds, CancellationToken ct = default);
+
     Task<List<ProjectSubscriptionDto>> GetSubscriptionsAsync(int userId, CancellationToken ct = default);
 
     /// <summary>Subscribes the user to the project (idempotent); null when the project does not exist.</summary>

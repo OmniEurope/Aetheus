@@ -61,17 +61,35 @@ public class TotpService(
         return true;
     }
 
-    public async Task<bool> DisableTotpAsync(int userId, string password, CancellationToken ct = default)
+    public async Task<bool> DisableTotpAsync(int userId, TotpDisableRequest request, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         var user = await repo.FindUserByIdTrackedAsync(userId, ct).ConfigureAwait(false);
-        if (user is null || !user.TotpEnabled) return false;
+        if (user is null || !user.TotpEnabled || string.IsNullOrEmpty(user.TotpSecret)) return false;
 
-        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash)) return false;
+        // R-50: the same lockout as the sign-in, the password AND the second factor. The password is checked
+        // first so a wrong password never consumes a recovery code.
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (LoginLockoutPolicy.IsLockedOut(user, now)) return false;
+        var accepted = !string.IsNullOrWhiteSpace(request.Code)
+            && BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash)
+            && (request.UseRecoveryCode
+                ? await ConsumeRecoveryCodeAsync(userId, request.Code, ct).ConfigureAwait(false)
+                : ValidateTotpCode(user.TotpSecret, request.Code));
+        if (!accepted)
+        {
+            await LoginLockoutPolicy.RecordFailureAsync(repo, timeProvider, userId, ct).ConfigureAwait(false);
+            return false;
+        }
 
         user.TotpSecret = null;
         user.TotpEnabled = false;
         user.TotpRecoveryCodes = null;
-        user.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
+        user.FailedLoginCount = 0;
+        user.LockoutEndUtc = null;
+        // Every other session ends: their tokens carry the previous stamp.
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
+        user.UpdatedAt = now;
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync("TotpDisabled", "User", userId, user.Username, ct).ConfigureAwait(false);
         return true;

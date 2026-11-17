@@ -73,22 +73,22 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2421));
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".run-overview-tiles")));
         Assert.Empty(cut.FindAll(".run-analysis-publishing-badge"));
-        Assert.Empty(cut.FindAll(".run-timeline-zone.omni-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
         await hubs.Server("pipelines").WhenInvokedAsync("JoinPipelineRunGroup");
 
         await cut.InvokeAsync(() => hubs.Server("pipelines").PushAsync("AnalysisPublishing", 2421, true));
 
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".run-analysis-publishing-badge")));
         var zone = cut.Find(".run-timeline-zone");
-        Assert.Contains("omni-busy", zone.ClassName, StringComparison.Ordinal);
-        Assert.Equal("true", zone.GetAttribute("aria-busy"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.NotNull(zone.QuerySelector(".run-tree-scroll"));
         Assert.Contains("AnalysisPublishing", cut.Find(".run-analysis-publishing-badge").TextContent, StringComparison.Ordinal);
 
         await cut.InvokeAsync(() => hubs.Server("pipelines").PushAsync("AnalysisPublishing", 2421, false));
 
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".run-analysis-publishing-badge")));
-        Assert.DoesNotContain("omni-busy", cut.Find(".run-timeline-zone").ClassName, StringComparison.Ordinal);
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
+        Assert.NotNull(cut.Find(".run-timeline-zone"));
     }
 
     [Fact]

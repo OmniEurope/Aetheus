@@ -120,6 +120,7 @@ public class PipelineRunTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/80", new PipelineRunDto
         {
             Id = 80,
+            BuildNumber = 6,
             PipelineId = 5,
             ProjectId = 2,
             ProjectName = "Toto",
@@ -131,7 +132,7 @@ public class PipelineRunTests : BunitContext
         var breadcrumb = Services.GetRequiredService<BreadcrumbService>();
 
         cut.WaitForAssertion(() => Assert.Equal(
-            ["Projects", "Toto", "Pipelines", "CI Build", "#80 PipelineRun"],
+            ["Projects", "Toto", "Pipelines", "CI Build", "#6 PipelineRun"],
             breadcrumb.Items.Select(item => item.Text)));
         Assert.Equal("/pipelines/5?projectId=2", breadcrumb.Items[3].Href);
     }
@@ -266,6 +267,35 @@ public class PipelineRunTests : BunitContext
     }
 
     [Fact]
+    public void TimingTile_ShowsTheAverageWithoutApprovalWaits_AndTheFullAverage_EachWithAHelpMark()
+    {
+        var started = new DateTime(2026, 11, 12, 8, 0, 0, DateTimeKind.Utc);
+        _handler.SetPaginatedJsonResponse<PipelineRunDto>(HttpMethod.Get, "api/pipelines/5/runs",
+        [
+            new() { Id = 1, PipelineId = 5, Status = PipelineStatus.Success, StartedAt = started, CompletedAt = started.AddHours(2), ApprovalWaitSeconds = 3600 }
+        ]);
+        _handler.SetJsonResponse("api/pipelines/runs/714", new PipelineRunDto
+        {
+            Id = 714,
+            PipelineId = 5,
+            PipelineName = "deploy",
+            Status = PipelineStatus.Success,
+            StartedAt = started,
+            CompletedAt = started.AddHours(2)
+        });
+
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 714));
+        cut.WaitForState(() => cut.FindAll("[data-testid=run-full-average-duration]").Count == 1);
+
+        var average = cut.Find("[data-testid=run-average-duration]");
+        var full = cut.Find("[data-testid=run-full-average-duration]");
+        Assert.Contains(PipelineRunsSummary.FormatDuration(TimeSpan.FromHours(1)), average.TextContent, StringComparison.Ordinal);
+        Assert.Contains(PipelineRunsSummary.FormatDuration(TimeSpan.FromHours(2)), full.TextContent, StringComparison.Ordinal);
+        Assert.Single(average.QuerySelectorAll("[data-testid=run-average-duration-help]"));
+        Assert.Single(full.QuerySelectorAll("[data-testid=run-full-average-duration-help]"));
+    }
+
+    [Fact]
     public async Task RunParameters_RenderAsOneTileAndOpenDialog()
     {
         _handler.SetJsonResponse("api/pipelines/runs/704", new PipelineRunDto
@@ -284,10 +314,11 @@ public class PipelineRunTests : BunitContext
         cut.WaitForState(() => cut.FindAll(".run-parameters-tile").Count == 1);
 
         Assert.DoesNotContain("run-params-grid", cut.Markup, StringComparison.Ordinal);
-        // R-28: the count is a row of the fact tile, its term then the number of parameters.
-        var count = Assert.Single(cut.Find(".run-parameters-tile").QuerySelectorAll(".omni-fact-tile__row"));
-        Assert.Contains("RunTileCount", count.TextContent, StringComparison.Ordinal);
-        Assert.Equal("2", count.QuerySelector(".omni-fact-tile__value")!.TextContent.Trim());
+        // R-61: the tile has the short title and shows three numbers (parameters, libraries, vaults), no names.
+        var tileRows = cut.Find(".run-parameters-tile").QuerySelectorAll(".omni-fact-tile__row");
+        Assert.Equal(3, tileRows.Length);
+        Assert.Contains("RunParametersTile", cut.Find(".run-parameters-tile .omni-fact-tile__title").TextContent, StringComparison.Ordinal);
+        Assert.Equal(["2", "0", "0"], tileRows.Select(row => row.QuerySelector(".omni-fact-tile__value")!.TextContent.Trim()).ToArray());
 
         // The tile opens a dialog, so it is a button (OmniFactTile.OnClick), a direct child of the tile grid.
         var tile = cut.Find(".run-overview-tiles > .run-parameters-tile");
@@ -300,6 +331,77 @@ public class PipelineRunTests : BunitContext
         await cut.InvokeAsync(() => tile.Click());
         Assert.True(opened);
         await cut.InvokeAsync(() => dialog.Close(null));
+    }
+
+    [Fact]
+    public void RunParametersDialog_ListsLibraryAndVaultVariablesWithTheirSource_AndNeverASecretValue()
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/712/used-variables", new List<PipelineRunUsedVariableDto>
+        {
+            new() { Kind = PipelineRunResourceKind.Library, SourceId = 4, SourceName = "shared-build", Name = "REGISTRY", Value = "registry.example", IsAvailable = true },
+            new() { Kind = PipelineRunResourceKind.Vault, SourceId = 9, SourceName = "deploy-secrets", Name = "API_TOKEN", Value = "must-not-show", IsAvailable = true },
+            new() { Kind = PipelineRunResourceKind.Vault, SourceId = 9, SourceName = "deploy-secrets", Name = "EMPTY_TOKEN", IsAvailable = false }
+        });
+
+        var cut = Render<PipelineRunParametersDialog>(parameters => parameters
+            .Add(component => component.Parameters, new Dictionary<string, string> { ["replicas"] = "3" })
+            .Add(component => component.RunId, 712));
+        cut.WaitForState(() => cut.FindAll("[data-testid=run-variable-source-link]").Count == 3);
+
+        Assert.Equal(
+            ["/variable-libraries/4", "/vaults/9", "/vaults/9"],
+            cut.FindAll("[data-testid=run-variable-source-link]").Select(link => link.GetAttribute("href")).ToArray());
+        Assert.Equal(
+            ["/variable-libraries/4?key=REGISTRY", "/vaults/9?key=API_TOKEN", "/vaults/9?key=EMPTY_TOKEN"],
+            cut.FindAll("[data-testid=run-variable-name-link]").Select(link => link.GetAttribute("href")).ToArray());
+        Assert.Contains("registry.example", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("replicas", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("must-not-show", cut.Markup, StringComparison.Ordinal);
+        Assert.Equal(["Available", "RunVariableNotAvailable"],
+            cut.FindAll("[data-testid=run-variable-secret-state]").Select(badge => badge.TextContent.Trim()).ToArray());
+    }
+
+    [Fact]
+    public void RunParametersDialog_KeepsTheParameters_WhenTheVariablesCannotBeLoaded()
+    {
+        _handler.SetResponse(HttpMethod.Get, "api/pipelines/runs/713/used-variables", System.Net.HttpStatusCode.InternalServerError);
+
+        var cut = Render<PipelineRunParametersDialog>(parameters => parameters
+            .Add(component => component.Parameters, new Dictionary<string, string> { ["replicas"] = "3" })
+            .Add(component => component.RunId, 713));
+        cut.WaitForState(() => cut.FindAll("[data-testid=run-variables-unavailable]").Count == 1);
+
+        Assert.Contains("replicas", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReleaseTile_HasOneVersionLineWithTheFullVersionInATooltip_AndTheDeployedTileRightBelow()
+    {
+        const string full = "0123456789abcdef0123456789abcdef01234567";
+        _handler.SetJsonResponse(HttpMethod.Get, "api/releases/by-run/", new List<ReleaseDto> { new() { Id = 9, Version = full, Status = ReleaseStatus.Published } });
+        _handler.SetJsonResponse("api/pipelines/runs/705", new PipelineRunDto
+        {
+            Id = 705,
+            PipelineId = 5,
+            PipelineName = "deploy",
+            Status = PipelineStatus.Success,
+            ResolvedVariables = new Dictionary<string, string> { ["APP_VERSION"] = "1.6.0-rc.1+build.42" },
+            DeployedAddress = new PipelineRunDeployedAddressDto { AppUrl = "https://app.example.test" }
+        });
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 705));
+        cut.WaitForState(() => cut.FindAll(".run-deployed-tile").Count == 1 && cut.FindAll("a[href='/releases/9']").Count == 1);
+
+        var release = cut.Find("a[href='/releases/9']");
+        var rows = release.QuerySelectorAll(".omni-fact-tile__row");
+        var row = Assert.Single(rows);
+        Assert.DoesNotContain("1.6.0-rc.1+build.42", release.TextContent, StringComparison.Ordinal);
+        Assert.Contains(full, row.GetAttribute("title"), StringComparison.Ordinal);
+        Assert.Contains("1.6.0-rc.1+build.42", row.GetAttribute("title"), StringComparison.Ordinal);
+        Assert.NotEqual(full, row.QuerySelector(".short-id__text")!.TextContent.Trim());
+
+        var next = release.NextElementSibling;
+        Assert.NotNull(next);
+        Assert.Contains("run-deployed-tile", next!.ClassName, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -462,6 +564,7 @@ public class PipelineRunTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/git/repos?projectId=8", new List<GitLightRepoDto>());
         _handler.SetJsonResponse("api/pipelines/runs/7/lineage", new PipelineRunLineageDto
         {
+            UpstreamBuildNumber = 12,
             Downstream = [new PipelineRunLinkDto { RunId = 51, PipelineId = 9, ProjectId = 8, PipelineName = "deploy-prod", BuildNumber = 12, Status = PipelineStatus.WaitingForApproval }]
         });
         _handler.SetJsonResponse("api/pipelines/runs/7", new PipelineRunDto
@@ -488,7 +591,7 @@ public class PipelineRunTests : BunitContext
         Assert.Contains("RunLineage", tile.TextContent);
         var parent = tile.QuerySelector("a.run-lineage-parent")!;
         Assert.Equal("/pipelines/runs/42?projectId=8", parent.GetAttribute("href"));
-        Assert.Contains("release-parent #42", parent.TextContent);
+        Assert.Contains("release-parent #12", parent.TextContent);
         var child = tile.QuerySelector("a.run-lineage-child")!;
         Assert.Equal("/pipelines/runs/51?projectId=8", child.GetAttribute("href"));
         Assert.Contains("deploy-prod #12", child.TextContent);
@@ -534,6 +637,7 @@ public class PipelineRunTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/317", new PipelineRunDto
         {
             Id = 317,
+            BuildNumber = 9,
             PipelineId = 10,
             PipelineName = "parent-release",
             Status = PipelineStatus.Success,
@@ -543,6 +647,7 @@ public class PipelineRunTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/318", new PipelineRunDto
         {
             Id = 318,
+            BuildNumber = 4,
             PipelineId = 11,
             PipelineName = "child-ci",
             Status = PipelineStatus.Success,
@@ -559,7 +664,7 @@ public class PipelineRunTests : BunitContext
         // The header title is the run identity: it has to follow the parameter change, not just the
         // body. "child-ci" appears in the run card before the header re-renders, so wait on the title.
         cut.WaitForAssertion(
-            () => Assert.Contains("#318 PipelineRun", cut.Find(".omni-page-header__title").TextContent, StringComparison.Ordinal));
+            () => Assert.Contains("#4 PipelineRun", cut.Find(".omni-page-header__title").TextContent, StringComparison.Ordinal));
         Assert.Contains("child-ci", cut.Markup);
         Assert.DoesNotContain("parent-release", cut.Markup);
     }
@@ -588,7 +693,8 @@ public class PipelineRunTests : BunitContext
             StartedAt = DateTime.UtcNow.AddMinutes(-1),
             CompletedAt = DateTime.UtcNow
         });
-        var reload = typeof(PipelineRun).GetMethod("ReloadRunAsync",
+        // The live connection (SignalR push) reloads through this variant, which draws the reloaded run itself.
+        var reload = typeof(PipelineRun).GetMethod("ReloadRunAndRenderAsync",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
 
         await cut.InvokeAsync(async () => await (Task)reload.Invoke(cut.Instance, [])!);

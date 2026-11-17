@@ -120,6 +120,24 @@ public class MainLayoutTests : BunitContext
     }
 
     [Fact]
+    public async Task OnLogout_SendsTheHeldRefreshTokenSoTheServerRevokesIt_BeforeDroppingIt()
+    {
+        // M1: the refresh token is posted with the logout, then forgotten by the client.
+        var auth = Services.GetRequiredService<AuthStateProvider>();
+        var cut = Render<MainLayout>();
+        // After the layout's start-up read of the (empty) test storage, as a sign-in or renewal would.
+        await cut.InvokeAsync(() => auth.LoginAsync(auth.Token!, "held-refresh-token"));
+
+        await cut.InvokeAsync(async () => await cut.Instance.OnLogout());
+
+        var logout = Assert.Single(_handler.RequestDetails, request =>
+            request.Method == "POST" && request.Url.EndsWith("api/auth/logout", StringComparison.Ordinal));
+        var body = System.Text.Json.JsonSerializer.Deserialize<LogoutRequest>(logout.Body!, JsonOptions.Web);
+        Assert.Equal("held-refresh-token", body!.RefreshToken);
+        Assert.Null(auth.RefreshToken);
+    }
+
+    [Fact]
     public async Task NavigateToHelp_NavigatesToHelpRoute()
     {
         var cut = Render<MainLayout>();

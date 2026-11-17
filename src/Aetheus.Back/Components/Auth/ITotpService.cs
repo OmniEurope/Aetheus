@@ -6,7 +6,7 @@ public interface ITotpService
 {
     Task<TotpSetupResponse> SetupTotpAsync(int userId, CancellationToken ct = default);
     Task<bool> VerifyAndEnableTotpAsync(int userId, string code, CancellationToken ct = default);
-    Task<bool> DisableTotpAsync(int userId, string password, CancellationToken ct = default);
+    Task<bool> DisableTotpAsync(int userId, TotpDisableRequest request, CancellationToken ct = default);
 
     /// <summary>Validates a TOTP code against the user's encrypted secret.</summary>
     bool ValidateTotpCode(string encryptedSecret, string code);

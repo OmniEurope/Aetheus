@@ -25,6 +25,7 @@ public sealed class PipelineFailedParentChildCancellationTests
     public async Task FailedParent_CancelsItsChildRunsThatAreStillInFlight()
     {
         _repo.GetTriggeredChildRunIdsAsync(10, Arg.Any<CancellationToken>()).Returns([11, 12, 13]);
+        _repo.GetRunNumbersAsync(Arg.Any<IEnumerable<int>>(), Arg.Any<CancellationToken>()).Returns(new Dictionary<int, int> { [10] = 7 });
         // 12 already ended: CancelRunAsync answers false for a terminal run.
         _runService.CancelRunAsync(11, Arg.Any<PipelineRunCancellation>(), Arg.Any<CancellationToken>()).Returns(true);
         _runService.CancelRunAsync(12, Arg.Any<PipelineRunCancellation>(), Arg.Any<CancellationToken>()).Returns(false);
@@ -35,7 +36,7 @@ public sealed class PipelineFailedParentChildCancellationTests
         Assert.Equal(2, cancelled);
         await _runService.Received(1).CancelRunAsync(
             11,
-            Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor && c.Reason.Contains("#10")),
+            Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor && c.Reason.Contains("#7")),
             Arg.Any<CancellationToken>());
         await _runService.Received(1).CancelRunAsync(13, Arg.Any<PipelineRunCancellation>(), Arg.Any<CancellationToken>());
     }

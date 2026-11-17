@@ -188,19 +188,21 @@ public class UrlSyncedTabsAuditTests
     }
 
     [Fact]
-    public void SharedTabs_ReserveStableGeometry()
+    public void SharedTabs_KeepOesDefaultHeader_AndOnlyStyleTheirContainer()
     {
+        // User decision 2026-11-12 (recette R-43): one tab header everywhere, OE's default rendering. app.css
+        // restyles neither the tabs, their title or icon, nor the strip's scrolling row; a page class on a tab set
+        // touches its panel or its width only.
         var frontDir = Path.Combine(FindRepoRoot(), "src", "Aetheus.Front");
         var wrapper = File.ReadAllText(Path.Combine(frontDir, "Components", "Shared", "UrlSyncedTabs.razor"));
-        var css = File.ReadAllText(Path.Combine(frontDir, "wwwroot", "css", "app.css"));
+        var css = Regex.Replace(
+            File.ReadAllText(Path.Combine(frontDir, "wwwroot", "css", "app.css")), @"/\*.*?\*/", string.Empty, RegexOptions.Singleline);
 
         Assert.Contains("Class=\"@CssClass\"", wrapper, StringComparison.Ordinal);
-        Assert.Contains("scrollbar-gutter: stable", css, StringComparison.Ordinal);
-        Assert.Contains(".url-synced-tabs > .omni-tabs__strip .omni-tabs__viewport", css, StringComparison.Ordinal);
-        Assert.Contains("flex: 1 1 0", css, StringComparison.Ordinal);
-        Assert.Contains(".omni-tabs > .omni-tabs__strip .omni-tabs__viewport .omni-tabs__tab", css, StringComparison.Ordinal);
-        Assert.Contains("width: 100%", css, StringComparison.Ordinal);
-        Assert.Contains("scrollbar-width: none", css, StringComparison.Ordinal);
+        var offenders = Regex.Matches(css, @"(?<selector>[^{}]*\.omni-tabs__(?:tab|title|icon|item)\b[^{}]*|[^{}]*\.omni-tabs__strip\s+\.omni-tabs__viewport[^{}]*)\{")
+            .Select(match => match.Groups["selector"].Value.Trim())
+            .ToList();
+        Assert.True(offenders.Count == 0, "These app.css rules restyle the OE tab header: " + string.Join(" | ", offenders));
     }
 
     private static List<TabsContainer> EnumerateContainers(string source)

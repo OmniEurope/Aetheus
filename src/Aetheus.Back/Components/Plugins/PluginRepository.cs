@@ -25,10 +25,12 @@ public class PluginRepository(AppDbContext db) : IPluginRepository
     public async Task<(List<PluginRegistration> Items, int TotalCount)> GetPageAsync(
         string? search, string? sortBy, bool sortDescending,
         int page, int pageSize, CancellationToken ct = default,
-        IReadOnlyList<GridFilter>? columnFilters = null)
+        IReadOnlyList<GridFilter>? columnFilters = null, int? organizationId = null)
     {
         // The grid's column header filters, before the count.
         var query = PluginListQuery.Columns.ApplyFilters(db.PluginRegistrations.AsNoTracking(), columnFilters);
+        if (organizationId is { } organization)
+            query = query.Where(plugin => plugin.OrganizationId == organization);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var normalized = search.Trim().ToLowerInvariant();

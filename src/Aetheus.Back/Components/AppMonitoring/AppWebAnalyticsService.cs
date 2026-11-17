@@ -251,6 +251,24 @@ public sealed class AppWebAnalyticsService(
             ct).ConfigureAwait(false);
     }
 
+    /// <summary>Upper bound of the visitors list, so a busy site never returns an unbounded payload.</summary>
+    internal const int MaximumVisitorRows = 500;
+
+    public async Task<IReadOnlyList<AppWebAnalyticsVisitorDto>?> GetVisitorsAsync(
+        int appId,
+        int days,
+        CancellationToken ct = default)
+    {
+        var app = await apps.GetAppForUpdateAsync(appId, ct).ConfigureAwait(false);
+        if (app is null)
+            return null;
+
+        days = Math.Clamp(days, 1, 90);
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        return await repository.GetVisitorsAsync(appId, today.AddDays(-(days - 1)), MaximumVisitorRows, ct)
+            .ConfigureAwait(false);
+    }
+
     private static bool IsAllowed(
         AppWebAnalyticsIngestEvent item,
         Aetheus.Back.Data.Entities.MonitoredApp app,

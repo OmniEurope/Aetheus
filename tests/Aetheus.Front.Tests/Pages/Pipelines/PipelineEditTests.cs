@@ -199,6 +199,8 @@ public class PipelineEditTests : BunitContext
         Assert.All(cut.FindAll("a.pipeline-runs-summary-card"), link => Assert.Contains("omni-card--action", link.ClassName, StringComparison.Ordinal));
         Assert.Equal(4, cut.FindAll(".omni-tile-grid.pipeline-runs-summary > .pipeline-runs-summary-card").Count);
         Assert.Equal(4, cut.FindAll(".pipeline-runs-summary-card").Count);
+        // Page rule 3.page-scroll-with-grid at 375: the four tiles sit in one scrolling row, not two rows above the grid.
+        Assert.Single(cut.FindAll(".omni-tile-grid.pipeline-runs-summary.tiles-scroll-row"));
     }
 
     [Fact]
@@ -404,6 +406,63 @@ public class PipelineEditTests : BunitContext
         Assert.NotNull(baseYaml);
         Assert.Contains(_handler.Requests, request =>
             request.Url.Contains("api/pipelines/templates/7/resolve?version=1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task R44_OpeningAPipeline_WhoseTemplateReferencesParametersNoOneDeclares_SendsNoResolveRequest()
+    {
+        // The back answers 400 for each `${{ parameters.x }}` that stays unresolved (revision, candidateVersion,
+        // deployServer in production): the request is not sent while their values are unknown.
+        _handler.SetJsonResponse("api/pipelines/templates/7", new PipelineTemplateDto
+        {
+            Id = 7,
+            Name = "host-bluegreen-deploy",
+            Version = 2,
+            YamlContent = "name: host-bluegreen-deploy\nstages:\n  - name: deploy\n    steps:\n      - run: deploy ${{ parameters.revision }} ${{ parameters.candidateVersion }} ${{ parameters.deployServer }}"
+        });
+        var coordinator = new PipelineTemplateEditorCoordinator(Services.GetRequiredService<ApiClient>());
+
+        var baseYaml = await coordinator.LoadBaseYamlAsync(
+            "name: aetheus-deploy-prod\nextends: host-bluegreen-deploy@2\nparameters:\n  - name: revision\n    default: candidate\nstages: []",
+            [new PipelineTemplateSummaryDto { Id = 7, Name = "host-bluegreen-deploy", Version = 2 }]);
+        var selection = await coordinator.SelectAsync(7, "aetheus-deploy-prod");
+
+        Assert.Null(baseYaml);
+        Assert.NotNull(selection);
+        Assert.DoesNotContain(_handler.Requests, request =>
+            request.Url.Contains("/resolve", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task R44_ARequiredParameterWithAnEmptyDefault_SendsNoResolveRequest()
+    {
+        _handler.SetJsonResponse("api/pipelines/templates/7", new PipelineTemplateDto
+        {
+            Id = 7,
+            Name = "host-bluegreen-deploy",
+            Version = 1,
+            YamlContent = "name: host-bluegreen-deploy\nparameters:\n  - name: deployServer\n    required: true\nstages: []"
+        });
+        var coordinator = new PipelineTemplateEditorCoordinator(Services.GetRequiredService<ApiClient>());
+
+        var baseYaml = await coordinator.LoadBaseYamlAsync(
+            "name: aetheus-deploy-prod\nextends: host-bluegreen-deploy@1\nparameters:\n  - name: deployServer\n    default: \"\"\nstages: []",
+            [new PipelineTemplateSummaryDto { Id = 7, Name = "host-bluegreen-deploy", Version = 1 }]);
+
+        Assert.Null(baseYaml);
+        Assert.DoesNotContain(_handler.Requests, request =>
+            request.Url.Contains("/resolve", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R44_ParameterValues_StillResolve_WhenEveryReferenceIsDeclared()
+    {
+        const string template = "name: t\nparameters:\n  - name: Revision\n    default: main\nstages:\n  - name: s\n    steps:\n      - run: echo ${{ parameters.revision }}";
+
+        var values = PipelineTemplateEditorCoordinator.ParameterValues(template, null);
+
+        Assert.NotNull(values);
+        Assert.Equal("main", values["Revision"]);
     }
 
     [Fact]
@@ -635,7 +694,7 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/templates/1/resolve?version=3", "name: old-template\nstages: []");
         OpenTab("visual");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        var visual = cut.WaitForComponent<VisualPipelineEditor>(TimeSpan.FromSeconds(2));
+        var visual = cut.WaitForComponent<VisualPipelineEditor>();
         cut.WaitForAssertion(() => Assert.Contains("old-template", visual.Instance.BaseTemplateYaml));
 
         cut.Render(p => p.Add(x => x.Id, 6));
@@ -662,7 +721,7 @@ public class PipelineEditTests : BunitContext
             YamlContent = "name: basic-ci\nstages: []"
         });
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
-        var picker = cut.WaitForComponent<OmniDropDown<int?>>(TimeSpan.FromSeconds(2));
+        var picker = cut.WaitForComponent<OmniDropDown<int?>>();
         await cut.InvokeAsync(() => picker.Instance.ValueChanged.InvokeAsync(42));
         cut.WaitForAssertion(() => Assert.Contains("Basic CI", Editor(cut).Value));
         Assert.Equal(42, picker.Instance.Value);
@@ -723,7 +782,7 @@ public class PipelineEditTests : BunitContext
         SetupNewPipelineMocks();
         OpenTab("visual");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        var visual = cut.WaitForComponent<VisualPipelineEditor>(TimeSpan.FromSeconds(2));
+        var visual = cut.WaitForComponent<VisualPipelineEditor>();
 
         await cut.InvokeAsync(() => visual.Instance.YamlDefinitionChanged.InvokeAsync("trigger: webhook\nstages: []"));
 
@@ -980,7 +1039,10 @@ public class PipelineEditTests : BunitContext
         Assert.Equal(uriBefore, navigation.Uri);
         Assert.True(_handler.Requests.Count(request => request.Method == "GET"
             && request.Url.Contains("api/pipelines/5/runs", StringComparison.Ordinal)) > runLoadsBefore);
+        // The pending notice (Info) is dismissed once the launch answers; the answer is a Success naming the run.
         Assert.Contains(Services.Toasts(),
+            notification => notification.Severity == OmniSeverity.Success);
+        Assert.DoesNotContain(Services.Toasts(),
             notification => notification.Severity == OmniSeverity.Info);
     }
 
@@ -1086,7 +1148,7 @@ public class PipelineEditTests : BunitContext
         cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var dialog = Services.GetRequiredService<OmniDialogService>();
-        Assert.Equal("false", cut.Find("[data-testid='pipeline-detail-page']").GetAttribute("aria-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
 
         await ClickAsync(cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger"));
         var task = ClickAsync(cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Single(item => item.TextContent.Trim() == "Delete"));
@@ -1094,9 +1156,8 @@ public class PipelineEditTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            var page = cut.Find("[data-testid='pipeline-detail-page']");
-            Assert.Contains("omni-busy", page.ClassName, StringComparison.Ordinal);
-            Assert.Equal("true", page.GetAttribute("aria-busy"));
+            Assert.NotNull(cut.Find("[data-testid='pipeline-detail-page']"));
+            Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         });
         Assert.Contains("Deploy Prod", cut.Markup, StringComparison.Ordinal);
         Assert.False(nav.Uri.EndsWith("/pipelines", StringComparison.Ordinal));
@@ -1104,6 +1165,9 @@ public class PipelineEditTests : BunitContext
         release.SetResult(new object());
         await task;
         Assert.EndsWith("/pipelines", nav.Uri);
+        // The page stays veiled until the navigation takes it away (the router unmounts it): the hold goes with it.
+        await DisposeComponentsAsync();
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     /// <summary>R-34: a failed deletion keeps the page, says so, and keeps the live updates running.</summary>
@@ -1218,7 +1282,7 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/variable-libraries", new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 });
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
-        var picker = cut.WaitForComponent<OmniDropDown<int?>>(TimeSpan.FromSeconds(2));
+        var picker = cut.WaitForComponent<OmniDropDown<int?>>();
 
         // The new-pipeline form loads the available templates for its template-picker dropdown.
         Assert.Equal(["Basic CI", "Docker Deploy"], picker.Instance.Options.Select(option => option.Text).ToArray());
@@ -1297,7 +1361,7 @@ public class PipelineEditTests : BunitContext
 
         // The names the editor loaded are the ones the visual editor offers.
         OpenTab("visual");
-        var visual = cut.WaitForComponent<VisualPipelineEditor>(TimeSpan.FromSeconds(2));
+        var visual = cut.WaitForComponent<VisualPipelineEditor>();
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(["lib1", "lib2"], visual.Instance.AvailableLibraries);

@@ -28,7 +28,7 @@ public sealed class ExternalRepoSyncServiceTests
         BackgroundServiceTestKit.ScopeFactory(
             (typeof(IGitLightRepository), _light), (typeof(IGitRepository), _git),
             (typeof(IExternalRepoMirrorService), _mirror), (typeof(IEntityChangeNotifier), _notifier)),
-        _clock, _logger, lease);
+        _clock, _logger, lease ?? LeaderLeaseDouble.Leader());
 
     private static GitInternalRepo Mirror(int id, int? connectionId) => new() { Id = id, ProjectId = 100 + id, GitConnectionId = connectionId };
 

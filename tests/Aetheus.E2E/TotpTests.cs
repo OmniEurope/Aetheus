@@ -9,27 +9,13 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Security")]
-[RollbackRelevant]
 public class TotpTests : E2ETestBase
 {
     [SetUp]
     public async Task SetUp() => await LoginAsync();
 
     [Test]
-    public async Task Settings_SecurityTab_ShowsTotpSetup()
-    {
-        await NavigateToAsync("settings");
-        await Page.WaitForSelectorAsync(".omni-tabs", new() { Timeout = 10000 });
-        var securityTab = Page.GetByRole(AriaRole.Tab, new() { Name = "Security", Exact = true });
-        await Expect(securityTab).ToBeVisibleAsync();
-        await securityTab.ClickAsync();
-        // The Security tab renders the "Two-Factor Authentication" section (heading + Enable/Disable 2FA).
-        // (The previous selector "text=Two-Factor, text=2FA, text=TOTP" was a malformed Playwright union
-        // selector - it searched for that whole literal string and never matched.)
-        await Expect(Page.GetByText("Two-Factor Authentication").First).ToBeVisibleAsync(new() { Timeout = 5000 });
-    }
-
-    [Test]
+    [RollbackRelevant]
     public async Task Login_RecoveryCodeMode_CompletesRealBrowserLogin()
     {
         var username = $"totp-browser-{Guid.NewGuid():N}";

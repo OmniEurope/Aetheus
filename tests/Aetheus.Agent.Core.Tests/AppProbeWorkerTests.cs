@@ -54,6 +54,33 @@ public class AppProbeWorkerTests
     }
 
     [Fact]
+    public async Task RunTick_AnImmediateProbeRequest_ProbesBeforeTheInterval_OncePerRequest()
+    {
+        // R-29: a user asked for an immediate probe; the agent probes at once instead of waiting for the interval.
+        var (worker, api, time) = Build();
+        api.GetAppProbesAsync(Arg.Any<CancellationToken>()).Returns(new List<AppProbeConfigDto>
+        {
+            new() { MonitoredAppId = 1, ProbeUrl = "http://localhost/health", ProbeIntervalSeconds = 3600, ProbeTimeoutSeconds = 5, ExpectedStatusCode = 200 }
+        });
+        await worker.RunTickAsync(TestContext.Current.CancellationToken);
+        api.ClearReceivedCalls();
+        var requestedAt = time.GetUtcNow().UtcDateTime;
+        api.GetAppProbesAsync(Arg.Any<CancellationToken>()).Returns(new List<AppProbeConfigDto>
+        {
+            new() { MonitoredAppId = 1, ProbeUrl = "http://localhost/health", ProbeIntervalSeconds = 3600, ProbeTimeoutSeconds = 5, ExpectedStatusCode = 200, ProbeRequestedAt = requestedAt }
+        });
+
+        time.Advance(TimeSpan.FromSeconds(AppMonitoringDefaults.AgentProbeConfigRefreshSeconds));
+        await worker.RunTickAsync(TestContext.Current.CancellationToken);
+        time.Advance(TimeSpan.FromSeconds(AppMonitoringDefaults.AgentProbeTickSeconds));
+        await worker.RunTickAsync(TestContext.Current.CancellationToken);
+
+        await api.Received(1).ReportAppProbeResultsAsync(
+            Arg.Is<List<AppProbeResultDto>>(r => r.Count == 1 && r[0].MonitoredAppId == 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RunTick_UnexpectedStatus_ReportsDownWithActualStatus()
     {
         var (worker, api, _) = Build(new StubHandler(HttpStatusCode.InternalServerError));
@@ -64,7 +91,7 @@ public class AppProbeWorkerTests
                 results.Count == 1
                 && !results[0].IsUp
                 && results[0].StatusCode == 500
-                && results[0].Error == "Unexpected status 500 (expected 200)"),
+                && AppProbeFailure.TryParse(results[0].Error) == new AppProbeFailure("status", "localhost", 500, 200)),
             Arg.Any<CancellationToken>());
     }
 
@@ -81,7 +108,7 @@ public class AppProbeWorkerTests
                 results.Count == 1
                 && !results[0].IsUp
                 && results[0].StatusCode == null
-                && results[0].Error == "connection failed"),
+                && AppProbeFailure.TryParse(results[0].Error) == new AppProbeFailure("unreachable", "localhost", null, null)),
             Arg.Any<CancellationToken>());
     }
 

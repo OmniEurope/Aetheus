@@ -17,8 +17,8 @@ namespace Aetheus.Agent.Core.Functions;
 /// <c>E2E_SUITE_STATUS</c> where the script exited 10; anything that leaves no gradable evidence fails
 /// the step. Both containers are removed on every path once the results directory exists. Failures are
 /// rerun once, alone, in the same image and container setup (<see cref="FailedTestRerun"/>): a test that
-/// passes on the rerun is flaky, named in the log and in <c>flaky-tests.txt</c>, and still fails the
-/// suite.
+/// passes on the rerun is flaky, named in the log and in <c>flaky-tests.txt</c>, and does not fail the
+/// suite on its own (owner decision of 2026-11-05, PLAN-006; the assurance contract grades the candidate on how many there are).
 ///
 /// Difference, deliberate: the script's fallback that built an E2E image from the source tree when no
 /// image was given is not ported; the image and the expected commit are required parameters (every
@@ -97,7 +97,7 @@ public sealed partial class RunQaE2eSuiteFunction : IPipelineFunction
         PipelineFunctionContext context, FunctionDocker docker, E2eRun run, TimeSpan interval, CancellationToken cancellationToken)
     {
         var description = $"E2E suite {run.Label}";
-        if (await FailedTestRerun.PlanAsync(context, description, run.Trx).ConfigureAwait(false) is not { } plan)
+        if (await FailedTestRerun.PlanAsync(context.Log, description, run.Trx).ConfigureAwait(false) is not { } plan)
             return null;
         // The first suite container's results are copied out already; the rerun's container takes its name.
         await docker.QuietAsync(cancellationToken, ["rm", "-f", run.RunnerContainer], keepErrors: false).ConfigureAwait(false);
@@ -107,7 +107,7 @@ public sealed partial class RunQaE2eSuiteFunction : IPipelineFunction
         Directory.CreateDirectory(rerun.Results);
         var outcome = await new E2eExecution(_tools, context, docker, rerun, interval).RunAsync(cancellationToken).ConfigureAwait(false);
         if (outcome.Error is null)
-            return await FailedTestRerun.ReconcileAsync(context, description, plan, rerun.Trx).ConfigureAwait(false);
+            return await FailedTestRerun.ReconcileAsync(context.Log, description, plan, rerun.Trx).ConfigureAwait(false);
         await context.Log($"{description}: the rerun left no gradable evidence ({outcome.Error}); the first attempt's failures stand.", TaskLogLevel.Warning)
             .ConfigureAwait(false);
         return null;
@@ -146,9 +146,9 @@ public sealed partial class RunQaE2eSuiteFunction : IPipelineFunction
             foreach (Match name in TestNameAttribute().Matches(result.Value))
                 await context.Log("  skipped: " + name.Value).ConfigureAwait(false);
         if (rerun is not null)
-            await FailedTestRerun.RecordAsync(context, $"E2E suite {run.Label}", run.Results, rerun, cancellationToken).ConfigureAwait(false);
+            await FailedTestRerun.RecordAsync(context.Log, $"E2E suite {run.Label}", run.Results, rerun, cancellationToken).ConfigureAwait(false);
         else if (status != 0)
-            await FailedTestNames.RecordAsync(context, run.Trx, Path.Combine(run.Results, FailedTestRerun.FailedList), cancellationToken).ConfigureAwait(false);
+            await FailedTestNames.RecordAsync(context.Log, run.Trx, Path.Combine(run.Results, FailedTestRerun.FailedList), cancellationToken).ConfigureAwait(false);
         context.SetOutput("E2E_SUITE_STATUS", status.ToString(CultureInfo.InvariantCulture));
         return PipelineFunctionResult.Success();
     }

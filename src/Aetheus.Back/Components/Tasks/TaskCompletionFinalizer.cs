@@ -16,10 +16,31 @@ internal sealed class TaskCompletionFinalizer(
     ILogger logger,
     IDomainEventDispatcher domainEvents)
 {
+    /// <summary>
+    /// What the task reported as its output: the result text, else the output-variable marker lines of its
+    /// log. Read BEFORE the completion is persisted (R-18): the step must become Success together with the
+    /// variables it published, because a sibling step finishing in the same instant advances the run on
+    /// every step it sees as Success.
+    /// </summary>
+    internal async Task<string?> ReadReportedOutputAsync(TaskResultDto result, int taskId, CancellationToken ct)
+    {
+        if (!string.IsNullOrEmpty(result.Output))
+            return result.Output;
+        var markerLines = await logService.GetTaskOutputVariableLinesAsync(taskId, ct).ConfigureAwait(false);
+        return markerLines.Count > 0 ? string.Join("\n", markerLines) : null;
+    }
+
+    /// <summary>The JSON a step stores as its published variables, or null when it published none.</summary>
+    internal static string? SerializeOutputVariables(string? reportedOutput) =>
+        string.IsNullOrEmpty(reportedOutput) ? null : SerializeOutputVariables(TaskOutputVariableParser.Parse(reportedOutput));
+
+    private static string? SerializeOutputVariables(IReadOnlyDictionary<string, string> outputVars) =>
+        outputVars.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(outputVars) : null;
+
     internal async Task<PipelineStepRun?> UpdateStepRunAsync(
         ServerTask task,
         TaskResultDto result,
-        int taskId,
+        string? logOutput,
         CancellationToken ct)
     {
         if (!task.PipelineStepRunId.HasValue)
@@ -29,19 +50,18 @@ internal sealed class TaskCompletionFinalizer(
             return null;
         stepRun.Status = result.Status;
         stepRun.ExitCode = result.ExitCode;
-        stepRun.CompletedAt = timeProvider.GetUtcNow().UtcDateTime;
+        // The fenced completion already stamped the step with the instant it stamped the task (the same
+        // UPDATE batch, read back above), so a second reading of the clock would only cost an UPDATE for
+        // a few microseconds. Only a step nobody stamped (the N-1 unfenced protocol) gets the time now.
+        stepRun.CompletedAt ??= timeProvider.GetUtcNow().UtcDateTime;
 
-        var logOutput = result.Output;
-        if (string.IsNullOrEmpty(logOutput))
-        {
-            var markerLines = await logService.GetTaskOutputVariableLinesAsync(taskId, ct).ConfigureAwait(false);
-            logOutput = markerLines.Count > 0 ? string.Join("\n", markerLines) : null;
-        }
         if (!string.IsNullOrEmpty(logOutput))
         {
             var outputVars = TaskOutputVariableParser.Parse(logOutput);
+            // The fenced completion persisted these together with the status; this keeps the unfenced
+            // protocol and the in-memory store whole.
             if (outputVars.Count > 0)
-                stepRun.OutputVariablesJson = System.Text.Json.JsonSerializer.Serialize(outputVars);
+                stepRun.OutputVariablesJson = SerializeOutputVariables(outputVars);
 
             if (task.PipelineRunId is { } pipelineRunId)
             {

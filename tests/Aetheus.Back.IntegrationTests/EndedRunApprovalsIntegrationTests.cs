@@ -9,8 +9,7 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>The PostgreSQL closing query rejects pending approvals of ended runs while retaining
 /// live-run approvals.</summary>
-[Collection(PostgresCollection.Name)]
-public sealed class EndedRunApprovalsIntegrationTests(PostgresFixture fixture)
+public sealed class EndedRunApprovalsIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task EndedRuns_LoseTheirPendingApprovals_WaitingRunsKeepTheirs()

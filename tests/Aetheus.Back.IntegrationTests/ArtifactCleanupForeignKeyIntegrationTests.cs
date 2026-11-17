@@ -16,7 +16,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// the link; a delivery still running refuses the row delete, and the file is then left in place.
 /// The InMemory provider enforces neither, which is why these live here.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ArtifactCleanupForeignKeyIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture), IDisposable
 {

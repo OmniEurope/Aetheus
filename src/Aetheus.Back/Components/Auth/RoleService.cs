@@ -204,14 +204,14 @@ public class RoleService(
 
     /// <summary>
     /// An organization's own role grants on that organization's resources only: a grant naming a resource of
-    /// another organization (or of none, an agent pool, the Docker platform) would name a resource it does not
+    /// another organization (or of none, the Docker platform) would name a resource it does not
     /// administer, and show its name back. Refused (400) before anything changes.
     /// </summary>
     private async Task EnsureOwnResourcesAsync(int organizationId, IEnumerable<ResourcePermissionEntry> entries, CancellationToken ct)
     {
         foreach (var entry in entries)
         {
-            if (entry.ResourceType is ResourceType.AgentPool or ResourceType.Docker)
+            if (entry.ResourceType is ResourceType.Docker)
                 throw new BadRequestException($"An organization's role cannot grant {entry.ResourceType}: it belongs to no organization.");
             if (entry.ResourceId is { } resourceId
                 && await authorizationService.GetResourceOrganizationIdAsync(entry.ResourceType, resourceId, ct).ConfigureAwait(false) != organizationId)
@@ -361,7 +361,8 @@ public class RoleService(
         await EnsureRoleExistsAsync(roleId, ct).ConfigureAwait(false);
         var (page, pageSize) = request.Normalize();
         var (items, total) = await roleRepo.GetUsersInRolePagedAsync(
-            roleId, request.Search, page, pageSize, request.SortBy, request.SortDescending, ct, request.Filters, organizationIds).ConfigureAwait(false);
+            roleId, request.Search, page, pageSize, request.SortBy, request.SortDescending, ct, request.Filters, organizationIds,
+            siteAdminView: false).ConfigureAwait(false);
         return ToPage(items, total, page, pageSize);
     }
 
@@ -372,7 +373,8 @@ public class RoleService(
         await EnsureRoleExistsAsync(roleId, ct).ConfigureAwait(false);
         var (page, pageSize) = request.Normalize();
         var (items, total) = await roleRepo.GetUsersAvailableForRolePagedAsync(
-            roleId, request.Search, page, pageSize, request.SortBy, request.SortDescending, ct, organizationIds).ConfigureAwait(false);
+            roleId, request.Search, page, pageSize, request.SortBy, request.SortDescending, ct, organizationIds,
+            siteAdminView: false).ConfigureAwait(false);
         return ToPage(items, total, page, pageSize);
     }
 

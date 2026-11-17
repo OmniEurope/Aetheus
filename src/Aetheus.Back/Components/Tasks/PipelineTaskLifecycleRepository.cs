@@ -17,13 +17,16 @@ public sealed class PipelineTaskLifecycleRepository(AppDbContext db, TimeProvide
             null,
             ct);
 
-    public Task CancelPendingTasksExceptStagesAsync(
+    public Task CancelActiveTasksExceptStagesAsync(
         int pipelineRunId,
         IReadOnlyCollection<string> preservedStages,
         CancellationToken ct = default) =>
+        // Running included: the agent learns of a cancellation only through the server-side status of the
+        // task it tracks (its reconcile pass stops the process tree once that status is terminal), so a
+        // task left Running here would run to its natural end and be recorded Success.
         CancelAsync(
             pipelineRunId,
-            [TaskExecutionStatus.Pending, TaskExecutionStatus.Assigned],
+            [TaskExecutionStatus.Pending, TaskExecutionStatus.Assigned, TaskExecutionStatus.Running],
             preservedStages,
             null,
             ct);

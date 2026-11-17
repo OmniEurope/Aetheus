@@ -10,7 +10,8 @@ public interface IRkhunterRepository
     Task<List<RkhunterScanResult>> GetScanHistoryAsync(int serverId, int limit = 50, CancellationToken ct = default);
     Task<RkhunterScanResult> AddScanResultAsync(RkhunterScanResult result, CancellationToken ct = default);
     Task AddTaskAsync(ServerTask task, CancellationToken ct = default);
-    Task UpdateScanScheduleAsync(int serverId, string? cronExpression, CancellationToken ct = default);
+    /// <summary>False when the server has no rkhunter state (not installed): nothing was stored.</summary>
+    Task<bool> UpdateScanScheduleAsync(int serverId, string? cronExpression, CancellationToken ct = default);
     Task<List<RkhunterState>> GetScheduledStatesAsync(CancellationToken ct = default);
     Task UpdateLastScheduledScanAsync(int serverId, CancellationToken ct = default);
 }

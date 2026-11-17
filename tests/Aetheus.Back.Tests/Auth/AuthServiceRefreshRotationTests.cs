@@ -39,7 +39,7 @@ public sealed class AuthServiceRefreshRotationTests : IDisposable
         _sut = new AuthService(
             new AuthRepository(_db, _clock),
             new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:JwtKey"] = key }).Build(),
-            Substitute.For<IAuditService>(), new JwtOptions { SigningKey = key },
+            Substitute.For<IAuditService>(), new JwtOptions { SigningKey = key }, new TokenHashKeys(new JwtOptions { SigningKey = key }),
             Substitute.For<IMemoryCache>(), Substitute.For<IOrganizationService>(),
             Substitute.For<ITotpService>(), _clock,
             Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),
@@ -126,5 +126,75 @@ public sealed class AuthServiceRefreshRotationTests : IDisposable
 
         Assert.Null(reuse.RejectionCode);
         Assert.False(string.IsNullOrEmpty(reuse.Response!.Token));
+    }
+
+    [Fact]
+    public async Task Logout_RevokesTheCallersRefreshToken_SoARefreshWithItThenFails_AndLeavesTheOtherSession()
+    {
+        // M1: two sessions of the same user (two devices); the logout of one ends only its token.
+        var loggedOut = await IssueRefreshTokenAsync();
+        var otherDevice = await IssueRefreshTokenAsync();
+
+        await _sut.LogoutAsync(UserId, loggedOut, Ct);
+
+        var tokens = await TokensAsync();
+        Assert.NotNull(tokens[0].RevokedAt);
+        Assert.Null(tokens[0].ReplacedById);
+        Assert.Null(tokens[1].RevokedAt);
+
+        _clock.Advance(TimeSpan.FromSeconds(2));
+        var other = await _sut.RefreshTokenWithReasonAsync(otherDevice, Ct);
+        Assert.Null(other.RejectionCode);
+        Assert.False(string.IsNullOrEmpty(other.Response!.RefreshToken));
+
+        var reuse = await _sut.RefreshTokenWithReasonAsync(loggedOut, Ct);
+        // Revoked without a replacement: a later use reads as a replay, never as a grace re-issue.
+        Assert.Null(reuse.Response);
+        Assert.Equal(RefreshRejectionCodes.Replay, reuse.RejectionCode);
+    }
+
+    [Fact]
+    public async Task Logout_WithAnotherUsersRefreshToken_RevokesNothing()
+    {
+        const int otherUserId = 43;
+        _db.Users.Add(new User { Id = otherUserId, Username = "dave", IsActive = true, SecurityStamp = "s", UserRoles = [] });
+        await _db.SaveChangesAsync(Ct);
+        var othersToken = (await _sut.RenewTokenAsync(otherUserId, Ct))!.RefreshToken!;
+
+        await _sut.LogoutAsync(UserId, othersToken, Ct);
+
+        Assert.All(await TokensAsync(), t => Assert.Null(t.RevokedAt));
+        var stillValid = await _sut.RefreshTokenWithReasonAsync(othersToken, Ct);
+        Assert.Null(stillValid.RejectionCode);
+    }
+
+    [Fact]
+    public async Task Logout_WithAnUnknownRefreshToken_RevokesNothing()
+    {
+        var held = await IssueRefreshTokenAsync();
+
+        await _sut.LogoutAsync(UserId, "not-a-token-this-server-issued", Ct);
+
+        Assert.All(await TokensAsync(), t => Assert.Null(t.RevokedAt));
+        Assert.Null((await _sut.RefreshTokenWithReasonAsync(held, Ct)).RejectionCode);
+    }
+
+    [Fact]
+    public async Task UseWithinGrace_WhenTheChainEndWasRevoked_GetsNoAccessToken()
+    {
+        // BACK-001: A->B->C, then the live C is revoked (password change, theft response). B still names
+        // its replacement, but the chain is over: A must not mint an access token through the grace window.
+        var original = await IssueRefreshTokenAsync();
+        var first = await _sut.RefreshTokenWithReasonAsync(original, Ct);
+        await _sut.RefreshTokenWithReasonAsync(first.Response!.RefreshToken!, Ct);
+        foreach (var token in _db.RefreshTokens.Where(t => t.RevokedAt == null))
+            token.RevokedAt = _clock.GetUtcNow().UtcDateTime;
+        await _db.SaveChangesAsync(Ct);
+        _clock.Advance(TimeSpan.FromSeconds(2));
+
+        var reuse = await _sut.RefreshTokenWithReasonAsync(original, Ct);
+
+        Assert.Null(reuse.Response);
+        Assert.Equal(RefreshRejectionCodes.Replay, reuse.RejectionCode);
     }
 }

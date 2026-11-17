@@ -20,6 +20,8 @@ public static class AgentRuntimeDefaults
     public const int LogRetentionDays = 30;
     public const int MinimumTaskTimeoutSeconds = 10;
     public const int MaximumTaskTimeoutSeconds = 3600;
+    /// <summary>Default bound of the production browser smoke suite, far below the step timeout: the suite takes seconds, so a longer wait is a hang.</summary>
+    public const int SmokeSuiteTimeoutSeconds = 600;
     public const int DeployReleasesToKeep = 3;
     public const int DeployMinimumFreeSpaceMiB = 512;
     public const int DeployUnpackRatioEstimate = 4;

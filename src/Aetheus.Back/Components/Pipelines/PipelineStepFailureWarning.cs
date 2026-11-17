@@ -9,8 +9,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 internal static class PipelineStepFailureWarning
 {
-    public static string RestoreArtifacts(string step, string reason) =>
-        Of(PipelineProblemCodes.StepFailedRestoreArtifacts, "Restore-artifacts", step, reason);
+    public static string RestoreArtifacts(string step, PipelineProblem cause) =>
+        Of(PipelineProblemCodes.StepFailedRestoreArtifacts, "Restore-artifacts", step, cause);
 
     public static string RestoreBackup(string step, string reason) =>
         Of(PipelineProblemCodes.StepFailedRestoreBackup, "Restore-backup", step, reason);
@@ -24,8 +24,8 @@ internal static class PipelineStepFailureWarning
     public static string Scanner(string step, string reason) =>
         Of(PipelineProblemCodes.StepFailedScanner, "Scanner", step, reason);
 
-    public static string Release(string step, string? reason) =>
-        Of(PipelineProblemCodes.StepFailedRelease, "Release", step, reason ?? string.Empty);
+    public static string Release(string step, PipelineProblem? cause) =>
+        Of(PipelineProblemCodes.StepFailedRelease, "Release", step, cause ?? PipelineArtifactProblems.Unresolved("The release artifact could not be resolved."));
 
     public static string Trigger(string step, string reason) =>
         Of(PipelineProblemCodes.StepFailedTrigger, "Trigger", step, reason);
@@ -52,6 +52,12 @@ internal static class PipelineStepFailureWarning
             $"Blue-green step '{step}': compose_env did not forward {names}, which this run does not define at this point.",
             ("step", step), ("variables", names)).ToStored();
     }
+
+    /// <summary>The failure whose reason is itself a coded problem: it is stored as the cause, written where the
+    /// sentence names <c>{detail}</c>, so the run page says both in the user's language.</summary>
+    private static string Of(string code, string label, string step, PipelineProblem cause) =>
+        PipelineProblem.Of(code, $"{label} step '{step}': {cause.English}", ("step", step), ("detail", cause.English))
+            .ToStored([cause.ToDto()]);
 
     private static string Of(string code, string label, string step, string reason) =>
         PipelineProblem.Of(code, $"{label} step '{step}': {reason}", ("step", step), ("detail", reason)).ToStored();

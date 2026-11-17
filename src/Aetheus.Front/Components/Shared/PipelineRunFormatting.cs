@@ -96,6 +96,24 @@ internal static class PipelineRunFormatting
     public static bool IsSkippedWithoutWork(PipelineStepRunDto step) =>
         step.Status == TaskExecutionStatus.Success && !string.IsNullOrWhiteSpace(step.SkippedReason);
 
+    /// <summary>R-39: a step that only declared a checkout, finished by the engine because the run preparation already
+    /// cloned the revision (<see cref="PipelineStepSkipReasons.CheckoutDoneByPreparation"/>).</summary>
+    public static bool IsCheckoutDoneByPreparation(PipelineStepRunDto step) =>
+        step.Status == TaskExecutionStatus.Success
+        && step.SkippedReason == PipelineStepSkipReasons.CheckoutDoneByPreparation;
+
+    /// <summary>The label of a step finished without doing its work: the checkout the preparation already made, or
+    /// (any other reason) an artifact that was not there to restore.</summary>
+    public static string SkippedWithoutWorkText(PipelineStepRunDto step, IStringLocalizer localizer) =>
+        IsCheckoutDoneByPreparation(step)
+            ? localizer["StepSkippedCheckoutPrepared"].Value
+            : localizer["StepSkippedArtifactMissing"].Value;
+
+    /// <summary>The tooltip of a step finished without doing its work: the localized sentence of a known code, else
+    /// the reason the engine stored.</summary>
+    public static string? SkippedWithoutWorkHint(PipelineStepRunDto step, IStringLocalizer localizer) =>
+        IsCheckoutDoneByPreparation(step) ? localizer["StepSkippedCheckoutPreparedHint"].Value : step.SkippedReason;
+
     /// <summary>A failure the pipeline was told to continue past.</summary>
     public static bool IsNonBlockingFailure(PipelineStepRunDto step) =>
         step is { Status: TaskExecutionStatus.Failed, ContinueOnError: true } && !IsRolledBack(step);
@@ -111,7 +129,7 @@ internal static class PipelineRunFormatting
     /// status.</summary>
     public static string StepStatusText(PipelineStepRunDto step, IStringLocalizer localizer) =>
         IsRolledBack(step) ? localizer["RolledBack"].Value
-        : IsSkippedWithoutWork(step) ? localizer["StepSkippedArtifactMissing"].Value
+        : IsSkippedWithoutWork(step) ? SkippedWithoutWorkText(step, localizer)
         : IsSkippedByCondition(step) ? localizer["Skipped"].Value
         : step.IsRejected ? localizer.Localize(PipelineStatus.Rejected)
         : localizer.Localize(step.Status);
@@ -121,7 +139,7 @@ internal static class PipelineRunFormatting
     public static string? StepStatusTitle(PipelineStepRunDto step, IStringLocalizer localizer) =>
         IsNonBlockingFailure(step) && step.IsAdvisory ? localizer["StepAdvisoryHint"].Value
         : IsNonBlockingFailure(step) ? localizer["StepFailedNonBlocking"].Value
-        : IsSkippedWithoutWork(step) ? step.SkippedReason
+        : IsSkippedWithoutWork(step) ? SkippedWithoutWorkHint(step, localizer)
         : IsSkippedByCondition(step) ? step.SkippedCondition
         : step.IsRejected ? localizer["StepRejectedHint"].Value
         : null;

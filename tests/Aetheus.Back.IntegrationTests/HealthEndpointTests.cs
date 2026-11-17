@@ -10,10 +10,10 @@ namespace Aetheus.Back.IntegrationTests;
 /// migrations did not apply against real PostgreSQL the host would not start and these
 /// tests would fail - which is exactly the signal the InMemory unit suite cannot give.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class HealthEndpointTests(PostgresFixture fixture)
+public sealed class HealthEndpointTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
+    [Trait("Category", "RollbackRelevant")]
     public async Task GetHealthLive_Anonymous_Returns200()
     {
         // Arrange

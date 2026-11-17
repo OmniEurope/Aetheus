@@ -141,4 +141,24 @@ public sealed class LoginRedirectTests : BunitContext
         cut.WaitForAssertion(() => Assert.Equal(
             $"http://localhost/account/change-password?returnUrl={EncodedRunLogs}", Nav.Uri));
     }
+
+    /// <summary>R-1: the seeded administrator of a fresh install signs in onto its account setup, the page kept.</summary>
+    [Fact]
+    public void Login_AsTheSeededAdministrator_LeadsToTheAccountSetup_KeepingTheRequestedPage()
+    {
+        _handler.SetJsonResponse("auth/login", new LoginResponse { Token = "jwt-token", MustChangePassword = true, MustSetUpAccount = true });
+        Nav.NavigateTo($"http://localhost/login?returnUrl={EncodedRunLogs}");
+
+        var cut = Render<Login>();
+        cut.Find("input#Email").Input("admin@aetheus.local");
+        cut.Find("input#Password").Input("secret-password");
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Equal(
+            $"http://localhost/account/setup?returnUrl={EncodedRunLogs}", Nav.Uri));
+    }
+
+    [Fact]
+    public void AccountSetup_IsAnAuthPage_NeverAReturnAddress() =>
+        Assert.Equal("/", LoginRedirect.Resolve(LoginRedirect.AccountSetupPath));
 }

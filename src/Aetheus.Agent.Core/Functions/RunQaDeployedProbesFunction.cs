@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net.Http;
-using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Aetheus.Agent.Core.Functions;
@@ -81,7 +81,7 @@ public sealed partial class RunQaDeployedProbesFunction : IPipelineFunction
         var passed = await ProbeAsync(context, http, backend, passwordFile, results, cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(
             Path.Combine(results, "deployed-proof.json"),
-            JsonSerializer.Serialize(new { schema = 1, suite = label, executedProbes = 5, status = passed ? "Passed" : "Failed" }) + "\n",
+            new JsonObject { ["schema"] = 1, ["suite"] = label, ["executedProbes"] = 5, ["status"] = passed ? "Passed" : "Failed" }.ToJsonString() + "\n",
             cancellationToken).ConfigureAwait(false);
         return await PublishAsync(context, label, results, passed, cancellationToken).ConfigureAwait(false);
     }
@@ -109,7 +109,7 @@ public sealed partial class RunQaDeployedProbesFunction : IPipelineFunction
             var password = (await File.ReadAllTextAsync(passwordFile, cancellationToken).ConfigureAwait(false)).TrimEnd('\n');
             var login = await http.PostJsonAsync(
                 backend + "/api/auth/login",
-                JsonSerializer.Serialize(new { email = AgentContractSession.QaAdminEmail, password }),
+                new JsonObject { ["email"] = AgentContractSession.QaAdminEmail, ["password"] = password }.ToJsonString(),
                 null,
                 cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(results, "login.json"), login, cancellationToken).ConfigureAwait(false);

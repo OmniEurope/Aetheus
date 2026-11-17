@@ -60,13 +60,28 @@ public sealed class TelemetrySendIntervalNoteTests : BunitContext
     }
 
     [Fact]
-    public void WithoutAnObservedInterval_TheVersionThatAppliesTheServersIsNamed()
+    public void R27_WithoutAnObservedInterval_NoSentenceAboutTheVersionIsShown()
     {
         var cut = RenderNote(observed: null);
 
-        cut.WaitForAssertion(() => Assert.Contains(
-            "ne s'applique qu'à partir d'Aetheus.Telemetry 1.1.0",
-            cut.Find("[data-testid=telemetry-send-interval-observation]").TextContent));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=telemetry-send-interval-setting]")));
+        Assert.Empty(cut.FindAll("[data-testid=telemetry-send-interval-observation]"));
+        Assert.DoesNotContain("1.1.0", cut.Markup);
+    }
+
+    [Fact]
+    public void R30_WhenTheHostStatesTheSetting_TheNoteDoesNotRepeatIt_AndReadsNothingTwice()
+    {
+        var interval = new AppTelemetrySendIntervalDto { ServerIntervalSeconds = 300, Profile = DataRetentionProfile.Standard, ObservedIntervalSeconds = 60 };
+
+        var cut = Render<TelemetrySendIntervalNote>(parameters => parameters
+            .Add(note => note.AppId, 4)
+            .Add(note => note.Interval, interval)
+            .Add(note => note.ShowSetting, false));
+
+        Assert.Empty(cut.FindAll("[data-testid=telemetry-send-interval-setting]"));
+        Assert.NotEmpty(cut.FindAll("[data-testid=telemetry-send-interval-observation]"));
+        Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("send-interval", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -26,6 +26,11 @@
     </OmniCard>
 }
 
+@* R-22: the creation form is folded by default so the grid sits right under the description on a phone (OEAPP-08/09).
+   It stays open after a validation error and folds once the token is created (the revealed token above stays visible). *@
+<OmniFieldset Collapsible="true" @bind-Expanded="_formExpanded" Class="pat-create-form">
+<Legend>@L["PatCreateFormTitle"]</Legend>
+<ChildContent>
 <OmniCard>
     <OmniTemplateForm TModel="NewTokenModel" Model="@_form" OnValidSubmit="@CreateAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
@@ -45,6 +50,8 @@
         </OmniRow>
     </OmniTemplateForm>
 </OmniCard>
+</ChildContent>
+</OmniFieldset>
 
 <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_tokens" Count="@_totalCount" TItem="PersonalAccessTokenDto"
                 IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25"

@@ -6,6 +6,8 @@ namespace Aetheus.Front.Components.Pipelines;
 public partial class SchemaPendingContractions
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private ClipboardService Clipboard { get; set; } = default!;
+    [Inject] private IJSRuntime Js { get; set; } = default!;
 
     [Parameter, EditorRequired] public IReadOnlyList<PendingContractionDto> Contractions { get; set; } = default!;
 
@@ -17,14 +19,11 @@ public partial class SchemaPendingContractions
     internal static OmniTone StepTone(SchemaContractionStep step) =>
         step == SchemaContractionStep.Drop ? OmniTone.Warning : OmniTone.Info;
 
-    /// <summary>The release when a deployment recorded the step it waits for; otherwise what it waits for, in words.</summary>
-    private string PossibleFrom(PendingContractionDto contraction)
-    {
-        if (contraction.PossibleFromRelease is { Length: > 0 } release) return release;
-        return contraction.RequiredAfterMigration is { } migration
-            ? string.Format(L["SchemaPendingAfterRelease"].Value, migration)
-            : L["SchemaPendingAfterPreviousStep"];
-    }
+    private string PossibleFrom(PendingContractionDto contraction) => SchemaContractionMarkdown.PossibleFrom(contraction, L);
+
+    private string Markdown => SchemaContractionMarkdown.Build(Contractions, L);
+    private Task CopyMarkdownAsync() => Clipboard.CopyAsync(Markdown, L["SchemaContractionExportCopied"]);
+    private Task DownloadMarkdownAsync() => Js.InvokeVoidAsync("downloadFile", "schema-contractions.md", Markdown, "text/markdown").AsTask();
 
     private string? AppliedHint(PendingContractionDto contraction) =>
         contraction.AppliedInRelease is { Length: > 0 } applied

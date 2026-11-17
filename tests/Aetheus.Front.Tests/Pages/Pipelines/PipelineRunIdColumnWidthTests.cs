@@ -8,13 +8,13 @@ namespace Aetheus.Front.Tests.Pages.Pipelines;
 public sealed class PipelineRunIdColumnWidthTests
 {
     [Fact]
-    public void TheWidth_FollowsTheLongestId()
+    public void TheWidth_FollowsTheLongestNumber()
     {
-        var shortIds = PipelineRunPresentation.IdColumnWidth([new PipelineRunDto { Id = 7, Status = PipelineStatus.Success }]);
+        var shortIds = PipelineRunPresentation.IdColumnWidth([new PipelineRunDto { Id = 7, BuildNumber = 7, Status = PipelineStatus.Success }]);
         var longIds = PipelineRunPresentation.IdColumnWidth(
         [
-            new PipelineRunDto { Id = 7, Status = PipelineStatus.Success },
-            new PipelineRunDto { Id = 24690, Status = PipelineStatus.Success }
+            new PipelineRunDto { Id = 7, BuildNumber = 7, Status = PipelineStatus.Success },
+            new PipelineRunDto { Id = 24690, BuildNumber = 24690, Status = PipelineStatus.Success }
         ]);
 
         Assert.Equal("calc(max(3ch, 2.5rem) + 2 * var(--omni-space-md))", shortIds);
@@ -28,8 +28,8 @@ public sealed class PipelineRunIdColumnWidthTests
     {
         var width = PipelineRunPresentation.IdColumnWidth(
         [
-            new PipelineRunDto { Id = 2469, Status = PipelineStatus.Success },
-            new PipelineRunDto { Id = 2470, Status = status }
+            new PipelineRunDto { Id = 2469, BuildNumber = 2469, Status = PipelineStatus.Success },
+            new PipelineRunDto { Id = 2470, BuildNumber = 2470, Status = status }
         ]);
 
         Assert.Equal("calc(max(6ch, 2.5rem) + var(--omni-badge-height) + var(--omni-space-xs) + 2 * var(--omni-space-md))", width);
@@ -39,7 +39,7 @@ public sealed class PipelineRunIdColumnWidthTests
     public void ACancellationAlreadyRequested_OffersNoActionAndTakesNoRoomForIt()
     {
         var width = PipelineRunPresentation.IdColumnWidth(
-            [new PipelineRunDto { Id = 2470, Status = PipelineStatus.Running, CancellationRequested = true }]);
+            [new PipelineRunDto { Id = 2470, BuildNumber = 2470, Status = PipelineStatus.Running, CancellationRequested = true }]);
 
         Assert.DoesNotContain("--omni-badge-height", width, StringComparison.Ordinal);
     }
@@ -51,7 +51,7 @@ public sealed class PipelineRunIdColumnWidthTests
             "src", "Aetheus.Front", "Components", "Pipelines", "PipelineEdit.razor"));
 
         Assert.Contains(
-            "Property=\"Id\" Title=\"@L[\"ID\"]\" Width=\"@PipelineRunPresentation.IdColumnWidth(_runs.Concat(_firstRunsPage))\"",
+            "Property=\"BuildNumber\" Title=\"@L[\"RunNumberColumn\"]\" Width=\"@PipelineRunPresentation.IdColumnWidth(_runs.Concat(_firstRunsPage))\"",
             markup, StringComparison.Ordinal);
     }
 }

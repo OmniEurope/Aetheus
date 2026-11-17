@@ -9,7 +9,6 @@ namespace Aetheus.E2E;
 /// browsers.</summary>
 [Category("E2E")]
 [Category("Accessibility")]
-[RollbackRelevant]
 public class AccessibilityTests : E2ETestBase
 {
     // The impacts we refuse to ship. Axe reports impact as one of

@@ -149,4 +149,86 @@ public class TaskDetailTests : BunitContext
         Assert.False(cut.Instance.InFlight);
         Assert.DoesNotContain("TaskInProgress", cut.Markup);
     }
+
+    /// <summary>ADR-060: the canonical address reads the task by identifier, then its logs by the internal
+    /// key it received, and the page names the number on the server, never the site-wide key.</summary>
+    [Fact]
+    public void TheUidAddress_LoadsTheTaskAndItsLogs_AndShowsItsNumber()
+    {
+        var uid = Guid.CreateVersion7();
+        _handler.SetJsonResponse($"api/tasks/{uid}", new ServerTaskDto
+        {
+            Id = 31696,
+            Uid = uid,
+            Number = 12,
+            ServerId = 9,
+            ServerName = "vps",
+            Name = "By identifier",
+            Status = TaskExecutionStatus.Success
+        });
+        _handler.SetJsonResponse("api/logs/task/31696", new List<TaskLogDto>
+        {
+            new() { Id = 1, TaskId = 31696, Message = "a log line", Timestamp = DateTime.Now }
+        });
+
+        var cut = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskUid, uid));
+
+        cut.WaitForAssertion(() => Assert.Contains("a log line", cut.Markup));
+        Assert.Contains("Task #12", cut.Markup);
+        // Blazor's own element references are random GUIDs that can contain any digit run (the nightly of
+        // 2026-11-04 rendered "31696f60-..."): strip them so the check reads only what the page renders.
+        var rendered = System.Text.RegularExpressions.Regex.Replace(
+            cut.Markup, "blazor:elementReference=\"[^\"]*\"", string.Empty);
+        Assert.DoesNotContain("31696", rendered);
+    }
+
+    [Fact]
+    public void AnUnknownUid_SaysSo_WithoutInventingANumber()
+    {
+        var uid = Guid.CreateVersion7();
+        _handler.SetResponse($"api/tasks/{uid}", System.Net.HttpStatusCode.NotFound);
+
+        var cut = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskUid, uid));
+
+        cut.WaitForAssertion(() => Assert.Contains("TaskNotFound", cut.Markup));
+        Assert.DoesNotContain("Task #", cut.Markup);
+    }
+
+    /// <summary>The router gives the page its one key, whichever address was opened.</summary>
+    [Fact]
+    public void TheRouteKey_ReadsAUidOrANumber()
+    {
+        var uid = Guid.CreateVersion7();
+        _handler.SetResponse($"api/tasks/{uid}", System.Net.HttpStatusCode.NotFound);
+        _handler.SetResponse("api/tasks/7085", System.Net.HttpStatusCode.NotFound);
+
+        var byUid = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskKey, uid.ToString()));
+        var byNumber = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskKey, "7085"));
+
+        byUid.WaitForAssertion(() => Assert.Equal(uid, byUid.Instance.TaskUid));
+        byNumber.WaitForAssertion(() => Assert.Equal(7085, byNumber.Instance.TaskId));
+        Assert.Null(byNumber.Instance.TaskUid);
+    }
+
+    [Fact]
+    public void AKeyThatIsNeitherANumberNorAUid_NamesNoTaskNumber()
+    {
+        _handler.SetResponse("api/tasks/0", System.Net.HttpStatusCode.NotFound);
+
+        var page = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskKey, "not-a-task"));
+
+        page.WaitForAssertion(() => Assert.DoesNotContain("#0", page.Markup, StringComparison.Ordinal));
+    }
+
+    /// <summary>A task the backfill has not reached yet keeps a readable name.</summary>
+    [Fact]
+    public void ATaskWithoutNumberYet_ShowsItsKey()
+    {
+        _handler.SetJsonResponse("api/tasks/7085", new ServerTaskDto { Id = 7085, Name = "Older", Status = TaskExecutionStatus.Success });
+        _handler.SetJsonResponse("api/logs/task/7085", new List<TaskLogDto>());
+
+        var cut = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskId, 7085));
+
+        cut.WaitForAssertion(() => Assert.Contains("Task #7085", cut.Markup));
+    }
 }

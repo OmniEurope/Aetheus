@@ -70,7 +70,7 @@ public sealed class MailOperationsService(
                 throw new BadRequestException("Invalid ACME account email.");
             env[MailSetupEnv.CertificateEmail] = acmeEmail;
         }
-        var id = await QueueAsync(serverId, $"Mail - TLS certificate ({hostname})", OperationKind.MailInstallCertificate,
+        var id = await QueueAsync(serverId, ServerTaskNames.MailTlsCertificate(hostname), OperationKind.MailInstallCertificate,
             hostname, env, 300, ct).ConfigureAwait(false);
         await audit.LogAsync("MailInstallCertificate", "Mail", serverId, hostname, ct).ConfigureAwait(false);
         return id;
@@ -93,7 +93,7 @@ public sealed class MailOperationsService(
 
     public async Task<MailTaskQueuedDto> InstallSpamFilterAsync(int serverId, CancellationToken ct = default)
     {
-        var id = await QueueAsync(serverId, "Mail - install spam filter (rspamd)", OperationKind.MailSpamInstall, "-",
+        var id = await QueueAsync(serverId, ServerTaskNames.MailSpamInstall, OperationKind.MailSpamInstall, "-",
             null, 900, ct).ConfigureAwait(false);
         await audit.LogAsync("MailSpamInstall", "Mail", serverId, "rspamd", ct).ConfigureAwait(false);
         return id;
@@ -110,7 +110,7 @@ public sealed class MailOperationsService(
             [MailSetupEnv.SpamAddHeaderScore] = Score(request.AddHeaderScore),
             [MailSetupEnv.SpamGreylistScore] = Score(request.GreylistScore)
         };
-        var id = await QueueAsync(serverId, "Mail - spam thresholds", OperationKind.MailSpamConfigure, "-", env, 120, ct).ConfigureAwait(false);
+        var id = await QueueAsync(serverId, ServerTaskNames.MailSpamThresholds, OperationKind.MailSpamConfigure, "-", env, 120, ct).ConfigureAwait(false);
         await audit.LogAsync("MailSpamConfigure", "Mail", serverId,
             $"reject={env[MailSetupEnv.SpamRejectScore]} add_header={env[MailSetupEnv.SpamAddHeaderScore]} greylist={env[MailSetupEnv.SpamGreylistScore]}",
             ct).ConfigureAwait(false);
@@ -125,7 +125,7 @@ public sealed class MailOperationsService(
         await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
         var kind = request.IsSpam ? "spam" : "ham";
         var env = new Dictionary<string, string>(StringComparer.Ordinal) { [MailSetupEnv.LearnMessage] = request.RawMessage };
-        var task = ServerTaskFactory.Operation(serverId, $"Mail - learn {kind}", OperationKind.MailSpamLearn, kind, env, 120);
+        var task = ServerTaskFactory.Operation(serverId, ServerTaskNames.MailLearn(request.IsSpam), OperationKind.MailSpamLearn, kind, env, 120);
         // The sample may carry personal data: encrypted at rest like the password-bearing mail tasks.
         task.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(env));
         await TaskQueuePersistence.PersistAndNotifyAsync(mailRepo.AddTaskAsync, taskService, task, ct).ConfigureAwait(false);
@@ -143,7 +143,7 @@ public sealed class MailOperationsService(
         if (!domains.Any(d => d.Name.Equals(senderDomain, StringComparison.OrdinalIgnoreCase)))
             throw new BadRequestException("The sender must belong to a mail domain of this server (it is DKIM-signed).");
         var env = new Dictionary<string, string>(StringComparer.Ordinal) { [MailSetupEnv.Sender] = request.From };
-        var id = await QueueAsync(serverId, $"Mail - delivery test to {request.To}", OperationKind.MailSendTest, request.To,
+        var id = await QueueAsync(serverId, ServerTaskNames.MailDeliveryTestPrefix + request.To, OperationKind.MailSendTest, request.To,
             env, 150, ct).ConfigureAwait(false);
         await audit.LogAsync("MailSendTest", "Mail", serverId, $"{request.From} -> {request.To}", ct).ConfigureAwait(false);
         return id;
@@ -163,7 +163,7 @@ public sealed class MailOperationsService(
     }
 
     public Task<MailTaskQueuedDto> RefreshQuotaAsync(int serverId, CancellationToken ct = default) =>
-        QueueAsync(serverId, "Mail - mailbox usage", OperationKind.MailQuotaReport, "-", null, 300, ct);
+        QueueAsync(serverId, ServerTaskNames.MailMailboxUsage, OperationKind.MailQuotaReport, "-", null, 300, ct);
 
     public async Task<int> IngestQuotaReportAsync(int serverId, int taskId, CancellationToken ct = default)
     {

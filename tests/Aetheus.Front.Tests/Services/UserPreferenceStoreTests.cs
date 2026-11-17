@@ -101,7 +101,9 @@ public sealed class UserPreferenceStoreTests
         var ct = TestContext.Current.CancellationToken;
         var changedAt = new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero);
         _handler.SetResponse(HttpMethod.Get, "api/users/me/preferences/aetheus.language", HttpStatusCode.NoContent);
-        _handler.SetResponse(HttpMethod.Put, "api/users/me/preferences/aetheus.language", HttpStatusCode.OK);
+        var keptAt = changedAt.AddSeconds(2);
+        _handler.SetJsonResponse(HttpMethod.Put, "api/users/me/preferences/aetheus.language",
+            new UserPreferenceDto { Key = "aetheus.language", Value = "\"fr-FR\"", UpdatedAt = keptAt });
         _handler.SetJsonResponse("api/users/me/preferences?since=", new List<UserPreferenceDto>
         {
             new() { Key = "omni.appearance", Value = null, UpdatedAt = changedAt }
@@ -111,7 +113,9 @@ public sealed class UserPreferenceStoreTests
         var changed = Assert.Single(await store.GetChangedSinceAsync(changedAt.AddDays(-1), ct));
         Assert.Equal(new OmniPreference("omni.appearance", null, changedAt), changed);
 
-        await store.SaveAsync(new OmniPreference("aetheus.language", "\"fr-FR\"", changedAt), ct);
+        var kept = await store.SaveAsync(new OmniPreference("aetheus.language", "\"fr-FR\"", changedAt), ct);
+        // The store answers what the server kept, with the date the server corrected.
+        Assert.Equal(new OmniPreference("aetheus.language", "\"fr-FR\"", keptAt), kept);
         var put = Assert.Single(_handler.RequestDetails, request => request.Method == "PUT");
         var sent = JsonSerializer.Deserialize<SaveUserPreferenceRequest>(put.Body!, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
         Assert.Equal("\"fr-FR\"", sent.Value);

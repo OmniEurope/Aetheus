@@ -634,4 +634,33 @@ public class AddAgentTests : BunitContext
         Assert.Equal(2, breadcrumb.Items.Count);
         Assert.Contains(breadcrumb.Items, i => i.Text == "AddAgent");
     }
+
+    [Fact]
+    public async Task R8_HostReboot_IsOffByDefault_SoTheInstallCommandCarriesNoRebootFlag()
+    {
+        IssueTokens();
+        var cut = Render<AddAgent>();
+        await GoToStepAsync(cut, 2);
+
+        Assert.DoesNotContain("--enable-host-reboot", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain(cut.Instance.GetAllCommands(), command => command.Contains("--enable-host-reboot", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task R8_TickingTheHostRebootCard_PutsItsFlagInTheInstallStepAndTheCopyAllCommands()
+    {
+        IssueTokens();
+        var cut = Render<AddAgent>();
+        await GoToStepAsync(cut, 1);
+
+        AngleSharp.Dom.IElement Card() => cut.FindAll(".omni-selectable-card")
+            .Single(item => item.TextContent.Contains("WizardModuleHostReboot", StringComparison.Ordinal));
+        Assert.DoesNotContain("omni-selectable-card--selected", Card().ClassName, StringComparison.Ordinal);
+        await Card().ClickAsync(new MouseEventArgs());
+        Assert.Contains("omni-selectable-card--selected", Card().ClassName, StringComparison.Ordinal);
+        await GoToStepAsync(cut, 1);
+
+        Assert.Contains("--enable-host-reboot", cut.Markup, StringComparison.Ordinal);
+        Assert.Single(cut.Instance.GetAllCommands(), command => command.Contains("--enable-host-reboot", StringComparison.Ordinal));
+    }
 }

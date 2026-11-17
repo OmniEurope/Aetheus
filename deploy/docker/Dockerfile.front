@@ -5,14 +5,17 @@
 #
 # Consumes the frontend and static-server outputs produced by scripts/publish-application.sh
 # under .pipeline-publish, without rebuilding inside the image.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0.0@sha256:bc0d6653979efba491ab3d6f589d691f96c309c3c3ef81325efa6978e7b7f242 AS runtime
 WORKDIR /app
 
-# Installs curl for readiness checks and the current OpenSSL security packages before copying build
+# Installs curl for readiness checks and the current OpenSSL and apt security packages before copying build
 # output, keeping this layer reusable across application builds. See docs/self-deploy-guide.md.
+# The base image ships Canonical's Pebble (/usr/bin/pebble, a Go binary outside dpkg, so apt cannot update
+# it) that nothing here runs; removing it removes its Go stdlib CVEs from the image (recette R-42).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl openssl libssl3t64 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends curl openssl libssl3t64 apt libapt-pkg7.0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/bin/pebble
 
 COPY .pipeline-publish/static-server/ .
 COPY .pipeline-publish/frontend/wwwroot ./wwwroot

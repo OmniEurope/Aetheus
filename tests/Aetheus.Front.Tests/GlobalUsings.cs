@@ -82,3 +82,4 @@ global using Aetheus.Shared.Components.Webhooks;
 global using Aetheus.Shared.Components.WorkItems;
 global using OmniEurope.Blazor.Components;
 global using static Aetheus.Front.Tests.FormModelTestHelper;
+global using BunitContext = Aetheus.Front.Tests.InteractiveBunitContext;

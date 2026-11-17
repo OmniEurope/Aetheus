@@ -197,20 +197,8 @@ public partial class LibraryPortAllocateDialog
 
     /// <summary>The library's <c>PORT_</c> entries, or null when it could not be read: that re-read is
     /// the doubt, not the verdict, so a caller that needs certainty keeps the refusal it already has.</summary>
-    private async Task<List<VariableEntryDto>?> ReadPortEntriesAsync()
-    {
-        try
-        {
-            var page = await Api.Variables.GetVariableEntriesPageAsync(
-                LibraryId, page: 1, pageSize: 200, search: PortRegistryLimits.PortKeyPrefix);
-            return [.. page.Items.Where(entry =>
-                entry.Key.StartsWith(PortRegistryLimits.PortKeyPrefix, StringComparison.Ordinal))];
-        }
-        catch (HttpRequestException)
-        {
-            return null;
-        }
-    }
+    private Task<List<VariableEntryDto>?> ReadPortEntriesAsync() =>
+        LibraryPortTargets.TryReadPortEntriesAsync(Api, LibraryId);
 
     /// <summary>One key per line, blanks dropped. The PORT_ prefix is enforced by the backend, which
     /// refuses rather than renames, so a typo is reported instead of quietly producing a variable the

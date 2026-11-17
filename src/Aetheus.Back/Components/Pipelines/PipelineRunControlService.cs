@@ -64,18 +64,18 @@ public sealed class PipelineRunControlService(
         if (!await CancelSingleRunAsync(root, cancellation, scheduler, launcher, ct).ConfigureAwait(false)) return false;
 
         var visited = new HashSet<int> { runId };
-        var pendingParents = new Queue<int>();
-        pendingParents.Enqueue(runId);
-        while (pendingParents.TryDequeue(out var parentRunId))
+        var pendingParents = new Queue<(int RunId, int RunNumber)>();
+        pendingParents.Enqueue((runId, root.BuildNumber));
+        while (pendingParents.TryDequeue(out var parent))
         {
-            var childIds = await repo.GetTriggeredChildRunIdsAsync(parentRunId, ct).ConfigureAwait(false);
+            var childIds = await repo.GetTriggeredChildRunIdsAsync(parent.RunId, ct).ConfigureAwait(false);
             foreach (var childId in childIds)
             {
                 if (!visited.Add(childId)) continue;
                 var child = await repo.GetPipelineRunWithPipelineAsync(childId, ct).ConfigureAwait(false);
                 if (child is not null && !IsTerminal(child.Status))
-                    await CancelSingleRunAsync(child, cancellation.ForChildOf(parentRunId), scheduler, launcher, ct).ConfigureAwait(false);
-                pendingParents.Enqueue(childId);
+                    await CancelSingleRunAsync(child, cancellation.ForChildOf(parent.RunNumber), scheduler, launcher, ct).ConfigureAwait(false);
+                pendingParents.Enqueue((childId, child?.BuildNumber ?? 0));
             }
         }
 

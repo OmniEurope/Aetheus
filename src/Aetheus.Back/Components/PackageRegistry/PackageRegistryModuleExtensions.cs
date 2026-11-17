@@ -13,6 +13,8 @@ public static class PackageRegistryModuleExtensions
         services.AddScoped<IPackageRegistryAdminService, PackageRegistryAdminService>();
         services.AddScoped<NuGetPackageInspector>();
         services.AddScoped<NpmPackageInspector>();
+        services.AddSingleton<PackageRunTokens>();
+        services.AddScoped<IPackageRunTokenIssuer, PackageRunTokenIssuer>();
         services.AddSingleton<PackageRegistryPublishGate>();
         services.AddSingleton<PackageRegistryUploadGate>();
         services.AddHostedService<PackageRegistryStorageReconciler>();

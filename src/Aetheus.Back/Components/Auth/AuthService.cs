@@ -15,6 +15,7 @@ public class AuthService(
     IConfiguration config,
     IAuditService audit,
     JwtOptions jwtOptions,
+    TokenHashKeys tokenHashKeys,
     IMemoryCache cache,
     Aetheus.Back.Components.Organizations.IOrganizationService orgService,
     ITotpService totpService,
@@ -24,14 +25,12 @@ public class AuthService(
     IDomainEventDispatcher domainEvents,
     ILogger<AuthService> logger) : IAuthService
 {
-    private const int MaxFailedAttempts = 5; // F-011
-    private static readonly TimeSpan BaseLockoutDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(30); // F-012
     private static readonly TimeSpan RefreshTokenGrace = RefreshTokenRetention.RevokedRetention;
     public async Task<bool> IsRegistrationTokenValidAsync(string token, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(token)) return false;
-        var regToken = await repo.FindValidRegistrationTokenAsync(HashToken(token), ct).ConfigureAwait(false);
+        var regToken = await repo.FindValidRegistrationTokenAsync(tokenHashKeys.HashCandidates(TokenHashPurpose.RegistrationToken, token), ct).ConfigureAwait(false);
         return regToken is not null;
     }
 
@@ -104,7 +103,11 @@ public class AuthService(
         var claims = BuildUserClaims(user, roles);
         var response = await GenerateTokenResponseWithRefreshAsync(
             claims, user.Id, request.RememberMe, ct).ConfigureAwait(false);
-        return response with { MustChangePassword = user.MustChangePassword };
+        return response with
+        {
+            MustChangePassword = user.MustChangePassword || user.MustSetUpAccount,
+            MustSetUpAccount = user.MustSetUpAccount
+        };
     }
 
     private async Task<(bool IsValid, LoginResponse? Challenge)> ValidateSecondFactorAsync(
@@ -146,21 +149,8 @@ public class AuthService(
 
     // --- Lockout helpers (F-011) ---
 
-    private async Task HandleFailedLoginAsync(User user, CancellationToken ct)
-    {
-        // The stored count, not the snapshot + 1: concurrent failures read the same snapshot.
-        var newCount = await repo.IncrementFailedLoginAsync(user.Id, ct).ConfigureAwait(false);
-        if (newCount >= MaxFailedAttempts)
-        {
-            // Exponential backoff: 15 min × 2^(lockout_round - 1), capped at 24 h
-            var lockoutRound = newCount / MaxFailedAttempts;
-            var duration = TimeSpan.FromTicks(
-                Math.Min(BaseLockoutDuration.Ticks * (1L << Math.Min(lockoutRound - 1, 6)),
-                          TimeSpan.FromHours(24).Ticks));
-            var lockoutEnd = timeProvider.GetUtcNow().UtcDateTime.Add(duration);
-            await repo.LockoutUserAsync(user.Id, lockoutEnd, ct).ConfigureAwait(false);
-        }
-    }
+    private Task HandleFailedLoginAsync(User user, CancellationToken ct)
+        => LoginLockoutPolicy.RecordFailureAsync(repo, timeProvider, user.Id, ct);
 
     // --- Login anomaly detection (F-013) ---
 
@@ -199,12 +189,15 @@ public class AuthService(
             new(ClaimTypes.Name, user.Username),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(AetheusClaimTypes.SecurityStamp, user.SecurityStamp),
-            new(AetheusClaimTypes.AnalyticsVisitor, AuthTokenHelper.AnalyticsVisitorId(jwtOptions.SigningKey, user.Id.ToString()))
+            new(AetheusClaimTypes.AnalyticsVisitor, tokenHashKeys.AnalyticsVisitorId(user.Id.ToString()))
         };
         // Carries the forced-change state through token renewal/refresh so the Front gate survives
         // a page reload; a token minted after the password is changed no longer includes it.
-        if (user.MustChangePassword)
+        // R-1: an account still to set up is held by the same server-side gate, whatever its other flag says.
+        if (user.MustChangePassword || user.MustSetUpAccount)
             claims.Add(new Claim(AetheusClaimTypes.MustChangePassword, "true"));
+        if (user.MustSetUpAccount)
+            claims.Add(new Claim(AetheusClaimTypes.MustSetUpAccount, "true"));
         foreach (var role in roles)
             claims.Add(new Claim(ClaimTypes.Role, role));
         return claims;
@@ -257,7 +250,7 @@ public class AuthService(
             ?? throw new BadRequestException("No organization available; create an organization first.");
         var token = new RegistrationToken
         {
-            Token = HashToken(plaintext),
+            Token = tokenHashKeys.Hash(TokenHashPurpose.RegistrationToken, plaintext),
             ExpiresAt = timeProvider.GetUtcNow().UtcDateTime.AddHours(request.ExpirationHours > 0 ? request.ExpirationHours : 24),
             OrganizationId = orgId
         };
@@ -313,8 +306,8 @@ public class AuthService(
 
     public async Task<int?> ValidateServerTokenAsync(string token, CancellationToken ct = default)
     {
-        var hash = HashToken(token);
-        return await repo.ValidateServerTokenHashAsync(hash, ct).ConfigureAwait(false);
+        var hashes = tokenHashKeys.HashCandidates(TokenHashPurpose.ServerToken, token);
+        return await repo.ValidateServerTokenHashAsync(hashes, ct).ConfigureAwait(false);
     }
 
     public async Task<ServerRegistrationResponse?> RotateAgentTokenAsync(int serverId, CancellationToken ct = default)
@@ -325,7 +318,7 @@ public class AuthService(
         await repo.RevokeServerTokensAsync(serverId, ct).ConfigureAwait(false);
 
         var bearerToken = GenerateSecureToken();
-        var tokenHash = HashToken(bearerToken);
+        var tokenHash = tokenHashKeys.Hash(TokenHashPurpose.ServerToken, bearerToken);
         var ttlDays = config.GetValue("AgentToken:TtlDays", 365);
 
         repo.AddServerToken(new ServerToken
@@ -364,7 +357,7 @@ public class AuthService(
         repo.AddServerToken(new ServerToken
         {
             ServerId = serverId,
-            TokenHash = HashToken(bearerToken),
+            TokenHash = tokenHashKeys.Hash(TokenHashPurpose.ServerToken, bearerToken),
             ExpiresAt = expiresAt
         });
         await repo.DeleteExpiredServerTokensAsync(serverId, ct).ConfigureAwait(false);
@@ -482,8 +475,20 @@ public class AuthService(
         return await GenerateTokenResponseWithRefreshAsync(claims, userId, rememberMe: false, ct).ConfigureAwait(false);
     }
 
-    public Task LogoutAsync(int userId, CancellationToken ct = default) =>
-        domainEvents.DispatchAsync(new UserSessionEndedEvent(userId, UserSessionEndReasons.Logout), ct);
+    public async Task LogoutAsync(int userId, string? refreshToken, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            var stored = await repo.FindRefreshTokenByHashAsync(
+                tokenHashKeys.HashCandidates(TokenHashPurpose.RefreshToken, refreshToken), ct).ConfigureAwait(false);
+            // Only the caller's own token: a bearer must not end another account's session. Revoked
+            // without a replacement, through the rotation's compare-and-set, so a later reuse reads
+            // as a replay (ReuseRevokedTokenAsync).
+            if (stored is not null && stored.UserId == userId)
+                await repo.RevokeRefreshTokenAsync(stored.Id, null, ct).ConfigureAwait(false);
+        }
+        await domainEvents.DispatchAsync(new UserSessionEndedEvent(userId, UserSessionEndReasons.Logout), ct).ConfigureAwait(false);
+    }
 
     // --- Refresh Token Rotation (F-012) ---
 
@@ -492,8 +497,10 @@ public class AuthService(
 
     public async Task<RefreshTokenOutcome> RefreshTokenWithReasonAsync(string refreshToken, CancellationToken ct = default)
     {
-        var tokenHash = HashToken(refreshToken);
-        var stored = await repo.FindRefreshTokenByHashAsync(tokenHash, ct).ConfigureAwait(false);
+        // R-53: the legacy hash is a candidate too; a token found through it is rotated below into one
+        // stored under the per-purpose hash, so the legacy row lives only until its first refresh.
+        var tokenHashes = tokenHashKeys.HashCandidates(TokenHashPurpose.RefreshToken, refreshToken);
+        var stored = await repo.FindRefreshTokenByHashAsync(tokenHashes, ct).ConfigureAwait(false);
         if (stored is null) return RefreshTokenOutcome.Rejected(RefreshRejectionCodes.UnknownToken);
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -506,7 +513,7 @@ public class AuthService(
         var newRefresh = new Data.Entities.RefreshToken
         {
             UserId = stored.UserId,
-            TokenHash = HashToken(newPlaintext),
+            TokenHash = tokenHashKeys.Hash(TokenHashPurpose.RefreshToken, newPlaintext),
             ExpiresAt = now.Add(RefreshTokenLifetime),
             CreatedAt = now
         };
@@ -560,10 +567,24 @@ public class AuthService(
     // the chain was ended (password change, logout, theft response: revoked with no replacement), the
     // rotated token must not mint an access token either. A replacement that was itself rotated onward
     // is still a live chain: another tab refreshing at the same moment must not read as a theft.
-    private async Task<bool> IsStillActiveAsync(int tokenId, DateTime now, CancellationToken ct) =>
-        await repo.FindRefreshTokenStateAsync(tokenId, ct).ConfigureAwait(false) is { } replacement
-        && !replacement.IsExpired(now)
-        && (replacement.RevokedAt is null || replacement.ReplacedById is not null);
+    // BACK-001: "rotated onward" proves nothing by itself. In A->B->C, ending the chain revokes only the
+    // live C, so B still points at a replacement; the chain is followed to its end, and only an active
+    // terminal token keeps the grace. An expired or missing link, or a chain longer than any rotation burst
+    // within the window, is refused.
+    private const int MaxGraceChainHops = 64;
+
+    private async Task<bool> IsStillActiveAsync(int tokenId, DateTime now, CancellationToken ct)
+    {
+        int? next = tokenId;
+        for (var hop = 0; hop < MaxGraceChainHops && next is { } id; hop++)
+        {
+            if (await repo.FindRefreshTokenStateAsync(id, ct).ConfigureAwait(false) is not { } token
+                || token.IsExpired(now)) return false;
+            if (token.RevokedAt is null) return true;
+            next = token.ReplacedById;
+        }
+        return false;
+    }
 
     private async Task<LoginResponse> GenerateTokenResponseWithRefreshAsync(
         List<Claim> claims, int userId, bool rememberMe, CancellationToken ct)
@@ -576,7 +597,7 @@ public class AuthService(
         var refresh = new Data.Entities.RefreshToken
         {
             UserId = userId,
-            TokenHash = HashToken(plaintext),
+            TokenHash = tokenHashKeys.Hash(TokenHashPurpose.RefreshToken, plaintext),
             ExpiresAt = now.Add(RefreshTokenLifetime),
             CreatedAt = now
         };
@@ -593,8 +614,16 @@ public class AuthService(
     public Task<bool> VerifyAndEnableTotpAsync(int userId, string code, CancellationToken ct = default)
         => totpService.VerifyAndEnableTotpAsync(userId, code, ct);
 
-    public Task<bool> DisableTotpAsync(int userId, string password, CancellationToken ct = default)
-        => totpService.DisableTotpAsync(userId, password, ct);
+    public async Task<LoginResponse?> DisableTotpAsync(int userId, TotpDisableRequest request, CancellationToken ct = default)
+    {
+        if (!await totpService.DisableTotpAsync(userId, request, ct).ConfigureAwait(false)) return null;
+
+        // The stamp was rotated with the change: drop the cached one after the commit, end the refresh
+        // tokens of the other sessions, then hand the caller a session under the new stamp.
+        cache.Remove($"sec-stamp:{userId}");
+        await repo.RevokeAllUserRefreshTokensAsync(userId, ct).ConfigureAwait(false);
+        return await RenewTokenAsync(userId, ct).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Git Smart-HTTP Basic-auth verification. Deliberately enforces lockout + BCrypt but NOT TOTP: the
@@ -618,6 +647,11 @@ public class AuthService(
             return null;
         }
 
+        // A password the account must still replace (forced change, R-1 account setup) opens nothing over Git
+        // either: the gate the API holds through the token claim has no token to read here.
+        if (user.MustChangePassword || user.MustSetUpAccount)
+            return null;
+
         // Align with LoginAsync: also clear a now-expired LockoutEndUtc, not just a non-zero fail count.
         if (user.FailedLoginCount > 0 || user.LockoutEndUtc is not null)
             await repo.ResetFailedLoginAsync(user.Id, ct).ConfigureAwait(false);
@@ -629,7 +663,5 @@ public class AuthService(
     private static string AttemptedLogin(LoginRequest request) => request.Email;
 
     private static string GenerateSecureToken() => AuthTokenHelper.GenerateSecureToken();
-
-    private string HashToken(string token) => AuthTokenHelper.HashToken(jwtOptions.SigningKey, token);
 
 }

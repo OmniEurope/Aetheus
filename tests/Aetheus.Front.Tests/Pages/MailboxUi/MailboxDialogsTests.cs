@@ -233,6 +233,38 @@ public sealed class MailboxDialogsTests : BunitContext
         Assert.Equal("a.txt", Assert.Single(downloaded).FileName);
     }
 
+    // Audit decision 2026-10-12 (option a): the frame loads the API's document by URL, under that document's own
+    // policy, instead of a srcdoc that inherited the page's policy and lost every inline style.
+    [Fact]
+    public void The_reader_loads_the_html_document_by_its_api_url_in_a_script_less_sandbox()
+    {
+        var cut = Render<MailboxReader>(parameters => parameters
+            .Add(reader => reader.Message, new MailboxMessageDto
+            {
+                Subject = "Styled",
+                Html = "<p style=\"color:red\">x</p>",
+                DocumentPath = "api/mail/documents/abc",
+                Text = "x"
+            }));
+
+        var frame = cut.Find("iframe.mailbox-html");
+        Assert.Equal("http://test/api/mail/documents/abc", frame.GetAttribute("src"));
+        Assert.False(frame.HasAttribute("srcdoc"));
+        Assert.Equal("allow-popups allow-popups-to-escape-sandbox", frame.GetAttribute("sandbox"));
+        Assert.Equal("no-referrer", frame.GetAttribute("referrerpolicy"));
+        Assert.Empty(cut.FindAll("pre.mailbox-text"));
+    }
+
+    [Fact]
+    public void The_reader_shows_the_text_when_no_document_url_came_with_the_html()
+    {
+        var cut = Render<MailboxReader>(parameters => parameters
+            .Add(reader => reader.Message, new MailboxMessageDto { Subject = "s", Html = "<p>x</p>", Text = "x" }));
+
+        Assert.Empty(cut.FindAll("iframe.mailbox-html"));
+        Assert.Equal("x", cut.Find("pre.mailbox-text").TextContent);
+    }
+
     [Fact]
     public void The_client_settings_name_the_host_ports_and_full_address()
     {

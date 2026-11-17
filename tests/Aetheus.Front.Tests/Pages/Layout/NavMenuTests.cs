@@ -47,6 +47,25 @@ public class NavMenuTests : BunitContext
         Assert.Contains("HelpCenter", cut.Markup);
     }
 
+    /// <summary>R-36: the planner is a global entry, after Projects and the mailboxes and before Notifications and
+    /// Settings; it is no longer inside the Projects submenu.</summary>
+    [Fact]
+    public void ThePlanner_IsAGlobalEntry_BetweenTheMailboxesAndTheNotifications()
+    {
+        var cut = Render<NavMenu>();
+
+        var hrefs = cut.FindAll("a[href]").Select(link => link.GetAttribute("href")).ToList();
+        var projects = hrefs.IndexOf("projects");
+        var mail = hrefs.IndexOf("mail");
+        var planner = hrefs.IndexOf("pipelines/schedule");
+        var settings = hrefs.IndexOf("settings");
+        Assert.True(projects >= 0 && mail > projects, "the mailboxes must follow Projects");
+        Assert.True(planner > mail, "the planner must follow the mailboxes");
+        Assert.True(settings > planner, "Settings must come after the planner (and the notifications between them)");
+        Assert.Contains("PipelineSchedule", cut.Find("a[href='pipelines/schedule']").TextContent, StringComparison.Ordinal);
+        Assert.True(planner > hrefs.IndexOf("servers"), "the planner is listed after the Servers and Projects sections");
+    }
+
     [Fact]
     public void AlertsLink_NavigatesWithoutAnUnreadBadge()
     {
@@ -110,6 +129,166 @@ public class NavMenuTests : BunitContext
         Assert.DoesNotContain("projects/7/ai-tasks", cut.Markup);
         Assert.DoesNotContain("href=\"analysis\"", cut.Markup);
         Assert.DoesNotContain("href=\"backups\"", cut.Markup);
+    }
+
+    private static AnalysisPortfolioProjectDto Project(int id, AnalysisGrade? grade, int critical = 0, int high = 0) => new()
+    {
+        ProjectId = id,
+        ProjectName = $"P{id}",
+        CriticalCount = critical,
+        HighCount = high,
+        Grade = grade is null ? null : new AnalysisGradeSummaryDto { OverallGrade = grade }
+    };
+
+    /// <summary>R-6: the project menu Quality entry shows its grade letter, never a red badge in its place, even with an
+    /// open critical finding (it is counted in the grade itself, R-7).</summary>
+    [Theory]
+    [InlineData(AnalysisGrade.B, 0, 0)]
+    [InlineData(AnalysisGrade.B, 0, 2)]
+    [InlineData(AnalysisGrade.A, 1, 0)]
+    [InlineData(AnalysisGrade.F, 4, 0)]
+    public void ProjectQualityEntry_ShowsTheGradeLetter_NeverARedBadge(AnalysisGrade grade, int critical, int high)
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(7, grade, critical, high) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("projects/7/overview");
+
+        var cut = Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var entry = cut.Find("a[href=\"projects/7/quality\"]");
+            Assert.Equal(grade.ToString(), entry.QuerySelector(".grade-badge")!.TextContent.Trim());
+        });
+    }
+
+    /// <summary>R-6: the main menu Quality entry shows the lowest grade of the projects (here B beside an A), whatever
+    /// the critical counts, and no badge when no project has a grade.</summary>
+    [Theory]
+    [InlineData(AnalysisGrade.B, 0, "B")]
+    [InlineData(AnalysisGrade.B, 3, "B")]
+    [InlineData(AnalysisGrade.F, 0, "F")]
+    public void MainQualityEntry_ShowsTheLowestGradeOfTheProjects(AnalysisGrade grade, int critical, string expected)
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(1, AnalysisGrade.A), Project(2, grade, critical) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("projects");
+
+        var cut = Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var entry = cut.Find("a[href=\"analysis\"]");
+            Assert.Equal(expected, entry.QuerySelector(".grade-badge")!.TextContent.Trim());
+        });
+    }
+
+    [Fact]
+    public void MainQualityEntry_HasNoBadge_WhenNoProjectHasAGrade()
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(1, null, critical: 2) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("projects");
+
+        var cut = Render<NavMenu>();
+
+        cut.WaitForAssertion(() => Assert.Null(cut.Find("a[href=\"analysis\"]").QuerySelector(".grade-badge")));
+    }
+
+    /// <summary>User decision 2026-11-10: the menu keeps the current grade. A finding decided or reopened (the notifier
+    /// fires) makes it re-read the summary at once, instead of keeping the letter read when the page was entered.</summary>
+    [Fact]
+    public void ProjectQualityEntry_ReadsTheGradeAgain_WhenAFindingDecisionMovesIt()
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(7, AnalysisGrade.B) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("projects/7/overview");
+        var cut = Render<NavMenu>();
+        cut.WaitForAssertion(() =>
+            Assert.Equal("B", cut.Find("a[href=\"projects/7/quality\"]").QuerySelector(".grade-badge")!.TextContent.Trim()));
+
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(7, AnalysisGrade.A) });
+        cut.InvokeAsync(() => Services.GetRequiredService<Aetheus.Front.Components.Shared.QualityChangeNotifier>().Notify());
+
+        cut.WaitForAssertion(() =>
+            Assert.Equal("A", cut.Find("a[href=\"projects/7/quality\"]").QuerySelector(".grade-badge")!.TextContent.Trim()),
+            TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public void ProjectQualityEntry_ReadsTheGradeAgain_WhenTheUserOpensTheProjectOverview()
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(7, AnalysisGrade.B) });
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo("projects/7/pipelines");
+        var cut = Render<NavMenu>();
+        cut.WaitForAssertion(() =>
+            Assert.Equal("B", cut.Find("a[href=\"projects/7/quality\"]").QuerySelector(".grade-badge")!.TextContent.Trim()));
+
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(7, AnalysisGrade.A) });
+        navigation.NavigateTo("projects/7/overview");
+
+        cut.WaitForAssertion(() =>
+            Assert.Equal("A", cut.Find("a[href=\"projects/7/quality\"]").QuerySelector(".grade-badge")!.TextContent.Trim()));
+    }
+
+    [Fact]
+    public void Dispose_StopsListeningToTheQualityNotifier()
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(7, AnalysisGrade.B) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("projects/7/overview");
+        var cut = Render<NavMenu>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("a[href=\"projects/7/quality\"]")));
+
+        cut.Instance.Dispose();
+
+        // A leftover subscription would read the summary again and re-render a disposed component.
+        var requestsBefore = _handler.RequestsSnapshot().Count(request => request.Url.Contains("api/analysis/portfolio/projects", StringComparison.Ordinal));
+        var rendersBefore = cut.RenderCount;
+        Services.GetRequiredService<Aetheus.Front.Components.Shared.QualityChangeNotifier>().Notify();
+        Assert.Equal(requestsBefore, _handler.RequestsSnapshot().Count(request => request.Url.Contains("api/analysis/portfolio/projects", StringComparison.Ordinal)));
+        Assert.Equal(rendersBefore, cut.RenderCount);
+    }
+
+    private static ServerQualityDto ServerQuality(int id, AnalysisGrade? grade) => new() { ServerId = id, ServerName = $"srv-{id}", Grade = grade };
+
+    /// <summary>R-7: the Servers menu and its Quality entry show the lowest grade of the servers, and the Quality entry of a
+    /// server its own grade; the Projects menu keeps only the projects' grades, whatever the servers' grades.</summary>
+    [Fact]
+    public void ServersMenu_ReflectsTheServersGrade_AndTheProjectsMenuOnlyTheProjects()
+    {
+        _handler.SetJsonResponse("api/servers/host-quality", new List<ServerQualityDto> { ServerQuality(1, AnalysisGrade.A), ServerQuality(2, AnalysisGrade.F) });
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto> { Project(1, AnalysisGrade.B) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("servers");
+
+        var cut = Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("F", cut.Find("a[href=\"servers\"]").QuerySelector(".grade-badge")!.TextContent.Trim());
+            Assert.Equal("F", cut.Find("a[href=\"servers/quality\"]").QuerySelector(".grade-badge")!.TextContent.Trim());
+            // The projects' Quality entry is the lowest grade of the projects (B), not the F of a server.
+            Assert.Equal("B", cut.Find("a[href=\"analysis\"]").QuerySelector(".grade-badge")!.TextContent.Trim());
+        });
+    }
+
+    [Fact]
+    public void ServerQualityEntry_ShowsThatServersGrade()
+    {
+        _handler.SetJsonResponse("api/servers/host-quality", new List<ServerQualityDto> { ServerQuality(1, AnalysisGrade.A), ServerQuality(2, AnalysisGrade.C) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("servers/2/overview");
+
+        var cut = Render<NavMenu>();
+
+        cut.WaitForAssertion(() => Assert.Equal("C", cut.Find("a[href=\"servers/2/quality\"]").QuerySelector(".grade-badge")!.TextContent.Trim()));
+    }
+
+    [Fact]
+    public void ServersMenu_HasNoBadge_WhenNoServerHasAGrade()
+    {
+        _handler.SetJsonResponse("api/servers/host-quality", new List<ServerQualityDto> { ServerQuality(1, null) });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("servers");
+
+        var cut = Render<NavMenu>();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("a[href=\"servers/quality\"]")));
+        Assert.Null(cut.Find("a[href=\"servers/quality\"]").QuerySelector(".grade-badge"));
     }
 
     [Fact]

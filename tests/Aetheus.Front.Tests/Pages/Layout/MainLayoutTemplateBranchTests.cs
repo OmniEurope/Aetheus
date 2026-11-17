@@ -19,7 +19,7 @@ namespace Aetheus.Front.Tests.Pages;
 public class MainLayoutTemplateBranchTests : BunitContext
 {
     private BunitTestHelper.TestHandler RegisterWithTaskTracker(
-        bool authenticated = true, bool isAdmin = false, bool mustChangePassword = false)
+        bool authenticated = true, bool isAdmin = false, bool mustChangePassword = false, bool mustSetUpAccount = false)
     {
         var handler = BunitTestHelper.RegisterServices(this, authenticated, isAdmin);
         handler.SetResponse(HttpMethod.Get, "health/live", System.Net.HttpStatusCode.ServiceUnavailable);
@@ -38,7 +38,7 @@ public class MainLayoutTemplateBranchTests : BunitContext
         {
             var js = Substitute.For<IJSRuntime>();
             js.InvokeAsync<string?>("localStorage.getItem", Arg.Is<object?[]>(a => a.Length == 1 && (string?)a[0] == "aetheus_auth_token"))
-                .Returns(ValueTask.FromResult<string?>(MakeJwt(isAdmin, mustChangePassword)));
+                .Returns(ValueTask.FromResult<string?>(MakeJwt(isAdmin, mustChangePassword, mustSetUpAccount)));
             var auth = new AuthStateProvider(js, NullLogger<AuthStateProvider>.Instance);
             Services.AddSingleton(auth);
 
@@ -54,7 +54,7 @@ public class MainLayoutTemplateBranchTests : BunitContext
         return handler;
     }
 
-    private static string MakeJwt(bool isAdmin, bool mustChangePassword = false)
+    private static string MakeJwt(bool isAdmin, bool mustChangePassword = false, bool mustSetUpAccount = false)
     {
         var header = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"alg\":\"HS256\"}"));
         var claims = new Dictionary<string, object>
@@ -66,6 +66,8 @@ public class MainLayoutTemplateBranchTests : BunitContext
         if (isAdmin) claims["role"] = "Admin";
         // The claim the backend mints for a forced password change (AetheusClaimTypes.MustChangePassword).
         if (mustChangePassword) claims["aetheus:mcp"] = "true";
+        // R-1: the seeded administrator still to set up (AetheusClaimTypes.MustSetUpAccount).
+        if (mustSetUpAccount) claims["aetheus:setup"] = "true";
         var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(claims);
         var p64 = Convert.ToBase64String(payload).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         return $"{header}.{p64}.sig";
@@ -141,6 +143,21 @@ public class MainLayoutTemplateBranchTests : BunitContext
             || request.Url.Contains("api/organizations", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>R-1: the seeded administrator of a fresh install is held on its account setup, wherever it goes,
+    /// even on the plain password change; the page it asked for is kept for after.</summary>
+    [Theory]
+    [InlineData("projects/1/pipelines", "%2Fprojects%2F1%2Fpipelines")]
+    [InlineData("account/change-password", null)]
+    public void SeededAdministrator_IsLedToTheAccountSetup(string requested, string? kept)
+    {
+        RegisterWithTaskTracker(authenticated: true, isAdmin: true, mustChangePassword: true, mustSetUpAccount: true);
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("http://localhost/" + requested);
+
+        Render<MainLayout>();
+
+        Assert.Equal(kept is null ? "http://localhost/account/setup" : "http://localhost/account/setup?returnUrl=" + kept, nav.Uri);
+    }
     /// <summary>The set-password page of the welcome mail renders like the login page, signed in or not: the
     /// visitor may already hold a session, and the sidebar and the account menu must not frame the page.</summary>
     [Fact]

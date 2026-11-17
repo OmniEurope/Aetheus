@@ -14,15 +14,19 @@ internal sealed class PipelineRunStatusRepository(AppDbContext db, ILogger logge
     internal static string StageArtifactCollectionTaskName(string stageName) =>
         StageCollectionPrefix + stageName + StageCollectionSuffix;
 
+    /// <param name="artifactCollectionFailed">The answer of <see cref="HasFailedArtifactCollectionAsync"/> the caller
+    /// has just read for this run (the scheduler reads it to choose the status it requests); null reads it here.
+    /// A run does not change between the caller's read and this one: both are inside the run's locked pass.</param>
     public async Task<PipelineStatus> ResolveTerminalStatusAsync(
         int runId,
         PipelineStatus requestedStatus,
+        bool? artifactCollectionFailed,
         CancellationToken ct)
     {
         // BACK-019: an artifact the run declared but never collected is a failure, whatever its steps
         // did. Checked outside the safety net's catch: a Success must never be granted on a failed query.
         if (requestedStatus == PipelineStatus.Success)
-            return await HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false)
+            return (artifactCollectionFailed ?? await HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false))
                 ? PipelineStatus.Failed
                 : requestedStatus;
         if (requestedStatus != PipelineStatus.Failed)
@@ -35,7 +39,8 @@ internal sealed class PipelineRunStatusRepository(AppDbContext db, ILogger logge
                     && (step.Status == TaskExecutionStatus.Failed
                         || step.Status == TaskExecutionStatus.Timeout), ct)
                 .ConfigureAwait(false);
-            var hasFailedArtifactCollection = await HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false);
+            var hasFailedArtifactCollection = artifactCollectionFailed
+                ?? await HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false);
             var hasSucceededStep = await db.PipelineStepRuns
                 .AnyAsync(step => step.PipelineRunId == runId
                     && !step.IsSystem

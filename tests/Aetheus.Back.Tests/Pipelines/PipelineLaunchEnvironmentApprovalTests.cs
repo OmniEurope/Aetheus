@@ -71,7 +71,8 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
             RunId, PipelineStatus.Running, PipelineStatus.WaitingForApproval, Arg.Any<CancellationToken>());
         await h.SystemTasks.DidNotReceive().CreateSystemTasksAsync(
             Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>());
         await h.AssertNoStageDispatchedAsync();
     }
 
@@ -85,7 +86,8 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
         await h.Repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
         await h.SystemTasks.DidNotReceive().CreateSystemTasksAsync(
             Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>());
     }
 
     [Fact]
@@ -97,7 +99,8 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
         await h.DispatchAsync(completed: [], PipelineRunHelpers.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
         await h.SystemTasks.Received(1).CreateSystemTasksAsync(
             RunId, Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>());
 
         // Prepare done: the build goes, and nothing is asked again.
         await h.DispatchAsync(completed: [PipelineRunHelpers.SystemPrepareStage], "Build images", "Deploy blue-green", "Confirm");
@@ -142,7 +145,8 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
         await h.Repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
         await h.SystemTasks.Received(1).CreateSystemTasksAsync(
             RunId, Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>());
     }
 
     private sealed class Harness
@@ -187,7 +191,8 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
             finalizer.IsRunActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
             SystemTasks.CreateSystemTasksAsync(
                     Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-                    Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>())
+                    Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PipelineRun?>(), Arg.Any<KnownRunAffinity?>())
                 .Returns(true);
             servers.ResolveEffectiveStageTarget(Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>())
                 .Returns(callInfo => callInfo.Arg<PipelineStageDefinition>());
@@ -210,8 +215,8 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
         /// <paramref name="pending"/> stages each still hold one pending step.</summary>
         public async Task DispatchAsync(List<string> completed, params string[] pending)
         {
-            Repo.GetCompletedStageNamesAsync(RunId, Arg.Any<CancellationToken>()).Returns(completed);
-            Repo.GetTerminalStageNamesAsync(RunId, Arg.Any<CancellationToken>()).Returns(completed);
+            Repo.GetStageProgressAsync(RunId, Arg.Any<CancellationToken>())
+                .Returns(new PipelineStageProgress(completed, completed));
             await _planner.CreateTasksForNextStageAsync(
                 RunId,
                 new PipelineYamlDefinition { Name = "aetheus-release-fast", Stages = [BuildImages, DeployBlueGreen, Confirm] },

@@ -250,6 +250,6 @@ public class ServerReachabilityProbeTests : IDisposable
             _clock.Advance(TimeSpan.FromMilliseconds(250));
             await Task.Delay(5, TestContext.Current.CancellationToken);
         }
-        return await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        return await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
     }
 }

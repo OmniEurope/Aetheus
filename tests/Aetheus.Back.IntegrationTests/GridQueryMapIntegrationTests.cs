@@ -7,7 +7,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Executes grid-filter expressions through Npgsql on PostgreSQL to verify provider
 /// translation and results beyond LINQ-to-objects tests.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class GridQueryMapIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly GridQueryMap<Server> Columns = new GridQueryMap<Server>()

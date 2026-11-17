@@ -27,7 +27,7 @@ public sealed class ApiPreferenceStore(ApiClient api, PreferenceScope scope) : I
         return changed.Select(preference => ToOmni(preference)!).ToList();
     }
 
-    public Task SaveAsync(OmniPreference preference, CancellationToken cancellationToken = default)
+    public async Task<OmniPreference> SaveAsync(OmniPreference preference, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(preference);
         RequireUser();
@@ -35,8 +35,10 @@ public sealed class ApiPreferenceStore(ApiClient api, PreferenceScope scope) : I
             throw new ArgumentException($"The preference key '{preference.Key}' is not accepted by the server.", nameof(preference));
         if (preference.Value is { Length: > UserPreferenceRules.MaxValueLength })
             throw new ArgumentException($"The preference '{preference.Key}' is longer than {UserPreferenceRules.MaxValueLength} characters.", nameof(preference));
-        return api.Preferences.SaveAsync(preference.Key,
-            new SaveUserPreferenceRequest { Value = preference.Value, UpdatedAt = preference.UpdatedAt }, cancellationToken);
+        // The server is the authority for dates: OmniPreferences replaces its cached entry with this answer.
+        var kept = await api.Preferences.SaveAsync(preference.Key,
+            new SaveUserPreferenceRequest { Value = preference.Value, UpdatedAt = preference.UpdatedAt }, cancellationToken).ConfigureAwait(false);
+        return ToOmni(kept)!;
     }
 
     /// <summary>The signed-in user's scope, or <see cref="OmniPreferences.NoUserScope"/> while nobody with a user row is signed in.</summary>

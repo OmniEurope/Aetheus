@@ -195,12 +195,18 @@ public sealed class DockerStorageMaintenanceBuildCompletionTests : IDisposable
         await service.StartAsync(_ct);
         try
         {
-            // Let the loop reach its first wait, then move the clock past the default 60-minute interval.
-            await Task.Delay(100, _ct);
+            // The loop arms its first 60-minute wait on its own thread, a moment after StartAsync returns: a clock moved
+            // before that moment is the clock the wait starts from, and nothing ever fires. The clock moves past the
+            // interval again until the pass has run, so the test never depends on how fast the machine armed the wait.
             Assert.Equal(0, BuilderInventories());
-            time.Advance(TimeSpan.FromMinutes(61));
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (BuilderInventories() == 0 && DateTime.UtcNow < deadline)
+            {
+                time.Advance(TimeSpan.FromMinutes(61));
+                await Task.Delay(10, _ct);
+            }
 
-            Assert.True(await WaitUntilAsync(() => BuilderInventories() > 0, _ct), "the periodic pass inventoried the builder");
+            Assert.True(BuilderInventories() > 0, "the periodic pass inventoried the builder");
         }
         finally
         {

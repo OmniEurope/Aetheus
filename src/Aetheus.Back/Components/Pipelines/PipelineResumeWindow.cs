@@ -99,6 +99,11 @@ internal sealed class PipelineResumeWindow(
     /// failed steps are not that stage's alone.</summary>
     private async Task<int?> MissedConfirmationWindowAsync(int runId, PipelineYamlDefinition definition, CancellationToken ct)
     {
+        // A stage confirmation is the only thing that raises a Pipeline-scope approval with a timeout
+        // (PipelineStageApprovalGate: ApprovalTimeoutMinutes > 0). A definition without one cannot have a
+        // timed-out confirmation, so the approvals (a join on the environment) are not read: that is every
+        // ordinary run at each completion, whose pending steps are empty or the cleanup alone.
+        if (!YamlParsingHelper.FlattenJobs(definition).Any(stage => stage.ApprovalTimeoutMinutes is > 0)) return null;
         var last = (await repo.GetApprovalsAsync(runId, ct).ConfigureAwait(false) ?? [])
             .Where(approval => approval.Scope == ApprovalScope.Pipeline && approval.TimeoutMinutes is > 0
                 && approval.Status != ApprovalStatus.Pending)

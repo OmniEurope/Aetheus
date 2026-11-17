@@ -4,7 +4,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Small" />
+    <ZoneVeil />
 }
 else if (_settings is null)
 {
@@ -34,7 +34,7 @@ else
                         </OmniColumn>
                         <OmniColumn Span="12" MediumSpan="4">
                             <OmniFormField Label="@L["DailyRecapTimeZone"]" For="daily-recap-zone" Required="true" Help="@L["DailyRecapTimeZoneHint"]" Class="omni-u-w-100">
-                                <OmniTextBox Id="daily-recap-zone" @bind-Value="_model.TimeZoneId" Autocomplete="off" Class="omni-u-w-100" />
+                                <OmniTextBox Id="daily-recap-zone" @bind-Value="_model.TimeZoneId" Class="omni-u-w-100" />
                                 <ValidationMessage For="@(() => _model.TimeZoneId)" />
                             </OmniFormField>
                         </OmniColumn>
@@ -59,7 +59,7 @@ else
                                    Help="@RecipientsHint" Error="@_recipientError" Class="omni-u-w-100 daily-recap-recipients">
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                             <OmniTextBox Id="daily-recap-new-recipient" Type="OmniTextBoxType.Email" @bind-Value="_model.NewRecipient"
-                                         Placeholder="@L["DailyRecapRecipientPlaceholder"]" Autocomplete="off" Class="daily-recap-new-recipient" />
+                                         Placeholder="@L["DailyRecapRecipientPlaceholder"]" Autocomplete="email" Class="daily-recap-new-recipient" />
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => AddRecipient())" Class="daily-recap-add-recipient">
                                 <Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["DailyRecapAddRecipient"]</span></ChildContent>
                             </OmniButton>

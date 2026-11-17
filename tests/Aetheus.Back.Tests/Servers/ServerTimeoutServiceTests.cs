@@ -54,7 +54,8 @@ public class ServerTimeoutServiceTests
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
 
         var sut = new ServerTimeoutService(scopeFactory, Substitute.For<ILogger<ServerTimeoutService>>(),
-            Options.Create(new BackgroundServicesOptions()), clock);
+            Options.Create(new BackgroundServicesOptions()), clock,
+            leaderLease: LeaderLeaseDouble.Leader());
         return (sut, serverRepo, clientProxy, events);
     }
 
@@ -167,7 +168,8 @@ public class ServerTimeoutServiceTests
             provider.GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<ILogger<ServerTimeoutService>>(),
             Options.Create(options),
-            clock);
+            clock,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         var startupGrace = sut.WaitForStartupGraceAsync(TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromMinutes(1).Add(TimeSpan.FromSeconds(59)));

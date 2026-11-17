@@ -15,7 +15,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>R1-36 / ADR-053 on PostgreSQL, through the real ingestion: a coverage under its threshold is a
 /// finding, the same finding from one run to the next, accepted it stops warning, fixed when the coverage is
 /// back over the threshold, and open again when it falls under it again.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class AnalysisThresholdFindingIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const string RuleId = "threshold.metric.quality.coverage.line";

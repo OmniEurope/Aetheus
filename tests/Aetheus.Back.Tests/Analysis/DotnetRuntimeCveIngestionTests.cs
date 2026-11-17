@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Agent.Core.Functions;
 using Aetheus.Back.Components.Analysis;
+using Aetheus.Shared.Components.VulnerabilityWatch;
 
 namespace Aetheus.Back.Tests.Analysis;
 
@@ -25,14 +26,14 @@ public sealed class DotnetRuntimeCveIngestionTests
     }
 
     [Fact]
-    public void TheRuntimeCve_IsAHighContainerFinding_OfTheSecurityGateScope()
+    public void TheRuntimeCve_IsAMediumContainerFinding_OfTheSecurityGateScope()
     {
         var parsed = SarifAnalysisParser.Parse(DotnetRuntimeCveSarif.Build([Finding("10.0.13")]), AnalysisCategory.Container);
 
         var finding = Assert.Single(parsed);
         Assert.Equal("CVE-2026-111497", finding.RuleId);
         Assert.Equal(AnalysisCategory.Container, finding.Category);
-        Assert.Equal(AnalysisSeverity.High, finding.Severity);
+        Assert.Equal(AnalysisSeverity.Medium, finding.Severity);
         Assert.Equal(AnalysisConfidence.High, finding.Confidence);
         Assert.Contains("CVE-2026-111497", finding.Title, StringComparison.Ordinal);
         Assert.Contains("installed Microsoft.AspNetCore.App.Runtime.linux-x64 10.0.13, fixed in 10.0.14", finding.Message, StringComparison.Ordinal);

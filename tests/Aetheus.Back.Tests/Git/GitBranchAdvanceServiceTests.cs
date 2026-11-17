@@ -118,6 +118,46 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task R38_A_Diverged_Branch_Names_Its_Commits_The_Target_Lacks_Newest_First()
+    {
+        var root = Commit("one");
+        var onMain = Commit("two");
+        var newestOnMain = Commit("three");
+        RunGit(_work, $"reset --quiet --hard {root}");
+        var released = Commit("released");
+        SetBareRef("refs/heads/main", newestOnMain);
+
+        var result = await _sut.TryFastForwardAsync(
+            ProjectId, "main", released, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitBranchAdvanceOutcome.NotFastForward, result.Outcome);
+        Assert.Equal(2, result.BranchOnlyTotal);
+        Assert.NotNull(result.BranchOnlyCommits);
+        Assert.Equal(["three", "two"], result.BranchOnlyCommits!.Select(commit => commit.Subject));
+        Assert.StartsWith(result.BranchOnlyCommits![0].ShortSha, newestOnMain, StringComparison.Ordinal);
+        Assert.StartsWith(result.BranchOnlyCommits[1].ShortSha, onMain, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R38_A_Diverged_Branch_Names_At_Most_Five_Commits_And_Counts_All_Of_Them()
+    {
+        var root = Commit("base");
+        for (var i = 1; i <= 8; i++) Commit($"on-main-{i}");
+        var mainTip = RunGit(_work, "rev-parse HEAD").Trim();
+        RunGit(_work, $"reset --quiet --hard {root}");
+        var released = Commit("released");
+        SetBareRef("refs/heads/main", mainTip);
+
+        var result = await _sut.TryFastForwardAsync(
+            ProjectId, "main", released, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitBranchAdvanceOutcome.NotFastForward, result.Outcome);
+        Assert.Equal(8, result.BranchOnlyTotal);
+        Assert.Equal(5, result.BranchOnlyCommits!.Count);
+        Assert.Equal("on-main-8", result.BranchOnlyCommits[0].Subject);
+    }
+
+    [Fact]
     public async Task Reports_AlreadyUpToDate_Without_Touching_The_Ref()
     {
         var only = Commit("one");

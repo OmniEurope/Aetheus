@@ -47,6 +47,20 @@ public interface IUserNotificationRepository
     Task<HashSet<int>> GetRecipientsAlreadyEmailedAsync(
         string eventType, string payloadMarker, IReadOnlyCollection<int> userIds, CancellationToken ct = default);
 
+    /// <summary>The pipeline's name and whether a schedule starts it; null when it does not exist.</summary>
+    Task<PipelineMailInfo?> GetPipelineMailInfoAsync(int pipelineId, CancellationToken ct = default);
+
+    /// <summary>The saved on/off choice of each user among <paramref name="userIds"/> for <paramref name="eventType"/> on
+    /// <paramref name="pipelineId"/>, in one query. A user who saved none for this pipeline has no entry.</summary>
+    Task<Dictionary<int, bool>> GetSavedPipelineChoicesAsync(
+        string eventType, int pipelineId, IReadOnlyCollection<int> userIds, CancellationToken ct = default);
+
+    /// <summary>Inserts or updates the user's choice for <paramref name="eventType"/> on one pipeline.</summary>
+    Task SavePipelineChoiceAsync(int userId, string eventType, int pipelineId, bool isEnabled, CancellationToken ct = default);
+
+    /// <summary>The user's saved per-pipeline choices for <paramref name="eventType"/>, by pipeline name.</summary>
+    Task<List<PipelineChoiceRow>> GetPipelineChoicesAsync(int userId, string eventType, CancellationToken ct = default);
+
     /// <summary>Inserts or updates one row per entry of <paramref name="preferences"/>; other rows are left alone.</summary>
     Task SavePreferencesAsync(int userId, IReadOnlyDictionary<string, bool> preferences, CancellationToken ct = default);
 

@@ -146,6 +146,7 @@ public sealed class PipelineCheckpointReuseService(
             {
                 PipelineName = pipelineName,
                 RunId = runId,
+                RunNumber = child?.BuildNumber,
                 ReuseCandidate = candidate,
                 Reason = candidate
                     ? "Candidate for reuse; all contracts and bytes will be revalidated atomically at launch."
@@ -320,11 +321,14 @@ public sealed class PipelineCheckpointReuseService(
         stepRun.CompletedAt = now;
         stepRun.TriggeredRunId = checkpointRunId;
         stepRun.OutputVariablesJson = outputs.Count == 0 ? null : JsonSerializer.Serialize(outputs);
+        var runNumbers = await repo.GetRunNumbersAsync([checkpointRunId, sourceParentRunId], ct).ConfigureAwait(false);
+        var checkpointNumber = runNumbers.GetValueOrDefault(checkpointRunId);
+        var sourceNumber = runNumbers.GetValueOrDefault(sourceParentRunId);
         await repo.AppendRunWarningsAsync(currentParent.Id,
             [PipelineProblem.Of(
                 PipelineProblemCodes.CheckpointReused,
-                $"Checkpoint reused: pipeline '{targetName}', run #{checkpointRunId}, {artifactCount} verified artifact(s), source run #{sourceParentRunId}.",
-                ("pipeline", targetName), ("run", checkpointRunId), ("artifacts", artifactCount), ("source", sourceParentRunId)).ToStored()], ct)
+                $"Checkpoint reused: pipeline '{targetName}', run #{checkpointNumber}, {artifactCount} verified artifact(s), source run #{sourceNumber}.",
+                ("pipeline", targetName), ("run", checkpointNumber), ("artifacts", artifactCount), ("source", sourceNumber)).ToStored()], ct)
             .ConfigureAwait(false);
         await audit.LogAsync("PipelineCheckpointReused", "PipelineRun", currentParent.Id,
             $"{targetName} | checkpoint={checkpointRunId} | source={sourceParentRunId} | artifacts={artifactCount}", ct)

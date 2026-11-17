@@ -75,6 +75,10 @@ public partial class PipelineRunsGrid
 
     private string PipelineHref(PipelineRunTableItem run) => PipelineRunTablePresentation.PipelineHref(run, ServerId);
 
+    /// <summary>R-34: the source head a deployment run checked out, shortened for the tooltip of its release version.</summary>
+    private static string ShortSourceCommit(PipelineRunTableItem run) =>
+        string.IsNullOrEmpty(run.SourceCommitHash) ? "-" : DisplayFormatting.ShortSha(run.SourceCommitHash);
+
     private string RunHref(PipelineRunTableItem run) => PipelineRunTablePresentation.RunHref(run, ServerId);
 
     private void OnRowClick(PipelineRunTableItem run) => Nav.NavigateTo(RunHref(run));
@@ -116,6 +120,13 @@ public partial class PipelineRunsGrid
                 if (status.Success)
                 {
                     Toast.Info("RunCancelled", "RunCancelledDetail");
+                    await OnRunCancelled.InvokeAsync();
+                }
+                else if (status.NotFound)
+                {
+                    // A run already finished (404) was a stale row: said as a warning (an expected race, not a
+                    // failure), and the host reads the runs again so the row shows its real state.
+                    Toast.Warning("CancelRun", "RunNoLongerCancellable");
                     await OnRunCancelled.InvokeAsync();
                 }
                 else if (status.Forbidden)

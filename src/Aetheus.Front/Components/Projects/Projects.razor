@@ -39,9 +39,7 @@
 
 @if (_loading)
 {
-    <div class="project-card-grid-loading">
-        <AetheusLoader />
-    </div>
+    <VeilHold Busy="true" />
 }
 else if (_viewMode == ProjectViewMode.Comfortable)
 {
@@ -97,15 +95,16 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                     </div>
                     <div class="project-production-row">
                         <a href="@($"/projects/{project.Id}/quality")" class="project-gate-summary"
-                            @onclick:stopPropagation="true" title="@L["AnalysisGlobalGrade"]">
+                            @onclick:stopPropagation="true" title="@ProjectGradeLabel.For(L, project.LatestGateGradeQualification)">
                             <span class="project-production-label">@L["AnalysisGrade"]</span>
-                            <GradeBadge Value="@project.LatestGateGrade" />
+                            <GradeBadge Value="@project.LatestGateGrade" Old="@ProjectGradeLabel.IsOld(project.LatestGateGradeQualification)" />
                         </a>
-                        @if (project.OnlineUserCount.HasValue)
+                        @if (project.OnlineUserState != OnlineAudienceState.Unavailable)
                         {
-                            <span class="project-online-users" title="@L["OnlineUsersAvailable"]">
+                            @* R-13/R-23: waiting for data is not a measured zero; the « ? » says what is counted. *@
+                            <span class="project-online-users">
                                 <OmniIcon Name="OmniIconName.Users" />
-                                @(string.Format(L["OnlineUsers"], project.OnlineUserCount.Value))
+                                <OnlineAudienceValue Count="@project.OnlineUserCount" State="@project.OnlineUserState" LastEventAt="@project.OnlineUserLastEventAt" Labeled="true" />
                             </span>
                         }
                     </div>
@@ -156,7 +155,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                                         <PipelineRunStatusBadge Status="runStatus" />
                                     }
                                     <a href="@($"/pipelines/runs/{project.LastRunId}")" class="project-activity-link"
-                                        @onclick:stopPropagation="true">#@project.LastRunId</a>
+                                        @onclick:stopPropagation="true">#@project.LastRunNumber</a>
                                 </div>
                                 <span class="project-activity-line project-activity-ellipsis" title="@(project.LastRunName ?? L["PipelineRun"])">@(project.LastRunName ?? L["PipelineRun"])</span>
                                 @if (project.LastRunIsActive && !string.IsNullOrWhiteSpace(project.LastRunCurrentStep))
@@ -238,8 +237,8 @@ else
                 </div>
                 <div>
                     <a href="@($"/projects/{project.Id}/quality")"
-                        @onclick:stopPropagation="true" title="@L["AnalysisGlobalGrade"]">
-                        <GradeBadge Value="@project.LatestGateGrade" />
+                        @onclick:stopPropagation="true" title="@ProjectGradeLabel.For(L, project.LatestGateGradeQualification)">
+                        <GradeBadge Value="@project.LatestGateGrade" Old="@ProjectGradeLabel.IsOld(project.LatestGateGradeQualification)" />
                     </a>
                 </div>
                 <div class="project-dense-activity">
@@ -270,8 +269,8 @@ else
                                 <PipelineRunStatusBadge Status="denseStatus" />
                             }
                             <a href="@($"/pipelines/runs/{project.LastRunId}")" @onclick:stopPropagation="true"
-                               title="#@project.LastRunId · @(project.LastRunName ?? L["PipelineRun"])">
-                                #@project.LastRunId · @(project.LastRunName ?? L["PipelineRun"])
+                               title="#@project.LastRunNumber · @(project.LastRunName ?? L["PipelineRun"])">
+                                #@project.LastRunNumber · @(project.LastRunName ?? L["PipelineRun"])
                             </a>
                         </div>
                         @if (project.LastRunIsActive && !string.IsNullOrWhiteSpace(project.LastRunCurrentStep))
@@ -291,10 +290,10 @@ else
                     }
                 </div>
                 <div class="project-dense-users">
-                    @if (project.OnlineUserCount.HasValue)
+                    @if (project.OnlineUserState != OnlineAudienceState.Unavailable)
                     {
                         <OmniIcon Name="OmniIconName.Users" />
-                        <span>@project.OnlineUserCount</span>
+                        <OnlineAudienceValue Count="@project.OnlineUserCount" State="@project.OnlineUserState" LastEventAt="@project.OnlineUserLastEventAt" />
                     }
                     else
                     {
@@ -309,7 +308,7 @@ else
 
 @if (VisibleProjects.Count == 0 && !_loading)
 {
-    <EmptyState Icon="folder" Title="@L["NoProjectsFound"]" Description="@L["EmptyProjectsHint"]">
+    <EmptyState data-testid="projects-empty" Icon="folder" Title="@L["NoProjectsFound"]" Description="@L["EmptyProjectsHint"]">
         <ActionContent>
             @if (_statusFilter.HasValue || !string.IsNullOrEmpty(_search) || _favoritesOnly)
             {

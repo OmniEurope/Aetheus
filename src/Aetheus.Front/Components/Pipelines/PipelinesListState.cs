@@ -6,6 +6,7 @@ namespace Aetheus.Front.Components.Pipelines;
 internal sealed record PipelinesListState(
     List<PipelineDependencyDto> Pipelines,
     List<PipelineRunDto> RecentRuns,
+    List<PipelineRunDto> ActiveRuns,
     Dictionary<int, PipelineFleetItemDto> FleetItems,
     List<PipelineTemplateSummaryDto> TemplateOptions,
     bool FleetAvailable,

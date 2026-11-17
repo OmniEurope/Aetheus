@@ -9,7 +9,7 @@
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <OmniHeading Level="OmniHeadingLevel.H5">@L[TitleKey]</OmniHeading>
-                @if (!EmptyValuesOnly && _readiness.RepositoryInspected && !string.IsNullOrWhiteSpace(_readiness.InspectedBranch))
+                @if (!EmptyValuesOnly && PipelineId is null && _readiness.RepositoryInspected && !string.IsNullOrWhiteSpace(_readiness.InspectedBranch))
                 {
                     <PipelineInfoTip Text="@string.Format(L["PipelineSetupReadinessCheckedOn"], _readiness.InspectedBranch)" />
                 }

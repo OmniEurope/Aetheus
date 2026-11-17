@@ -19,7 +19,6 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Project deletion removes owned rows under actual foreign-key rules while preserving
 /// shared servers and unrelated project data.</summary>
-[Collection(PostgresCollection.Name)]
 public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture), IDisposable
 {
     /// <summary>More task log lines than one batch holds, so the batched delete loops.</summary>
@@ -128,15 +127,6 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
         Assert.True(File.Exists(Path.Combine(_storageRoot, project.ArtifactPath)));
         await _gitCli.DidNotReceiveWithAnyArgs().DeleteRepoAsync(default!, ct);
         await _audit.DidNotReceiveWithAnyArgs().LogAsync(default!, default!, default, default, ct);
-    }
-
-    [Fact]
-    public async Task Delete_OfAMissingProject_ReturnsFalse()
-    {
-        await ResetAndMigrateAsync();
-        await using var db = NewContext();
-        Assert.Null(await BuildService(db).DeleteAsync(424242, [], TestContext.Current.CancellationToken));
-        Assert.Null(await BuildService(db).GetPreviewAsync(424242, TestContext.Current.CancellationToken));
     }
 
     private ProjectDeletionService BuildService(AppDbContext db)

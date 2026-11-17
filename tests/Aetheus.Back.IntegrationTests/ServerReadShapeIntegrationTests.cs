@@ -14,8 +14,7 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>PostgreSQL read-shape tests verify bounded rows and only the columns needed by each
 /// view.</summary>
-[Collection(PostgresCollection.Name)]
-public sealed class ServerReadShapeIntegrationTests(PostgresFixture fixture)
+public sealed class ServerReadShapeIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

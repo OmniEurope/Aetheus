@@ -9,10 +9,20 @@ variables:
   APPLICATION_PACKAGE_BROWSER_ANALYTICS_COMMANDS: ""
 
 stages:
+  # The exact revision this run was launched on, as every pipeline of the platform starts (ADR-054).
+  - name: Checkout
+    group: Packages
+    execution_role: build
+    os: linux
+    steps:
+      - name: Check out the exact source
+        checkout: true
+
   - name: Package
     group: Packages
     execution_role: build
     os: linux
+    depends_on: [Checkout]
     artifacts:
       - ".pipeline-artifacts/packages/**"
     steps:

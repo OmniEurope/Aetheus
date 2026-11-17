@@ -13,6 +13,7 @@ public class ApiClient(HttpClient http)
     public AiApi Ai { get; } = new(http);
     public AnalysisApi Analysis { get; } = new(http);
     public AuthApi Auth { get; } = new(http);
+    public ExternalPipelinesApi ExternalPipelines { get; } = new(http);
     public GitApi Git { get; } = new(http);
     public MailApi Mail { get; } = new(http);
     public MailboxApi Mailbox { get; } = new(http);
@@ -21,6 +22,7 @@ public class ApiClient(HttpClient http)
     public UserNotificationsApi Notifications { get; } = new(http);
     public PackagesApi Packages { get; } = new(http);
     public PipelinesApi Pipelines { get; } = new(http);
+    public PipelineSchedulesApi PipelineSchedules { get; } = new(http);
     public PipelineTemplatesApi PipelineTemplates { get; } = new(http);
     public UserPreferencesApi Preferences { get; } = new(http);
     public ProjectsApi Projects { get; } = new(http);
@@ -28,6 +30,7 @@ public class ApiClient(HttpClient http)
     public ServersApi Servers { get; } = new(http);
     public ServerToolsApi ServerTools { get; } = new(http);
     public SettingsApi Settings { get; } = new(http);
+    public SystemLogRulesApi SystemLogRules { get; } = new(http);
     public TeamspeakApi Teamspeak { get; } = new(http);
     public VariablesApi Variables { get; } = new(http);
 }

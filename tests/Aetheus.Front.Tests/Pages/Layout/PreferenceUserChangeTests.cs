@@ -45,7 +45,7 @@ public sealed class PreferenceUserChangeTests : BunitContext
         // The production chain, in place of the helper's in-memory preferences.
         Services.AddOmniEuropePreferences<ApiPreferenceStore>(options => options.SyncInterval = Timeout.InfiniteTimeSpan);
         Services.AddScoped<IUserPreferences, UserPreferences>();
-        Services.AddScoped(sp => new ActiveOrganizationService(sp.GetRequiredService<ApiClient>(), sp.GetRequiredService<IUserPreferences>()));
+        Services.AddScoped(sp => new ActiveOrganizationService(sp.GetRequiredService<ApiClient>(), sp.GetRequiredService<IUserPreferences>(), sp.GetRequiredService<AuthStateProvider>()));
     }
 
     private OmniAppearanceState Appearance => Services.GetRequiredService<OmniAppearanceState>();

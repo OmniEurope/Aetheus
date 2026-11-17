@@ -44,7 +44,7 @@ internal static partial class StaticWebAssetsManifest
             var (value, error) = RebaseRoot(resolvedSourceRoot, contentRoot, marker, packageRoot);
             if (error is not null)
                 return (0, error);
-            rebased.Add(value);
+            rebased.Add((JsonNode?)value);
         }
         manifest["ContentRoots"] = rebased;
         File.WriteAllText(manifestPath, manifest.ToJsonString(Compact));

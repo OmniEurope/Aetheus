@@ -35,6 +35,15 @@ public class SystemLogsTests : BunitContext
         Assert.Contains("SystemLogs", cut.Markup);
     }
 
+    /// <summary>Page rule 3.page-scroll-with-grid: the strip of the two tabs is spaced by the page gap, its empty panel is hidden by this class.</summary>
+    [Fact]
+    public void TheJournalAndFilteredTabs_CarryTheStripOnlyClassThatHidesTheirEmptyPanel()
+    {
+        var cut = Render<SystemLogs>();
+
+        Assert.Single(cut.FindAll(".omni-tabs.system-logs-tabs"));
+    }
+
     [Theory]
     [InlineData("Error")]
     [InlineData("Fatal")]

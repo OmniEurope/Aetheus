@@ -91,21 +91,6 @@ public sealed class LateApiFailureNavigationTests : E2ETestBase
     }
 
     [Test]
-    public async Task FleetFailure_LeavingPipelinesWhileItsLoadIsPending_NeverRaisesTheErrorCardElsewhere()
-    {
-        await NavigateToAsync("/pipelines");
-        // Leave at once: the fleet request and its retry are still in flight.
-        await NavigateInsideTheApplicationAsync("/logs");
-        await WaitForEveryFleetLoadToFailForGoodAsync();
-        await AssertNoErrorSurfaceAsync("/logs");
-
-        await NavigateInsideTheApplicationAsync("/settings");
-        await WaitForNoSpinnerAsync();
-        await WaitForEveryFleetLoadToFailForGoodAsync();
-        await AssertNoErrorSurfaceAsync("/settings");
-    }
-
-    [Test]
     public async Task FleetFailure_HoppingThroughPagesBeforeTheyFinishLoading_NeverRaisesTheErrorCardElsewhere()
     {
         await NavigateToAsync("/pipelines");

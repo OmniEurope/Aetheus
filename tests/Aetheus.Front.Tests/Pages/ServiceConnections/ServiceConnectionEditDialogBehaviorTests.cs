@@ -35,7 +35,8 @@ public sealed class ServiceConnectionEditDialogBehaviorTests : BunitContext
 
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/service-connections", StringComparison.Ordinal));
         Assert.True(Spy.Closed);
-        Assert.Equal(true, Spy.LastResult);
+        // R-10: the dialog closes with the connection the server answered, so the list can draw it at once.
+        Assert.Equal(5, Assert.IsType<ServiceConnectionDto>(Spy.LastResult).Id);
     }
 
     [Fact]
@@ -70,7 +71,7 @@ public sealed class ServiceConnectionEditDialogBehaviorTests : BunitContext
         var cut = Render<ServiceConnectionEditDialog>(p => p.Add(x => x.ConnectionId, 8));
 
         Assert.Contains("Credentials", cut.Markup, StringComparison.Ordinal);
-        Assert.Empty(cut.FindComponents<AetheusLoader>());
+        Assert.Empty(cut.FindComponents<ZoneVeil>());
     }
 
     [Fact]

@@ -65,7 +65,7 @@ public partial class ProjectTasksSection : ProjectPagedSectionBase<ServerTaskDto
 
     /// <summary>The export writes the source the cell links to.</summary>
     private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is { } pipelineRunId
-        ? $"{L["PipelineRun"]} #{pipelineRunId}"
+        ? PipelineRunPresentation.Label(L["PipelineRun"].Value, task.PipelineRunNumber)
         : $"{L["Server"]}: {SourceServerName(task)}";
     private Func<ServerTaskDto, object?>? _sourceExport;
 }

@@ -37,14 +37,17 @@ public sealed class SiteAppearanceWindowTests : BunitContext
         await cut.InvokeAsync(cut.Instance.OpenAsync);
 
         var window = cut.Find(".omni-appearance-window");
-        // Decision of 2026-10-06: theme, palette with the mode beside it, font, density, text size, control
-        // size (the moving field only under Givre and Trou noir, below). R1-25 (2026-10-21): the content
-        // width row (centred or full width) is shown too, since the window binds FullWidthChanged.
+        // OE 1.14 lays the window out in three sections, one row per setting: Style (mode, theme, palette,
+        // backdrop, animation), Text (font, size) and Layout (density, controls, width). Every row Aetheus binds
+        // is shown: the backdrop since the window binds BackdropChanged, the content width (R1-25) since it
+        // binds FullWidthChanged.
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
-        Assert.Equal(7, rows.Length);
-        Assert.Contains(rows, row => row.TextContent.Contains("7/10", StringComparison.Ordinal));
-        Assert.Contains(rows, row => row.TextContent.Contains("3/10", StringComparison.Ordinal));
-        var densities = rows[3].QuerySelectorAll(".omni-select-bar__item");
+        Assert.Equal(10, rows.Length);
+        var shown = cut.FindComponent<OmniAppearanceWindow>().Instance;
+        Assert.Equal(7, shown.TextSizeLevel);
+        Assert.Equal(3, shown.ControlSizeLevel);
+        Assert.Contains(rows, row => row.QuerySelectorAll("option").Length == OmniThemeBackdrops.All.Count);
+        var densities = rows[7].QuerySelectorAll(".omni-select-bar__item");
         Assert.Equal(3, densities.Length);
         Assert.Contains("omni-select-bar__item--selected", densities[0].ClassList);
     }
@@ -79,14 +82,32 @@ public sealed class SiteAppearanceWindowTests : BunitContext
 
         var window = cut.Find(".omni-appearance-window");
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
-        Assert.Equal(7, rows.Length);
-        // The switch sits on the theme row's title line, so it adds no row.
-        var track = rows[0].QuerySelector(".omni-switch__track");
+        Assert.Equal(10, rows.Length);
+        // OE 1.14: the switch has its own Animation row, right under the backdrop.
+        var track = rows[4].QuerySelector(".omni-switch__track");
         Assert.NotNull(track);
 
         await cut.InvokeAsync(() => cut.FindComponent<OmniAppearanceWindow>().Instance.BackdropMotionChanged.InvokeAsync(false));
 
         Assert.False(State.BackdropMotion);
+    }
+
+    /// <summary>OE 1.14: the window offers the theme's backdrop and keeps the choice in the user's appearance,
+    /// which the application's OmniThemeScope paints and omni-boot.js replays.</summary>
+    [Fact]
+    public async Task TheBackdrop_IsOffered_AndTheChoiceIsKept()
+    {
+        var cut = Render<SiteAppearanceWindow>();
+        await cut.InvokeAsync(cut.Instance.OpenAsync);
+
+        var window = cut.FindComponent<OmniAppearanceWindow>().Instance;
+        Assert.True(window.BackdropChanged.HasDelegate);
+        var chosen = OmniThemeBackdrops.All.Last();
+
+        await cut.InvokeAsync(() => window.BackdropChanged.InvokeAsync(chosen));
+
+        Assert.Equal(chosen.Name, State.Backdrop?.Name);
+        Assert.Equal(chosen.Name, cut.FindComponent<OmniAppearanceWindow>().Instance.Backdrop?.Name);
     }
 
     /// <summary>Use the OE theme catalogue, with Essentiel as the default and no

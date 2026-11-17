@@ -98,25 +98,66 @@ public class MainLayoutTemplateCoverageTests : BunitContext
         cut.WaitForElement(MenuCard);
     }
 
-    // ── Admin user, orgs loaded, no available orgs → "AllOrganizations" badge ──
-    // The org selector now lives in the user menu (relocated from the top bar): the
-    // (Auth.IsAdmin && Orgs.IsLoaded) else-if branch renders once the menu is opened.
+    // ── Admin user, no membership → a real selector offering "all" and every organization (R-33) ──
+    // The org selector lives in the user menu: an Admin used to get a fixed badge and no way to change it.
 
     [Fact]
-    public void AdminUser_OrgsLoadedEmpty_RendersAllOrganizationsBadge()
+    public void AdminUser_OrgsLoadedEmpty_RendersASelectorOfAllAndEveryOrganization()
     {
         var handler = RegisterWithAuth(authenticated: true, isAdmin: true);
-        // The layout's own organizations load answers "no organization": the state comes from the page's
-        // bootstrap instead of a private setter written beside it, which that load could overtake.
+        // The layout's own organizations load answers "no membership"; the Admin's list comes from the server's
+        // administered organizations. The state comes from the page's bootstrap instead of a private setter
+        // written beside it, which that load could overtake.
         handler.SetJsonResponse(HttpMethod.Get, "api/organizations/me", new List<MyOrganizationDto>());
+        handler.SetJsonResponse(HttpMethod.Get, "api/organizations/administered", new List<AdministeredOrganizationDto> { new(5, "Acme", []) });
         var orgs = Services.GetRequiredService<ActiveOrganizationService>();
 
         var cut = Render<MainLayout>();
         cut.WaitForState(() => orgs.IsLoaded);
         OpenMenu(cut);
 
-        // The application's own row sits in OE's slot for it, under the identity.
-        Assert.Contains("AllOrganizations", cut.Find(".omni-app-menu__extra").TextContent, StringComparison.Ordinal);
+        var extra = cut.Find(".omni-app-menu__extra");
+        cut.WaitForAssertion(() => Assert.Single(extra.QuerySelectorAll(".user-menu-org-picker")));
+        // No fixed badge any more, and the label is the short "Organization", not "Active organization".
+        Assert.Empty(extra.QuerySelectorAll(".user-menu-all-orgs"));
+        Assert.DoesNotContain("ActiveOrganization", extra.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Organization", extra.TextContent, StringComparison.Ordinal);
+        var options = extra.QuerySelectorAll("option").Select(option => option.TextContent.Trim()).ToList();
+        Assert.Equal(["AllOrganizations", "Acme"], options);
+    }
+
+    [Fact]
+    public void AdminChoosingAnOrganizationInTheMenu_MakesItTheActiveOne_AndClosesTheMenu()
+    {
+        var handler = RegisterWithAuth(authenticated: true, isAdmin: true);
+        handler.SetJsonResponse(HttpMethod.Get, "api/organizations/me", new List<MyOrganizationDto>());
+        handler.SetJsonResponse(HttpMethod.Get, "api/organizations/administered", new List<AdministeredOrganizationDto> { new(5, "Acme", []) });
+        var orgs = Services.GetRequiredService<ActiveOrganizationService>();
+        var cut = Render<MainLayout>();
+        cut.WaitForState(() => orgs.IsLoaded);
+        OpenMenu(cut);
+
+        var select = cut.WaitForElement(".omni-app-menu__extra select.user-menu-org-picker");
+        // An option's value is its position in the list, not the organization id: choose it by what it says.
+        select.Change(select.QuerySelectorAll("option").Single(option => option.TextContent.Trim() == "Acme").GetAttribute("value"));
+
+        cut.WaitForAssertion(() => Assert.Equal(5, orgs.Active?.Id));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(MenuCard)));
+    }
+
+    [Fact]
+    public void Member_RendersTheOrganizationSelectorWithoutTheAllChoice()
+    {
+        var handler = RegisterWithAuth();
+        handler.SetJsonResponse(HttpMethod.Get, "api/organizations/me", new List<MyOrganizationDto> { new(42, "Acme", "acme", OrganizationRole.Owner) });
+        var orgs = Services.GetRequiredService<ActiveOrganizationService>();
+        var cut = Render<MainLayout>();
+        cut.WaitForState(() => orgs.IsLoaded);
+        OpenMenu(cut);
+
+        var options = cut.Find(".omni-app-menu__extra").QuerySelectorAll("option")
+            .Where(option => !string.IsNullOrEmpty(option.GetAttribute("value"))).Select(option => option.TextContent.Trim()).ToList();
+        Assert.Equal(["Acme"], options);
     }
 
     // ── Orgs loaded with available orgs → dropdown in the application menu ─────
@@ -190,11 +231,11 @@ public class MainLayoutTemplateCoverageTests : BunitContext
 
         OpenMenu(cut);
 
-        // Use a neutral sign-out button beside the version in the application menu.
+        // R-31 (OE 1.11.1): the sign-out button beside the version is the menu's primary action.
         var lastLine = cut.Find(MenuCard).Children.Last();
         Assert.Contains("omni-app-menu__footer", lastLine.ClassList);
         var signOut = lastLine.QuerySelector("button.omni-app-menu__sign-out")!;
-        Assert.Contains("omni-button--secondary", signOut.ClassList);
+        Assert.Contains("omni-button--primary", signOut.ClassList);
         signOut.Click();
 
         // The sign-out awaits the realtime stop and two localStorage removals before navigating; observe

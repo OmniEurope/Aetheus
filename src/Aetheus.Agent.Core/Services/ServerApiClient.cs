@@ -92,6 +92,12 @@ public sealed class ServerApiClient(
         await PostAsync($"api/servers/{serverId}/ports/observed", report, ct).ConfigureAwait(false);
     }
 
+    public async Task ReportHostPackagesAsync(
+        int serverId, HostPackageInventoryReportDto report, CancellationToken ct = default)
+    {
+        await PostAsync($"api/servers/{serverId}/host-packages", report, ct).ConfigureAwait(false);
+    }
+
     public async Task ReportBackupResultAsync(int runId, BackupExecuteResultDto result, CancellationToken ct = default)
     {
         await PostAsync($"api/backups/runs/{runId}/result", result, ct).ConfigureAwait(false);

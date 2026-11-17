@@ -119,9 +119,10 @@ public abstract class ApiClientBase(HttpClient http)
     /// return a typed validation/problem payload the UI must surface.
     /// </summary>
     protected Task<ApiOutcome<TValue, TError>> PostForOutcomeAsync<TValue, TError>(
-        string url, object? body = null, CancellationToken ct = default)
+        string url, object? body = null, CancellationToken ct = default, string? idempotencyKey = null)
         where TValue : class
-        where TError : class => SendForOutcomeAsync<TValue, TError>(HttpMethod.Post, url, body, ct);
+        where TError : class => SendForOutcomeAsync<TValue, TError>(
+            HttpMethod.Post, url, body, ct, idempotencyKey: idempotencyKey);
 
 
     /// <summary>PUT a JSON body, mapping the response into an <see cref="ApiOutcome{TValue,TError}"/>
@@ -134,19 +135,32 @@ public abstract class ApiClientBase(HttpClient http)
 
 
     protected async Task<ApiOutcome<TValue, TError>> SendForOutcomeAsync<TValue, TError>(
-        HttpMethod method, string url, object? body, CancellationToken ct, bool callerHandlesEveryError = false)
+        HttpMethod method, string url, object? body, CancellationToken ct, bool callerHandlesEveryError = false,
+        bool callerHandlesConflict = false, string? idempotencyKey = null)
         where TValue : class
         where TError : class
     {
         using var request = new HttpRequestMessage(method, url);
         if (body is not null) request.Content = JsonContent.Create(body, body.GetType());
+        // A request that also carries its key in the body may be sent again by the resilience pipeline (ApiRetryPolicy).
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+            request.Options.Set(ApiRetryPolicy.IdempotencyKeyOption, idempotencyKey);
         // The caller shows a 400 itself from ErrorMessage: the global notifier must not add a second toast.
         request.Options.Set(ErrorNotificationHandler.CallerHandlesBadRequest, true);
         if (callerHandlesEveryError) request.Options.Set(ErrorNotificationHandler.CallerHandlesErrors, true);
+        // A caller that says a 409 itself (a pipeline name already taken, R-38) reads its reason from ErrorMessage.
+        if (callerHandlesConflict) request.Options.Set(ErrorNotificationHandler.CallerHandlesConflict, true);
         using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
 
         if (response.IsSuccessStatusCode)
             return new(await response.Content.ReadFromJsonAsync<TValue>(JsonOptions.Web, ct).ConfigureAwait(false), null, false);
+
+        if (callerHandlesConflict && response.StatusCode == HttpStatusCode.Conflict)
+        {
+            var conflict = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return new(null, null, false, response.StatusCode,
+                string.IsNullOrWhiteSpace(conflict) ? null : ApiErrorText.Read(conflict));
+        }
 
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {

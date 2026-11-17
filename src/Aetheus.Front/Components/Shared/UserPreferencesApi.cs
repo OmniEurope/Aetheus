@@ -36,8 +36,11 @@ public sealed class UserPreferencesApi(HttpClient http) : ApiClientBase(http)
             : await response.Content.ReadFromJsonAsync<UserPreferenceDto>(JsonOptions.Web, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Writes one preference; a null value is a removal, kept as a tombstone with its date.</summary>
-    public async Task SaveAsync(string key, SaveUserPreferenceRequest request, CancellationToken ct = default)
+    /// <summary>
+    /// Writes one preference; a null value is a removal, kept as a tombstone with its date. Answers what the
+    /// server kept (it is the authority for dates).
+    /// </summary>
+    public async Task<UserPreferenceDto> SaveAsync(string key, SaveUserPreferenceRequest request, CancellationToken ct = default)
     {
         using var message = new HttpRequestMessage(HttpMethod.Put, $"{Root}/{Uri.EscapeDataString(key)}")
         {
@@ -48,5 +51,7 @@ public sealed class UserPreferencesApi(HttpClient http) : ApiClientBase(http)
         message.Options.Set(ErrorNotificationHandler.CallerHandlesBadRequest, true);
         using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<UserPreferenceDto>(JsonOptions.Web, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"The server answered no preference for the write of '{key}'.");
     }
 }

@@ -39,6 +39,9 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         ["analysis.gate.blocked"] = "GateBlocked",
         ["analysis.gate.error"] = "GateError",
         ["analysis.cve-sync.failed"] = "CveFailed",
+        ["analysis.cve.detected"] = "CveDetected",
+        ["analysis.dependency-update.ready"] = "DependencyUpdateReady",
+        ["analysis.dependency-update.closed"] = "DependencyUpdateClosed",
         ["analysis.governance.expiring"] = "GovernanceExpiring",
         ["analysis.operational.cve-sync-failed"] = "OperationalCve",
         ["analysis.operational.cve-db-stale"] = "CveStale",
@@ -81,8 +84,11 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         ["pipeline.succeeded"] = "Succeeded",
         ["release.deployed"] = "Succeeded",
         ["agent-update.completed"] = "Succeeded",
+        ["analysis.dependency-update.ready"] = "Succeeded",
+        ["analysis.dependency-update.closed"] = "Succeeded",
         ["app.recovered"] = "Healthy",
         ["analysis.gate.warning"] = "Warning",
+        ["analysis.cve.detected"] = "Warning",
         ["analysis.governance.expiring"] = "Warning",
         ["analysis.operational.cve-db-stale"] = "Warning",
         ["analysis.operational.storage-drift"] = "Warning",
@@ -117,21 +123,25 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
     private MailTemplateData Compose(NotificationEmail email, string? frontOrigin)
     {
         ArgumentNullException.ThrowIfNull(email);
-        var key = Events.GetValueOrDefault(email.EventType, "Unknown");
-        var heading = T(key + "Title");
         using var payload = Parse(email.PayloadJson);
         var root = payload?.RootElement;
+        // R-26: the CVE mail is one for all the projects the recipient follows; it names none of them above the details.
+        var cveList = email.EventType == CveDetectedMail.EventType && CveDetectedMail.IsList(root);
+        var key = EventKey(email.EventType, root, cveList);
+        var heading = T(key + "Title");
         var projectPrefix = email.EventType + " in project ";
-        var context = Context(email, root, projectPrefix);
+        var context = cveList ? null : Context(email, root, projectPrefix);
         var (path, linkKey) = Destination(email.EventType, root);
         var link = Url(frontOrigin, path);
         var values = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [Event] = heading,
             [Summary] = heading + (string.IsNullOrWhiteSpace(context) ? "" : Sep + OneLine(context)),
+            [EventWord] = T(key + "Word"),
+            [SubjectLine] = SubjectOf(T(key + "Word"), ProjectNameOf(email, root, projectPrefix) ?? Value(root, "ServerName")),
             [Intro] = T(key + "Intro"),
             [NotificationMailVariables.Context] = context ?? string.Empty,
-            [Project] = Value(root, "ProjectName") ?? ProjectOfSubject(email, projectPrefix) ?? string.Empty,
+            [Project] = ProjectNameOf(email, root, projectPrefix) ?? string.Empty,
             // No address, no button: the note under it says why instead.
             [Link] = link ?? string.Empty,
             [LinkLabel] = link is null ? string.Empty : T(linkKey),
@@ -144,7 +154,9 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
             [StatusBanner] = Banner(heading, BannerColours(email.EventType, root)),
             [ApprovalActions] = ApprovalMailActions.Block(email.EventType, Id(root, "PipelineRunId"), Id(root, "ApprovalId"), frontOrigin, colours, T),
             [ContextLink] = ContextBlock(context, serverUrl, root),
-            [Details] = DetailTable(email, root, projectPrefix, serverUrl),
+            [Details] = cveList
+                ? "<table>" + new CveDetectedMail(language, colours, frontOrigin).Rows(root) + "</table>"
+                : DetailTable(email, root, projectPrefix, serverUrl),
             [LinkNote] = link is null ? NoLinkNote() : RootRunNote(root, frontOrigin)
         };
         return new MailTemplateData(values, blocks);
@@ -162,6 +174,14 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         return context;
     }
 
+    /// <summary>The resource key of the event: the CVE digest has its own wording, an unknown event a neutral one.</summary>
+    private static string EventKey(string eventType, JsonElement? root, bool cveList) =>
+        cveList && CveDetectedMail.IsDigest(root) ? "CveDigest" : Events.GetValueOrDefault(eventType, "Unknown");
+
+    /// <summary>The project the event belongs to: the payload's name, else the one the subject line names.</summary>
+    private static string? ProjectNameOf(NotificationEmail email, JsonElement? root, string projectPrefix) =>
+        Value(root, "ProjectName") ?? ProjectOfSubject(email, projectPrefix);
+
     private static string? ProjectOfSubject(NotificationEmail email, string projectPrefix) =>
         email.Subject.StartsWith(projectPrefix, StringComparison.Ordinal) ? email.Subject[projectPrefix.Length..] : null;
 
@@ -177,6 +197,8 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
     /// <summary>The colours of the status the payload reports, else of the status the event stands for, else neutral.</summary>
     private (string Background, string Ink) BannerColours(string eventType, JsonElement? root)
     {
+        if (eventType == CveDetectedMail.EventType && CveDetectedMail.WorstSeverity(root) is { } worst && StatusTones.TryGetValue(worst, out var worstTone))
+            return colours.Pair(worstTone);
         if (root is { ValueKind: JsonValueKind.Object } obj)
         {
             foreach (var property in obj.EnumerateObject())
@@ -239,6 +261,13 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         if (eventType.StartsWith("agent-update.", StringComparison.Ordinal) && property.Name is "FailureCode" or "FailureDiagnostic")
         {
             AgentFailureRows(html, root, property.Name);
+            return true;
+        }
+        if (eventType == "pipeline.launch-refused" && property.Name == "Reason"
+            && LaunchRefusedReasonText.Build(root, language) is { } reason)
+        {
+            // The reason as problem codes, said in the recipient's language; a payload without them shows its English Reason.
+            Detail(html, NotificationEmailText.Label("Reason", language), reason);
             return true;
         }
         if (property.Name == "TriggeredAt" && TriggeredInstant(property.Value) is { } triggered)
@@ -358,11 +387,28 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         return Id(root, "PipelineId") is { } pipeline ? ($"/pipelines/{pipeline}", "RunLink") : null;
     }
 
+    /// <summary>Where an analysis event points (recette R-27): the analysis it is about, never the quality of every project. The
+    /// run's Gate tab for a report or a gate verdict, the finding for an expiring decision, the project's findings (or the CVE
+    /// watch for several projects) for a vulnerability mail; only an event about no project at all opens the portfolio.</summary>
+    private static (string Path, string LinkKey) AnalysisDestination(string eventType, JsonElement? root, int? project)
+    {
+        if (eventType == CveDetectedMail.EventType && CveDetectedMail.IsList(root)) return CveDetectedMail.Destination(root);
+        // R-30: the dependency updates panel is on the project's page.
+        if (eventType.StartsWith("analysis.dependency-update.", StringComparison.Ordinal) && project is { } updateProject)
+            return ($"/projects/{updateProject}/overview", "ProjectLink");
+        if (eventType == "analysis.governance.expiring" && Id(root, "FindingId") is { } finding)
+            return ($"/analysis/findings/{finding}", "AnalysisLink");
+        if (eventType is "analysis.report.completed" or "analysis.gate.warning" or "analysis.gate.blocked" or "analysis.gate.error"
+            && Id(root, "PipelineRunId") is { } run)
+            return ($"/pipelines/runs/{run}?tab=gate", "AnalysisLink");
+        return project is { } analysisProject ? ($"/projects/{analysisProject}/quality", "AnalysisLink") : ("/analysis", "AnalysisLink");
+    }
+
     /// <summary>Where a place-shaped event points: the quality page, the vaults, or its server.</summary>
     private static (string Path, string LinkKey)? PlaceDestination(string eventType, JsonElement? root, int? project)
     {
         if (eventType.StartsWith("analysis.", StringComparison.Ordinal))
-            return project is { } analysisProject ? ($"/projects/{analysisProject}/quality", "AnalysisLink") : ("/analysis", "AnalysisLink");
+            return AnalysisDestination(eventType, root, project);
         if (eventType == "SecretExpiring") return ("/vaults", "VaultLink");
         // An alert opens on its own page; the pages of its server below only serve an alert raised before
         // alerts were stored (recette R-52).
@@ -400,6 +446,10 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
     private string DisplayField(string eventType, JsonProperty property) =>
         EnumName(eventType, property) is { } name ? T("Status" + name)
         : eventType == "alert.triggered" && AlertValue(property) is { } alert ? alert
+        : property.Name == "BuildNumber" ? $"#{Display(property.Value)}"
+        // R-30: what an automatic dependency update did, worded in the recipient's language; an unknown code stays as written.
+        : eventType.StartsWith("analysis.dependency-update.", StringComparison.Ordinal) && property.Name == "Outcome"
+            && property.Value.ValueKind == JsonValueKind.String && NotificationEmailText.Find("Outcome" + property.Value.GetString(), language) is { } outcome ? outcome
         : Display(property.Value);
 
     /// <summary>The rule's name tells the reader nothing the event does not (recette R-53); the server's identifier is
@@ -410,7 +460,13 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         (name == "ServerId" && serverUrl is not null)
         || (eventType == "alert.triggered" && name is "RuleName" or "Changes" or "AlertId")
         || (eventType.StartsWith("agent-update.", StringComparison.Ordinal) && name is "AgentUpdateRequestId" or "ProjectId")
-        || (eventType == "pipeline.approval-requested" && name == "ApprovalId");
+        || (eventType == "pipeline.approval-requested" && name == "ApprovalId")
+        // R-30: the project is named in the subject; its identifier only feeds the link.
+        || (eventType.StartsWith("analysis.dependency-update.", StringComparison.Ordinal) && name == "ProjectId")
+        // The codes behind the Reason: they feed its wording, they are not a row of their own.
+        || (eventType == "pipeline.launch-refused" && name == LaunchRefusedReasonText.ProblemsProperty)
+        // R-8: a reader knows a run by its number; the technical keys only feed the links.
+        || (eventType.StartsWith("pipeline.", StringComparison.Ordinal) && name is "PipelineRunId" or "RootRunId");
 
     /// <summary>The words of an alert's metric, comparison, severity and host risks; a value without a word stays as the producer wrote it.</summary>
     private string? AlertValue(JsonProperty property)
@@ -473,6 +529,22 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         if (string.IsNullOrWhiteSpace(json)) return null;
         try { return JsonDocument.Parse(json); }
         catch (JsonException) { return null; } // Preserve malformed data as encoded text rather than fail delivery.
+    }
+
+    /// <summary>Longest project or server name a subject carries: a mail list truncates anything longer anyway.</summary>
+    private const int SubjectNameMaxLength = 60;
+
+    /// <summary>
+    /// The default subject (recette R-26): "Aetheus - name - word", or "Aetheus - word" when the event names no
+    /// project or server. The name is data: control characters (CR and LF above all, which would split the header)
+    /// become spaces, runs of spaces collapse, and a long name is cut.
+    /// </summary>
+    internal static string SubjectOf(string word, string? name)
+    {
+        var clean = string.Concat((name ?? string.Empty).Select(c => char.IsControl(c) ? ' ' : c));
+        clean = string.Join(' ', clean.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (clean.Length > SubjectNameMaxLength) clean = clean[..SubjectNameMaxLength].TrimEnd();
+        return clean.Length == 0 ? $"Aetheus - {word}" : $"Aetheus - {clean} - {word}";
     }
 
     private static string OneLine(string value) => value.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);

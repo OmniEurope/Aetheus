@@ -16,7 +16,10 @@ public interface IPipelineRunFinalizer
 {
     /// <summary>Finalizes a run to <paramref name="status"/>, raising the completion event and evicting
     /// the run's masked secrets.</summary>
-    Task CompleteRunAsync(int pipelineRunId, PipelineStatus status, CancellationToken ct);
+    /// <param name="artifactCollectionFailed">What the caller has just read from
+    /// <see cref="IPipelineRepository.HasFailedArtifactCollectionAsync"/> for this run, so that finalizing it does
+    /// not read the same answer again; null when the caller has not read it.</param>
+    Task CompleteRunAsync(int pipelineRunId, PipelineStatus status, CancellationToken ct, bool? artifactCollectionFailed = null);
 
     /// <summary>Fails a run whose stages found no matching runner, persisting the human-readable reasons.</summary>
     Task FailRunWithUnmatchedStagesAsync(
@@ -61,9 +64,9 @@ public sealed class PipelineRunFinalizer(
     TimeProvider timeProvider,
     IPipelineResourceLockRepository? resourceLocks = null) : IPipelineRunFinalizer
 {
-    public async Task CompleteRunAsync(int pipelineRunId, PipelineStatus status, CancellationToken ct)
+    public async Task CompleteRunAsync(int pipelineRunId, PipelineStatus status, CancellationToken ct, bool? artifactCollectionFailed = null)
     {
-        await repo.UpdatePipelineRunStatusAsync(pipelineRunId, status, ct).ConfigureAwait(false);
+        await repo.UpdatePipelineRunStatusAsync(pipelineRunId, status, ct, artifactCollectionFailed).ConfigureAwait(false);
         await ReleaseLocksAsync(pipelineRunId, status, ct).ConfigureAwait(false);
         // Ended runs leave no pending approval.
         if (status.IsTerminal())
@@ -175,15 +178,11 @@ public sealed class PipelineRunFinalizer(
 
     // Guards the dead-end failure branches so a non-Running run (Cancelled / WaitingForApproval /
     // already completed) is never flipped to Failed by a late scheduling pass.
-    public async Task<bool> IsRunActiveAsync(int runId, CancellationToken ct)
-    {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        return run?.Status == PipelineStatus.Running;
-    }
+    // One EXISTS on the status: the guard needs no run row, the pipeline and project, or their YAML.
+    public Task<bool> IsRunActiveAsync(int runId, CancellationToken ct) =>
+        repo.IsRunStillRunningAsync(runId, ct);
 
-    public async Task<bool> IsCancellationRequestedAsync(int runId, CancellationToken ct)
-    {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        return run is not null && HasCancellationRequest(run.AdditionalVariablesJson);
-    }
+    // One column, read live: a cancellation can land at any time, so this is never answered from a loaded run.
+    public Task<bool> IsCancellationRequestedAsync(int runId, CancellationToken ct) =>
+        repo.IsRunCancellationRequestedAsync(runId, ct);
 }

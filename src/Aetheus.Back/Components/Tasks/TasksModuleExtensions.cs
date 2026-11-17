@@ -12,6 +12,8 @@ public static class TasksModuleExtensions
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<ITaskServerReader>(sp => sp.GetRequiredService<ITaskService>());
         services.AddScoped<IUnexecutableTaskRefuser, UnexecutableTaskRefuser>();
+        services.AddScoped<ITaskIdentityBackfillRepository, TaskIdentityBackfillRepository>();
+        services.AddHostedService<TaskIdentityBackfillService>();
         services.AddScoped<Services.DomainEvents.IDomainEventHandler<ReleaseDeployedEvent>, ReleaseDeployedNotificationHandler>();
         return services;
     }

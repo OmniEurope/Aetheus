@@ -36,7 +36,10 @@ public class CertbotOperationExecutorRunnerTests
             NullLogger<CertbotOperationExecutor>.Instance)
         {
             IsLinux = isLinux,
-            RunProcessAsync = calls.RunAsync
+            RunProcessAsync = calls.RunAsync,
+            // R-26: a host with no enabled Apache site; the real sites-enabled of the machine running the tests is never read.
+            EnabledSites = new ApacheEnabledSites("/etc/apache2/sites-enabled", _ => null, _ => null,
+                _ => new HashSet<string>(StringComparer.Ordinal), new ApacheSiteFileReader(NullLogger.Instance))
         };
 
     private static Task<ExecutorResult> Obtain(
@@ -196,6 +199,33 @@ public class CertbotOperationExecutorRunnerTests
 
         Assert.Equal(["-n", ManageHelper, verb], Assert.Single(calls.Runs).Argv);
         Assert.True(log.Has($"certbot {verb} (all)", TaskLogLevel.Info));
+    }
+
+    [Fact]
+    public async Task RenewalCheck_WithCertificateNames_RunsTheHelperWithEachNameAsItsOwnArgument()
+    {
+        var calls = new ProcessRunCalls();
+        var log = new OutputLog();
+
+        await Build(calls).ExecuteAsync(
+            OperationKind.CertbotRenewalCheck, "random.example.com,demo.example.com", 60, log.Write, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["-n", ManageHelper, "renewal-check", "random.example.com", "demo.example.com"], Assert.Single(calls.Runs).Argv);
+        Assert.True(log.Has("certbot renewal-check random.example.com demo.example.com", TaskLogLevel.Info));
+    }
+
+    [Theory]
+    [InlineData("random.example.com,--force-renewal")]
+    [InlineData("a.example.com,a.example.com")]
+    public async Task RenewalCheck_WithAnInvalidNameList_IsRefusedWithoutRunningAnything(string target)
+    {
+        var calls = new ProcessRunCalls();
+
+        var result = await Build(calls).ExecuteAsync(
+            OperationKind.CertbotRenewalCheck, target, 60, new OutputLog().Write, TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Empty(calls.Runs);
     }
 
     [Fact]

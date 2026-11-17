@@ -20,6 +20,7 @@
                     <OmniAppearanceSettings Appearance="Appearance.Appearance" AppearanceChanged="Appearance.SetAppearanceAsync"
                                             Preset="Appearance.Preset" PresetChanged="Appearance.SetPresetAsync"
                                             Palette="Appearance.Palette" PaletteChanged="Appearance.SetPaletteAsync"
+                                            Backdrop="Appearance.Backdrop" BackdropChanged="Appearance.SetBackdropAsync"
                                             Font="Appearance.Font" FontChanged="Appearance.SetFontAsync"
                                             TextSizeLevel="Appearance.TextSizeLevel" TextSizeLevelChanged="Appearance.SetTextSizeLevelAsync"
                                             Density="Appearance.Density" DensityChanged="Appearance.SetDensityAsync"
@@ -61,6 +62,12 @@
                             <OmniFormField Label="@L["Password"]" For="oe-formfield-pages-settings-settings-4">
                                 <OmniPassword Id="oe-formfield-pages-settings-settings-4" @bind-Value="_disablePassword" Class="omni-u-w-100" />
                             </OmniFormField>
+                            <OmniFormField Label="@(_disableUseRecoveryCode ? L["TotpRecoveryCode"] : L["TotpCode"])" For="oe-formfield-pages-settings-settings-7">
+                                <OmniTextBox Id="oe-formfield-pages-settings-settings-7" @bind-Value="_disableCode" maxlength="20"
+                                             Placeholder="@(_disableUseRecoveryCode ? L["TotpRecoveryCodePlaceholder"] : L["TotpCodePlaceholder"])"
+                                             Autocomplete="one-time-code" Class="omni-u-w-100" />
+                            </OmniFormField>
+                            <OmniCheckBox @bind-Value="_disableUseRecoveryCode">@L["TotpUseRecoveryCode"]</OmniCheckBox>
                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DisableTotp" Class="@("btn-fit" + (_totpBusy ? " btn-busy" : null))" Busy="@(_totpBusy)" title="@L["Disable2FA"]"><Icon><OmniIcon Name="OmniIconName.LockOpen" /></Icon><ChildContent><span>@L["Disable"]</span></ChildContent></OmniButton>
                         </OmniStack>
                     }
@@ -104,18 +111,20 @@
                     <OmniDataAnnotationsValidator Localizer="@L" />
                     <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="settings-form">
                         <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ChangePassword"]</OmniHeading>
-                        <OmniFormField Label="@L["CurrentPassword"]" For="CurrentPassword">
-                            <OmniPassword @bind-Value="_pwModel.CurrentPassword" Id="CurrentPassword" Class="omni-u-w-100" />
-                            <ValidationMessage For="@(() => _pwModel.CurrentPassword)" />
-                        </OmniFormField>
-                        <OmniFormField Label="@L["NewPassword"]" For="NewPassword">
-                            <OmniPassword @bind-Value="_pwModel.NewPassword" Id="NewPassword" Class="omni-u-w-100" />
-                            <ValidationMessage For="@(() => _pwModel.NewPassword)" />
-                        </OmniFormField>
-                        <OmniFormField Label="@L["ConfirmPassword"]" For="ConfirmPassword">
-                            <OmniPassword @bind-Value="_pwModel.ConfirmPassword" Id="ConfirmPassword" Class="omni-u-w-100" />
-                            <ValidationMessage For="@(() => _pwModel.ConfirmPassword)" />
-                        </OmniFormField>
+                        <OmniStack Gap="OmniSpacing.Small">
+                            <OmniFormField Label="@L["CurrentPassword"]" For="CurrentPassword">
+                                <OmniPassword @bind-Value="_pwModel.CurrentPassword" Id="CurrentPassword" Class="omni-u-w-100" />
+                                <ValidationMessage For="@(() => _pwModel.CurrentPassword)" />
+                            </OmniFormField>
+                            <OmniFormField Label="@L["NewPassword"]" For="NewPassword">
+                                <OmniPassword @bind-Value="_pwModel.NewPassword" Id="NewPassword" Class="omni-u-w-100" />
+                                <ValidationMessage For="@(() => _pwModel.NewPassword)" />
+                            </OmniFormField>
+                            <OmniFormField Label="@L["ConfirmPassword"]" For="ConfirmPassword">
+                                <OmniPassword @bind-Value="_pwModel.ConfirmPassword" Id="ConfirmPassword" Class="omni-u-w-100" />
+                                <ValidationMessage For="@(() => _pwModel.ConfirmPassword)" />
+                            </OmniFormField>
+                        </OmniStack>
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@("btn-fit" + (_pwBusy ? " btn-busy" : null))" Busy="@(_pwBusy)"><Icon><OmniIcon Name="OmniIconName.LockKey" /></Icon><ChildContent><span>@L["ChangePassword"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniTemplateForm>

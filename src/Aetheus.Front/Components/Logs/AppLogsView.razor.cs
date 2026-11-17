@@ -95,7 +95,7 @@ public partial class AppLogsView : IAsyncDisposable
             _total = result.TotalCount;
             _loadFailed = false;
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (IsReadFailure(ex))
         {
             if (AppId != appId) return;
             // A push that fails keeps the rows on screen for the next push. Any other failed call is
@@ -110,6 +110,15 @@ public partial class AppLogsView : IAsyncDisposable
             if (!fromPush && AppId == appId) _loading = false;
         }
     }
+
+    /// <summary>R-34: every way the read of the logs can end without rows is a failed read, said as such. A refused or
+    /// unreachable call is an <see cref="HttpRequestException"/>; a timeout surfaces as a
+    /// <see cref="TaskCanceledException"/> (the read passes no cancellation token, so nothing else cancels it), which
+    /// the grid ignores as a superseded load and then showed as "no logs yet"; a body that is not the expected JSON
+    /// (an HTML fallback page, a proxy error) is a <see cref="System.Text.Json.JsonException"/>, which the grid's own alert
+    /// reported next to the empty state.</summary>
+    private static bool IsReadFailure(Exception exception) =>
+        exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException;
 
     /// <summary> The pages of an export, read from the API with the sort and the column filters of
     /// the grid, without touching the rows it shows (the grid's load replaces them). A failed page

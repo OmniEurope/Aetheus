@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @if (Pipelines is null)
 {
-    <AetheusLoader />
+    <ZoneVeil />
 }
 else
 {
@@ -12,10 +12,12 @@ else
     <Aetheus.Front.Components.Pipelines.ProjectPipelinesReadiness ProjectId="@ProjectId" Loaded="@OnReadinessLoaded" />
     @if (_readinessLoaded)
     {
+        @* R-11: the pipelines of the external repository, imported read-only (nothing drawn without one). *@
+        <Aetheus.Front.Components.Pipelines.ExternalPipelinesPanel ProjectId="@ProjectId" />
         <PipelinesList ProjectId="ProjectId" />
     }
     else
     {
-        <AetheusLoader />
+        <ZoneVeil />
     }
 }

@@ -24,23 +24,6 @@ internal static class ScannerSourceStager
         CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
     private static extern int CreateHardLinkUnix(string existingPath, string newPath);
 
-    internal static string EnsureDockerVisibleSource(
-        string sourceDirectory,
-        string scanRoot,
-        string workDirectory)
-    {
-        var workRoot = Path.GetFullPath(workDirectory);
-        if (IsPathWithin(sourceDirectory, workRoot))
-            return sourceDirectory;
-
-        // Files are hard-linked when possible so large image archives remain zero-copy.
-        // The bounded copy fallback covers cross-device files. Symlinks are preserved only
-        // when their target remains inside the source tree and are never traversed.
-        var stagedSource = Path.Combine(scanRoot, "source");
-        StageSourceTree(sourceDirectory, stagedSource);
-        return stagedSource;
-    }
-
     internal static void StageSourceTree(
         string sourceDirectory,
         string destinationDirectory,

@@ -18,7 +18,7 @@ public class ActiveOrganizationServiceTests : BunitContext
     }
 
     private ActiveOrganizationService CreateSut() =>
-        new(Services.GetRequiredService<ApiClient>(), _preferences);
+        new(Services.GetRequiredService<ApiClient>(), _preferences, Services.GetRequiredService<AuthStateProvider>());
 
     private static MyOrganizationDto MakeOrg(int id, string name = "OrgName") =>
         new(id, name, name.ToLower(), OrganizationRole.Member);

@@ -7,6 +7,8 @@ public sealed record PipelineArtifactDto
 {
     public int Id { get; init; }
     public int PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int PipelineRunNumber { get; init; }
     public int PipelineId { get; init; }
     public int? ProjectId { get; init; }
     public string Name { get; init; } = string.Empty;

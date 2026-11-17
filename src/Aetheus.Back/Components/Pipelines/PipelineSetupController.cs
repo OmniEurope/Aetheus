@@ -173,7 +173,7 @@ public class PipelineSetupController(
             return Forbid();
 
         return Ok(await productionSetup.AnalyzeAsync(
-            request.ProjectId, request.ComposeFile, await AdministeredServersAsync(ct), ct));
+            request.ProjectId, request.ComposeFile, request.Branch, await AdministeredServersAsync(ct), ct));
     }
 
     /// <summary>Creates the variables, secrets and ports the Compose file asks for and the project's configuration
@@ -188,6 +188,20 @@ public class PipelineSetupController(
             return Forbid();
 
         return Ok(await productionSetup.ApplyAsync(request, await AdministeredServersAsync(ct), ct));
+    }
+
+    /// <summary>R-38: creates the generic Apache templates in the project's configuration repository when the Compose file could
+    /// not be read (the full setup above needs it). It writes only to that repository, never to the project's source; the
+    /// rights are the setup's own, since it creates the repository when the project has none.</summary>
+    [HttpPost("production-apache")]
+    public async Task<ActionResult<ProjectConfigRepositoryDto>> ApplyProductionApache(
+        [FromBody] PipelineProductionApacheRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (await AuthorizeProvisioningAsync(request.ProjectId, ct) is null)
+            return Forbid();
+
+        return Ok(await productionSetup.ApplyApacheTemplatesAsync(request, ct));
     }
 
     /// <summary>Recette R-77: the servers a project with none may be given, those the user administers, since launching

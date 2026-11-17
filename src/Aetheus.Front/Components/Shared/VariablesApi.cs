@@ -228,15 +228,17 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         => PostForApiErrorOutcomeAsync<AllocateLibraryPortsRequest, List<VariableEntryDto>>(
             $"api/variable-libraries/{libraryId}/ports/allocate", request, ct);
 
+    /// <summary>Gives keys that already hold a conflicting port a new one, releasing the old one.</summary>
+    public Task<ApiOutcome<List<VariableEntryDto>, ApiError>> ReallocateLibraryPortsAsync(
+        int libraryId, AllocateLibraryPortsRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<AllocateLibraryPortsRequest, List<VariableEntryDto>>(
+            $"api/variable-libraries/{libraryId}/ports/reallocate", request, ct);
 
-    /// <summary>Releases a port this library's project holds, after its PORT_* entry was deleted.</summary>
-    public async Task<int> ReleaseLibraryPortAsync(int libraryId, int port, CancellationToken ct = default)
-    {
-        var response = await Http.DeleteAsync($"api/variable-libraries/{libraryId}/ports/{port}", ct);
-        if (!response.IsSuccessStatusCode) return 0;
-        return await response.Content.ReadFromJsonAsync<int>(JsonOptions.Web, ct).ConfigureAwait(false);
-    }
-
+    /// <summary>The ports a reallocation of <c>request.Keys</c> would be given, reserving nothing.</summary>
+    public Task<ApiOutcome<List<int>, ApiError>> PreviewFreeLibraryPortsAsync(
+        int libraryId, AllocateLibraryPortsRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<AllocateLibraryPortsRequest, List<int>>(
+            $"api/variable-libraries/{libraryId}/ports/free-preview", request, ct);
 
     /// <summary>Checks this library's existing <c>PORT_*</c> entries against one server.</summary>
     public Task<ApiOutcome<PortCheckResultDto, ApiError>> CheckLibraryPortsAsync(

@@ -65,11 +65,13 @@ internal static class PipelineRunGatePresentation
     /// <summary>The gate uses the same grade as the run list, including the sealed candidate
     /// contract when applicable; see <c>PipelineRunGradeHydration</c>.</summary>
     public static AnalysisGrade? HeadlineGrade(AnalysisRunGateDto gate, AnalysisGrade? runGrade) =>
-        runGrade ?? gate.Grade?.OverallGrade;
+        // Recette R-21: a gate in error refuses the evidence its letter was computed from (run 3100 read "Error" beside an A),
+        // so it shows no letter; the causes say why.
+        gate.Status == AnalysisGateStatus.Error ? null : runGrade ?? gate.Grade?.OverallGrade;
 
     /// <summary>True when the run's letter is not the analysis letter, so the gate says where it comes from.</summary>
     public static bool GradeComesFromSeal(AnalysisRunGateDto gate, AnalysisGrade? runGrade) =>
-        runGrade is not null && runGrade != gate.Grade?.OverallGrade;
+        gate.Status != AnalysisGateStatus.Error && runGrade is not null && runGrade != gate.Grade?.OverallGrade;
 
     /// <summary>The run parameter a deployment restores its candidate release by.</summary>
     internal const string CandidateVersionParameter = "candidateVersion";

@@ -12,9 +12,8 @@ namespace Aetheus.Back.Tests.Architecture;
 /// resurfaces.
 ///
 /// Deliberately narrow to avoid false positives: it inspects only <b>non-comment</b> lines (shell
-/// <c>#</c> comments, C#/Razor <c>//</c> / <c>///</c> / <c>/* */</c>), so the single legitimate
-/// reference - the migration-cleanup routine's comment naming the OLD <c>PROM_*</c> aliases it removes
-/// (<c>install-agent-linux.sh</c> <c>cleanup_legacy_prometheus_artifacts</c>) - is allowed. A word
+/// <c>#</c> comments, C#/Razor <c>//</c> / <c>///</c> / <c>/* */</c>), so a comment may still name the old
+/// <c>PROM_*</c> aliases (the installer's migration cleanup that did was removed on 2026-11-05, R-18). A word
 /// boundary before <c>PROM_</c> keeps unrelated tokens (e.g. <c>EEPROM_</c>) from matching.
 /// </summary>
 public sealed class PrometheusNamingScorieAuditTests

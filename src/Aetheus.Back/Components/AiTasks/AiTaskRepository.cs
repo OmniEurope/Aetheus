@@ -8,9 +8,11 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
     public async Task<(List<AiRunnerProfile> Items, int Total)> GetProfilesPageAsync(
         string? search, int page, int pageSize, CancellationToken ct,
         IReadOnlyList<GridFilter>? columnFilters = null,
-        string? sortBy = null, bool sortDescending = false)
+        string? sortBy = null, bool sortDescending = false, int? organizationId = null)
     {
         var query = db.AiRunnerProfiles.AsNoTracking();
+        if (organizationId is { } organization)
+            query = query.Where(profile => profile.OrganizationId == organization);
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(profile => profile.Name.Contains(search));
         // The list's column header filters, before the count.

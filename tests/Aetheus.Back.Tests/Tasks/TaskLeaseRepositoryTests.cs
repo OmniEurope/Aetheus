@@ -112,6 +112,32 @@ public sealed class TaskLeaseRepositoryTests : IDisposable
         Assert.Equal(NowUtc.AddMinutes(2), server.AgentSessionLeaseExpiresAt);
     }
 
+    /// <summary>R-2: every poll used to rewrite the lease, one committed UPDATE every 10 s on an idle runner.
+    /// A lease with more than 90 s left is returned as it is.</summary>
+    [Fact]
+    public async Task AcquireAgentSessionLeaseAsync_LeavesALeaseWithMostOfItsDurationLeftUntouched()
+    {
+        var lease = NowUtc.AddSeconds(100);
+        var server = AddServer(sessionId: "session-a", leaseExpiresAt: lease, fencingToken: 4);
+        await SaveAsync();
+
+        var token = await _repository.AcquireAgentSessionLeaseAsync(1, "session-a", Ct);
+
+        Assert.Equal(4, token);
+        Assert.Equal(lease, server.AgentSessionLeaseExpiresAt);
+    }
+
+    [Fact]
+    public async Task AcquireAgentSessionLeaseAsync_RenewsOnceLessThanNinetySecondsAreLeft()
+    {
+        var server = AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddSeconds(89), fencingToken: 4);
+        await SaveAsync();
+
+        await _repository.AcquireAgentSessionLeaseAsync(1, "session-a", Ct);
+
+        Assert.Equal(NowUtc.AddMinutes(2), server.AgentSessionLeaseExpiresAt);
+    }
+
     /// <summary>A renewed lease for the same process session must preserve its fencing token so the
     /// agent retains ownership of running work.</summary>
     [Fact]
@@ -240,6 +266,47 @@ public sealed class TaskLeaseRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task TryStartTaskWithLeaseAsync_RepeatedStart_IsRefusedAndTheStartIsReadableUnderTheSameLease()
+    {
+        AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
+        var task = AddTask();
+        await SaveAsync();
+
+        Assert.True(await _repository.TryStartTaskWithLeaseAsync(task, "session-a", 1, NowUtc, Ct));
+        await SaveAsync();
+        _clock.Advance(TimeSpan.FromSeconds(12));
+        var again = await _repository.TryStartTaskWithLeaseAsync(task, "session-a", 1, _clock.GetUtcNow().UtcDateTime, Ct);
+
+        Assert.False(again);
+        Assert.Equal(NowUtc, await _repository.GetStartedAtUnderLeaseAsync(task.Id, "session-a", 1, Ct));
+    }
+
+    [Fact]
+    public async Task GetStartedAtUnderLeaseAsync_ReportsNothingForAnyOtherClaimantOrState()
+    {
+        AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
+        AddServer(id: 2, sessionId: "session-b", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
+        var running = AddTask(id: 100, status: TaskExecutionStatus.Running);
+        running.StartedAt = NowUtc;
+        var assigned = AddTask(id: 101);
+        var otherServer = AddTask(id: 102, serverId: 2, status: TaskExecutionStatus.Running, sessionId: "session-b");
+        otherServer.StartedAt = NowUtc;
+        var cancelled = AddTask(id: 103, status: TaskExecutionStatus.Cancelled);
+        cancelled.StartedAt = NowUtc;
+        await SaveAsync();
+
+        Assert.Equal(NowUtc, await _repository.GetStartedAtUnderLeaseAsync(100, "session-a", 1, Ct));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(100, "session-b", 1, Ct));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(100, "session-a", 2, Ct));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(101, "session-a", 1, Ct));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(102, "session-a", 1, Ct));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(103, "session-a", 1, Ct));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(404, "session-a", 1, Ct));
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Null(await _repository.GetStartedAtUnderLeaseAsync(100, "session-a", 1, Ct));
+    }
+
+    [Fact]
     public async Task TryStartTaskWithLeaseAsync_StartsTheOwningPipelineStepAlongWithTheTask()
     {
         AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
@@ -328,7 +395,7 @@ public sealed class TaskLeaseRepositoryTests : IDisposable
         await SaveAsync();
 
         var completed = await _repository.TryCompleteTaskWithLeaseAsync(
-            task, "session-a", 1, TaskExecutionStatus.Success, 0, NowUtc, "{}", Ct);
+            task, "session-a", 1, TaskExecutionStatus.Success, 0, NowUtc, "{}", null, Ct);
 
         Assert.True(completed);
         Assert.Equal(TaskExecutionStatus.Success, task.Status);
@@ -345,7 +412,7 @@ public sealed class TaskLeaseRepositoryTests : IDisposable
         await SaveAsync();
 
         var completed = await _repository.TryCompleteTaskWithLeaseAsync(
-            task, "session-a", 1, TaskExecutionStatus.Success, 0, NowUtc, "{}", Ct);
+            task, "session-a", 1, TaskExecutionStatus.Success, 0, NowUtc, "{}", null, Ct);
 
         Assert.False(completed);
         Assert.Equal(TaskExecutionStatus.Running, task.Status);

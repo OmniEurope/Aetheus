@@ -228,6 +228,43 @@ public class PipelineServiceTests
         await _repoMock.DidNotReceive().AddPipelineAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>());
     }
 
+    // --- R-38: a name is unique within its project, said in clear before anything is written ---
+
+    [Fact]
+    public async Task CreatePipelineAsync_WithANameTheProjectAlreadyHolds_IsRefusedByName_BeforeAnyWrite()
+    {
+        _repoMock.FindPipelineByNameAndProjectAsync("oe1-security", 15, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline { Id = 3, Name = "oe1-security", ProjectId = 15 });
+
+        var exception = await Assert.ThrowsAsync<ConflictException>(() => _sut.CreatePipelineAsync(new CreatePipelineRequest
+        {
+            Name = "oe1-security",
+            ProjectId = 15,
+            YamlDefinition = "name: oe1-security\ntrigger: manual\nstages: []"
+        }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal("A pipeline named 'oe1-security' already exists in this project.", exception.Message);
+        await _repoMock.DidNotReceive().AddPipelineAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>());
+        await _pipelineGitMock.DidNotReceiveWithAnyArgs().WriteProjectPipelineYamlAsync(
+            default, default!, default!, default!, TestContext.Current.CancellationToken, default, default);
+    }
+
+    [Fact]
+    public async Task CreatePipelineAsync_WithANameAnotherProjectHolds_IsCreated()
+    {
+        _repoMock.FindPipelineByNameAndProjectAsync("oe1-security", 16, Arg.Any<CancellationToken>()).Returns((Pipeline?)null);
+
+        var result = await _sut.CreatePipelineAsync(new CreatePipelineRequest
+        {
+            Name = "oe1-security",
+            ProjectId = 16,
+            YamlDefinition = "name: oe1-security\ntrigger: manual\nstages: []"
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("oe1-security", result.Name);
+        await _repoMock.Received(1).AddPipelineAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task UpdatePipelineAsync_WithAMissingProfile_IsRefused_BeforeTheGitWrite()
     {
@@ -468,6 +505,51 @@ public class PipelineServiceTests
             Name = "Old",
             Description = "d",
             YamlDefinition = "name: p\ntrigger: manual\nstages:\n  - name: Build\n    steps:\n      - name: Say\n        shell: echo two"
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("bob", existing.CreatedByUsername);
+    }
+
+    private const string Scheduled = "name: p\ntrigger: schedule\nschedule: \"0 0 1 * * *\"\nstages:\n  - name: b\n    steps:\n      - name: s\n        shell: echo one\n";
+
+    [Theory]
+    [InlineData("name: p\ntrigger: schedule\nschedule: \"0 30 2 * * *\"\nstages:\n  - name: b\n    steps:\n      - name: s\n        shell: echo one\n", "alice")]
+    [InlineData("name: p\ntrigger: manual\nschedule: \"0 0 1 * * *\"\nstages:\n  - name: b\n    steps:\n      - name: s\n        shell: echo one\n", "alice")]
+    [InlineData("name: p\ntrigger: schedule\nschedule: \"0 30 2 * * *\"\nstages:\n  - name: b\n    steps:\n      - name: s\n        shell: echo two\n", "bob")]
+    [InlineData("name: p\ntrigger: schedule\nschedule: \"0 0 1 * * *\"\n# nothing else\nstages:\n  - name: b\n    steps:\n      - name: s\n        shell: echo one\n", "bob")]
+    [InlineData("name: p\ntrigger: webhook\nschedule: \"0 0 1 * * *\"\nstages:\n  - name: b\n    steps:\n      - name: s\n        shell: echo one\n", "bob")]
+    public async Task UpdatePipelineAsync_MovesOwnership_UnlessOnlyTheScheduleOrTriggerLineChanged(string yaml, string owner)
+    {
+        SetCurrentUser("bob");
+        var existing = new Pipeline { Id = 1, Name = "Old", CreatedByUsername = "alice", YamlDefinition = Scheduled, Runs = [] };
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.UpdatePipelineAsync(1, new UpdatePipelineRequest
+        {
+            Name = "Old",
+            Description = "d",
+            YamlDefinition = yaml
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(owner, existing.CreatedByUsername);
+        Assert.Equal(yaml, existing.YamlDefinition);
+    }
+
+    [Fact]
+    public async Task UpdatePipelineAsync_ScheduleMoveOnAnUnownedPipeline_StillAdoptsIt()
+    {
+        // F-EXEC-1b: an unowned pipeline has no owner to keep; the re-save stays its remediation.
+        SetCurrentUser("bob");
+        var existing = new Pipeline { Id = 1, Name = "Old", CreatedByUsername = null, YamlDefinition = Scheduled, Runs = [] };
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.UpdatePipelineAsync(1, new UpdatePipelineRequest
+        {
+            Name = "Old",
+            Description = "d",
+            YamlDefinition = Scheduled.Replace("0 0 1", "0 30 2", StringComparison.Ordinal)
         }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("bob", existing.CreatedByUsername);

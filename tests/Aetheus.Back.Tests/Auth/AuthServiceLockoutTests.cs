@@ -45,7 +45,7 @@ public class AuthServiceLockoutTests
             _repo,
             config,
             Substitute.For<IAuditService>(),
-            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
+            new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }, new TokenHashKeys(new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" }),
             Substitute.For<IMemoryCache>(),
             orgRepo,
             Substitute.For<ITotpService>(),

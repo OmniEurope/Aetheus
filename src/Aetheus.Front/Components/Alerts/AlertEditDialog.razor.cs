@@ -14,8 +14,9 @@ public partial class AlertEditDialog : EntityEditDialogBase
     private List<OmniOption<MetricType>> _metricTypes = [];
 
     private List<OmniOption<AlertSeverity>> _severityTypes = [];
+    private List<ServerDto> _servers = [];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _metricTypes = Enum.GetValues<MetricType>()
             .Select(metric => new OmniOption<MetricType>(metric, L.Localize(metric)))
@@ -38,12 +39,35 @@ public partial class AlertEditDialog : EntityEditDialogBase
                 NotificationChannelId = a.NotificationChannelId
             };
         }
+
+        try
+        {
+            _servers = await Api.Servers.GetAllServersAsync();
+        }
+        catch (HttpRequestException)
+        {
+            // The list stays empty: the required server field then refuses the save instead of creating a rule that never fires.
+        }
+    }
+
+    // The list draws the saved rule at once (R-10): the dialog closes with what the server answered.
+    private Task CloseWithSavedAsync(AlertRuleDto saved)
+    {
+        Dialog.Close(saved);
+        return Task.CompletedTask;
     }
 
     private async Task SubmitAsync()
     {
         if (!ValidateRequiredName(_model.Name))
             return;
+
+        // A rule without a server is excluded from metric evaluation and never fires: the server is mandatory.
+        if (_model.ServerId is null)
+        {
+            Toast.Warning("ValidationError", "RequiredFields");
+            return;
+        }
 
         await RunBusyAsync(async () =>
         {
@@ -52,7 +76,7 @@ public partial class AlertEditDialog : EntityEditDialogBase
                 await Ui.RunAsync(
                     () => Api.Monitoring.UpdateAlertRuleAsync(Alert!.Id, _model),
                     "AlertUpdated",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedAsync,
                     successTitleKey: "Updated");
             }
             else
@@ -72,7 +96,7 @@ public partial class AlertEditDialog : EntityEditDialogBase
                 await Ui.RunAsync(
                     () => Api.Monitoring.CreateAlertRuleAsync(create),
                     "AlertCreated",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedAsync,
                     successTitleKey: "Created");
             }
         });

@@ -2,8 +2,9 @@
 
 <OmniStack>
     @* Server-verified hash-chain integrity for this entry (never an optimistic default).
-       Recette R-116: while it is verified, OE's busy veil lies over the card, no loader beside the wording. *@
-    <OmniCard Class="@(_verifying ? "omni-busy" : null)" aria-busy="@(_verifying ? "true" : "false")">
+       Recette R-116, R-1: while it is verified, the page veil is held, no loader beside the wording. *@
+    <VeilHold Busy="@_verifying" />
+    <OmniCard>
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             @if (_verifying)
             {

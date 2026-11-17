@@ -14,6 +14,17 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private ClipboardService Clipboard { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
+    [Inject] private ActiveOrganizationService Organizations { get; set; } = default!;
+
+    /// <summary>R-28: the page's two tabs, the lines no exclusion rule matches and the lines one does.</summary>
+    private static readonly string[] TabSlugs = ["journal", "filtered"];
+
+    [Parameter, SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
+    private string? _appliedTab;
+
+    private bool ShowExcluded => string.Equals(Tab, "filtered", StringComparison.Ordinal);
 
     private List<SystemLogFileDto>? _logFiles;
     private List<string> _fileNames = [];
@@ -64,6 +75,7 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     {
         _searchText = Search;
         _appliedSearch = Search;
+        _appliedTab = Tab;
         _levelOptions = LevelsArray.Select(value => new LogLevelOption(L[value], value)).ToList();
         try
         {
@@ -72,7 +84,7 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
             // The back says when the log files changed (at most every 2 s); the grid then refreshes
             // in place, keeping its scroll position and filters.
             _liveLogs = new AdminEntitySubscription(HubFactory);
-            await _liveLogs.StartAsync(AdminEntities.SystemLog,
+            _ = _liveLogs.StartAsync(AdminEntities.SystemLog,
                 () => InvokeAsync(() => _liveReload.RequestAsync(RefreshLiveAsync)));
         }
         catch (HttpRequestException) { } // 401 on expired JWT - redirect handled by AuthProvider
@@ -84,10 +96,13 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
 
     protected override async Task OnParametersSetAsync()
     {
-        if (!_initialized || string.Equals(Search, _appliedSearch, StringComparison.Ordinal))
+        if (!_initialized
+            || (string.Equals(Search, _appliedSearch, StringComparison.Ordinal)
+                && string.Equals(Tab, _appliedTab, StringComparison.Ordinal)))
             return;
 
         _appliedSearch = Search;
+        _appliedTab = Tab;
         _searchText = Search;
         await ReloadEntriesAsync();
     }
@@ -106,7 +121,7 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         var (sortBy, sortDescending) = args.ToSortRequest(nameof(SystemLogEntryDto.Timestamp), fallbackDescending: true);
         return Api.Security.GetSystemLogEntriesAsync(
             _selectedFile, _selectedLevel, _searchText, _dateFrom, _dateTo, page, pageSize,
-            sortBy, sortDescending, args.ToApiFilters());
+            sortBy, sortDescending, args.ToApiFilters(), Organizations.Active?.Id, ShowExcluded);
     }
 
     private async Task LoadDataAsync(GridLoadArgs args)
@@ -120,7 +135,7 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         {
             var result = await Api.Security.GetSystemLogEntriesAsync(
                 _selectedFile, _selectedLevel, _searchText, _dateFrom, _dateTo, page, pageSize,
-                sortBy, sortDescending, filters);
+                sortBy, sortDescending, filters, Organizations.Active?.Id, ShowExcluded);
             if (_disposed) return;
             _items = result.Items;
             _total = result.TotalCount;
@@ -190,7 +205,6 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(_selectedFile)) return;
         _isDownloading = true;
-        StateHasChanged();
         try
         {
             var bytes = await Api.Security.DownloadSystemLogFileAsync(_selectedFile);
@@ -202,7 +216,6 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         finally
         {
             _isDownloading = false;
-            StateHasChanged();
         }
     }
 
@@ -223,6 +236,38 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
                 await OnRefreshAsync();
             }
         });
+    }
+
+    /// <summary>Opens the organization's rules (R-28); the grid reloads when the dialog closes, so a rule
+    /// created, switched or deleted moves the lines at once.</summary>
+    private Task OnManageRulesAsync() => OpenRulesDialogAsync(string.Empty, string.Empty);
+
+    /// <summary>One click from a line: the rule dialog opens with a pattern read from that line.</summary>
+    private Task OnExcludeLineAsync(SystemLogEntryDto entry) =>
+        OpenRulesDialogAsync(SuggestPattern(entry.Message), string.Empty);
+
+    private async Task OpenRulesDialogAsync(string pattern, string category)
+    {
+        await Dialog.OpenAsync<SystemLogRulesDialog>(L["SystemLogRules"],
+            new Dictionary<string, object?>
+            {
+                ["InitialPattern"] = pattern,
+                ["InitialCategory"] = category
+            },
+            new OmniDialogOptions { Width = "700px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
+        if (!_disposed) await ReloadEntriesAsync();
+    }
+
+    /// <summary>The start of a message that names the kind of line, before its figures: the text up to the first
+    /// colon ("Slow request POST /api/tasks/claim"), or the first characters when there is none.</summary>
+    internal static string SuggestPattern(string message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        var cut = message.IndexOf(':', StringComparison.Ordinal);
+        var kind = (cut > 0 ? message[..cut] : message).Trim();
+        return kind.Length <= SaveSystemLogExclusionRuleRequest.MaxPatternLength
+            ? kind
+            : kind[..SaveSystemLogExclusionRuleRequest.MaxPatternLength];
     }
 
     private Task OnCopyCorrelationIdAsync(string correlationId) => Clipboard.CopyAsync(correlationId, correlationId);

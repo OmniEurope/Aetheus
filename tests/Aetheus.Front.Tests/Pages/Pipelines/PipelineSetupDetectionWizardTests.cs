@@ -23,7 +23,7 @@ public sealed class PipelineSetupDetectionWizardTests : BunitContext
     private static readonly string[] Templates =
     [
         "application-ci", "application-quality", "application-security", "application-qa",
-        "application-candidate", "application-nightly", "application-deploy-prod"
+        "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
     ];
 
     private async Task<IRenderedComponent<PipelineSetupWizard>> OpenCapabilitiesAsync(PipelineSetupDetectionDto detection)
@@ -121,6 +121,45 @@ public sealed class PipelineSetupDetectionWizardTests : BunitContext
         Assert.Contains(requests, request => request.Name == "atlas-qa");
         var candidate = Assert.Single(requests, request => request.Name == "atlas-candidate");
         Assert.Contains("APPLICATION_QA_ENABLED: \"true\"", candidate.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BranchWithoutBrowserTests_WarnsThatTheQaDeclaresNone_AndDoesNotLockTheWizard()
+    {
+        var cut = await OpenCapabilitiesAsync(new PipelineSetupDetectionDto
+        {
+            HasDotNetSolution = true,
+            HasDotNetTestProject = true,
+            HasBrowserTests = false,
+            HasComposeFile = true,
+            HasDockerRunner = true
+        });
+
+        Assert.True(IsTicked(cut, "qa"));
+        var warnings = cut.Find("[data-testid='setup-detection-warnings']").TextContent;
+        Assert.Contains("PipelineSetupWarnNoBrowserTests", warnings, StringComparison.Ordinal);
+        Assert.DoesNotContain("PipelineSetupWarnNoTests", warnings, StringComparison.Ordinal);
+
+        await cut.InvokeAsync(cut.FindComponent<WizardDialog>().Instance.NextStep);
+        cut.WaitForAssertion(() => Assert.Contains("setup-summary", cut.Markup, StringComparison.Ordinal));
+        Assert.False(cut.Find(".omni-wizard__actions button.omni-wizard__finish").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public async Task BranchWithBrowserTests_DoesNotWarnAboutThem()
+    {
+        var cut = await OpenCapabilitiesAsync(new PipelineSetupDetectionDto
+        {
+            HasDotNetSolution = true,
+            HasDotNetTestProject = true,
+            HasBrowserTests = true,
+            BrowserTestTool = "playwright-dotnet",
+            BrowserTestProject = "tests/E2E/E2E.csproj",
+            HasComposeFile = true,
+            HasDockerRunner = true
+        });
+
+        Assert.Empty(cut.FindAll("[data-testid='setup-detection-warnings']"));
     }
 
     [Fact]

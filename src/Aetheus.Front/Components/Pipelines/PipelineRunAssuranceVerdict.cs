@@ -19,7 +19,20 @@ public static class PipelineRunAssuranceVerdict
     /// <param name="Grade">The sealed grade letter, when the seal published one.</param>
     /// <param name="Deployable">Null when the run carries no verdict at all (not a candidate).</param>
     /// <param name="BlockingTests">The tests that hold the package back, each with the step it came from when known.</param>
-    public sealed record Verdict(string? Grade, bool? Deployable, IReadOnlyList<BlockingTest> BlockingTests);
+    public sealed record Verdict(string? Grade, bool? Deployable, IReadOnlyList<BlockingTest> BlockingTests)
+    {
+        /// <summary>PLAN-006: the suites that named flaky tests (failed, then passed on their single rerun).
+        /// Findings to fix, never blocking on their own: the seal grades the candidate on their count.</summary>
+        public IReadOnlyList<FlakySuite> FlakyTests { get; init; } = [];
+    }
+
+    /// <summary>The flaky tests one suite published beside its status (<c>QA_CURRENT_E2E_FLAKY_TESTS</c>).</summary>
+    /// <param name="Key">The seal's test key ("currentE2E").</param>
+    /// <param name="Names">The names as published, a <c>+N more</c> tail included.</param>
+    public sealed record FlakySuite(string Key, IReadOnlyList<string> Names);
+
+    private const string StatusSuffix = "_GATE_STATUS";
+    private const string FlakySuffix = "_FLAKY_TESTS";
 
     /// <summary>One entry of <c>CANDIDATE_BLOCKING_TESTS</c> ("currentIntegration=Failed").</summary>
     /// <param name="Text">The entry in the seal's own words, shown as is when no producer is known.</param>
@@ -51,8 +64,20 @@ public static class PipelineRunAssuranceVerdict
                 .ToList()
             : [];
 
-        return new Verdict(hasGrade ? grade : null, deployable, blocking);
+        return new Verdict(hasGrade ? grade : null, deployable, blocking) { FlakyTests = Flaky(variables) };
     }
+
+    /// <summary>Each sealed suite's flaky list, read beside its status variable
+    /// (UNIT_TEST_GATE_STATUS -> UNIT_TEST_FLAKY_TESTS), in the seal's order.</summary>
+    private static List<FlakySuite> Flaky(Dictionary<string, string> variables) =>
+        [.. PipelineControlVerdict.TestGateStatusVariables
+            .Select(test => (test.Key, Variable: (test.Value.EndsWith(StatusSuffix, StringComparison.Ordinal)
+                ? test.Value[..^StatusSuffix.Length] : test.Value) + FlakySuffix))
+            .Select(test => variables.TryGetValue(test.Variable, out var value)
+                ? new FlakySuite(test.Key, value.Split(", ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                : null)
+            .OfType<FlakySuite>()
+            .Where(suite => suite.Names.Count > 0)];
 
     // "currentIntegration=Failed" -> the step that set QA_CURRENT_INTEGRATION_GATE_STATUS non-zero.
     private static BlockingTest Resolve(string entry, PipelineRunDto run, IReadOnlyDictionary<int, PipelineRunDto>? children)

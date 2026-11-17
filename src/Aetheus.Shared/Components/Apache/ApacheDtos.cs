@@ -54,6 +54,12 @@ public sealed record ApacheVirtualHostDto
     [StringLength(1000)]
     public string ConfigFile { get; init; } = string.Empty;
     public bool IsEnabled { get; init; }
+
+    /// <summary>Recette R-14: the account that owns the site file when it is not the agent's own (root, certbot), so the
+    /// agent cannot delete it. Empty when the agent owns the file, when its owner could not be read, and for an agent
+    /// too old to report it: no owner is ever guessed.</summary>
+    [StringLength(64)]
+    public string ConfigFileForeignOwner { get; init; } = string.Empty;
 }
 
 // --- Action request ---

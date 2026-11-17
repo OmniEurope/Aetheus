@@ -31,7 +31,7 @@ public sealed class DeliveryTemplateVersionResetTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var audit = Substitute.For<IAuditService>();
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         foreach (var name in new[] { "host-bluegreen-deploy", "application-candidate", "application-promotion", "application-ci" })
@@ -80,7 +80,7 @@ public sealed class DeliveryTemplateVersionResetTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var audit = Substitute.For<IAuditService>();
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         var template = await LoadTemplateAsync(db, organizationId, "application-ci");
@@ -101,6 +101,42 @@ public sealed class DeliveryTemplateVersionResetTests
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>An imported external pipeline runs its stored, reviewed copy and changes only by a re-import: the
+    /// reset renumbers the template it extends but rewrites neither its database definition nor a Git file, while
+    /// the Aetheus pipeline beside it is repinned.</summary>
+    [Fact]
+    public async Task SeedAsync_AnImportedExternalPipeline_IsNeverRepinned()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        AddTemplate(db, organizationId, "application-ci", 6, Shipped("application-ci"));
+        var importedYaml = "name: oe-ci\nextends: application-ci@6\nstages: []\n";
+        var imported = AddPipeline(db, projectId, "oe-ci", importedYaml, "application-ci", 6);
+        imported.ExternalImportCommit = "0123456789abcdef0123456789abcdef01234567";
+        imported.ExternalImportPath = ".pipeline/oe-ci.yaml";
+        var own = AddPipeline(db, projectId, "ats-ci", "name: ats-ci\nextends: application-ci@6\nstages: []\n", "application-ci", 6);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var git = Substitute.For<IPipelineGitService>();
+        var audit = Substitute.For<IAuditService>();
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, (await LoadTemplateAsync(db, organizationId, "application-ci")).LatestVersion);
+        var untouched = await db.Pipelines.SingleAsync(pipeline => pipeline.Id == imported.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(importedYaml, untouched.YamlDefinition);
+        Assert.Equal(6, untouched.TemplateReferenceVersion);
+        Assert.Equal(1, (await db.Pipelines.SingleAsync(pipeline => pipeline.Id == own.Id, TestContext.Current.CancellationToken))
+            .TemplateReferenceVersion);
+        await git.DidNotReceive().ReadProjectPipelineYamlAsync(
+            Arg.Any<int>(), "oe-ci", Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await git.DidNotReceive().WriteProjectPipelineYamlAsync(
+            Arg.Any<int>(), "oe-ci", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Any<int?>());
+        await audit.DidNotReceive().LogAsync("TemplateVersionRepinned", "Pipeline", imported.Id,
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
     /// <summary>The completion marker prevents renumbering regardless of template version
     /// count.</summary>
     [Fact]
@@ -115,7 +151,7 @@ public sealed class DeliveryTemplateVersionResetTests
         var audit = Substitute.For<IAuditService>();
         var git = Substitute.For<IPipelineGitService>();
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         var template = await LoadTemplateAsync(db, organizationId, "application-ci");
@@ -146,7 +182,7 @@ public sealed class DeliveryTemplateVersionResetTests
         var versionIds = await db.PipelineTemplateVersions.Select(version => version.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(TestContext.Current.CancellationToken);
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader()).SeedAsync(TestContext.Current.CancellationToken);
 
         var template = await LoadTemplateAsync(db, organizationId, "application-candidate");
         Assert.Equal(shipped, template.LatestVersion);
@@ -191,7 +227,7 @@ public sealed class DeliveryTemplateVersionResetTests
             .Returns((GitWriteOutcome.Failed, "repository not initialized on disk"));
         var audit = Substitute.For<IAuditService>();
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         await git.Received(1).WriteProjectPipelineYamlAsync(projectId, "ats-ci",
@@ -252,7 +288,7 @@ public sealed class DeliveryTemplateVersionResetTests
             });
         var audit = Substitute.For<IAuditService>();
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("name: ats-ci\nextends: application-ci@1\n", gitFiles["ats-ci"]);
@@ -265,7 +301,7 @@ public sealed class DeliveryTemplateVersionResetTests
         failQuality = false;
         git.ClearReceivedCalls();
         audit.ClearReceivedCalls();
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("name: ats-quality\nextends: application-quality@1\n", gitFiles["ats-quality"]);
@@ -300,7 +336,7 @@ public sealed class DeliveryTemplateVersionResetTests
                 Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
             .Returns((GitWriteOutcome.Committed, (string?)null));
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, pipelineGit: git)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         await git.Received(1).WriteProjectPipelineYamlAsync(projectId, "ats-ci",
@@ -309,7 +345,7 @@ public sealed class DeliveryTemplateVersionResetTests
         Assert.True(await HasSettingAsync(db, DeliveryTemplateVersionReset.GitRepinDoneKey));
 
         git.ClearReceivedCalls();
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, pipelineGit: git)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, pipelineGit: git, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         Assert.Empty(git.ReceivedCalls());
@@ -329,7 +365,7 @@ public sealed class DeliveryTemplateVersionResetTests
         AddTemplate(db, organizationId, "host-bluegreen-deploy", 6, Shipped("host-bluegreen-deploy"));
         AddPipeline(db, projectId, "aetheus-deploy-prod", DeployProdYaml, "host-bluegreen-deploy", 6);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(TestContext.Current.CancellationToken);
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader()).SeedAsync(TestContext.Current.CancellationToken);
         var versionIds = await db.PipelineTemplateVersions.OrderBy(version => version.Id)
             .Select(version => version.Id).ToListAsync(TestContext.Current.CancellationToken);
         var ci = await LoadTemplateAsync(db, organizationId, "application-ci");
@@ -345,7 +381,7 @@ public sealed class DeliveryTemplateVersionResetTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var audit = Substitute.For<IAuditService>();
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit)
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, lease: LeaderLeaseDouble.Leader())
             .SeedAsync(TestContext.Current.CancellationToken);
 
         var after = await db.PipelineTemplateVersions.OrderBy(version => version.Id)
@@ -372,7 +408,7 @@ public sealed class DeliveryTemplateVersionResetTests
             "name: acme-deploy\nextends: host-bluegreen-deploy@3\nstages: []\n", "host-bluegreen-deploy", 3);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(TestContext.Current.CancellationToken);
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, lease: LeaderLeaseDouble.Leader()).SeedAsync(TestContext.Current.CancellationToken);
 
         var userTemplate = await LoadTemplateAsync(db, organizationId, "my-ci");
         Assert.Equal(3, userTemplate.LatestVersion);

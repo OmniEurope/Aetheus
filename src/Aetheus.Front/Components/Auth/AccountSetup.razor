@@ -1,0 +1,67 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/account/setup"
+
+<PageTitle>@L["AccountSetupTitle"] - Aetheus</PageTitle>
+
+@* R-1 (owner decision 2026-10-29): the seeded administrator's first step, a page like the forced password change. *@
+<div class="login-container">
+    <OmniCard>
+        <OmniStack Gap="OmniSpacing.Large">
+            <OmniHeading Level="OmniHeadingLevel.H4" Class="omni-u-mb-0">@L["AccountSetupTitle"]</OmniHeading>
+            <OmniAlert Severity="OmniSeverity.Info"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
+                @L["AccountSetupMessage"]
+            </ChildContent></OmniAlert>
+
+            <OmniTemplateForm TModel="AccountSetupModel" Model="@_model" OnValidSubmit="@OnSubmit">
+                <OmniDataAnnotationsValidator Localizer="@L" />
+                <OmniStack Gap="OmniSpacing.Large">
+                    <OmniStack Gap="OmniSpacing.Small">
+                        <OmniFormField Label="@L["Username"]" For="SetupUsername">
+                            <ChildContent>
+                                <OmniTextBox @bind-Value="_model.Username" Id="SetupUsername" Autocomplete="username" />
+                                <ValidationMessage For="@(() => _model.Username)" />
+                            </ChildContent>
+                        </OmniFormField>
+                        <OmniFormField Label="@L["Email"]" For="SetupEmail">
+                            <ChildContent>
+                                <OmniTextBox @bind-Value="_model.Email" Id="SetupEmail" Type="OmniTextBoxType.Email" Autocomplete="email" />
+                                <ValidationMessage For="@(() => _model.Email)" />
+                            </ChildContent>
+                        </OmniFormField>
+                        <OmniFormField Label="@L["AccountSetupInstallationPassword"]" For="CurrentPassword">
+                            <ChildContent>
+                                <OmniPassword @bind-Value="_model.CurrentPassword" Id="CurrentPassword" aria-label="@L["AccountSetupInstallationPassword"]" />
+                                <ValidationMessage For="@(() => _model.CurrentPassword)" />
+                            </ChildContent>
+                        </OmniFormField>
+                        <OmniFormField Label="@L["NewPassword"]" For="NewPassword">
+                            <ChildContent>
+                                <OmniPassword @bind-Value="_model.NewPassword" Id="NewPassword" aria-label="@L["NewPassword"]" />
+                                <ValidationMessage For="@(() => _model.NewPassword)" />
+                            </ChildContent>
+                        </OmniFormField>
+                        <OmniFormField Label="@L["ConfirmPassword"]" For="ConfirmPassword">
+                            <ChildContent>
+                                <OmniPassword @bind-Value="_model.ConfirmPassword" Id="ConfirmPassword" aria-label="@L["ConfirmPassword"]" />
+                                <ValidationMessage For="@(() => _model.ConfirmPassword)" />
+                            </ChildContent>
+                        </OmniFormField>
+                    </OmniStack>
+
+                    @if (!string.IsNullOrEmpty(_error))
+                    {
+                        <OmniAlert Severity="OmniSeverity.Danger"><Icon><OmniIcon Name="OmniIconName.Error" /></Icon><ChildContent>@_error</ChildContent></OmniAlert>
+                    }
+
+                    @* STD-BTN: Save visible, the way out in the menu. *@
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@("btn-full-width" + (_busy ? " btn-busy" : null))" Busy="@(_busy)" Label="@L["Save"]"><Icon><OmniIcon Name="OmniIconName.LockKey" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem Tone="OmniTone.Danger" OnClick="@LogoutAsync"><Icon><OmniIcon Name="OmniIconName.SignOut" /></Icon><ChildContent>@L["Logout"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
+                    </OmniStack>
+                </OmniStack>
+            </OmniTemplateForm>
+        </OmniStack>
+    </OmniCard>
+</div>

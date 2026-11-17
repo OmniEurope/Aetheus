@@ -87,7 +87,8 @@ public sealed class DatabaseConnectionOpenProbeTests
             Options.Create(new SlowRequestDiagnosticsOptions { ConnectionProbeThreshold = threshold }),
             new BackgroundWorkTracker(TimeProvider.System),
             TimeProvider.System,
-            log);
+            log,
+            leaderLease: LeaderLeaseDouble.Leader());
         return (service, log);
     }
 

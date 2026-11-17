@@ -20,8 +20,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// Whoever newly becomes site Admin, by the bootstrap or through the user APIs, is told by mail, and a mail that
 /// does not leave never undoes the grant. Only the SMTP sender is replaced.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class SiteAdminBootstrapIntegrationTests(PostgresFixture fixture)
+public sealed class SiteAdminBootstrapIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string MarkerKey = "Auth:SiteAdminBootstrap";
     private const string GrantedSubject = "Aetheus: you are now a site administrator";

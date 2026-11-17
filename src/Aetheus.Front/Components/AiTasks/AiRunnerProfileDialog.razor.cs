@@ -170,7 +170,8 @@ public partial class AiRunnerProfileDialog
                 if (updated is not null)
                 {
                     Notify.Success("Updated");
-                    Dialog.Close(true);
+                    // R-10: the saved profile goes back to the list, which draws that row at once.
+                    Dialog.Close(updated);
                 }
             }
             else
@@ -179,7 +180,7 @@ public partial class AiRunnerProfileDialog
                 if (created is not null)
                 {
                     Notify.Success("Created");
-                    Dialog.Close(true);
+                    Dialog.Close(created);
                 }
             }
         }

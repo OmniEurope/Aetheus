@@ -51,8 +51,9 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
         Assert.Equal(templateName, resolution.TemplateName);
         Assert.Equal(1, resolution.ResolvedVersion);
 
-        // The project adds no stage: the run is the template's, stage for stage.
-        var template = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(templateYaml)!;
+        // The project adds no stage: the run is the template's, stage for stage (the template as it resolves, a
+        // deployment template holding its core's stages).
+        var template = (await resolver.ResolveAsync(templateYaml, OrganizationId, ct: TestContext.Current.CancellationToken)).Definition;
         Assert.Equal(template.Stages.Select(stage => stage.Name), definition.Stages.Select(stage => stage.Name));
 
         var stages = YamlParsingHelper.FlattenJobs(definition);
@@ -82,8 +83,8 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
         string templateName, string resource, string variable, bool declaredEmpty)
     {
         var templateYaml = DeliveryTemplateCatalog.ReadResource(resource);
-        var template = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(templateYaml)!;
         var resolver = new PipelineTemplateResolver(Repository(templateName, templateYaml));
+        var template = (await resolver.ResolveAsync(templateYaml, OrganizationId, ct: TestContext.Current.CancellationToken)).Definition;
         var project = ProjectPipeline(templateName) + $"\n  {variable}: \"make release\"";
 
         var resolved = (await resolver.ResolveAsync(
@@ -172,11 +173,13 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
     /// land on that one server, or the restored files would be on another machine than the command. The parameter
     /// is required: a run without a server is refused before it starts, never handed to any runner (the unresolved
     /// literal it left made the W5 deployment wait for a runner that never existed).</summary>
-    [Fact]
-    public async Task DeployServerParameter_BindsEveryStageThatSharesTheCandidateWorkspace()
+    [Theory]
+    [InlineData("application-deploy-prod")]
+    [InlineData("application-deploy-prod-front-back")]
+    public async Task DeployServerParameter_BindsEveryStageThatSharesTheCandidateWorkspace(string template)
     {
-        const string template = "application-deploy-prod";
-        var resolver = new PipelineTemplateResolver(Repository(template, DeliveryTemplateCatalog.ReadResource("generic/application-deploy-prod.yaml")));
+        var resolver = new PipelineTemplateResolver(Repository(template, DeliveryTemplateCatalog.ReadResource(
+            DeliveryTemplateCatalog.Definitions[template].Resources.Single())));
         var bound = $"""
             name: demo-{template}
             extends: {template}@1
@@ -207,6 +210,134 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
         Assert.Contains("deployServer", unbound.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>R-11: whether the API has its own host is the template a pipeline extends, never a switch. The monolith
+    /// template deploys one host (the front's own, the interface and the API served together); the front-and-API template
+    /// adds the API's host to its three steps that name hosts. Everything else is the common core's, stage for stage,
+    /// with the server the stages run on and the stage they wait for kept (a stage a template writes again replaces the
+    /// core's field for field).</summary>
+    [Fact]
+    public async Task TheTwoDeploymentTemplates_DifferOnlyByTheHostsTheyApply_AndShareTheCoreStageForStage()
+    {
+        var monolithWithItsGuard = await ResolveDeploymentAsync("application-deploy-prod");
+        var frontBack = await ResolveDeploymentAsync("application-deploy-prod-front-back");
+
+        // The monolith alone has the one stage that refuses a strategy other than `replace`; the rest is the core's.
+        Assert.Equal(StrategyGuard, Assert.Single(monolithWithItsGuard.Stages, stage => !frontBack.Stages.Any(other => other.Name == stage.Name)).Name);
+        var monolith = monolithWithItsGuard with { Stages = [.. monolithWithItsGuard.Stages.Where(stage => stage.Name != StrategyGuard)] };
+        Assert.Equal(monolith.Stages.Select(stage => stage.Name), frontBack.Stages.Select(stage => stage.Name));
+        Assert.All(monolith.Stages.Zip(frontBack.Stages), pair =>
+        {
+            Assert.Equal(pair.First.Agent, pair.Second.Agent);
+            Assert.Equal(pair.First.DependsOn.Where(name => name != StrategyGuard), pair.Second.DependsOn);
+            Assert.Equal(pair.First.Group, pair.Second.Group);
+            Assert.Equal(pair.First.ExecutionRole, pair.Second.ExecutionRole);
+            Assert.Equal(pair.First.Os, pair.Second.Os);
+            Assert.Equal(pair.First.Steps.Select(step => step.Name), pair.Second.Steps.Select(step => step.Name));
+        });
+        Assert.All(frontBack.Stages.Where(stage => stage.Name is "Apply HTTP vhosts" or "TLS" or "Apply Apache vhosts"),
+            stage => Assert.Equal("atlas-prod", stage.Agent));
+
+        var onlyTheFront = HostFiles(monolith);
+        var frontAndApi = HostFiles(frontBack);
+        Assert.Equal(["$(APP_HOST).conf", "$(APP_HOST)-ssl.conf"], onlyTheFront);
+        Assert.Equal(["$(APP_HOST).conf", "$(API_HOST).conf", "$(APP_HOST)-ssl.conf", "$(API_HOST)-ssl.conf"], frontAndApi);
+        Assert.Equal(
+            ["$(APP_HOST) $(API_HOST)", "$(APP_HOST)"],
+            new[] { frontBack, monolith }.Select(definition => Assert.Single(
+                definition.Stages.SelectMany(stage => stage.Steps), step => step.Function == "ensure-tls-certificates").With["hosts"]));
+        // No switch is left: the shape is the template, not a variable the steps read.
+        Assert.All(new[] { monolith, frontBack }, definition =>
+        {
+            Assert.DoesNotContain("DEPLOY_HAS_API", definition.Variables.Keys);
+            Assert.DoesNotContain(definition.Stages.SelectMany(stage => stage.Steps),
+                step => (step.Condition ?? string.Empty).Contains("DEPLOY_HAS_API", StringComparison.Ordinal));
+        });
+    }
+
+    private const string StrategyGuard = "Check the strategy";
+
+    /// <summary>R-11: a monolith is deployed by replacement only, but only the wizard enforced it. A pipeline written by hand
+    /// with another strategy must be refused by the run itself: the guard is the first stage (every other stage waits for
+    /// it, so nothing reaches the server), and its step, run with the pipeline's variables as the agent runs it, exits
+    /// non-zero with an explicit message for anything but `replace`. The shell is really run, not read.</summary>
+    [Theory]
+    [InlineData("replace", true)]
+    [InlineData("bluegreen", false)]
+    [InlineData("", false)]
+    public async Task AMonolithPipeline_WithAStrategyOtherThanReplace_IsRefusedByItsFirstStage(string strategy, bool accepted)
+    {
+        var template = "application-deploy-prod";
+        var resolver = new PipelineTemplateResolver(Repository(template, DeliveryTemplateCatalog.ReadResource(
+            DeliveryTemplateCatalog.Definitions[template].Resources.Single())));
+        var handWritten = $"""
+            name: demo-{template}
+            extends: {template}@1
+            trigger: manual
+            stages: []
+            variables:
+              APPLICATION_PREFIX: "demo"
+              DEPLOY_STRATEGY: "{strategy}"
+            """;
+        var parameters = new Dictionary<string, string> { ["candidateVersion"] = "1.0.0", ["deployServer"] = "atlas-prod" };
+
+        var definition = (await resolver.ResolveAsync(
+            handWritten, OrganizationId, parameters, TestContext.Current.CancellationToken)).Definition;
+
+        var guard = Assert.Single(definition.Stages, stage => stage.Name == StrategyGuard);
+        Assert.Empty(guard.DependsOn);
+        Assert.All(definition.Stages.Where(stage => stage != guard), stage => Assert.True(
+            WaitsFor(definition, stage, StrategyGuard), $"'{stage.Name}' must wait for the strategy check."));
+
+        var (exitCode, error) = await RunShellAsync(Assert.Single(guard.Steps).Shell!, definition.Variables["DEPLOY_STRATEGY"]);
+        Assert.Equal(accepted ? 0 : 1, exitCode);
+        if (accepted) return;
+        Assert.Contains("replace", error, StringComparison.Ordinal);
+        Assert.Contains("front-back", error, StringComparison.Ordinal);
+        Assert.Contains($"'{strategy}'", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The front-and-API template keeps blue-green: it carries no such guard.</summary>
+    [Fact]
+    public async Task TheFrontAndApiTemplate_HasNoStrategyGuard_AsItSupportsBlueGreen() =>
+        Assert.DoesNotContain((await ResolveDeploymentAsync("application-deploy-prod-front-back")).Stages,
+            stage => stage.Name == StrategyGuard);
+
+    private static bool WaitsFor(PipelineYamlDefinition definition, PipelineStageDefinition stage, string name) =>
+        stage.DependsOn.Any(dependency => dependency == name
+            || WaitsFor(definition, definition.Stages.Single(other => other.Name == dependency), name));
+
+    private static async Task<(int ExitCode, string Error)> RunShellAsync(string script, string strategy)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(
+            OperatingSystem.IsWindows() ? @"C:\Program Files\Git\bin\bash.exe" : "/bin/sh")
+        {
+            UseShellExecute = false,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true
+        };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add(script);
+        start.Environment["DEPLOY_STRATEGY"] = strategy;
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        return (process.ExitCode, await error);
+    }
+
+    private static List<string> HostFiles(PipelineYamlDefinition definition) => [.. definition.Stages
+        .SelectMany(stage => stage.Steps)
+        .Where(step => step.Type == "apache-config")
+        .SelectMany(step => step.ConfigFiles.Keys)];
+
+    private static async Task<PipelineYamlDefinition> ResolveDeploymentAsync(string template)
+    {
+        var resolver = new PipelineTemplateResolver(Repository(template, DeliveryTemplateCatalog.ReadResource(
+            DeliveryTemplateCatalog.Definitions[template].Resources.Single())));
+        var parameters = new Dictionary<string, string> { ["candidateVersion"] = "1.0.0", ["deployServer"] = "atlas-prod" };
+        return (await resolver.ResolveAsync(ProjectPipeline(template), OrganizationId, parameters,
+            TestContext.Current.CancellationToken)).Definition;
+    }
+
     private static async Task<IReadOnlyDictionary<string, string>> ResolvedVariablesAsync(string templateName, string resource)
     {
         var resolver = new PipelineTemplateResolver(Repository(templateName, DeliveryTemplateCatalog.ReadResource(resource)));
@@ -218,8 +349,7 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
     /// report a QA, a deployment or a package that never happened (AGENTS.md, no fake success).</summary>
     [Theory]
     [InlineData("generic/application-qa.yaml", "APPLICATION_QA_COMMANDS")]
-    [InlineData("generic/application-qa-extended.yaml", "APPLICATION_QA_EXTENDED_COMMANDS")]
-    [InlineData("generic/application-deploy-prod.yaml", "APPLICATION_DEPLOY_PROD_COMMANDS")]
+    [InlineData("generic/application-deploy-prod-core-v1.yaml", "APPLICATION_DEPLOY_PROD_COMMANDS")]
     [InlineData("generic/application-release-fast.yaml", "APPLICATION_RELEASE_FAST_COMMANDS")]
     [InlineData("generic/package-telemetry.yaml", "APPLICATION_PACKAGE_TELEMETRY_COMMANDS")]
     [InlineData("generic/package-web-analytics-dotnet.yaml", "APPLICATION_PACKAGE_DOTNET_ANALYTICS_COMMANDS")]
@@ -234,6 +364,30 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
         var run = shell.IndexOf($"sh -eu -c \"${variable}\"", StringComparison.Ordinal);
         Assert.True(guard >= 0 && guard < refusal && refusal < run, $"{resource} must refuse before it runs.");
         Assert.Contains($"set {variable} in this pipeline.", shell, StringComparison.Ordinal);
+    }
+
+    /// <summary>Recette R-67 and R-59: the browser tests and the extended QA are declared by the project (or by the setup
+    /// wizard for it), and a pipeline that declares none must not fail by construction: the run warns, in the user's
+    /// language through a named run warning, and succeeds. <c>none</c> is a declared choice: it runs nothing, says so, and
+    /// raises no warning. A command is still run, whole, with <c>sh -eu -c</c>.</summary>
+    [Theory]
+    [InlineData("generic/application-qa.yaml", "APPLICATION_QA_E2E_COMMANDS", "QaE2eCommandMissing")]
+    [InlineData("generic/application-qa-extended.yaml", "APPLICATION_QA_EXTENDED_COMMANDS", "QaExtendedCommandMissing")]
+    public void WithoutDeclaredCommands_TheRunWarnsAndSucceeds_AndNoneIsADeclaredChoice(
+        string resource, string variable, string warningCode)
+    {
+        var shell = CommandStep(resource, variable).Shell!;
+
+        var empty = shell.IndexOf($"if test -z \"${{{variable}:-}}\"; then", StringComparison.Ordinal);
+        var warning = shell.IndexOf($"##aetheus[setvariable name=RUN_WARNING_CODE]{warningCode}", StringComparison.Ordinal);
+        var firstExit = shell.IndexOf("exit 0", empty, StringComparison.Ordinal);
+        var none = shell.IndexOf($"if test \"${variable}\" = none; then", StringComparison.Ordinal);
+        var run = shell.IndexOf($"sh -eu -c \"${variable}\"", StringComparison.Ordinal);
+        Assert.True(empty >= 0 && empty < warning && warning < firstExit, $"{resource}: an undeclared command must warn, then succeed.");
+        Assert.True(firstExit < none && none < run, $"{resource}: `none` must be read before the command is run.");
+        Assert.DoesNotContain("exit 1", shell[..run], StringComparison.Ordinal);
+        Assert.Contains($"{variable}): ", shell[empty..none], StringComparison.Ordinal);
+        Assert.DoesNotContain("RUN_WARNING", shell[none..run], StringComparison.Ordinal);
     }
 
     private static PipelineStepDefinition CommandStep(string resource, string variable) =>
@@ -252,18 +406,28 @@ public sealed class GenericTemplatesWithoutProjectFilesTests
           APPLICATION_PREFIX: "demo"
         """;
 
+    /// <summary>The shipped generic templates, each at its version 1 (the catalog's one file), with <paramref name="yaml"/>
+    /// as the one of <paramref name="name"/>: a deployment template names its core, which the resolver then finds beside it.</summary>
     private static IPipelineTemplateRepository Repository(string name, string yaml)
     {
         var repository = Substitute.For<IPipelineTemplateRepository>();
-        var template = new PipelineTemplate
+        var shipped = DeliveryTemplateCatalog.Definitions
+            .Where(entry => entry.Value.Resources.All(resource => resource.StartsWith("generic/", StringComparison.Ordinal)))
+            .ToDictionary(entry => entry.Key, entry => DeliveryTemplateCatalog.ReadResource(entry.Value.Resources.Single()));
+        shipped[name] = yaml;
+        var id = 40;
+        foreach (var (templateName, templateYaml) in shipped)
         {
-            Id = 41,
-            Name = name,
-            OrganizationId = OrganizationId,
-            LatestVersion = 1,
-            Versions = [new PipelineTemplateVersion { Version = 1, YamlContent = yaml }]
-        };
-        repository.FindTemplateByNameAsync(name, OrganizationId, Arg.Any<CancellationToken>()).Returns(template);
+            var template = new PipelineTemplate
+            {
+                Id = ++id,
+                Name = templateName,
+                OrganizationId = OrganizationId,
+                LatestVersion = 1,
+                Versions = [new PipelineTemplateVersion { Version = 1, YamlContent = templateYaml }]
+            };
+            repository.FindTemplateByNameAsync(templateName, OrganizationId, Arg.Any<CancellationToken>()).Returns(template);
+        }
         return repository;
     }
 }

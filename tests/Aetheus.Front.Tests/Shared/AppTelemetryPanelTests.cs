@@ -15,6 +15,8 @@ public class AppTelemetryPanelTests : BunitContext
 
     private void SeedTelemetry()
     {
+        _handler.SetJsonResponse(HttpMethod.Get, "/probe-now", new AppProbeNowDto());
+        _handler.SetJsonResponse(HttpMethod.Get, "/telemetry-export-request", new AppTelemetryExportRequestDto());
         _handler.SetJsonResponse("api/appmonitoring/projects/1/apps", new List<MonitoredAppDto>
         {
             new() { Id = 5, ProjectId = 1, Name = "toto-qa", CurrentStatus = AppHealthStatus.Up, HasIngestKey = true }
@@ -80,8 +82,30 @@ public class AppTelemetryPanelTests : BunitContext
         var note = cut.Find("[data-testid=telemetry-send-interval]");
         var tabs = cut.Find("[role='tab']");
         Assert.Equal(AngleSharp.Dom.DocumentPositions.Following, note.CompareDocumentPosition(tabs) & AngleSharp.Dom.DocumentPositions.Following);
-        Assert.Contains("TelemetrySendIntervalSetting", note.TextContent);
+        // R-30: what the application departs from stays under the picker; the setting itself is the picker's help.
+        Assert.DoesNotContain("TelemetrySendIntervalSetting", note.TextContent);
         Assert.Contains("TelemetrySendIntervalObservedDiffers", note.TextContent);
+        // One read of the interval for the application, shared by the help and the note.
+        Assert.Single(_handler.Requests, r => r.Url.Contains("apps/5/send-interval", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R30_R31_TheApplicationLabelAndPicker_ShareOneField_AndTheSendIntervalIsItsHelp()
+    {
+        SeedTelemetry();
+        var cut = Render<AppTelemetryPanel>(p => p.Add(c => c.ProjectId, 1));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".omni-form-field__help-mark")));
+        var field = cut.Find("[data-testid=telemetry-app-field]");
+        // R-31: the label names the picker (for/id) and both live in the same field, laid out on one line by CSS.
+        var label = field.QuerySelector("label")!;
+        Assert.Equal("telemetry-application", label.GetAttribute("for"));
+        Assert.Equal("Application", label.TextContent.Replace("*", string.Empty, StringComparison.Ordinal).Trim());
+        Assert.NotNull(field.QuerySelector("#telemetry-application"));
+        // R-30: the send interval is the help of the label, a « ? » mark, not a permanent line.
+        Assert.NotNull(field.QuerySelector(".omni-form-field__help-mark"));
+        Assert.Contains("TelemetrySendIntervalSetting", field.InnerHtml);
+        Assert.Empty(cut.FindAll("[data-testid=telemetry-send-interval-setting]"));
     }
 
     [Fact]
@@ -278,7 +302,9 @@ public class AppTelemetryPanelTests : BunitContext
             Assert.Contains("BrowserErrorsLast30Days", cut.Markup);
             // Top pages have a dedicated sub-tab.
             Assert.DoesNotContain("TopPagesThisMonth", cut.Markup);
-            Assert.Empty(cut.FindAll(".omni-data-grid__table"));
+            // R-22: the view now holds the visitors grid, so the top pages are told apart by their routes.
+            Assert.DoesNotContain("/docs", cut.Markup);
+            Assert.DoesNotContain("/pricing", cut.Markup);
         });
     }
 }

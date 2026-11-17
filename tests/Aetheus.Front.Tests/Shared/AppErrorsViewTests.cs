@@ -307,7 +307,9 @@ public sealed class AppErrorsViewTests : BunitContext
         var download = module.Invocations["download"].Single();
         // The application's name, then the content; OE appends its generation time once.
         Assert.Matches(@"^shop-errors-\d{4}-\d{2}-\d{2}-\d{4}\.md$", Assert.IsType<string>(download.Arguments[0]));
-        var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        var raw = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        // OE 1.14 writes the data inert; assert what a Markdown viewer shows.
+        var markdown = Aetheus.Front.Tests.Shared.MarkdownExportText.AsRead(raw);
         Assert.Contains(handler.Requests, request => request.Url.Contains("errors?page=1&pageSize=200", StringComparison.Ordinal)
             && request.Url.Contains("sortBy=LastSeenAt&sortDescending=true", StringComparison.Ordinal));
         Assert.Contains(handler.Requests, request => request.Url.Contains("errors?page=2&pageSize=200", StringComparison.Ordinal));

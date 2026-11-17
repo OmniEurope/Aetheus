@@ -15,6 +15,17 @@ internal static class PipelineRunPresentation
             ? EditBackHref(projectId, serverId)
             : LocalReturnUrl.Validated(returnUrl) ?? "/pipelines";
 
+    /// <summary>R-8: a run as a person names it, the word alone while its number is not known (a task pushed live).</summary>
+    public static string Label(string runWord, int? runNumber) =>
+        runNumber is { } number ? FormattableString.Invariant($"{runWord} #{number}") : runWord;
+
+    /// <summary>R-8: a point of a project-level trend. A project spans several pipelines and a number is only unique within
+    /// one, so the label carries the pipeline name; just the number while the name is not known.</summary>
+    public static string TrendLabel(string? pipelineName, int runNumber) =>
+        string.IsNullOrWhiteSpace(pipelineName)
+            ? FormattableString.Invariant($"#{runNumber}")
+            : FormattableString.Invariant($"{pipelineName} #{runNumber}");
+
     public static string Href(int runId, int? projectId, int? serverId) => serverId is { } server
         ? $"/pipelines/runs/{runId}?serverId={server}"
         : projectId is { } project ? $"/pipelines/runs/{runId}?projectId={project}" : $"/pipelines/runs/{runId}";
@@ -56,7 +67,7 @@ internal static class PipelineRunPresentation
         var hasAction = false;
         foreach (var run in runs)
         {
-            digits = Math.Max(digits, run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture).Length);
+            digits = Math.Max(digits, run.BuildNumber.ToString(System.Globalization.CultureInfo.InvariantCulture).Length);
             hasAction |= CanCancel(run) || IsFailed(run);
         }
 

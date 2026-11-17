@@ -100,7 +100,9 @@ public sealed class AppPerformanceViewTests : BunitContext
         var download = module.Invocations["download"].Single();
         // The application's name, lowercase without accents, then the content; OE appends its time.
         Assert.Matches(@"^editeur-toto-performance-\d{4}-\d{2}-\d{2}-\d{4}\.md$", Assert.IsType<string>(download.Arguments[0]));
-        var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        var raw = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        // OE 1.14 writes the data inert; assert what a Markdown viewer shows.
+        var markdown = Aetheus.Front.Tests.Shared.MarkdownExportText.AsRead(raw);
         Assert.Contains("Éditeur Toto (#5)", markdown, StringComparison.Ordinal);
         Assert.Contains("2026-09-28T07:00:00.000Z", markdown, StringComparison.Ordinal);
         Assert.Contains("POST api/login (2500 ms)", markdown, StringComparison.Ordinal);
@@ -138,12 +140,15 @@ public sealed class AppPerformanceViewTests : BunitContext
     [Fact]
     public void TheExplorer_IsNotLoadedUntilOpened()
     {
-        _handler.SetJsonResponse("api/appmonitoring/apps/5/performance", new AppPerformanceReportDto());
+        _handler.SetJsonResponse("api/appmonitoring/apps/5/performance", new AppPerformanceReportDto
+        {
+            MeasuredAt = new DateTime(2026, 9, 28, 10, 0, 0, DateTimeKind.Utc),
+            Routes = [new AppRouteTimingDto { Method = "GET", Route = "api/x", Count = 3, P50Ms = 1, P95Ms = 2, P99Ms = 3, MaxMs = 4 }]
+        });
 
         var cut = Render<AppPerformanceView>(parameters => parameters.Add(component => component.AppId, 5));
 
-        cut.WaitForAssertion(() => Assert.Contains("AppPerformanceNoData", cut.Markup, StringComparison.Ordinal));
-        Assert.Contains("AppPerformanceExplore", cut.Markup, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.Contains("AppPerformanceExplore", cut.Markup, StringComparison.Ordinal));
         Assert.Empty(cut.FindComponents<AppMetricsView>());
         Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("metrics/names", StringComparison.Ordinal));
     }

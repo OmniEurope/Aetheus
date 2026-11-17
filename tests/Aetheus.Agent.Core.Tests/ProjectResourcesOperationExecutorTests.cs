@@ -41,10 +41,17 @@ public sealed class ProjectResourcesOperationExecutorTests
         ["network ls"] = [],
     };
     private readonly Dictionary<string, (int ExitCode, string Line)> _dockerFailures = new(StringComparer.Ordinal);
+    // What the certbot delete helper answers: its exit code and the lines it printed (stdout, then "[stderr] ..." lines).
+    private (int ExitCode, string[] Lines) _certbotDelete = (0, []);
+    private bool _certbotDeleteWasRun;
+    // True when the lineage is gone from /live once the certbot delete ran (it was never one certbot managed).
+    private bool _liveDirectoryEmptiesAfterDelete;
     private bool _stateIsLink;
     private readonly HashSet<string> _links = new(StringComparer.Ordinal);
     private string _serverUrl = new AetheusAgentOptions().ServerUrl;
     private readonly HashSet<OperationKind> _failingSiteOperations = [];
+    // Why the batch removal of the virtual hosts leaves them (null: they go).
+    private string? _siteRemovalRefusal;
     private readonly Dictionary<string, string> _enabledSites = new(StringComparer.Ordinal)
     {
         ["000-default.conf"] = "<VirtualHost *:80>\n  DocumentRoot /var/www/html\n</VirtualHost>",
@@ -83,15 +90,26 @@ public sealed class ProjectResourcesOperationExecutorTests
             _commands.Enqueue($"{kind} {site}");
             return Task.FromResult(new ExecutorResult(_failingSiteOperations.Contains(kind) ? 1 : 0, false));
         },
-        DeleteCertificateAsync = (lineage, _, _, _) =>
+        RemoveSitesAsync = (sites, _, _, _) =>
+        {
+            _commands.Enqueue("ApacheRemoveSites " + string.Join(',', sites));
+            return Task.FromResult<IReadOnlyDictionary<string, string?>>(
+                sites.ToDictionary(site => site, _ => _siteRemovalRefusal, StringComparer.Ordinal));
+        },
+        DeleteCertificateAsync = async (lineage, _, onOutput, _) =>
         {
             _commands.Enqueue("certbot delete " + lineage);
-            return Task.FromResult(new ExecutorResult(0, false));
+            _certbotDeleteWasRun = true;
+            foreach (var line in _certbotDelete.Lines) await onOutput(line, TaskLogLevel.Info);
+            await onOutput($"[process] exit-code={_certbotDelete.ExitCode}", TaskLogLevel.Info);
+            return new ExecutorResult(_certbotDelete.ExitCode, false);
         },
         ListDirectory = path => path.EndsWith("sites-available", StringComparison.Ordinal)
             ? new HashSet<string>([Host + ".conf", Host + "-ssl.conf", "000-default.conf", .. _availableSites.Keys])
             : path.EndsWith("sites-enabled", StringComparison.Ordinal) ? _enabledSites.Keys.Concat(_rootOnlySites.Keys).ToHashSet()
-            : path.EndsWith("/live", StringComparison.Ordinal) ? new HashSet<string>([Host]) : new HashSet<string>(),
+            : path.EndsWith("/live", StringComparison.Ordinal)
+                ? (_liveDirectoryEmptiesAfterDelete && _certbotDeleteWasRun ? new HashSet<string>() : new HashSet<string>([Host]))
+                : new HashSet<string>(),
         ReadSiteFile = path => path.Contains("/sites-available/", StringComparison.Ordinal)
             ? _availableSites.GetValueOrDefault(Path.GetFileName(path))
             : _enabledSites.GetValueOrDefault(Path.GetFileName(path)),
@@ -167,7 +185,7 @@ public sealed class ProjectResourcesOperationExecutorTests
         var commands = _commands.Where(command => !command.Contains(" ls ", StringComparison.Ordinal) && !command.StartsWith("docker ps", StringComparison.Ordinal)).ToList();
         Assert.Equal(
             ["docker rm -f portfolio-prod-web-1", "docker volume rm portfolio-prod_db",
-             $"ApacheDisableSite {Host}-ssl.conf", $"ApacheDeleteSite {Host}-ssl.conf", $"certbot delete {Host}", $"delete {StateDir}"],
+             $"ApacheRemoveSites {Host}-ssl.conf", $"certbot delete {Host}", $"delete {StateDir}"],
             commands);
         var report = ProjectServerResourceOutput.Parse(string.Join('\n', _output));
         Assert.True(report.Complete);
@@ -211,7 +229,7 @@ public sealed class ProjectResourcesOperationExecutorTests
     [Fact]
     public async Task Remove_KeepsTheCertificate_WhenTheVirtualHostOfItsHostWasNotRemoved()
     {
-        _failingSiteOperations.Add(OperationKind.ApacheDisableSite);
+        _siteRemovalRefusal = "the site could not be removed";
 
         var result = await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site, Certificate] });
 
@@ -220,6 +238,116 @@ public sealed class ProjectResourcesOperationExecutorTests
         var certificate = Assert.Single(report.Resources, item => item.Kind == ProjectServerResourceKind.Certificate);
         Assert.Equal((ProjectServerResourceOutcome.Failed, "vhost not removed"), (certificate.Outcome, certificate.Reason));
         Assert.DoesNotContain(_commands, command => command.StartsWith("certbot delete", StringComparison.Ordinal));
+    }
+
+    // R-48: the reason was only "certbot could not delete it (exit code 1)", so a lock held by a rehearsal could not be told
+    // from an unknown lineage. The reason now carries certbot's own last lines.
+    [Fact]
+    public async Task Remove_ACertbotFailure_CarriesCertbotsOutputInItsReason()
+    {
+        _certbotDelete = (1, ["Saving debug log to /var/log/letsencrypt/letsencrypt.log", "[stderr] Failed to delete the lineage: renewal configuration is not readable"]);
+
+        var result = await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site, Certificate] });
+
+        Assert.Equal(1, result.ExitCode);
+        var certificate = Assert.Single(ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources, item => item.Kind == ProjectServerResourceKind.Certificate);
+        Assert.Equal(ProjectServerResourceOutcome.Failed, certificate.Outcome);
+        Assert.Contains("exit code 1", certificate.Reason, StringComparison.Ordinal);
+        Assert.Contains("renewal configuration is not readable", certificate.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("[process]", certificate.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Remove_TheCertbotOutputInTheReason_IsBounded_AndNeverCarriesASecretLine()
+    {
+        var noisy = Enumerable.Range(1, 40).Select(number => $"[stderr] line {number} " + new string('x', 400)).ToList();
+        noisy.Insert(39, "[stderr] api_token=SECRET-VALUE-123");
+        _certbotDelete = (1, [.. noisy]);
+
+        await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site, Certificate] });
+
+        var certificate = Assert.Single(ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources, item => item.Kind == ProjectServerResourceKind.Certificate);
+        Assert.True(certificate.Reason!.Length <= 700, $"the reason is {certificate.Reason.Length} characters long");
+        Assert.DoesNotContain("SECRET-VALUE-123", certificate.Reason, StringComparison.Ordinal);
+        Assert.Contains("line 40", certificate.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Remove_ABusyCertbot_IsReportedAsBusy_NotAsAFailureOfTheCertificate_AndTheTaskStaysIncomplete()
+    {
+        _certbotDelete = (75, ["[stderr] Another instance of Certbot is already running.", "[stderr] certbot is still busy after 60 seconds: certificate " + Host + " was not touched."]);
+
+        var result = await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site, Certificate] });
+
+        Assert.Equal(1, result.ExitCode);
+        var certificate = Assert.Single(ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources, item => item.Kind == ProjectServerResourceKind.Certificate);
+        Assert.Equal(ProjectServerResourceOutcome.Failed, certificate.Outcome);
+        Assert.StartsWith("certbot est occupé", certificate.Reason, StringComparison.Ordinal);
+        Assert.Contains("relancer", certificate.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not delete", certificate.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Remove_ACertificateCertbotDoesNotKnow_IsAlreadyGone_WhenNothingIsLeftInLive()
+    {
+        _certbotDelete = (76, ["[stderr] No certificate found with name '" + Host + "' (expected one of: other.example.com)."]);
+        _liveDirectoryEmptiesAfterDelete = true;
+
+        await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site, Certificate] });
+
+        var certificate = Assert.Single(ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources, item => item.Kind == ProjectServerResourceKind.Certificate);
+        Assert.Equal(ProjectServerResourceOutcome.Absent, certificate.Outcome);
+        Assert.Contains("certbot ne le connaît pas", certificate.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Remove_ACertificateCertbotDoesNotKnow_StaysAFailure_WhenFilesAreStillInLive()
+    {
+        _certbotDelete = (76, ["[stderr] No certificate found with name '" + Host + "' (expected one of: other.example.com)."]);
+
+        var result = await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site, Certificate] });
+
+        Assert.Equal(1, result.ExitCode);
+        var certificate = Assert.Single(ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources, item => item.Kind == ProjectServerResourceKind.Certificate);
+        Assert.Equal(ProjectServerResourceOutcome.Failed, certificate.Outcome);
+        Assert.Contains("certbot ne le connaît pas", certificate.Reason, StringComparison.Ordinal);
+        Assert.Contains("live", certificate.Reason, StringComparison.Ordinal);
+    }
+
+    // R-26 (task 31718): the sites of a project went one by one, each followed by Apache's own test, so a site was put back
+    // when a later site of the same project already pointed to a deleted certificate. They now go together, in one call.
+    [Fact]
+    public async Task Remove_TakesAllTheVirtualHostsOutInOneCall_BeforeTheirCertificates()
+    {
+        const string secondHost = "api.portfolio.example";
+        var secondSite = new ProjectServerResourceRef(ProjectServerResourceKind.VirtualHost, secondHost + "-ssl.conf", secondHost);
+        var secondCertificate = new ProjectServerResourceRef(ProjectServerResourceKind.Certificate, secondHost, secondHost);
+        _availableSites[secondHost + "-ssl.conf"] = "<VirtualHost *:443>\n</VirtualHost>";
+
+        var result = await RunAsync(OperationKind.ProjectResourcesRemove,
+            Identity with { Hosts = [Host, secondHost], Remove = [Site, secondSite, Certificate, secondCertificate] });
+
+        // The plain virtual host of the first host was not confirmed, so it stays and the task reports it.
+        Assert.Equal(1, result.ExitCode);
+        var sites = ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources.Where(item => item.Kind == ProjectServerResourceKind.VirtualHost && item.Outcome == ProjectServerResourceOutcome.Removed);
+        Assert.Equal([Site.Name, secondSite.Name], sites.Select(item => item.Name));
+        var removal = Assert.Single(_commands, command => command.StartsWith("ApacheRemoveSites", StringComparison.Ordinal));
+        Assert.Equal($"ApacheRemoveSites {Host}-ssl.conf,{secondHost}-ssl.conf", removal);
+        var commands = _commands.ToList();
+        Assert.True(commands.IndexOf(removal) < commands.IndexOf($"certbot delete {Host}"));
+    }
+
+    [Fact]
+    public async Task Remove_SaysOnEachVirtualHost_WhyApacheKeptIt_WhenAnotherSiteBreaksTheConfiguration()
+    {
+        _siteRemovalRefusal = "Apache's configuration test fails because of the enabled site other-ssl.conf, which is not one of the sites being removed. Fix or disable other-ssl.conf, then delete again.";
+
+        var result = await RunAsync(OperationKind.ProjectResourcesRemove, Identity with { Remove = [Site] });
+
+        Assert.Equal(1, result.ExitCode);
+        var site = Assert.Single(ProjectServerResourceOutput.Parse(string.Join('\n', _output)).Resources,
+            item => item.Kind == ProjectServerResourceKind.VirtualHost && item.Outcome != ProjectServerResourceOutcome.NotListed);
+        Assert.Equal((ProjectServerResourceOutcome.Failed, _siteRemovalRefusal), (site.Outcome, site.Reason));
     }
 
     [Theory]
@@ -502,7 +630,7 @@ public sealed class ProjectResourcesOperationExecutorTests
             Assert.Single(report.Resources, line => line.Kind == item.Kind && line.Name == item.Name).Outcome));
         var commands = _commands.Where(command => !command.Contains(" ls ", StringComparison.Ordinal) && !command.StartsWith("docker ps", StringComparison.Ordinal)).ToList();
         Assert.Equal(
-            ["docker rm -f portfolio-prod-web-1", $"ApacheDisableSite {Host}-ssl.conf", $"ApacheDeleteSite {Host}-ssl.conf",
+            ["docker rm -f portfolio-prod-web-1", $"ApacheRemoveSites {Host}-ssl.conf",
              "docker image rm portfolio-prod-back-blue:latest", $"ApacheDisableSite {UpstreamFile}", $"ApacheDeleteSite {UpstreamFile}"],
             commands);
         Assert.Contains("docker container ls -a --filter ancestor=portfolio-prod-back-blue:latest --format {{.Names}}", _commands);

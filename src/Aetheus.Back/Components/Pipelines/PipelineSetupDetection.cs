@@ -19,13 +19,17 @@ internal sealed class PipelineSetupDetection(IPipelineRepository pipelines, IGit
     internal const string QaCommands = "APPLICATION_QA_COMMANDS";
     internal const string DeployProdCommands = "APPLICATION_DEPLOY_PROD_COMMANDS";
 
+    /// <summary>R-59: the QA pipeline's browser tests, declared empty by its template. Not a default command that fails
+    /// without what it needs: it is read only so the setup wizard can write the command of the browser tests it finds.</summary>
+    internal const string QaE2eCommands = "APPLICATION_QA_E2E_COMMANDS";
+
     /// <summary>The command variables the selected definitions carry from their template and do not
     /// replace in the pipeline itself: the ones whose default will run.</summary>
     public static HashSet<string> DefaultCommands(
         IEnumerable<PipelineYamlDefinition> definitions, IReadOnlySet<string> overridden) =>
         [.. definitions
             .SelectMany(definition => definition.Variables.Keys)
-            .Where(key => key is CiCommands or QualityCommands or QaCommands or DeployProdCommands
+            .Where(key => key is CiCommands or QualityCommands or QaCommands or DeployProdCommands or QaE2eCommands
                 && !overridden.Contains(key))];
 
     /// <summary>Reads what the default commands in <paramref name="defaults"/> need and reports what is
@@ -43,8 +47,9 @@ internal sealed class PipelineSetupDetection(IPipelineRepository pipelines, IGit
         var needsTests = defaults.Contains(QaCommands);
         var needsCompose = defaults.Contains(DeployProdCommands);
 
-        bool? solution = null, tests = null, compose = null, docker = null;
+        bool? solution = null, tests = null, compose = null, docker = null, globalJson = null;
         (bool? DotNet, bool? Python, bool? Java) languages = (null, null, null);
+        var browserTests = new PipelineSetupRepositoryProbe.BrowserTestFinding(null, null, null);
         if (repositoryId is { } id && branch is not null)
         {
             var probe = new PipelineSetupRepositoryProbe(git, logger, id, branch);
@@ -53,6 +58,10 @@ internal sealed class PipelineSetupDetection(IPipelineRepository pipelines, IGit
             if (needsCompose) compose = await probe.HasComposeFileAsync(ct).ConfigureAwait(false);
             // R-105: the quality pipeline's languages, to leave out the steps of the ones the project does not use.
             if (defaults.Contains(QualityCommands)) languages = await probe.FindLanguagesAsync(ct).ConfigureAwait(false);
+            // R-59: the browser tests the QA pipeline can run, so the wizard declares their command itself.
+            if (defaults.Contains(QaE2eCommands)) browserTests = await probe.FindBrowserTestsAsync(ct).ConfigureAwait(false);
+            // R-30: a .NET repository without global.json pins no SDK; said, though the toolchain step copes with it.
+            globalJson = await FindGlobalJsonAsync(probe, solution, tests, languages.DotNet, ct).ConfigureAwait(false);
         }
 
         if (needsCompose)
@@ -67,17 +76,45 @@ internal sealed class PipelineSetupDetection(IPipelineRepository pipelines, IGit
             Add(checks, PipelineSetupReadinessKind.NoComposeFile, [.. PipelineSetupRepositoryProbe.ComposeFileNames]);
         if (docker == false)
             Add(checks, PipelineSetupReadinessKind.NoDockerRunner, [DeployProdCommands]);
+        AddNoGlobalJson(checks, globalJson);
 
         return new PipelineSetupDetectionDto
         {
+            HasGlobalJson = globalJson,
             HasDotNetSolution = solution,
             HasDotNetTestProject = tests,
             HasComposeFile = compose,
             HasDockerRunner = docker,
             HasDotNetProject = languages.DotNet,
             HasPython = languages.Python,
-            HasJava = languages.Java
+            HasJava = languages.Java,
+            HasBrowserTests = browserTests.Found,
+            BrowserTestTool = browserTests.Tool,
+            BrowserTestDirectory = browserTests.Directory,
+            BrowserTestProject = browserTests.Project,
+            BrowserTestFramework = browserTests.Framework,
+            BrowserTestUsesTestingPlatform = browserTests.TestingPlatform ? true : null
         };
+    }
+
+    /// <summary>R-30: whether the root holds a <c>global.json</c>, asked only of a repository found to be .NET.</summary>
+    private static async Task<bool?> FindGlobalJsonAsync(
+        PipelineSetupRepositoryProbe probe, bool? solution, bool? tests, bool? dotNet, CancellationToken ct) =>
+        solution == true || tests == true || dotNet == true
+            ? await probe.HasGlobalJsonAsync(ct).ConfigureAwait(false)
+            : null;
+
+    /// <summary>R-30: a warning, not a blocking finding: the toolchain step installs the SDK channel of the target
+    /// framework, so nothing fails; only the exact SDK is left unpinned.</summary>
+    private static void AddNoGlobalJson(List<PipelineSetupReadinessCheckDto> checks, bool? globalJson)
+    {
+        if (globalJson == false)
+            checks.Add(new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.NoGlobalJson,
+                Severity = PipelineSetupReadinessSeverity.Warning,
+                Items = ["global.json"]
+            });
     }
 
     private static void Add(

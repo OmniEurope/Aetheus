@@ -6,7 +6,7 @@
 ARG APP_VERSION=0.0.0
 ARG CACHE_COHORT=shared
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build-source
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea AS build-source
 ARG CACHE_COHORT
 WORKDIR /src
 
@@ -50,7 +50,7 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
 # Install the EF tool BEFORE copying sources: source-only rebuilds keep this
 # layer cached instead of re-downloading the tool on every deploy.
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
-    dotnet tool install --global dotnet-ef --version 10.0.14
+    dotnet tool install --global dotnet-ef --version 10.0.15
 ENV PATH="${PATH}:/root/.dotnet/tools"
 
 ARG APP_VERSION
@@ -172,19 +172,43 @@ COPY deploy/pipeline-templates/generic/*.yaml /deploy/pipeline-templates/generic
 # Pass the non-routable placeholder directly to the design-time factory. Arguments after
 # `--` are forwarded by dotnet-ef to IDesignTimeDbContextFactory, avoiding environment
 # propagation differences between Docker engines. This value is never used at runtime.
-# The restore belongs to this layer because `dotnet ef` builds the project from the assets file the
+#
+# Two RUNs, so the `nuget-*` cache mount is held exclusively (sharing=locked) for the restore only.
+# The bundle used to run in one locked RUN: it waited behind every other locked publish of this file
+# (the agents, aetheus-fn) and then held the mount, and so blocked them, for its whole compile and
+# publish (run 3093: layer ef-bundle 9 min 14 s counting the wait; locally 258 s of which 89 s waiting).
+# The restore belongs to the first RUN because `dotnet ef` builds the project from the assets file the
 # cached restore layer left behind, and never re-downloads a package the buildx cache mount no longer
 # holds. Mirror run 1104 proved the split exactly: the combined restore came back `#28 CACHED` and
 # this stage still failed with NETSDK1064 on Microsoft.AspNetCore.OpenApi.
+# The restore passes SelfContained=true, like the build and the bundle after it, so the runtime pack is
+# downloaded under the lock and the assets file is the one they use. The second RUN mounts the same
+# cache shared, and its own `dotnet build` restores again (a no-op while the packages are there, a
+# refill when a storage sweep emptied the mount between the two RUNs), so it cannot fail with
+# NETSDK1064 either.
+#
+# One compile of Aetheus.Back, not two. `dotnet ef migrations bundle` used to build the project in Debug
+# for its design-time model discovery, then `dotnet publish` its generated efbundle.csproj, whose project
+# reference compiled Aetheus.Back and its three project references again in Release (measured locally:
+# 52 s and 48 s). Aetheus.Back is built once here in Release for linux-x64, the output dotnet-ef then
+# inspects (--no-build --configuration Release) and the one the bundle's publish finds up to date.
+# The bundle still comes from this Linux container, still self-contained linux-x64, still carries the
+# same migrations; only the second compile is gone.
 # RunAnalyzers=false: this compile only feeds the bundle, and the analyzers' verdict belongs to the
 # CI Compile stage. Skipping them halves the compile (28 s -> 14 s for Aetheus.Back, measured locally
 # on 2026-09-13) and leaves the assemblies byte-identical (same sha256); source generators still run.
-# dotnet-ef forwards no MSBuild property, so it is set as an environment variable MSBuild reads.
+# dotnet-ef forwards no MSBuild property, so it is set as an environment variable MSBuild reads (the
+# bundle's publish inherits it as well).
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
-    dotnet restore Aetheus.Back/Aetheus.Back.csproj -r linux-x64 \
-    && RunAnalyzers=false dotnet-ef migrations bundle \
+    dotnet restore Aetheus.Back/Aetheus.Back.csproj -r linux-x64 -p:SelfContained=true
+RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=shared \
+    export RunAnalyzers=false \
+    && dotnet build Aetheus.Back/Aetheus.Back.csproj -c Release -r linux-x64 --self-contained \
+    && dotnet-ef migrations bundle \
         --project Aetheus.Back/Aetheus.Back.csproj \
         --startup-project Aetheus.Back/Aetheus.Back.csproj \
+        --configuration Release \
+        --no-build \
         --runtime linux-x64 \
         --self-contained \
         --force \
@@ -192,23 +216,26 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
         -- \
         --design-connection "Host=localhost;Database=aetheus_design;Username=build"
 
-# Not part of the image. The release-fast pipelines build THIS target while their host publish runs, so
-# the two slowest image inputs (the EF bundle and the agent packages, none of which reads
-# .pipeline-publish/) are already in the builder's cache when the full build starts. It only gathers
+# Not part of the image. The release-fast pipelines and the CI packaging step build THIS target while the
+# frontend host publish runs, so the two slowest image inputs (the EF bundle and the agent packages, none
+# of which reads .pipeline-publish/) are already in the builder's cache when the full build starts. It only gathers
 # the outputs of stages the image already builds, so warming it changes nothing the image contains.
 # It must stay above `runtime`: a bare build takes the LAST stage of the file as its target.
 FROM scratch AS release-inputs-warm
 COPY --from=ef-bundle /app/efbundle /efbundle
 COPY --from=agent-release /agent-release/ /agent-release/
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0.0@sha256:bc0d6653979efba491ab3d6f589d691f96c309c3c3ef81325efa6978e7b7f242 AS runtime
 WORKDIR /app
 
 # Installs reusable runtime dependencies before copying build output, including curl for health
-# checks and the OpenSSL security packages. See docs/self-deploy-guide.md.
+# checks and the OpenSSL and apt security packages (CVE-2026-109518). See docs/self-deploy-guide.md.
+# The base image ships Canonical's Pebble (/usr/bin/pebble, a Go binary outside dpkg, so apt cannot update
+# it) that nothing here runs; removing it removes its Go stdlib CVEs from the image (recette R-42).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgssapi-krb5-2 git openssl libssl3t64 curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 git openssl libssl3t64 curl apt libapt-pkg7.0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/bin/pebble
 
 # Every named-volume mount point must exist app-owned in the image, otherwise a
 # fresh volume materializes root-owned and the first write fails under USER app.

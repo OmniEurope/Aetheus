@@ -50,6 +50,25 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
         return CreatedAtAction(nameof(GetApp), new { id = app.Id }, app);
     }
 
+    /// <summary>R-47: the pipeline wizard configures the telemetry of the project (Write), idempotently.</summary>
+    [HttpPost("projects/{projectId:int}/telemetry-setup")]
+    public async Task<ActionResult<AppTelemetrySetupDto>> ConfigureTelemetrySetup(int projectId, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Write, ct))
+            return Forbid();
+        var setup = await service.ConfigureTelemetrySetupAsync(projectId, ct);
+        return setup is null ? NotFound() : Ok(setup);
+    }
+
+    /// <summary>R-47: whether the telemetry the wizard configured still waits for the repository's telemetry package.</summary>
+    [HttpGet("projects/{projectId:int}/telemetry-setup")]
+    public async Task<ActionResult<AppTelemetrySetupDto>> GetTelemetrySetup(int projectId, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Read, ct))
+            return Forbid();
+        return Ok(await service.GetTelemetrySetupAsync(projectId, ct));
+    }
+
     [HttpPut("apps/{id:int}")]
     public async Task<ActionResult<MonitoredAppDto>> UpdateApp(int id, [FromBody] UpdateMonitoredAppRequest request, CancellationToken ct)
     {
@@ -105,6 +124,7 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
     }
 
     [HttpPost("agent/probe-results")]
+    [RelaxedCommitDurability]
     [Authorize(Policy = "AgentToken")]
     [RequestSizeLimit(256 * 1024)]
     public async Task<IActionResult> ReportProbeResults([FromBody] List<AppProbeResultDto> results, CancellationToken ct)

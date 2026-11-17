@@ -4,9 +4,11 @@ using System.Text.Json.Nodes;
 namespace Aetheus.Back.Components.PackageRegistry;
 
 /// <summary>
-/// NuGet v3 feed. Every endpoint needs a personal access token, except the service index and, for a
-/// package an administrator opened to anonymous download (R-58), the reads <c>dotnet restore</c>
-/// makes: version list, archive, manifest and registration. Search and publication stay authenticated.
+/// NuGet v3 feed. Every endpoint needs a credential (a personal access token, or a pipeline run's token,
+/// <see cref="PackageRunTokens"/>), except the service index and, for a package an administrator opened to
+/// anonymous download (R-58), the reads <c>dotnet restore</c> makes: version list, archive, manifest and
+/// registration. Search and publication stay authenticated; publication is an administrator's or a run
+/// token's (observability packages only), unlist and relist an administrator's.
 /// </summary>
 [ApiController]
 [Route("api/packages/nuget")]
@@ -120,7 +122,7 @@ public class NuGetRegistryController(
     }
 
     [HttpPut("v2/package")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PackageRegistryPolicies.Publish)]
     [RequestSizeLimit(PackageRegistryDefaults.MaxRequestBodyBytes)]
     public async Task<IActionResult> Publish(CancellationToken ct)
     {
@@ -138,7 +140,8 @@ public class NuGetRegistryController(
         await registry.PublishAsync(
             package.OpenReadStream,
             User.Identity?.Name ?? "unknown",
-            ct);
+            ct,
+            observabilityPackagesOnly: PackageRegistryPolicies.IsPipelineRun(User));
         return StatusCode(StatusCodes.Status201Created);
     }
 

@@ -65,7 +65,7 @@ public class PersonalAccessTokensPageTests : BunitContext
     }
 
     [Fact]
-    public void Create_RevealsPlaintextTokenOnce_AndPostsRequest()
+    public async Task Create_RevealsPlaintextTokenOnce_AndPostsRequest()
     {
         var handler = BunitTestHelper.RegisterServices(this);
         handler.SetPaginatedJsonResponse(HttpMethod.Get, "personal-access-tokens", Array.Empty<PersonalAccessTokenDto>());
@@ -78,7 +78,7 @@ public class PersonalAccessTokensPageTests : BunitContext
         var cut = Render<PersonalAccessTokens>();
 
         cut.Find("input#Name").Input("deploy");
-        cut.Find("button[type=\"submit\"]").Click();
+        await cut.Find("button[type=\"submit\"]").ClickAsync(new());
 
         Assert.Contains("aeth_pat_SUPERSECRETVALUE1234567890", cut.Markup);
         Assert.Contains("PatRevealTitle", cut.Markup);
@@ -88,6 +88,63 @@ public class PersonalAccessTokensPageTests : BunitContext
         var request = System.Text.Json.JsonSerializer.Deserialize<CreatePersonalAccessTokenRequest>(
             body!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
         Assert.Equal("deploy", request!.Name);
+    }
+
+    private static bool FormIsOpen(IRenderedComponent<PersonalAccessTokens> cut) =>
+        cut.Find(".pat-create-form details").HasAttribute("open");
+
+    [Fact]
+    public void CreationForm_IsFoldedByDefault_SoTheGridSitsRightUnderTheDescription()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetPaginatedJsonResponse(HttpMethod.Get, "personal-access-tokens", new[] { Active() });
+
+        var cut = Render<PersonalAccessTokens>();
+
+        Assert.False(cut.FindComponent<OmniFieldset>().Instance.Expanded);
+        Assert.False(FormIsOpen(cut));
+        // The grid follows the folded form directly: no other card sits between them.
+        Assert.Single(cut.FindAll(".pat-create-form"));
+    }
+
+    [Fact]
+    public async Task CreationForm_OpensOnDemand_AndStaysOpenAfterAValidationError()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetPaginatedJsonResponse(HttpMethod.Get, "personal-access-tokens", Array.Empty<PersonalAccessTokenDto>());
+        var cut = Render<PersonalAccessTokens>();
+
+        var fieldset = cut.FindComponent<OmniFieldset>();
+        await cut.InvokeAsync(() => fieldset.Instance.ExpandedChanged.InvokeAsync(true));
+        Assert.True(FormIsOpen(cut));
+
+        // An empty name fails validation: nothing is posted and the form stays open.
+        cut.Find("button[type=\"submit\"]").Click();
+
+        Assert.True(FormIsOpen(cut));
+        Assert.DoesNotContain(handler.Requests, r => r.Method == "POST");
+    }
+
+    [Fact]
+    public async Task Create_ShowsTheTokenOutsideTheFoldedForm_AndFoldsTheForm()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetPaginatedJsonResponse(HttpMethod.Get, "personal-access-tokens", Array.Empty<PersonalAccessTokenDto>());
+        handler.SetJsonResponse(HttpMethod.Post, "personal-access-tokens", new CreatedPersonalAccessTokenDto
+        {
+            Token = Active(3, "deploy"),
+            PlaintextToken = "aeth_pat_SUPERSECRETVALUE1234567890"
+        });
+        var cut = Render<PersonalAccessTokens>();
+        await cut.InvokeAsync(() => cut.FindComponent<OmniFieldset>().Instance.ExpandedChanged.InvokeAsync(true));
+
+        cut.Find("input#Name").Input("deploy");
+        await cut.Find("button[type=\"submit\"]").ClickAsync(new());
+
+        Assert.False(FormIsOpen(cut));
+        // The revealed token is in its own card, not inside the (now folded) form.
+        Assert.Contains("aeth_pat_SUPERSECRETVALUE1234567890", cut.Markup);
+        Assert.DoesNotContain("aeth_pat_SUPERSECRETVALUE1234567890", cut.Find(".pat-create-form").InnerHtml, StringComparison.Ordinal);
     }
 
     [Fact]

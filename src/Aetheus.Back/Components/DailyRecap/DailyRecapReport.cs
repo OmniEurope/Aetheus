@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.VulnerabilityWatch;
+
 namespace Aetheus.Back.Components.DailyRecap;
 
 /// <summary>
@@ -19,6 +21,16 @@ internal sealed record DailyRecapReport
     public IReadOnlyList<RecapExpiring> Secrets { get; init; } = [];
     public RecapFindings Findings { get; init; } = new(new Dictionary<AnalysisSeverity, int>(), 0);
     public IReadOnlyList<RecapMailServer> MailServers { get; init; } = [];
+    public RecapCveWatch CveWatch { get; init; } = RecapCveWatch.Empty;
+
+    /// <summary>The open CVEs of each project that has any. Unscoped as collected: the sender keeps, per recipient, the projects they may read.</summary>
+    public IReadOnlyList<RecapProjectCve> CveProjects { get; init; } = [];
+
+    /// <summary>R-41: the open CVEs of the host system of each server that has any. Unscoped as collected: the sender keeps, per recipient, the servers they may read.</summary>
+    public IReadOnlyList<RecapServerCve> CveServers { get; init; } = [];
+
+    /// <summary>The sources the CVE section owes attribution to, for the ecosystems the watch runs.</summary>
+    public IReadOnlyList<VulnerabilityAttribution> CveSources { get; init; } = [];
 
     /// <summary>How many days ahead an expiring certificate or secret is reported.</summary>
     public int CertificateHorizonDays { get; init; }
@@ -29,7 +41,8 @@ internal sealed record DailyRecapReport
 
 /// <summary>A parent pipeline run that reached a final status during the day.</summary>
 internal sealed record RecapPipelineRun(
-    int RunId, string PipelineName, string? ProjectName, PipelineStatus Status, DateTime CompletedAtUtc, string? BranchName);
+    int RunId, string PipelineName, string? ProjectName, PipelineStatus Status, DateTime CompletedAtUtc, string? BranchName,
+    int RunNumber = 0);
 
 internal sealed record RecapOsUpdates(bool Probed, int PendingTotal, int PendingSecurity);
 
@@ -66,6 +79,54 @@ internal sealed record RecapExpiring(string Name, string Owner, DateTime Expires
 internal sealed record RecapFindings(IReadOnlyDictionary<AnalysisSeverity, int> NewBySeverity, int Resolved)
 {
     public int NewTotal => NewBySeverity.Values.Sum();
+}
+
+/// <summary>
+/// What the vulnerability watch holds, platform-wide like the findings: the open matches that are certain
+/// (affected, finding not accepted or dismissed) by the severity their source published, the ones that
+/// are exploited (KEV) or have no published severity, the ones still to verify, and what appeared or closed
+/// during the day.
+/// </summary>
+internal sealed record RecapCveWatch(
+    IReadOnlyDictionary<AnalysisSeverity, int> OpenBySeverity,
+    int OpenExploited,
+    int OpenUnrated,
+    int OpenToVerify,
+    int NewInDay,
+    int ClosedInDay)
+{
+    public static RecapCveWatch Empty { get; } = new(new Dictionary<AnalysisSeverity, int>(), 0, 0, 0, 0, 0);
+
+    /// <summary>Affected packages still open: every severity, and the ones with none published.</summary>
+    public int OpenTotal => OpenBySeverity.Values.Sum() + OpenUnrated;
+
+    public bool IsQuiet => OpenTotal == 0 && OpenToVerify == 0 && NewInDay == 0 && ClosedInDay == 0;
+}
+
+/// <summary>
+/// The affected packages still open in one project (recette R-25): what the recap says to that project's
+/// readers, per project, instead of mailing the same open CVEs every day. <see cref="BySeverity"/> counts the
+/// ones whose source published a severity; <see cref="Unrated"/> the ones with none.
+/// </summary>
+internal sealed record RecapProjectCve(
+    int ProjectId,
+    string ProjectName,
+    IReadOnlyDictionary<AnalysisSeverity, int> BySeverity,
+    int Exploited,
+    int Unrated)
+{
+    public int Open => BySeverity.Values.Sum() + Unrated;
+}
+
+/// <summary>R-41: the affected packages of one server's host system, counted like those of a project.</summary>
+internal sealed record RecapServerCve(
+    int ServerId,
+    string ServerName,
+    IReadOnlyDictionary<AnalysisSeverity, int> BySeverity,
+    int Exploited,
+    int Unrated)
+{
+    public int Open => BySeverity.Values.Sum() + Unrated;
 }
 
 internal sealed record RecapMailServer(

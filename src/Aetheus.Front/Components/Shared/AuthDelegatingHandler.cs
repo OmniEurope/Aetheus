@@ -227,6 +227,8 @@ public sealed class AuthDelegatingHandler(
 
     private async Task<TokenRenewalOutcome> RefreshWithRotationAsync(Uri baseAddress, string refreshToken, CancellationToken ct)
     {
+        // F-FRONT-001: who held the session when this renewal left; the answer is applied only to that session.
+        var identityAtSend = auth.SessionIdentity;
         using var refresh = new HttpRequestMessage(HttpMethod.Post, new Uri(baseAddress, "api/auth/token/refresh"));
         refresh.Headers.Add(RenewalMarkerHeader, "1");
         refresh.Content = JsonContent.Create(
@@ -239,6 +241,7 @@ public sealed class AuthDelegatingHandler(
             var body = await refreshResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions.Web, ct).ConfigureAwait(false);
             if (body is { Token.Length: > 0 })
             {
+                if (!SessionUnchanged(identityAtSend)) return TokenRenewalOutcome.Unavailable;
                 await auth.LoginAsync(body.Token, body.RefreshToken);
                 // A grace-window answer carries no refresh token: the one this tab sent was
                 // already rotated, so pick up the rotated one another tab stored.
@@ -259,9 +262,23 @@ public sealed class AuthDelegatingHandler(
         return TokenRenewalOutcome.Unavailable;
     }
 
+    /// <summary>
+    /// False when the session changed hands or ended while the renewal was in flight (another tab signed in as
+    /// someone else, or this tab signed out): the renewed tokens belong to the former session, so applying them
+    /// would overwrite the new account's tokens or revive an ended session. The renewal then reads as unavailable
+    /// and no request is replayed with the other account's token.
+    /// </summary>
+    private bool SessionUnchanged(string? identityAtSend)
+    {
+        if (string.Equals(identityAtSend, auth.SessionIdentity, StringComparison.Ordinal)) return true;
+        logger.LogWarning("The session changed while its token was being renewed; the renewed tokens are discarded");
+        return false;
+    }
+
     /// <summary>Fallback: legacy renew endpoint (for bootstrap admin tokens without refresh tokens).</summary>
     private async Task<TokenRenewalOutcome> RenewWithLegacyEndpointAsync(Uri baseAddress, CancellationToken ct)
     {
+        var identityAtSend = auth.SessionIdentity;
         using var renew = new HttpRequestMessage(HttpMethod.Post, new Uri(baseAddress, "api/auth/renew"));
         renew.Headers.Add(RenewalMarkerHeader, "1");
         renew.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
@@ -272,6 +289,7 @@ public sealed class AuthDelegatingHandler(
             var legacyBody = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions.Web, ct).ConfigureAwait(false);
             if (legacyBody is { Token.Length: > 0 })
             {
+                if (!SessionUnchanged(identityAtSend)) return TokenRenewalOutcome.Unavailable;
                 await auth.LoginAsync(legacyBody.Token, legacyBody.RefreshToken);
                 return TokenRenewalOutcome.Succeeded;
             }

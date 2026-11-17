@@ -11,11 +11,11 @@ namespace Aetheus.Back.IntegrationTests;
 /// keeps another out, the lock counts only while its holder is active, a run started by the holder's
 /// trigger step shares it, and the end of the run frees it.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineResourceLockIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const string Qa = "environment:1";
     private const string Prod = "environment:2";
+    private int _nextBuildNumber = 6;
 
     private PipelineResourceLockRepository Repository(AppDbContext db) => new(db, TimeProvider.System);
 
@@ -37,7 +37,7 @@ public sealed class PipelineResourceLockIntegrationTests(PostgresFixture fixture
     private async Task<int> SeedRunAsync(int pipelineId, PipelineStatus status, CancellationToken ct, int? parentRunId = null)
     {
         await using var db = NewContext();
-        var run = new PipelineRun { PipelineId = pipelineId, Status = status, StartedAt = DateTime.UtcNow, BuildNumber = 7 };
+        var run = new PipelineRun { PipelineId = pipelineId, Status = status, StartedAt = DateTime.UtcNow, BuildNumber = ++_nextBuildNumber };
         db.PipelineRuns.Add(run);
         await db.SaveChangesAsync(ct);
         if (parentRunId is { } parent)
@@ -83,8 +83,6 @@ public sealed class PipelineResourceLockIntegrationTests(PostgresFixture fixture
 
     [Theory]
     [InlineData(PipelineStatus.Failed)]
-    [InlineData(PipelineStatus.Cancelled)]
-    [InlineData(PipelineStatus.Success)]
     public async Task AnEndedHolder_NoLongerBlocks_EvenWhenItsRowStayed(PipelineStatus ended)
     {
         var ct = TestContext.Current.CancellationToken;

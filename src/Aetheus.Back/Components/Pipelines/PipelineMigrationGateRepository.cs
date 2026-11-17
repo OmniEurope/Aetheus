@@ -21,6 +21,9 @@ internal sealed class PipelineMigrationGateRepository(AppDbContext db) : IPipeli
             .ThenBy(verdict => verdict.Id)
             .ToListAsync(ct);
 
+    public async Task<int> GetRunNumberAsync(int runId, CancellationToken ct = default) =>
+        (await Shared.PipelineRunNumbers.ReadAsync(db, [runId], ct).ConfigureAwait(false)).GetValueOrDefault(runId);
+
     public Task<bool> EnvironmentExistsAsync(int environmentId, CancellationToken ct = default) =>
         db.Environments.AsNoTracking().AnyAsync(environment => environment.Id == environmentId, ct);
 

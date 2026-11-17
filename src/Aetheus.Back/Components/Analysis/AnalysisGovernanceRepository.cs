@@ -94,6 +94,14 @@ internal sealed class AnalysisGovernanceRepository(AppDbContext db)
 
     public Task<AnalysisFinding?> GetTrackedFindingAsync(int findingId, CancellationToken ct) =>
         db.AnalysisFindings.Include(finding => finding.Decisions)
+            // One occurrence of the CVE watch is enough to know whose finding it is (R-24: the length an acceptance takes).
+            // R-44: the occurrence is named by its identifier (a limit without an order is not deterministic), and the
+            // two collections are read by two queries instead of one cartesian product.
+            .Include(finding => finding.Occurrences
+                .Where(occurrence => occurrence.ScannerKey == AcceptedRiskDuration.CveWatchScannerKey)
+                .OrderBy(occurrence => occurrence.Id)
+                .Take(1))
+            .AsSplitQuery()
             .FirstOrDefaultAsync(finding => finding.Id == findingId, ct);
 
     public Task<List<AnalysisFindingDecision>> GetFindingDecisionsAsync(int findingId, CancellationToken ct) =>
@@ -109,6 +117,35 @@ internal sealed class AnalysisGovernanceRepository(AppDbContext db)
     {
         db.AnalysisFindingDecisions.Add(decision);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<List<AnalysisDecisionExpired>> EndExpiredFindingDecisionsAsync(DateTime now, int take, CancellationToken ct)
+    {
+        var due = await db.AnalysisFindingDecisions
+            .Include(decision => decision.AnalysisFinding)
+            .Where(decision => decision.RevokedAt == null && decision.ExpiresAt != null && decision.ExpiresAt <= now)
+            .OrderBy(decision => decision.ExpiresAt)
+            .ThenBy(decision => decision.Id)
+            .Take(take)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var ended = new List<AnalysisDecisionExpired>(due.Count);
+        foreach (var decision in due)
+        {
+            decision.RevokedAt = now;
+            var finding = decision.AnalysisFinding;
+            // Only a status a decision gave goes back to Open: a finding already open stays as it is, and one a
+            // scan found fixed stays fixed.
+            if (finding.Status.IsDecision())
+            {
+                finding.Status = AnalysisFindingStatus.Open;
+                finding.UpdatedAt = now;
+            }
+            ended.Add(new AnalysisDecisionExpired(
+                decision.Id, finding.Id, decision.OrganizationId, decision.ProjectId, decision.Status, decision.ExpiresAt!.Value));
+        }
+        if (due.Count > 0) await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return ended;
     }
 
     public async Task ReopenExpiredFindingDecisionsAsync(int projectId, DateTime now, CancellationToken ct)

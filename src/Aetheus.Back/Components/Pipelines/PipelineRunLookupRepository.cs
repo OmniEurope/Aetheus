@@ -22,4 +22,12 @@ internal sealed class PipelineRunLookupRepository(AppDbContext db) : IPipelineRu
             .Where(r => runIds.Contains(r.Id))
             .Select(r => new { r.Id, r.Status })
             .ToDictionaryAsync(x => x.Id, x => x.Status, ct).ConfigureAwait(false);
+
+    public async Task<PipelineRunDeployedReleaseDto?> GetDeployedReleaseAsync(
+        int runId, bool includeAlreadyDeployed, CancellationToken ct = default)
+    {
+        var resolved = await Monitoring.PipelineRunDeployedReleases
+            .ResolveAsync(db, [runId], includeAlreadyDeployed, ct).ConfigureAwait(false);
+        return resolved.GetValueOrDefault(runId);
+    }
 }

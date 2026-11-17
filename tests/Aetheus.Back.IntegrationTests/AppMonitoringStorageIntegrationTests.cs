@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
 public sealed class AppMonitoringStorageIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]

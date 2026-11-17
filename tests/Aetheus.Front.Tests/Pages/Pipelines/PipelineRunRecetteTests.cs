@@ -24,6 +24,7 @@ public sealed class PipelineRunRecetteTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/2836", new PipelineRunDto
         {
             Id = 2836,
+            BuildNumber = 128,
             PipelineId = 24,
             PipelineName = "aetheus-candidate",
             Status = PipelineStatus.Success,
@@ -44,11 +45,12 @@ public sealed class PipelineRunRecetteTests : BunitContext
     }
 
     [Fact]
-    public void R29_TheTitleStartsWithTheRunId_SoTheUsefulPartSurvivesTheMobileCut()
+    public void R29_TheTitleStartsWithTheRunNumber_SoTheUsefulPartSurvivesTheMobileCut()
     {
         _handler.SetJsonResponse("api/pipelines/runs/2836", new PipelineRunDto
         {
             Id = 2836,
+            BuildNumber = 128,
             PipelineId = 24,
             PipelineName = "aetheus-candidate",
             Status = PipelineStatus.Success,
@@ -59,7 +61,7 @@ public sealed class PipelineRunRecetteTests : BunitContext
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2836));
 
         cut.WaitForAssertion(() =>
-            Assert.StartsWith("#2836 ", cut.Find(".omni-page-header__title").TextContent.Trim(), StringComparison.Ordinal));
+            Assert.StartsWith("#128 ", cut.Find(".omni-page-header__title").TextContent.Trim(), StringComparison.Ordinal));
     }
 
     [Fact]

@@ -3,7 +3,7 @@
 <OmniTemplateForm TModel="MailboxFolderModel" Model="@_model" OnValidSubmit="@Submit">
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniFormField Label="@L["MailboxFolderName"]" Help="@L["MailboxFolderNameRule"]" For="mailbox-folder-name">
-        <OmniTextBox Id="mailbox-folder-name" @bind-Value="_model.Name" Autocomplete="off" />
+        <OmniTextBox Id="mailbox-folder-name" @bind-Value="_model.Name" />
     </OmniFormField>
     <ValidationMessage For="@(() => _model.Name)" />
     <DialogFooter OnCancel="@(() => Dialog.Close())">

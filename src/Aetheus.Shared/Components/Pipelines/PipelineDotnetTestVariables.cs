@@ -24,6 +24,9 @@ public static class PipelineDotnetTestVariables
     /// <summary><c>true</c> to collect and require Cobertura coverage.</summary>
     public const string CollectCoverage = "AETHEUS_DOTNET_TEST_COLLECT_COVERAGE";
 
+    /// <summary><c>true</c> to run the failed tests once more and tell the flaky ones apart.</summary>
+    public const string RerunFailedTests = "AETHEUS_DOTNET_TEST_RERUN_FAILED_TESTS";
+
     /// <summary>A runsettings file, relative to the workspace.</summary>
     public const string RunSettings = "AETHEUS_DOTNET_TEST_RUNSETTINGS";
 

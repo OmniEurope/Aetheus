@@ -147,7 +147,12 @@ public class PermissionRepository(AppDbContext db) : IPermissionRepository
                 .Where(item => item.ProjectId != null && orgIds.Contains(item.Project!.OrganizationId))
                 .Select(item => item.Id)
                 .ToListAsync(ct).ConfigureAwait(false),
-            // AgentPool and Docker belong to no organization: only a site-wide grant reaches them.
+            // R-12: an agent pool is owned by an organization directly.
+            ResourceType.AgentPool => await db.AgentPools.AsNoTracking()
+                .Where(pool => orgIds.Contains(pool.OrganizationId))
+                .Select(pool => pool.Id)
+                .ToListAsync(ct).ConfigureAwait(false),
+            // Docker belongs to no organization: only a site-wide grant reaches it.
             _ => []
         };
     }
@@ -187,6 +192,8 @@ public class PermissionRepository(AppDbContext db) : IPermissionRepository
                     : null),
             ResourceType.ServiceConnection => db.ServiceConnections.AsNoTracking()
                 .Where(item => item.Id == resourceId && item.ProjectId != null).Select(item => (int?)item.Project!.OrganizationId),
+            ResourceType.AgentPool => db.AgentPools.AsNoTracking()
+                .Where(pool => pool.Id == resourceId).Select(pool => (int?)pool.OrganizationId),
             _ => null
         };
         return query is null ? null : await query.FirstOrDefaultAsync(ct).ConfigureAwait(false);

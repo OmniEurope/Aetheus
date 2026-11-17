@@ -61,7 +61,7 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
 
     /// <summary>Each column filters from a menu in its header, not from a second header row. On by
     /// default for every list; a grid can still turn it off.</summary>
-    [Parameter] public bool ShowHeaderFilterMenu { get; set; } = true;
+    [Parameter] public OmniDataGridFilterPlacement FilterPlacement { get; set; } = OmniDataGridFilterPlacement.HeaderMenu;
 
     /// <summary>Alternating row shades on every list by default.</summary>
     [Parameter] public bool AllowAlternatingRows { get; set; } = true;
@@ -162,7 +162,8 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     // its first request follows column registration and includes default filters and sorts.
     private Func<OmniDataGridLoadRequest, Task<OmniDataGridResult<TItem>>>? EffectiveLoad =>
         UsesRemoteLoad ? LoadRemoteAsync : null;
-    private bool EffectiveBusy => IsLoading;
+    // The read behind a row change is quiet (R-10): the page's own loading flag, raised by its LoadData, draws no bar.
+    private bool EffectiveBusy => IsLoading && _quietReads == 0;
 
     private EventCallback<OmniDataGridRowMouseEventArgs<TItem>> EffectiveRowClick => RowClick.HasDelegate
         ? EventCallback.Factory.Create<OmniDataGridRowMouseEventArgs<TItem>>(this, args => RowClick.InvokeAsync(args.Item))
@@ -287,6 +288,7 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
         try
         {
             _loadFailed = false;
+            var startedAt = _rowChanges.Sequence;
             if (_servingHeldRows)
             {
                 // The page has just loaded these rows itself; asking it again would fetch them twice.
@@ -295,18 +297,21 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
             else
             {
                 await LoadData.InvokeAsync(request.ToGridLoadArgs());
+                // A read that started after a row change returned: the rows it holds include that change.
+                _rowChanges.Settle(startedAt);
             }
             var result = VirtualData!();
             _lastRemoteCount = result.TotalCount;
             _lastServedRows = result.Items;
-            return result;
+            return ShownRows(result, request);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Logger.LogWarning(ex, "Grid LoadData failed for {ItemType}; showing the error state.", typeof(TItem).Name);
             _loadFailed = true;
             await InvokeAsync(StateHasChanged);
-            return new OmniDataGridResult<TItem>([], 0);
+            // The quiet read behind a row change keeps the rows drawn; any other read shows the empty error state.
+            return _quietReads > 0 && _lastShown is not null ? _lastShown : new OmniDataGridResult<TItem>([], 0);
         }
         finally
         {
@@ -395,6 +400,100 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     /// received rows use NewRowHighlight, while sorting, filtering and explicit actions use
     /// Reload.</summary>
     public Task Refresh() => Grid?.RefreshAsync() ?? Task.CompletedTask;
+
+    /// <summary>Shows the rows the page holds right now (what <see cref="VirtualData"/> returns) without
+    /// asking <see cref="LoadData"/> for them: the page has just changed its list locally (a row created,
+    /// saved or deleted, answered by the server) and the grid must draw it at once. The scroll and page are
+    /// kept; a <see cref="Refresh"/> afterwards lets the server correct whatever differs.</summary>
+    public async Task ShowHeldRows()
+    {
+        if (Grid is null || !UsesRemoteLoad) return;
+        _servingHeldRows = true;
+        try
+        {
+            await Grid.RefreshAsync();
+        }
+        finally
+        {
+            _servingHeldRows = false;
+        }
+    }
+
+    // R-10, the one mechanism for a row that changes: the page hands over what its action answered, the grid
+    // draws it at once, and the server read that confirms it runs behind, quietly (no bar, no veil, no emptied
+    // table). Only for a grid fed by LoadData; a grid fed by Data draws what the page holds.
+    private readonly GridRowOverlay<TItem> _rowChanges = new();
+    private int _quietReads;
+    private Task _backgroundRefresh = Task.CompletedTask;
+    private OmniDataGridResult<TItem>? _lastShown;
+
+    /// <summary>The read started by the last row change, for a caller that must wait for it.</summary>
+    internal Task BackgroundRefresh => _backgroundRefresh;
+
+    /// <summary>
+    /// Draws <paramref name="row"/>, as the action answered it, in place of the row of the same key, or as a new
+    /// row when the first window has none. A new row goes where <paramref name="order"/> puts it, else on top.
+    /// Call it only once the action succeeded: a failed action calls <see cref="RestoreRowsAsync"/> instead.
+    /// </summary>
+    public Task ShowRowAsync(TItem row, Comparison<TItem>? order = null)
+    {
+        _rowChanges.Show(KeyOfRow(row), row, order);
+        return ShowChangeAsync();
+    }
+
+    /// <summary>Takes <paramref name="row"/> out of the grid, once the action that deleted it succeeded.</summary>
+    public Task HideRowAsync(TItem row)
+    {
+        _rowChanges.Hide(KeyOfRow(row), row);
+        return ShowChangeAsync();
+    }
+
+    /// <summary>
+    /// An action failed: the rows go back to what the server holds. Drops the changes not yet confirmed and
+    /// reads the list again, quietly; the call returns when the real rows are in.
+    /// </summary>
+    public async Task RestoreRowsAsync()
+    {
+        _rowChanges.Clear();
+        await ReadQuietlyAsync();
+    }
+
+    private object KeyOfRow(TItem row)
+    {
+        if (!UsesRemoteLoad)
+            throw new InvalidOperationException(
+                $"AetheusDataGrid<{typeof(TItem).Name}>: a row change needs LoadData; a grid fed by Data draws what the page holds.");
+        return EffectiveKeyOf?.Invoke(row) ?? throw new InvalidOperationException(
+            $"AetheusDataGrid<{typeof(TItem).Name}>: a row change needs KeyProperty to name a public property of the row.");
+    }
+
+    private async Task ShowChangeAsync()
+    {
+        await ShowHeldRows();
+        _backgroundRefresh = InvokeAsync(ReadQuietlyAsync);
+    }
+
+    // The server read behind a change keeps the rows on screen, also when it fails: the change stays drawn and
+    // the grid's load alert says the read did not end.
+    private async Task ReadQuietlyAsync()
+    {
+        if (Grid is null) return;
+        _quietReads++;
+        try
+        {
+            await Grid.RefreshAsync();
+        }
+        finally
+        {
+            _quietReads--;
+        }
+    }
+
+    private OmniDataGridResult<TItem> ShownRows(OmniDataGridResult<TItem> held, OmniDataGridLoadRequest request)
+    {
+        _lastShown = _rowChanges.Apply(held, request.Skip, request.PageSize, EffectiveVirtualize, row => EffectiveKeyOf?.Invoke(row));
+        return _lastShown;
+    }
 
     public void EditRow(TItem item) => _ = Grid?.EditRowAsync(item);
     public void UpdateRow(TItem item) => _ = Grid?.UpdateRowAsync(item);

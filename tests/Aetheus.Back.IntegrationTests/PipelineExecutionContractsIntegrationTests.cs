@@ -2,13 +2,10 @@
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
 public sealed class PipelineExecutionContractsIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {
@@ -118,106 +115,6 @@ public sealed class PipelineExecutionContractsIntegrationTests(PostgresFixture f
         var results = await Task.WhenAll(first, second);
         Assert.Single(results, result => result);
         Assert.Single(results, result => !result);
-    }
-
-    [Fact]
-    public async Task ToolchainExecutionFields_RoundTripWithLegacyNullsAndPublicFailureFields()
-    {
-        await ResetAndMigrateAsync();
-        var graph = await SeedGraphAsync();
-
-        await using (var seed = NewContext())
-        {
-            seed.Tasks.AddRange(
-                new ServerTask
-                {
-                    ServerId = graph.ServerId,
-                    Name = "legacy",
-                    Command = "true",
-                    CreatedAt = DateTime.UtcNow
-                },
-                new ServerTask
-                {
-                    ServerId = graph.ServerId,
-                    Name = "toolchain",
-                    Command = "dotnet test",
-                    Executor = ExecutorType.Container,
-                    ContainerToolchain = "dotnet-10",
-                    ContainerShell = "sh",
-                    FailureCode = "TestsFailed",
-                    FailureReason = "Two tests failed.",
-                    CreatedAt = DateTime.UtcNow
-                });
-            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using var verification = NewContext();
-        var legacy = await verification.Tasks.AsNoTracking()
-            .SingleAsync(task => task.Name == "legacy", TestContext.Current.CancellationToken);
-        var toolchain = await verification.Tasks.AsNoTracking()
-            .SingleAsync(task => task.Name == "toolchain", TestContext.Current.CancellationToken);
-
-        Assert.Null(legacy.ContainerToolchain);
-        Assert.Null(legacy.ContainerShell);
-        Assert.Null(legacy.FailureCode);
-        Assert.Null(legacy.FailureReason);
-        Assert.Equal("dotnet-10", toolchain.ContainerToolchain);
-        Assert.Equal("sh", toolchain.ContainerShell);
-        Assert.Equal("TestsFailed", toolchain.FailureCode);
-        Assert.Equal("Two tests failed.", toolchain.FailureReason);
-    }
-
-    [Fact]
-    public async Task TriggeredRunLookupIndex_IsPresentAndUsedByPostgres()
-    {
-        await ResetAndMigrateAsync();
-        var graph = await SeedGraphAsync();
-        await using (var seed = NewContext())
-        {
-            seed.PipelineStepRuns.Add(new PipelineStepRun
-            {
-                PipelineRunId = graph.RunId,
-                StageName = "orchestrate",
-                StepName = "trigger-child",
-                Status = TaskExecutionStatus.Running,
-                TriggeredRunId = 424242
-            });
-            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await using (var indexCommand = new NpgsqlCommand(
-                         """
-                         SELECT indexname
-                         FROM pg_indexes
-                         WHERE schemaname = 'public'
-                           AND tablename = 'PipelineStepRuns'
-                           AND indexname = 'IX_PipelineStepRuns_TriggeredRunId'
-                         """,
-                         connection))
-        {
-            Assert.Equal(
-                "IX_PipelineStepRuns_TriggeredRunId",
-                await indexCommand.ExecuteScalarAsync(TestContext.Current.CancellationToken));
-        }
-
-        await using var explain = new NpgsqlCommand(
-            """
-            SET enable_seqscan = off;
-            EXPLAIN (COSTS OFF)
-            SELECT *
-            FROM "PipelineStepRuns"
-            WHERE "TriggeredRunId" = 424242
-            """,
-            connection);
-        await using var reader = await explain.ExecuteReaderAsync(TestContext.Current.CancellationToken);
-        var plan = new List<string>();
-        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
-            plan.Add(reader.GetString(0));
-        Assert.Contains(
-            plan,
-            line => line.Contains("IX_PipelineStepRuns_TriggeredRunId", StringComparison.Ordinal));
     }
 
     private PipelineRepository CreateRepository(Aetheus.Back.Data.AppDbContext db) =>

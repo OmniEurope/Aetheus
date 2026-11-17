@@ -12,7 +12,7 @@ public class GitServiceTests
 
     public GitServiceTests()
     {
-        _sut = new GitCliService(Substitute.For<ILogger<GitCliService>>(), new Aetheus.Back.Components.Git.GitProcessRunner(Substitute.For<ILogger<Aetheus.Back.Components.Git.GitProcessRunner>>()));
+        _sut = new GitCliService(Substitute.For<ILogger<GitCliService>>());
     }
 
     private static List<(string BranchName, string Version)> InvokeParseOutput(string output)

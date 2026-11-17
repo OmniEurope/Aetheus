@@ -97,6 +97,50 @@ public sealed class UserNotificationService(
         return await GetPreferencesAsync(userId, ct).ConfigureAwait(false);
     }
 
+    public async Task<PipelineFailureMailPreferenceDto?> GetPipelineFailureMailPreferenceAsync(
+        int userId, int pipelineId, CancellationToken ct = default)
+    {
+        if (await repo.GetPipelineMailInfoAsync(pipelineId, ct).ConfigureAwait(false) is not { } pipeline) return null;
+        var saved = await repo.GetSavedPipelineChoicesAsync(
+            NotificationEventTypes.PipelineFailed, pipelineId, [userId], ct).ConfigureAwait(false);
+        return ToDto(pipeline, saved.TryGetValue(userId, out var enabled) ? enabled : null);
+    }
+
+    public async Task<PipelineFailureMailPreferenceDto?> SetPipelineFailureMailPreferenceAsync(
+        int userId, int pipelineId, bool isEnabled, CancellationToken ct = default)
+    {
+        if (await repo.GetPipelineMailInfoAsync(pipelineId, ct).ConfigureAwait(false) is not { } pipeline) return null;
+        await repo.SavePipelineChoiceAsync(userId, NotificationEventTypes.PipelineFailed, pipelineId, isEnabled, ct)
+            .ConfigureAwait(false);
+        return ToDto(pipeline, isEnabled);
+    }
+
+    public async Task<List<PipelineFailureMailChoiceDto>> GetPipelineFailureMailChoicesAsync(
+        int userId, IReadOnlyCollection<int>? readablePipelineIds, CancellationToken ct = default)
+    {
+        var rows = await repo.GetPipelineChoicesAsync(userId, NotificationEventTypes.PipelineFailed, ct).ConfigureAwait(false);
+        return rows
+            .Where(row => readablePipelineIds is null || readablePipelineIds.Contains(row.PipelineId))
+            .Select(row => new PipelineFailureMailChoiceDto
+            {
+                PipelineId = row.PipelineId,
+                PipelineName = row.PipelineName,
+                IsEnabled = row.IsEnabled,
+                DefaultEnabled = !row.IsScheduled,
+                IsScheduled = row.IsScheduled
+            })
+            .ToList();
+    }
+
+    private static PipelineFailureMailPreferenceDto ToDto(PipelineMailInfo pipeline, bool? saved) => new()
+    {
+        PipelineId = pipeline.Id,
+        IsEnabled = saved ?? !pipeline.IsScheduled,
+        DefaultEnabled = !pipeline.IsScheduled,
+        IsSaved = saved is not null,
+        IsScheduled = pipeline.IsScheduled
+    };
+
     public async Task<List<ProjectSubscriptionDto>> GetSubscriptionsAsync(int userId, CancellationToken ct = default)
     {
         var subscriptions = await repo.GetSubscriptionsAsync(userId, ct).ConfigureAwait(false);
@@ -204,7 +248,8 @@ public sealed class UserNotificationService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
         var projectId = ReadProjectId(jsonPayload);
-        if (projectId is null) return 0;
+        // An event about several projects at once (recette R-26) has no project of its own: each follower gets one delivery.
+        if (projectId is null) return await RecordProjectDigestAsync(eventType, jsonPayload, ct).ConfigureAwait(false);
 
         // A type missing from the catalogue has no preference a user could have set: nobody receives it.
         if (NotificationEventTypes.Find(eventType) is not { } descriptor) return 0;
@@ -258,6 +303,65 @@ public sealed class UserNotificationService(
         return deliveries.Count;
     }
 
+    /// <summary>
+    /// Recette R-26: an event that lists several projects (<see cref="ProjectDigestPayload"/>) writes ONE delivery per
+    /// follower, whatever the number of projects they follow, narrowed to the projects they follow and can still read,
+    /// and e-mails it once. The payload without any project, or with none a follower can read, writes nothing.
+    /// </summary>
+    private async Task<int> RecordProjectDigestAsync(string eventType, string jsonPayload, CancellationToken ct)
+    {
+        if (NotificationEventTypes.Find(eventType) is not { } descriptor) return 0;
+        var projectIds = ProjectDigestPayload.ProjectIds(jsonPayload);
+        if (projectIds.Count == 0) return 0;
+
+        var followed = new Dictionary<int, (NotificationRecipient Recipient, HashSet<int> Projects)>();
+        foreach (var projectId in projectIds)
+        {
+            var candidates = await repo.GetProjectRecipientsAsync(projectId, eventType, descriptor.DefaultEnabled, ct).ConfigureAwait(false);
+            if (candidates.Count == 0) continue;
+            var readers = await authorization.GetUsernamesWithPermissionAsync(
+                [.. candidates.Select(candidate => candidate.Username)], ResourceType.Project, projectId,
+                Permission.Read, ct).ConfigureAwait(false);
+            foreach (var candidate in candidates.Where(candidate => readers.Contains(candidate.Username)))
+            {
+                if (!followed.TryGetValue(candidate.UserId, out var entry))
+                    followed[candidate.UserId] = entry = (candidate, []);
+                entry.Projects.Add(projectId);
+            }
+        }
+
+        var deliveries = new List<(NotificationDelivery Delivery, string? Address, int? OrganizationId)>();
+        foreach (var (userId, (recipient, projects)) in followed.OrderBy(pair => pair.Key))
+        {
+            if (ProjectDigestPayload.Narrow(jsonPayload, projects) is not { } narrowed) continue;
+            deliveries.Add((new NotificationDelivery
+            {
+                RecipientUserId = userId,
+                ChannelId = null,
+                EventType = eventType,
+                Subject = BuildDigestSubject(eventType, projects.Count),
+                PayloadJson = narrowed,
+                // Until the e-mail below says otherwise: recorded for the user, nothing sent.
+                Status = NotificationDeliveryStatus.NotConfigured,
+                ErrorMessage = null,
+                SentAt = null
+            }, recipient.Email, ProjectDigestPayload.SingleOrganizationId(narrowed)));
+        }
+
+        if (deliveries.Count == 0) return 0;
+        if (descriptor.SentByEmail)
+        {
+            // The template of an organization applies to a mail that is only about its projects.
+            foreach (var group in deliveries.GroupBy(item => item.OrganizationId))
+                await EmailOptedInDeliveriesAsync(
+                    [.. group.Select(item => item.Delivery)], [.. group.Select(item => item.Address)], null, null, group.Key, ct).ConfigureAwait(false);
+        }
+
+        await repo.AddDeliveriesAsync([.. deliveries.Select(item => item.Delivery)], ct).ConfigureAwait(false);
+        await PushChangedAsync([.. deliveries.Select(item => item.Delivery.RecipientUserId)], ct).ConfigureAwait(false);
+        return deliveries.Count;
+    }
+
     /// <summary> Recette R1-77: without an opt-in event type every delivery is e-mailed. With one, only the
     /// recipients who enabled that preference (off unless they saved it on) are; the others keep their in-app
     /// delivery, recorded as NotConfigured with the reason, so a child pipeline result never mails by default.
@@ -278,10 +382,16 @@ public sealed class UserNotificationService(
             ? []
             : await repo.GetSavedChoicesAsync(
                 optInEventType, [.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
+        var pipelineRefusals = await PipelineFailureMailRefusalsAsync(deliveries, ct).ConfigureAwait(false);
         var mailed = new List<NotificationDelivery>();
         var mailedAddresses = new List<string?>();
         for (var i = 0; i < deliveries.Count; i++)
         {
+            if (pipelineRefusals.TryGetValue(deliveries[i].RecipientUserId, out var refusal))
+            {
+                deliveries[i].ErrorMessage = refusal;
+                continue;
+            }
             if (optInEventType is not null)
             {
                 if (!(savedChoices.TryGetValue(deliveries[i].RecipientUserId, out var enabled)
@@ -302,6 +412,33 @@ public sealed class UserNotificationService(
         }
 
         await EmailDeliveriesAsync(mailed, mailedAddresses, ct, organizationId).ConfigureAwait(false);
+    }
+
+    /// <summary>The recipients of a pipeline failure who must not be e-mailed it, with the reason their in-app delivery
+    /// carries (the delivery itself is written either way). A recipient is mailed when they saved "on" for the pipeline,
+    /// or saved nothing and the pipeline is not started by a schedule: a nightly does not mail by default, a user who
+    /// wants it turns it on. Any other event, or a payload without a known pipeline, refuses nobody.</summary>
+    private async Task<Dictionary<int, string>> PipelineFailureMailRefusalsAsync(
+        IReadOnlyList<NotificationDelivery> deliveries, CancellationToken ct)
+    {
+        if (deliveries.Count == 0 || deliveries[0].EventType != NotificationEventTypes.PipelineFailed) return [];
+        if (ReadInt32(deliveries[0].PayloadJson, "PipelineId") is not { } pipelineId) return [];
+        if (await repo.GetPipelineMailInfoAsync(pipelineId, ct).ConfigureAwait(false) is not { } pipeline) return [];
+        var saved = await repo.GetSavedPipelineChoicesAsync(
+            NotificationEventTypes.PipelineFailed, pipelineId, [.. deliveries.Select(delivery => delivery.RecipientUserId)], ct)
+            .ConfigureAwait(false);
+
+        var refusals = new Dictionary<int, string>();
+        foreach (var delivery in deliveries)
+        {
+            var userId = delivery.RecipientUserId;
+            var hasChoice = saved.TryGetValue(userId, out var enabled);
+            if (hasChoice ? enabled : !pipeline.IsScheduled) continue;
+            refusals[userId] = hasChoice
+                ? "E-mail not sent: the recipient turned off failure e-mails for this pipeline."
+                : "E-mail not sent: the pipeline is started by a schedule, so its failure e-mails are off unless the recipient turned them on.";
+        }
+        return refusals;
     }
 
     /// <summary> Every notification also leaves by e-mail to the recipient's account address, and
@@ -354,7 +491,11 @@ public sealed class UserNotificationService(
     }
 
     /// <summary>The integer <c>ProjectId</c> at the root of the payload, or null when it is absent or null.</summary>
-    internal static int? ReadProjectId(string jsonPayload)
+    internal static int? ReadProjectId(string jsonPayload) => ReadInt32(jsonPayload, "ProjectId");
+
+    /// <summary>The integer property <paramref name="name"/> (any case) at the root of the payload, or null when it is
+    /// absent, null or not an integer.</summary>
+    private static int? ReadInt32(string jsonPayload, string name)
     {
         if (string.IsNullOrWhiteSpace(jsonPayload)) return null;
         try
@@ -363,10 +504,10 @@ public sealed class UserNotificationService(
             if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
             foreach (var property in document.RootElement.EnumerateObject())
             {
-                if (string.Equals(property.Name, "ProjectId", StringComparison.OrdinalIgnoreCase)
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)
                     && property.Value.ValueKind == JsonValueKind.Number
-                    && property.Value.TryGetInt32(out var projectId))
-                    return projectId;
+                    && property.Value.TryGetInt32(out var value))
+                    return value;
             }
         }
         catch (JsonException)
@@ -381,6 +522,10 @@ public sealed class UserNotificationService(
         var subject = $"{eventType} in project {projectName}";
         return subject.Length <= SubjectMaxLength ? subject : subject[..SubjectMaxLength];
     }
+
+    /// <summary>The subject of an event about several projects: it names their number, never one of them.</summary>
+    internal static string BuildDigestSubject(string eventType, int projectCount) =>
+        projectCount == 1 ? $"{eventType} in 1 project" : $"{eventType} in {projectCount} projects";
 
     private static NotificationDeliveryDto ToDto(NotificationDelivery delivery) => new()
     {

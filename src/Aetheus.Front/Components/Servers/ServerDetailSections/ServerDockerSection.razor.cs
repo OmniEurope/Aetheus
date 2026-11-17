@@ -14,7 +14,6 @@ public partial class ServerDockerSection : IAsyncDisposable
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter] public bool DockerInitialLoaded { get; set; }
-    [Parameter] public EventCallback<ServerDetailDto> ServerChanged { get; set; }
 
     private readonly CancellationTokenSource _lifetimeCts = new();
     private int? _activeServerId;
@@ -95,6 +94,25 @@ public partial class ServerDockerSection : IAsyncDisposable
         if (result is DockerPruneDialogResult selection)
             await PruneAsync(selection.Containers, selection.Images, selection.Volumes);
     }
+
+    // Recette R-12: the stack actions the compose tab launches are adopted with the container ones.
+    private static readonly string[] AdoptedTaskPrefixes = ["Docker", ServerTaskNames.ComposeActionPrefix];
+
+    /// <summary>Recette R-12: what a task adopted on arrival ("Docker Restart - abc123def456") is called, as the tabs name
+    /// the task they launch themselves. A container action is "{action} {id}", like the containers tab shows it.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+    [
+        ServerAdoptedTaskTitles.Key(L, "Docker prune", "DockerPrune"),
+        ServerAdoptedTaskTitles.Key(L, "Docker update limits - ", "ResourceLimits"),
+        ServerAdoptedTaskTitles.KeyWith(L, "Docker pull - ", "DockerPull"),
+        ServerAdoptedTaskTitles.KeyWith(L, "Docker rmi - ", "Delete"),
+        ServerAdoptedTaskTitles.KeyWith(L, "Docker compose deploy - ", "Deploy"),
+        ServerAdoptedTaskTitles.KeyWith(L, "Docker build - ", "DockerBuild"),
+        ServerAdoptedTaskTitles.KeyWith(L, ServerTaskNames.DockerExecPrefix, "DockerShell"),
+        new(ServerTaskNames.ComposeActionPrefix, rest => ServerAdoptedTaskTitles.Action<DockerComposeAction>(
+            rest, (action, stack) => DockerComposeTab.ActionTitle(L, action, stack))),
+        new("Docker ", rest => ServerAdoptedTaskTitles.Action<DockerContainerAction>(rest, (action, id) => $"{L[action.ToString()]} {id}"))
+    ]);
 
     private async Task PruneAsync(bool containers, bool images, bool volumes)
     {

@@ -29,10 +29,26 @@
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@ObservationText(entry)</OmniText>
                 </OmniStack>
             }
+
+            @if (_result.Entries.Count > 0 && !_result.Entries.Any(IsConflict))
+            {
+                <OmniAlert Severity="OmniSeverity.Success"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent>@L["PortCheckNoConflict"]</ChildContent></OmniAlert>
+            }
         </OmniStack>
     }
 
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CheckAsync" Disabled="@(_serverId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon name="OmniIconName.Check" /></Icon><ChildContent><span>@L["CheckPorts"]</span></ChildContent></OmniButton>
+        @* STD-BTN: one main action. Once the check found conflicts, moving them is the next step and checking
+           again goes into the menu. *@
+        @if (_conflicting.Count > 0)
+        {
+            <OmniSplitButton Text="@L["PortReallocate"]" Variant="OmniButtonVariant.Primary" OnClick="@ReallocateAsync" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>
+                <OmniMenuItem OnClick="@CheckAsync" Disabled="@(_serverId is null)"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent>@L["CheckPorts"]</ChildContent></OmniMenuItem>
+            </ChildContent></OmniSplitButton>
+        }
+        else
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CheckAsync" Disabled="@(_serverId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon name="OmniIconName.Check" /></Icon><ChildContent><span>@L["CheckPorts"]</span></ChildContent></OmniButton>
+        }
     </DialogFooter>
 </OmniStack>

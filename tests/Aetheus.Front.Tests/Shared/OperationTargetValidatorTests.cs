@@ -303,6 +303,39 @@ public class OperationTargetValidatorTests
     public void TeamspeakGetLogs_ValidatesInstallPath(string target, bool expected)
         => Assert.Equal(expected, OperationTargetValidator.IsValid(OperationKind.TeamspeakGetLogs, target));
 
+    // DEPLOY-001: the root-owned helper extracts into the install path and chowns it recursively to
+    // the teamspeak user, so the install target must be a dedicated /opt/teamspeak* directory.
+    [Theory]
+    [InlineData("/opt/teamspeak3-server_linux_amd64", true)]   // the UI default
+    [InlineData("/opt/teamspeak", true)]
+    [InlineData("/opt/teamspeak/server-1", true)]
+    [InlineData("/etc", false)]
+    [InlineData("/usr", false)]
+    [InlineData("/home", false)]
+    [InlineData("/home/teamspeak", false)]
+    [InlineData("/opt", false)]
+    [InlineData("/opt/", false)]
+    [InlineData("/opt/other", false)]
+    [InlineData("/srv/ts", false)]
+    [InlineData("/opt/teamspeak/../../etc", false)]           // traversal
+    [InlineData("/opt/teamspeak/..", false)]
+    [InlineData("/opt/teamspeak/./x", false)]                 // dot segment
+    [InlineData("/opt/teamspeak//x", false)]                  // empty segment
+    [InlineData("/opt/teamspeak/", false)]                    // trailing slash
+    [InlineData("/opt/teamspeak\n", false)]                   // trailing line feed
+    [InlineData("/opt/teamspeak x", false)]
+    [InlineData("", false)]
+    public void TeamspeakSetup_InstallPathMustBeDedicatedOptTeamspeakDirectory(string target, bool expected)
+        => Assert.Equal(expected, OperationTargetValidator.IsValid(OperationKind.TeamspeakSetup, target));
+
+    [Fact]
+    public void TeamspeakSetup_InstallPathLongerThan127Characters_ReturnsFalse()
+    {
+        var path = "/opt/teamspeak/" + new string('a', 60) + "/" + new string('b', 60);
+        Assert.True(path.Length > 127);
+        Assert.False(OperationTargetValidator.IsValid(OperationKind.TeamspeakSetup, path));
+    }
+
     // Portsentry setup (audit "dead shell action" migration): the scan mode is the task target
     // (alphanumeric, 1-16 chars). The TCP/UDP port lists travel in env vars, re-validated agent-side.
     [Theory]

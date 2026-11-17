@@ -265,6 +265,68 @@ public sealed class PipelineRunPreflightServiceTests
         Assert.Contains("names pipeline 'aetheus-cii', which does not exist", problem, StringComparison.Ordinal);
     }
 
+    /// <summary>The nightly the setup wizard writes by default: extended QA off, so its stage is conditioned out
+    /// and the pipeline it names does not exist. The launch must not be refused for a step it never starts.</summary>
+    private static PipelineYamlDefinition NightlyWithExtendedQaStage() => Definition(
+        Stage("NightlyQA") with { Condition = "eq(variables['APPLICATION_QA_ENABLED'], 'true')" },
+        new PipelineStageDefinition
+        {
+            Name = "NightlyQAExtended",
+            Agent = "linux-01",
+            Condition = "eq(variables['APPLICATION_QA_EXTENDED_ENABLED'], 'true')",
+            Steps = [new PipelineStepDefinition
+            {
+                Name = "Run the extended QA", Type = "trigger", Pipeline = "$(APPLICATION_QA_EXTENDED_PIPELINE)"
+            }]
+        });
+
+    [Fact]
+    public async Task StageConditionedOutOnTheLaunchVariables_DoesNotRequireItsPipelineToExist()
+    {
+        ConfiguredTargets(42);
+
+        var outcome = await RunWithVariablesAsync(
+            NightlyWithExtendedQaStage(),
+            ("APPLICATION_QA_ENABLED", "true"),
+            ("APPLICATION_QA_EXTENDED_ENABLED", "false"),
+            ("APPLICATION_QA_EXTENDED_PIPELINE", "application-qa-extended"));
+
+        Assert.Empty(outcome.Problems);
+        await _repo.DidNotReceive().FindPipelineByNameAndProjectAsync(
+            "application-qa-extended", Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StageConditionedInOnTheLaunchVariables_StillRefusesAMissingPipeline()
+    {
+        ConfiguredTargets(42);
+
+        var outcome = await RunWithVariablesAsync(
+            NightlyWithExtendedQaStage(),
+            ("APPLICATION_QA_ENABLED", "true"),
+            ("APPLICATION_QA_EXTENDED_ENABLED", "true"),
+            ("APPLICATION_QA_EXTENDED_PIPELINE", "application-qa-extended"));
+
+        var found = Assert.Single(outcome.Problems);
+        Assert.Equal(PipelineProblemCodes.StepPipelineMissing, found.Code);
+        Assert.Equal("application-qa-extended", found.Parameters["pipeline"]);
+    }
+
+    /// <summary>A condition the launch cannot decide (a status function, a value the launch does not hold) keeps
+    /// the check: a real risk is never hidden because it could not be evaluated.</summary>
+    [Fact]
+    public async Task StageWhoseConditionCannotBeDecidedAtLaunch_StillRefusesAMissingPipeline()
+    {
+        ConfiguredTargets(42);
+
+        var outcome = await RunWithVariablesAsync(
+            NightlyWithExtendedQaStage(),
+            ("APPLICATION_QA_ENABLED", "true"),
+            ("APPLICATION_QA_EXTENDED_PIPELINE", "application-qa-extended"));
+
+        Assert.Equal(PipelineProblemCodes.StepPipelineMissing, Assert.Single(outcome.Problems).Code);
+    }
+
     /// <summary>The stage's own `variables:` override the run's at dispatch, so they do here too.</summary>
     [Fact]
     public async Task StageVariableOverridingTheRunValue_IsTheNameJudged()

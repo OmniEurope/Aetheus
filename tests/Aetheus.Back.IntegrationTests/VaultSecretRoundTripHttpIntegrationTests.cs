@@ -16,8 +16,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// <c>POST /api/vaults/{id}/secrets/{secretId}/reveal</c>, which by design requires Write on the vault
 /// (the right to change the value), never Read.
 /// </summary>
-[Collection(PostgresCollection.Name)]
-public sealed class VaultSecretRoundTripHttpIntegrationTests(PostgresFixture fixture)
+public sealed class VaultSecretRoundTripHttpIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task SecretRoundTrip_IsEncryptedAtRest_MaskedInLists_AndRefusedToAReader()

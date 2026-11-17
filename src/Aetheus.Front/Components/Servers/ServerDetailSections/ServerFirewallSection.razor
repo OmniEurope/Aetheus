@@ -8,17 +8,17 @@
     <SectionContent SectionName="@PageHeaderActions.SectionName">
         @if (_firewall.Active)
         {
-            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ToggleAsync(false))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon><ChildContent><span>@L["FirewallDisable"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ToggleAsync(false))" Class="@(ActionBusy ? "btn-busy" : null)" Busy="@(ActionBusy)" Disabled="@ActionBusy"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon><ChildContent><span>@L["FirewallDisable"]</span></ChildContent></OmniButton>
         }
         else
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleAsync(true))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["FirewallEnable"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleAsync(true))" Class="@(ActionBusy ? "btn-busy" : null)" Busy="@(ActionBusy)" Disabled="@ActionBusy"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["FirewallEnable"]</span></ChildContent></OmniButton>
         }
     </SectionContent>
 }
 
 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
-    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" SettleOnHeartbeat="true" OnSettled="@(() => LoadAsync(live: true))" />
+    <ServerTaskFollower @ref="_follower" AdoptedTitle="@AdoptedTitle" ServerId="@ServerId" NamePrefix="@ServerTaskNames.FirewallPrefix" SettleOnHeartbeat="true" OnSettled="@(() => LoadAsync(live: true))" />
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <OmniIcon Name="OmniIconName.ShieldCheck" />
         @if (_firewall is not null && _firewall.Installed)
@@ -29,7 +29,7 @@
 
     @if (_loading)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <ZoneVeil />
     }
     else if (_firewall is null || !_firewall.Installed)
     {
@@ -52,6 +52,10 @@
 
         @if (CanEdit)
         {
+            @* R-22: the rule form is folded by default so the rules grid is not pushed below the fold of a phone (OEAPP-08/09). *@
+            <OmniFieldset Collapsible="true" @bind-Expanded="_formExpanded" Class="firewall-rule-form">
+            <Legend>@L["FirewallFormTitle"]</Legend>
+            <ChildContent>
             <OmniCard>
                 <OmniTemplateForm TModel="NewRuleModel" Model="@_rule" OnValidSubmit="@((EditContext context) => SubmitRuleAsync((NewRuleModel)context.Model))">
                     <OmniDataAnnotationsValidator Localizer="@L" />
@@ -69,10 +73,12 @@
                                 <IconTemplate Context="action"><OmniIcon Name="@RuleActionIcon(action)" /></IconTemplate>
                             </OmniSelectBar>
                         </ChildContent></OmniFormField>
-                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["FirewallAddRule"]</span></ChildContent></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(ActionBusy ? "btn-busy" : null)" Busy="@(ActionBusy)" Disabled="@ActionBusy"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["FirewallAddRule"]</span></ChildContent></OmniButton>
                     </OmniRow>
                 </OmniTemplateForm>
             </OmniCard>
+            </ChildContent>
+            </OmniFieldset>
         }
 
         <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Rules"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_firewall.Rules" TItem="FirewallRuleDto" KeyOf="@(row => row.Raw)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
@@ -92,7 +98,7 @@
                     <Template Context="r">
                         @if (CanEdit && IsDeletable(r))
                         {
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" Class="@(ActionBusy ? "btn-busy" : null)" Busy="@(ActionBusy)" Disabled="@ActionBusy" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                         }
                     </Template>
                 </OmniDataGridColumn>

@@ -310,12 +310,12 @@ public sealed class PipelineLaunchPreconditionTests
 
         Assert.Equal(2, problems.Count);
         var count = Assert.Single(logger.Entries, entry => entry.Attributes.ContainsKey("ProblemCount") && !entry.Attributes.ContainsKey("Problem"));
-        Assert.Equal(LogLevel.Warning, count.Level);
+        Assert.Equal(LogLevel.Information, count.Level);
         Assert.Equal(2, count.Attributes["ProblemCount"]);
         Assert.Equal("aetheus-nightly", count.Attributes["PipelineName"]);
         var perProblem = logger.Entries.Where(entry => entry.Attributes.ContainsKey("Problem")).ToList();
         Assert.Equal(2, perProblem.Count);
-        Assert.All(perProblem, entry => Assert.Equal(LogLevel.Warning, entry.Level));
+        Assert.All(perProblem, entry => Assert.Equal(LogLevel.Information, entry.Level));
         Assert.Equal([1, 2], perProblem.Select(entry => (int)entry.Attributes["ProblemNumber"]!));
         Assert.Equal(problems[0], perProblem[0].Attributes["Problem"]);
         var cut = (string)perProblem[1].Attributes["Problem"]!;

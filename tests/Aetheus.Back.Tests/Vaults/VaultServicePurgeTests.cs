@@ -24,6 +24,18 @@ public class VaultServicePurgeTests
             _audit, Substitute.For<IEntityChangeNotifier>(), TimeProvider.System, Substitute.For<IMemoryCache>());
     }
 
+    // R-10: the secrets page shows the row from this answer, so it counts the versions like the detail does.
+    [Fact]
+    public async Task ASavedSecret_AnswersItsVersionCount()
+    {
+        _repo.FindSecretAsync(3, Arg.Any<CancellationToken>()).Returns(new VaultSecret { Id = 3, VaultId = 1, Key = "K" });
+        _repo.CountSecretVersionsAsync(3, Arg.Any<CancellationToken>()).Returns(7);
+
+        var saved = await _sut.UpdateSecretAsync(1, 3, new UpdateVaultSecretRequest { Key = "K", Value = "placeholder" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(7, saved!.VersionCount);
+    }
+
     [Fact]
     public async Task UnknownSecret_PurgesNothing()
     {

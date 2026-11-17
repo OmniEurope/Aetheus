@@ -2,18 +2,33 @@
 @* ADR-057: the production deployment the wizard prepares from the Compose file of the repository. One OE card; the
    explanations are tooltips (R2-18), the only alert is the one saying no Compose file was found. A variable only the
    operator knows is a field that may stay empty: the deployment then stops until it is filled in, never silently. *@
+@* R-36: the candidate starts the deployment and gives it no server, so the choice is required here, whatever the reading of the
+   repository found; it is written as the default of the pipeline's deployServer. *@
+@if (ServerRequiredShown)
+{
+    <OmniFormField For="setup-production-server" Label="@L["PipelineSetupProdServer"]" Required="true"
+                   Help="@L["PipelineSetupProdServerRequiredHelp"]"
+                   Error="@(Setup.ServerMissing ? L["PipelineSetupProdServerRequiredError"].Value : null)"
+                   Class="omni-u-w-100" data-testid="setup-production-server-required">
+        <OmniDropDown Id="setup-production-server" TValue="string" Options="@ServerOptions"
+                      Value="@Setup.Server" ValueChanged="@ChooseServer" ValueExpression="@(() => ServerValue)"
+                      AllowEmpty="true" Placeholder="@L["PipelineSetupProdServerChoose"]" Class="omni-u-w-100" />
+    </OmniFormField>
+}
 @if (Setup.Loading && Setup.Analysis is null)
 {
-    <AetheusLoader Size="OmniControlSize.Small" />
+    <ZoneVeil />
 }
 else if (Setup.Analysis is not { Readable: true })
 {
     <PipelineProductionRefusedAlert Setup="@Setup" />
     <span class="omni-u-text-muted" data-testid="setup-production-unreadable">@L["PipelineSetupProdUnreadable"]</span>
+    <PipelineProductionApache Setup="@Setup" />
 }
 else
 {
-    <OmniCard Class="@(Setup.Loading ? "omni-busy" : null)" aria-busy="@(Setup.Loading ? "true" : "false")" data-testid="setup-production">
+    <VeilHold Busy="@Setup.Loading" />
+    <OmniCard data-testid="setup-production">
         <HeaderContent>
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <strong>@L["PipelineSetupProdTitle"]</strong>
@@ -22,7 +37,22 @@ else
         </HeaderContent>
         <ChildContent>
             <OmniStack Gap="OmniSpacing.Medium">
+                @* R-7: the creation is blocked, not carried on without PORT_FRONT and PORT_BACK, while the templates cannot be read. *@
+                @if (Setup.TemplatesUnreadable)
+                {
+                    <OmniAlert Severity="OmniSeverity.Danger" Title="@L["PipelineSetupProdTemplatesUnreadableTitle"]" Live="true"
+                               data-testid="setup-production-templates-unreadable">
+                        <OmniStack Gap="OmniSpacing.Small">
+                            <span>@L["PipelineSetupProdTemplatesUnreadable"]</span>
+                            <div>
+                                <OmniButton Variant="OmniButtonVariant.Primary" Busy="@Setup.Loading" OnClick="@ReadAgainAsync"
+                                            data-testid="setup-production-templates-retry"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+                            </div>
+                        </OmniStack>
+                    </OmniAlert>
+                }
                 <PipelineProductionRefusedAlert Setup="@Setup" />
+                <PipelineProductionApache Setup="@Setup" />
                 @if (Analysis.ComposeFiles.Count == 0)
                 {
                     <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-production-no-compose">@L["PipelineSetupProdNoCompose"]</OmniAlert>
@@ -45,12 +75,25 @@ else
                             }
                         </OmniDescriptionItem>
                         <OmniDescriptionItem Term="@L["PipelineSetupProdStrategy"]">
-                            <OmniFormField For="setup-production-strategy" Help="@L["PipelineSetupProdStrategyHelp"]" Class="omni-u-w-100">
-                                <OmniDropDown Id="setup-production-strategy" TValue="string" Options="@StrategyOptions"
-                                              Value="@Setup.Strategy" ValueChanged="@ChooseStrategy" ValueExpression="@(() => StrategyValue)"
-                                              Class="omni-u-w-100" />
-                            </OmniFormField>
+                            @* R-40 (c): the help mark sits beside the field, never under the term. *@
+                            @if (Setup.Monolith)
+                            {
+                                @* R-11: a monolith has the replacement only, so there is nothing to choose. *@
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                                    <strong data-testid="setup-production-strategy-fixed">@L["PipelineSetupProdReplace"]</strong>
+                                    <PipelineInfoTip Text="@L["PipelineSetupProdMonolithStrategyHelp"].Value" />
+                                </OmniStack>
+                            }
+                            else
+                            {
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                                    <strong id="setup-production-strategy" data-testid="setup-production-strategy-chosen">@StrategyLabel</strong>
+                                    <PipelineInfoTip Text="@L["PipelineSetupProdStrategyHelp"].Value" />
+                                </OmniStack>
+                            }
                         </OmniDescriptionItem>
+                        @if (!ServerRequiredShown)
+                        {
                         <OmniDescriptionItem Term="@L["PipelineSetupProdServer"]">
                             @if (Analysis.Servers.Count == 0)
                             {
@@ -68,17 +111,24 @@ else
                             }
                             else
                             {
-                                <OmniFormField For="setup-production-server" Help="@ServerHelp" Class="omni-u-w-100">
-                                    <OmniDropDown Id="setup-production-server" TValue="string" Options="@ServerOptions"
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                                    <OmniDropDown Id="setup-production-server" aria-label="@L["PipelineSetupProdServer"]" TValue="string" Options="@ServerOptions"
                                                   Value="@Setup.Server" ValueChanged="@ChooseServer" ValueExpression="@(() => ServerValue)"
-                                                  AllowEmpty="true" Placeholder="@L["PipelineSetupProdServerChoose"]" Class="omni-u-w-100" />
-                                </OmniFormField>
+                                                  AllowEmpty="true" Placeholder="@L["PipelineSetupProdServerChoose"]" />
+                                    <PipelineInfoTip Text="@ServerHelp" />
+                                </OmniStack>
                             }
                         </OmniDescriptionItem>
-                        <OmniDescriptionItem Term="@L["PipelineSetupProdConfigRepo"]">
-                            <span data-testid="setup-production-config-repo">@ConfigRepositoryText</span>
-                        </OmniDescriptionItem>
+                        }
                     </OmniDescriptionList>
+
+                    @* R-11: the shape chosen picks the deployment template; the Compose file only checks it. *@
+                    @if (Setup.ShapeMismatch)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-production-shape-mismatch">
+                            @(Setup.Monolith ? L["PipelineSetupProdMonolithMismatch"] : L["PipelineSetupProdFrontBackMismatch"])
+                        </OmniAlert>
+                    }
 
                     @if (Setup.StrategyMismatch)
                     {
@@ -87,49 +137,75 @@ else
                         </OmniAlert>
                     }
 
-                    @if (Listed.Count > 0)
+                    @* R-40 (d): the only place a value is typed; the banner of the summary leaves these keys out.
+                       R-53: one compact row per variable, its help behind the "?" of the label, the state as a small badge. *@
+                    @if (ToFill.Count > 0)
                     {
-                        <OmniHeading Level="OmniHeadingLevel.H6">@L["PipelineSetupProdVariables"]</OmniHeading>
-                        <OmniDescriptionList data-testid="setup-production-variables">
-                            @foreach (var variable in Listed)
+                        <OmniHeading Level="OmniHeadingLevel.H6">@L["PipelineSetupProdToFill"]</OmniHeading>
+                        <div class="pipeline-prod-rows" data-testid="setup-production-to-fill">
+                            @foreach (var variable in ToFill)
                             {
                                 var name = variable.Name;
                                 var box = BoxOf(name);
-                                <OmniDescriptionItem Term="@name">
-                                    <OmniStack Gap="OmniSpacing.Small">
-                                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Wrap="true" Gap="OmniSpacing.Small">
-                                            <OmniBadge Icon="@(BadgeIcon.For(Tone(variable)))" Tone="@Tone(variable)" Fill="OmniFill.Tonal" data-testid="@($"setup-production-kind-{name}")">@KindText(variable)</OmniBadge>
-                                            @if (variable.Exists)
-                                            {
-                                                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Success))" Tone="OmniTone.Success" Fill="OmniFill.Outline">@L["PipelineSetupProdExists"]</OmniBadge>
-                                            }
-                                        </OmniStack>
-                                        @if (variable.Kind == ProductionVariableKind.NeedsValue && !variable.Exists)
-                                        {
-                                            @if (variable.Secret)
-                                            {
-                                                <OmniPassword Id="@($"setup-production-value-{name}")" aria-label="@name" @bind-Value="box.Value"
-                                                              IgnorePasswordManagers="true" Autocomplete="off" Placeholder="@L["PipelineSetupProdValuePlaceholder"]" Class="omni-u-w-100" />
-                                            }
-                                            else
-                                            {
-                                                <OmniTextBox Id="@($"setup-production-value-{name}")" aria-label="@name" @bind-Value="box.Value"
-                                                             Placeholder="@L["PipelineSetupProdValuePlaceholder"]" Class="omni-u-w-100" />
-                                            }
-                                        }
-                                        else if (variable.Kind == ProductionVariableKind.DefaultValue && !variable.Secret && variable.DefaultValue is { Length: > 0 } proposed)
-                                        {
-                                            <span class="text-mono">@proposed</span>
-                                        }
-                                    </OmniStack>
-                                </OmniDescriptionItem>
+                                var typed = IsCommitted(name);
+                                <div class="pipeline-prod-row" data-testid="setup-production-row">
+                                    <OmniFormField For="@($"setup-production-value-{name}")" Label="@name" Help="@L["PipelineSetupProdValuePlaceholder"]">
+                                        <ChildContent>
+                                            @* R-54: the value is in the setup from the first keystroke; Enter, blur or change add nothing to it. *@
+                                            <div class="pipeline-prod-field" data-testid="@($"setup-production-field-{name}")">
+                                                @if (variable.Secret)
+                                                {
+                                                    <OmniPassword Id="@($"setup-production-value-{name}")" @bind-Value="box.Value"
+                                                                  IgnorePasswordManagers="true" Autocomplete="new-password" Class="omni-u-w-100" />
+                                                }
+                                                else
+                                                {
+                                                    <OmniTextBox Id="@($"setup-production-value-{name}")" @bind-Value="box.Value" Class="omni-u-w-100" />
+                                                }
+                                            </div>
+                                        </ChildContent>
+                                        <EndContent>
+                                            <OmniBadge Icon="@(BadgeIcon.For(typed ? OmniTone.Success : OmniTone.Warning))" Tone="@(typed ? OmniTone.Success : OmniTone.Warning)" Fill="OmniFill.Solid"
+                                                       data-testid="@($"setup-production-kind-{name}")">@(typed ? L["PipelineSetupProdTyped"] : L["PipelineSetupProdKindNeedsValue"])</OmniBadge>
+                                        </EndContent>
+                                    </OmniFormField>
+                                </div>
                             }
-                        </OmniDescriptionList>
+                        </div>
                     }
-                    else
-                    {
-                        <span data-testid="setup-production-no-variables">@L["PipelineSetupProdNoVariables"]</span>
-                    }
+
+                    @* R-40 (a), R-53: what the creation generates or reads on its own is one folded, compact list. *@
+                    <OmniAccordion Level="OmniHeadingLevel.H6" data-testid="setup-production-generated">
+                        <OmniAccordionItem Title="@L["PipelineSetupProdGenerated"]" Help="@L["PipelineSetupProdGeneratedHelp"]" Expanded="false">
+                            <div class="pipeline-prod-generated" data-testid="setup-production-variables">
+                                <div class="pipeline-prod-generated-row">
+                                    <span class="text-mono">@L["PipelineSetupProdConfigRepo"]</span>
+                                    <span></span>
+                                    <span class="text-mono omni-u-text-muted" data-testid="setup-production-config-repo">@ConfigRepositoryText</span>
+                                </div>
+                                @foreach (var variable in Generated)
+                                {
+                                    var name = variable.Name;
+                                    <div class="pipeline-prod-generated-row" data-testid="setup-production-generated-row">
+                                        <span class="text-mono">@name</span>
+                                        <span class="pipeline-prod-badges">
+                                            @* R-40 (g): one state per variable, defined or to fill in, never both. *@
+                                            <OmniBadge Icon="@(BadgeIcon.For(Tone(variable)))" Tone="@Tone(variable)" Fill="OmniFill.Solid" data-testid="@($"setup-production-kind-{name}")">@KindText(variable)</OmniBadge>
+                                            @if (variable.Exists && variable.Kind != ProductionVariableKind.NeedsValue)
+                                            {
+                                                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Success))" Tone="OmniTone.Success" Fill="OmniFill.Solid">@L["PipelineSetupProdExists"]</OmniBadge>
+                                            }
+                                        </span>
+                                        <span class="text-mono omni-u-text-muted">@(variable.Kind == ProductionVariableKind.DefaultValue && !variable.Secret ? variable.DefaultValue : null)</span>
+                                    </div>
+                                }
+                                @if (Generated.Count == 0)
+                                {
+                                    <span data-testid="setup-production-no-variables">@L["PipelineSetupProdNoVariables"]</span>
+                                }
+                            </div>
+                        </OmniAccordionItem>
+                    </OmniAccordion>
                 }
             </OmniStack>
         </ChildContent>

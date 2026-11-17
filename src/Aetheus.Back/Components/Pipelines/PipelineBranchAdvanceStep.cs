@@ -63,17 +63,21 @@ public sealed class PipelineBranchAdvanceStep(
                 return $"'{target.Branch}' advanced from {Short(result.PreviousSha) ?? "(new branch)"} to {Short(commit)} "
                     + $"(release {release.Version}, repository {result.RepositorySlug}).";
             case GitBranchAdvanceOutcome.AlreadyUpToDate:
-                return $"'{target.Branch}' already points at {Short(commit)} (release {release.Version}); nothing to advance.";
+                // R-34: a step that moves nothing says so, and says it deployed the release's own commit, so a
+                // green "Advance main" never reads as "main now follows the source head of this run".
+                return $"Nothing was advanced: '{target.Branch}' already points at {Short(commit)} "
+                    + $"(release {release.Version}, the commit this run deployed); nothing to advance.";
             case GitBranchAdvanceOutcome.AlreadyContains:
                 // A branch already containing the deployed release needs no update.
-                return $"'{target.Branch}' is at {Short(result.PreviousSha)}, which already contains {Short(commit)} "
-                    + $"(release {release.Version}); nothing to advance.";
+                return $"Nothing was advanced: '{target.Branch}' is at {Short(result.PreviousSha)}, which already contains {Short(commit)} "
+                    + $"(release {release.Version}, the commit this run deployed); nothing to advance.";
             case GitBranchAdvanceOutcome.NotFastForward:
                 {
                     // A real divergence is worth a look, but the deployment it follows did succeed: it is a
                     // warning on the run, never a failed run (the replaced prod-advance-main.sh was best effort).
                     var reason = $"'{target.Branch}' is at {Short(result.PreviousSha)}, which has diverged from {Short(commit)} "
-                        + $"(release {release.Version}): a fast-forward is impossible, the branch was left where it is.";
+                        + $"(release {release.Version}): a fast-forward is impossible, the branch was left where it is."
+                        + DivergenceCause(target.Branch, result);
                     await pipelines.AppendRunWarningsAsync(
                         runId, [PipelineStepFailureWarning.AdvanceBranch(stepRun.StepName, reason)], ct).ConfigureAwait(false);
                     return reason;
@@ -98,6 +102,20 @@ public sealed class PipelineBranchAdvanceStep(
                     ct).ConfigureAwait(false);
                 return null;
         }
+    }
+
+    /// <summary>R-38: names the commits the branch holds that the deployed commit lacks, which are what made it diverge
+    /// (typically a commit written straight on the branch, for instance by the pipeline editor), so the cause reads
+    /// from the run without opening the repository. Empty when git could not list them.</summary>
+    private static string DivergenceCause(string branch, GitBranchAdvanceResult result)
+    {
+        if (result.BranchOnlyCommits is not { Count: > 0 } commits) return string.Empty;
+        var named = string.Join("; ", commits.Select(commit =>
+            commit.Subject.Length == 0 ? commit.ShortSha : $"{commit.ShortSha} {commit.Subject}"));
+        var more = result.BranchOnlyTotal is { } total && total > commits.Count
+            ? $" (and {total - commits.Count} more)"
+            : string.Empty;
+        return $" Commits on '{branch}' missing from the candidate: {named}{more}.";
     }
 
     /// <summary>
@@ -187,8 +205,9 @@ public sealed class PipelineBranchAdvanceStep(
             new Dictionary<string, string> { [OutcomeOutput] = message });
     }
 
-    /// <summary>The step output that carries what the advance did.</summary>
-    internal const string OutcomeOutput = "BRANCH_ADVANCE";
+    /// <summary>The step output that carries what the advance did. The step creates no agent task, hence no task
+    /// log: the run page shows this line as the step's log (R-34).</summary>
+    internal const string OutcomeOutput = PipelineStepOutputs.BranchAdvanceOutcome;
 
     private async Task FailAsync(int runId, PipelineStepRun stepRun, string reason, CancellationToken ct)
     {

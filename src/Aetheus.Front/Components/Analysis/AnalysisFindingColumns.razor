@@ -4,7 +4,7 @@
     <Template Context="finding"><span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@FindingHref(finding.Id, RunId)">@($"#{finding.Id}")</OmniLink></span></Template>
 </OmniDataGridColumn>
 <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Severity" ExportValue="@SeverityExport" Title="@L["Severity"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" DefaultFilterValue="@Defaults?.Severity">
-    <Template Context="finding"><OmniBadge Icon="@(BadgeIcon.ForState(AnalysisPresentation.SeverityBadge(finding.Severity)))" Fill="OmniFill.Solid" Tone="@AnalysisPresentation.SeverityBadge(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge></Template>
+    <Template Context="finding"><OmniBadge Icon="@(BadgeIcon.ForSeverity(AnalysisPresentation.SeverityBadge(finding.Severity)))" Fill="OmniFill.Solid" Tone="@AnalysisPresentation.SeverityBadge(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge></Template>
 </OmniDataGridColumn>
 <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Category" ExportValue="@CategoryExport" Title="@L["Category"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@CategoryText">
     <Template Context="finding">@L.Localize(finding.Category)</Template>
@@ -46,6 +46,16 @@
     <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Responsible" Title="@L["AnalysisResponsible"]" Width="10rem" Filterable="true" />
     <OmniDataGridColumn TItem="AnalysisFindingDto" Property="LastSeenAt" Title="@L["LastSeen"]" Width="10rem" FormatString="{0:g}" Filterable="true" />
 }
+@* R-18: detail columns written by every export (a file handed to an AI that fixes the finding) and never drawn
+   on screen (OmniDataGridColumn.ExportOnly). They carry no filter default. *@
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportMessage" ExportOnly="true" Property="Message" Title="@L["Message"]" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportCwe" ExportOnly="true" Property="Cwe" Title="@L["AnalysisCwe"]" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportHelpUri" ExportOnly="true" Property="HelpUri" Title="@L["AnalysisHelpUrl"]" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportTool" ExportOnly="true" Property="LatestOccurrence.ToolName" Title="@L["AnalysisTool"]" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportSymbol" ExportOnly="true" Property="LatestOccurrence.Symbol" Title="@L["Symbol"]" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportFirstSeen" ExportOnly="true" Property="FirstSeenAt" Title="@L["FirstSeen"]" FormatString="{0:g}" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportBranch" ExportOnly="true" Property="LatestOccurrence.BranchName" Title="@L["Branch"]" />
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="ExportCommit" ExportOnly="true" Property="LatestOccurrence.CommitHash" Title="@L["Commit"]" />
 <OmniDataGridColumn TItem="AnalysisFindingDto" Key="Actions" Title="@L["Actions"]" Width="@(CanRevertDecisions ? "6.5rem" : "4rem")" Sortable="false">
     @* Opening the finding is the primary row action. Stop the button click from also triggering
        row navigation. *@

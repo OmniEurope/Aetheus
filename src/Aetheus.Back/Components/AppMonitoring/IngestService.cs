@@ -66,10 +66,14 @@ public sealed class IngestService(
             return null;
         }
 
-        var hash = hasher.Hash(ingestKey);
-        var cacheKey = KeyCacheKey(hash);
-        if (cache.TryGetValue<CachedKeyResolution>(cacheKey, out var cached))
+        // R-53: a key stored before R-53 carries the legacy hash (second candidate). A hit is cached under
+        // the hash that matched, so InvalidateKeyCache(stored hash) still drops it; a miss under the first.
+        var hashes = hasher.HashCandidates(ingestKey);
+        var hash = hashes[0];
+        foreach (var candidate in hashes)
         {
+            if (!cache.TryGetValue<CachedKeyResolution>(KeyCacheKey(candidate), out var cached))
+                continue;
             if (cached.AppId > 0)
                 return cached.AppId;
             rejections.Record(hash, RequestOrigin()); // -1 = negative-cached miss
@@ -77,9 +81,10 @@ public sealed class IngestService(
         }
 
         var resolution = await appRepo.ResolveIngestKeyHashAsync(
-            hash,
+            hashes,
             timeProvider.GetUtcNow().UtcDateTime,
             ct).ConfigureAwait(false);
+        var cacheKey = KeyCacheKey(resolution?.MatchedHash ?? hash);
         // Cache both hits and misses briefly to blunt DB-probing with random keys.
         var cacheDuration = resolution?.ValidUntilUtc is { } validUntil
             ? validUntil - timeProvider.GetUtcNow().UtcDateTime
@@ -234,6 +239,7 @@ public sealed class IngestService(
         }
 
         await appRepo.TouchIngestAsync(appId, dropped, now, ct).ConfigureAwait(false);
+        await appRepo.MarkTelemetryExportReceivedAsync(appId, now, ct).ConfigureAwait(false);
         var alerts = await EvaluateThresholdsAsync(appId, extremesByMetric, now, ct).ConfigureAwait(false);
 
         if (dropped > 0 || capped)

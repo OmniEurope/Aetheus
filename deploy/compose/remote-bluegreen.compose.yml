@@ -99,7 +99,6 @@ services:
         - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
         - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS:-}
         - ArtifactStorage__ProjectQuotaBytes=${ARTIFACT_PROJECT_QUOTA_BYTES:-21474836480}
-        - RateLimiting__Disabled=${RATE_LIMITING_DISABLED:-false}
       volumes:
         - git-repos:/app/data/git-repos
         - dp-keys:/app/data/dp-keys

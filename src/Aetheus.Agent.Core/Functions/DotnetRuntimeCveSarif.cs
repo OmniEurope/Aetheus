@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json.Nodes;
+using Aetheus.Shared.Components.VulnerabilityWatch;
 
 namespace Aetheus.Agent.Core.Functions;
 
@@ -8,8 +9,8 @@ namespace Aetheus.Agent.Core.Functions;
 internal sealed record DotnetRuntimeCveFinding(string Image, IReadOnlyList<DotnetRuntimePack> Packs, DotnetRuntimeAdvisory Advisory);
 
 /// <summary>The SARIF the Security stage publishes for the .NET runtime CVEs, ingested like any scanner report: a finding
-/// per CVE and image, High because Microsoft's release metadata carries no severity and a security release of the runtime
-/// is treated as one that matters (the image scanners gate on HIGH and CRITICAL too).
+/// per CVE and image, Medium because Microsoft's release metadata carries no severity and a CVE listed for a release may
+/// target the SDK or another component rather than the runtime the image embeds (user decision 2026-11-08).
 ///
 /// The identity of a finding is the CVE and the image, never the version: the finding stays the same finding while the
 /// image keeps an older runtime and is fixed when the runtime moves to the release that fixes it.
@@ -19,7 +20,11 @@ internal sealed record DotnetRuntimeCveFinding(string Image, IReadOnlyList<Dotne
 internal static class DotnetRuntimeCveSarif
 {
     internal const string ToolName = "Aetheus .NET runtime CVE check";
-    internal const string Severity = "High";
+    internal const string Severity = "Medium";
+
+    /// <summary>What the release metadata really says about a CVE: it is listed for a release, with no component named.
+    /// A finding therefore never claims that the image embeds the vulnerable runtime code (user decision 2026-11-07).</summary>
+    internal const string ListedNote = "CVE listed for this .NET release, component not specified by Microsoft";
 
     public static string Build(IReadOnlyList<DotnetRuntimeCveFinding> findings)
     {
@@ -38,7 +43,8 @@ internal static class DotnetRuntimeCveSarif
         return new JsonObject { ["version"] = "2.1.0", ["runs"] = new JsonArray(run) }.ToJsonString();
     }
 
-    private static JsonObject Rule(DotnetRuntimeAdvisory advisory)
+    // JsonNode rather than JsonObject: the typed JsonArray.Add<T> is reflection-based (IL2026 in the trimmed aetheus-fn).
+    private static JsonNode Rule(DotnetRuntimeAdvisory advisory)
     {
         var rule = new JsonObject
         {
@@ -47,14 +53,14 @@ internal static class DotnetRuntimeCveSarif
             ["fullDescription"] = Text(
                 $"Microsoft lists {advisory.CveId} among the CVEs fixed by .NET {advisory.FixedIn}"
                 + (advisory.FixedOn is null ? string.Empty : $" (released {advisory.FixedOn})")
-                + ". Severity is assumed High: the release metadata gives none.")
+                + ". Severity is assumed Medium: the release metadata gives none.")
         };
         if (advisory.CveUrl is not null)
             rule["helpUri"] = advisory.CveUrl;
         return rule;
     }
 
-    private static JsonObject Result(DotnetRuntimeCveFinding finding)
+    private static JsonNode Result(DotnetRuntimeCveFinding finding)
     {
         var advisory = finding.Advisory;
         var packs = finding.Packs.OrderBy(pack => pack.Package, StringComparer.Ordinal).ToList();
@@ -71,11 +77,13 @@ internal static class DotnetRuntimeCveSarif
         return new JsonObject
         {
             ["ruleId"] = advisory.CveId,
-            ["level"] = "error",
+            ["level"] = "warning",
             ["message"] = Text(
-                $"{finding.Image} ships a .NET runtime older than {advisory.FixedIn}, the release that fixes {advisory.CveId}{fixedOn}: "
+                $"{advisory.CveId}: {ListedNote}. Microsoft lists it among the CVEs fixed by .NET {advisory.FixedIn}{fixedOn}. "
+                + $"{finding.Image} ships a .NET runtime older than that release: "
                 + $"installed {installed}, fixed in {advisory.FixedIn}. The latest security release of the channel is {advisory.LatestSecurity}. "
-                + "Source: Microsoft .NET release metadata; its severity is not published, High is assumed."),
+                + "Whether the vulnerable component is part of this image is not known. "
+                + "Source: Microsoft .NET release metadata; its severity is not published, Medium is assumed."),
             ["properties"] = new JsonObject { ["severity"] = Severity, ["confidence"] = "High" },
             ["partialFingerprints"] = new JsonObject { ["aetheus/identity"] = $"dotnet-runtime-cve|{advisory.CveId}|{finding.Image}" },
             ["locations"] = new JsonArray(location)

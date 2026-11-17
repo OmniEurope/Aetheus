@@ -8,8 +8,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class TaskWatchdogRepositoryIntegrationTests(PostgresFixture fixture)
+public sealed class TaskWatchdogRepositoryIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task GetStaleRunningTasksAsync_FiltersAndBoundsInsideOnePostgresCommand()

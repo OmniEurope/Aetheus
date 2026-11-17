@@ -1,0 +1,27 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* R-13/R-23: the "online" counter of a project or an application, with its « ? » help. The count is the number of
+   distinct telemetry visitors seen in the last five minutes; three states are told apart so a zero is never shown when
+   nothing is known: web analytics off (nothing drawn), waiting for data (no event ingested in the window), and a
+   measured number, zero included. *@
+@if (State != OnlineAudienceState.Unavailable)
+{
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
+               Class="online-audience" data-testid="online-audience" data-state="@State">
+        @if (State == OnlineAudienceState.Waiting)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="online-audience-waiting">@L["OnlineUsersWaiting"]</OmniText>
+        }
+        else
+        {
+            <span data-testid="online-audience-count">@CountText</span>
+        }
+        @* The « ? » help, an OE tooltip reachable by keyboard; its text is also its accessible name. *@
+        @if (ShowHelp)
+        {
+            <OmniTooltip Text="@HelpText" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
+                <span role="img" aria-label="@HelpText" data-testid="online-audience-help"><OmniIcon Name="OmniIconName.Question" Class="omni-u-text-muted" aria-hidden="true" /></span>
+            </OmniTooltip>
+        }
+    </OmniStack>
+}

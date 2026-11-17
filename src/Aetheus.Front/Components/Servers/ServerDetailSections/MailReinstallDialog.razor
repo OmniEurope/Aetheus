@@ -12,7 +12,7 @@
         </OmniAlert>
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailReinstallAfter"]</OmniText>
         <OmniFormField Label="@string.Format(L["MailReinstallTypeToConfirm"], Word)" For="mail-reinstall-confirmation">
-            <OmniTextBox Id="mail-reinstall-confirmation" @bind-Value="_model.Confirmation" Placeholder="@Word" Autocomplete="off" />
+            <OmniTextBox Id="mail-reinstall-confirmation" @bind-Value="_model.Confirmation" Placeholder="@Word" />
         </OmniFormField>
     </OmniStack>
     <DialogFooter OnCancel="@(() => Dialog.Close())">

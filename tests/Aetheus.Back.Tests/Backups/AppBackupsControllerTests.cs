@@ -110,6 +110,42 @@ public sealed class AppBackupsControllerTests
         await _authz.DidNotReceive().HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, Arg.Any<int>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>());
     }
 
+    // R-8: a move in the planner needs the Write right on the owning project, as an update that keeps the agent's
+    // parameters does, and never touches the server rights.
+    [Fact]
+    public async Task SetSchedule_WithoutProjectWrite_IsForbiddenBeforeAnyChange()
+    {
+        var controller = CreateController();
+        _service.GetOwningProjectIdAsync(4, Arg.Any<CancellationToken>()).Returns(1);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await controller.SetSchedule(4, new SetBackupScheduleRequest { ScheduleCron = "0 5 * * *" }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _service.DidNotReceive().SetScheduleAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetSchedule_WithProjectWrite_ChangesOnlyTheSchedule()
+    {
+        var controller = CreateController();
+        _service.GetOwningProjectIdAsync(4, Arg.Any<CancellationToken>()).Returns(1);
+        _service.GetOwningProjectIdAsync(404, Arg.Any<CancellationToken>()).Returns((int?)null);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _service.SetScheduleAsync(4, "0 5 * * *", Arg.Any<CancellationToken>()).Returns(new BackupPolicyDto());
+        var ct = TestContext.Current.CancellationToken;
+
+        var result = await controller.SetSchedule(4, new SetBackupScheduleRequest { ScheduleCron = "0 5 * * *" }, ct);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await _service.DidNotReceive().UpdateAsync(Arg.Any<int>(), Arg.Any<UpdateBackupPolicyRequest>(), Arg.Any<CancellationToken>());
+        await _authz.DidNotReceive().HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, Arg.Any<int>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>());
+        // A policy that does not exist has no owner to check: refused like the update, and nothing is written.
+        Assert.IsType<ForbidResult>((await controller.SetSchedule(404, new SetBackupScheduleRequest { ScheduleCron = "0 5 * * *" }, ct)).Result);
+    }
+
     private AppBackupsController CreateController() => new(_service, _authz)
     {
         ControllerContext = new ControllerContext

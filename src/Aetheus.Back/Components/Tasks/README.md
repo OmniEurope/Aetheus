@@ -17,6 +17,7 @@ peut masquer le résultat réel de la tâche.
 | `/api/tasks` | GET | User | List tasks (paginated, filterable) |
 | `/api/tasks/active` | GET | User | In-flight tasks (for top-bar tracker) |
 | `/api/tasks/{id}` | GET | User | Task detail |
+| `/api/tasks/{uid}` | GET | User | Task detail by public identifier (ADR-060), same Server Read check |
 | `/api/tasks` | POST | ServerAdmin | Create free-form command task |
 | `/api/tasks/operation` | POST | User | Create typed operation task |
 | `/api/tasks/statuses` | POST | AgentToken | Bulk status query for task reconciliation |
@@ -25,6 +26,7 @@ peut masquer le résultat réel de la tâche.
 | `/api/tasks/{id}/complete` | POST | AgentToken | Agent reports task result |
 | `/api/tasks/{id}/deployment-build-refusal` | POST | AgentToken | Report a deployment build refusal |
 | `/api/tasks/{id}/cancel` | POST | User | Cancel a task |
+| `/api/admin/task-identity-backfill` | GET | Admin | Tasks left to fill by the ADR-060 backfill |
 
 ## Key Classes
 

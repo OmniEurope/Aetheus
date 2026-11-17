@@ -1,0 +1,7 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* The OE help mark ("?") for a line that has no Help parameter of its own (a fact-tile row): an OmniTooltip opened on
+   hover and on focus, reached by Tab, the same mark as the grade rows and OmniFormField.Help. *@
+<OmniTooltip Text="@Text" Focusable="true" MaxWidth="OmniTooltipWidth.Wide" CompactLength="0">
+    <span role="img" aria-label="@L["Help"]" data-testid="@TestId"><OmniIcon Name="OmniIconName.Question" Class="omni-u-text-muted" aria-hidden="true" /></span>
+</OmniTooltip>

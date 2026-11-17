@@ -110,6 +110,15 @@ internal sealed class PipelineFleetService(
         return updated;
     }
 
+    public async Task<bool> ExtractionTurnsScheduleOnAsync(
+        int pipelineId, ExtractPipelineTemplateRequest request, CancellationToken ct = default)
+    {
+        // The definition written by default extends the template and has no trigger of its own.
+        if (!request.RewritePipeline || string.IsNullOrWhiteSpace(request.RewrittenPipelineYaml)) return false;
+        var row = await GetRowAsync(pipelineId, ct).ConfigureAwait(false);
+        return PipelineScheduleOnlyEdit.TurnsScheduleOn(row.YamlDefinition, request.RewrittenPipelineYaml);
+    }
+
     public async Task<PipelineTemplateDto> ExtractAsync(
         int pipelineId, ExtractPipelineTemplateRequest request, CancellationToken ct = default)
     {
@@ -252,6 +261,7 @@ internal sealed class PipelineFleetService(
             EnvironmentId = row.EnvironmentId,
             ProjectServerId = row.ProjectServerId,
             SourceBranch = row.SourceBranch,
+            SourceRepositoryId = row.SourceRepositoryId,
             AiRunnerProfileId = row.AiRunnerProfileId
         }, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Pipeline {row.PipelineId} was not found.");

@@ -31,8 +31,10 @@ public partial class ServerMailReinstall : IDisposable
     [Parameter] public EventCallback RunningChanged { get; set; }
 
     [Inject] private TimeProvider Clock { get; set; } = default!;
+    [Inject] private TaskTrackerService Tracker { get; set; } = default!;
 
     private bool _starting;
+    private bool _adoptedOnArrival;
     private int? _taskId;
     private DateTimeOffset? _queuedAt;
     private PeriodicTimer? _ticker;
@@ -69,6 +71,8 @@ public partial class ServerMailReinstall : IDisposable
 
     private int? _shownServerId;
 
+    protected override void OnInitialized() => Tracker.OnChanged += OnTrackerChanged;
+
     // The section is reused when the user moves to another server: its purge is not this one's.
     protected override void OnParametersSet()
     {
@@ -77,6 +81,40 @@ public partial class ServerMailReinstall : IDisposable
         StopTicker();
         _taskId = null;
         _outcome = null;
+        // Recette R-12: a purge queued before the user left the page is still running on the agent.
+        _adoptedOnArrival = AdoptOpenPurge();
+    }
+
+    // The page above reads Erasing in its own render, which came before this component's reference existed.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !_adoptedOnArrival) return;
+        await RunningChanged.InvokeAsync();
+    }
+
+    private void OnTrackerChanged()
+    {
+        if (!AdoptOpenPurge()) return;
+        _ = InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            await RunningChanged.InvokeAsync();
+        });
+    }
+
+    /// <summary>Recette R-12: binds to the purge of this server that the live task feed still holds as queued or running,
+    /// when this component follows none (the user left the page and came back, or another session started it).</summary>
+    private bool AdoptOpenPurge()
+    {
+        if (Running) return false;
+        var open = ServerTaskAdoption.FindInFlight(Tracker.Tasks, ServerId, name => string.Equals(name, ServerTaskNames.MailPurge, StringComparison.Ordinal));
+        if (open is null) return false;
+        _outcome = null;
+        _taskId = open.Id;
+        var since = open.StartedAt ?? open.CreatedAt;
+        _queuedAt = since == default ? Clock.GetUtcNow() : new DateTimeOffset(DateTime.SpecifyKind(since, DateTimeKind.Utc));
+        StartTicker();
+        return true;
     }
 
     private async Task PurgeAsync()
@@ -164,7 +202,11 @@ public partial class ServerMailReinstall : IDisposable
         _queuedAt = null;
     }
 
-    public void Dispose() => StopTicker();
+    public void Dispose()
+    {
+        Tracker.OnChanged -= OnTrackerChanged;
+        StopTicker();
+    }
 
     private async Task<string> LastLogLineAsync(int taskId)
     {

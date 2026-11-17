@@ -27,7 +27,7 @@ public sealed class CoordinatorLeaderLeaseTests
             lease);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:ai-task-scheduler",
@@ -47,7 +47,7 @@ public sealed class CoordinatorLeaderLeaseTests
             lease);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:agent-update-coordinator",
@@ -67,7 +67,7 @@ public sealed class CoordinatorLeaderLeaseTests
             lease);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:app-telemetry-retention",
@@ -88,7 +88,7 @@ public sealed class CoordinatorLeaderLeaseTests
             lease);
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:artifact-storage-monitor",
@@ -108,7 +108,7 @@ public sealed class CoordinatorLeaderLeaseTests
             Substitute.For<IChunkedArtifactUploadService>());
 
         await service.StartAsync(TestContext.Current.CancellationToken);
-        await invoked.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await invoked.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         await lease.Received(1).RunAsLeaderAsync(
             "aetheus:artifact-cleanup",

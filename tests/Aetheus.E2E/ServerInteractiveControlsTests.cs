@@ -91,7 +91,6 @@ public sealed class ServerInteractiveControlsTests : E2ETestBase
     }
 
     [Test]
-    [RollbackRelevant]
     public async Task Services_AutoRefreshToggle_RereadsASnapshotWhenSwitchedBackOn()
     {
         await ReenrollServerForTaskProbeAsync(_serverId);

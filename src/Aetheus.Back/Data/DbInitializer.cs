@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Configuration;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Configuration;
 
@@ -80,12 +81,17 @@ public static class DbInitializer
         db.Roles.Add(adminRole);
         await db.SaveChangesAsync();
 
+        // R-1 (owner decision 2026-10-29): the seeded administrator holds the default address and the configured
+        // password; its first sign-in leads to choosing its holder's own account, and reaches nothing else before.
+        var setupRequired = SeededAdministratorSetup.IsRequired(config);
         var adminUser = new User
         {
             Username = SeededAdminEmail.SeededUsername,
             Email = SeededAdminEmail.Resolve(config),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
-            IsActive = true
+            IsActive = true,
+            MustChangePassword = setupRequired,
+            MustSetUpAccount = setupRequired
         };
         db.Users.Add(adminUser);
         await db.SaveChangesAsync();

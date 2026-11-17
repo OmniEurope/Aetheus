@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
 public sealed class ServerEnrollmentTransactionIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
 {

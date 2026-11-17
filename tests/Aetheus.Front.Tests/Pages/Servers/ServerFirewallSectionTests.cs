@@ -58,6 +58,21 @@ public class ServerFirewallSectionTests : BunitContext
     }
 
     [Fact]
+    public async Task RuleForm_IsFoldedByDefault_AndOpensOnDemand()
+    {
+        var cut = RenderWith(Firewall(active: true, cap: true), cap: true);
+        var fieldset = cut.FindComponent<OmniFieldset>();
+
+        Assert.False(fieldset.Instance.Expanded);
+        Assert.False(cut.Find(".firewall-rule-form details").HasAttribute("open"));
+        Assert.Contains("8080", cut.Markup);
+
+        await cut.InvokeAsync(() => fieldset.Instance.ExpandedChanged.InvokeAsync(true));
+
+        Assert.True(cut.Find(".firewall-rule-form details").HasAttribute("open"));
+    }
+
+    [Fact]
     public void WithoutCapability_ShowsManageDisabledHint_AndNoForm()
     {
         var cut = RenderWith(Firewall(active: true, cap: false), cap: false);

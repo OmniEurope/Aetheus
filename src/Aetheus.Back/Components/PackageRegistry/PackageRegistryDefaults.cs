@@ -16,7 +16,12 @@ internal static class PackageRegistryDefaults
     /// on an agent without a token. A package row created by its first publication starts open to
     /// anonymous reading (the migration only opened rows that already existed); an administrator can close
     /// it afterwards, and every other package starts private.</summary>
-    public static bool IsPublicByDefault(PackageRegistryKind kind, string normalizedName) => kind switch
+    public static bool IsPublicByDefault(PackageRegistryKind kind, string normalizedName) =>
+        IsObservabilityPackage(kind, normalizedName);
+
+    /// <summary>The packages the <c>publish-observability</c> step publishes: the only ones a pipeline run's
+    /// registry credential (<see cref="PackageRunTokens"/>) may publish.</summary>
+    public static bool IsObservabilityPackage(PackageRegistryKind kind, string normalizedName) => kind switch
     {
         PackageRegistryKind.NuGet => normalizedName is "aetheus.telemetry" or "aetheus.webanalytics",
         PackageRegistryKind.Npm => normalizedName == "@aetheus/web-analytics",

@@ -1,0 +1,27 @@
+{
+    "name": "acme/shop",
+    "description": "A small storefront on Symfony components",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*",
+        "guzzlehttp/guzzle": "7.5.0",
+        "monolog/monolog": "^2.9.0",
+        "symfony/http-foundation": "~5.4.0",
+        "twig/twig": "^3.0 || ^2.0",
+        "psr/log": "dev-main as 1.1.4"
+    },
+    "require-dev": {
+        "monolog/monolog": ">=2.9.0",
+        "phpunit/phpunit": "^9.5"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/package-versions-deprecated": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

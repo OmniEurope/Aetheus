@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -23,20 +24,17 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken cancellationToken)
     {
-        if (kind != OperationKind.PipelineEvaluateAnalysisGate
-            || target.ToLowerInvariant() is not ("security" or "quality")
-            || !envVars.TryGetValue("AETHEUS_RUN_ID", out var runText)
-            || !int.TryParse(runText, out var runId)
-            || runId <= 0)
-            return new ExecutorResult(1, false);
+        // Recette R-21: every refusal says which input is wrong and the step ends with that reason, never a bare exit code.
+        if (InvalidParameters(kind, target, envVars) is { } invalid)
+            return await FailAsync(onOutput, invalid).ConfigureAwait(false);
+        var runId = int.Parse(envVars["AETHEUS_RUN_ID"], CultureInfo.InvariantCulture);
 
         var gate = await apiClient.GetAnalysisRunGateAsync(
             runId, target, cancellationToken).ConfigureAwait(false);
         if (gate is null)
-        {
-            await onOutput("Le verdict d'analyse agrégé est indisponible.", TaskLogLevel.Error).ConfigureAwait(false);
-            return new ExecutorResult(1, false);
-        }
+            return await FailAsync(onOutput,
+                $"Le verdict d'analyse {target} du run {runId.ToString(CultureInfo.InvariantCulture)} est indisponible : "
+                + "le serveur n'a renvoyé aucun verdict (réponse vide).").ConfigureAwait(false);
 
         var stageName = envVars.GetValueOrDefault("AETHEUS_STAGE_NAME");
         var machine = JsonSerializer.Serialize(gate, JsonOptions);
@@ -60,7 +58,20 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
         await onOutput(
             $"Verdict {target}: {gate.Status} - {gate.ReportCount} rapports, {gate.FindingCount} findings, "
             + $"{gate.BlockerCount} blocages, {gate.WarningCount} avertissements, "
-            + (gate.Grade?.OverallGrade is { } letter ? $"note {letter}." : $"note : {GradeText(gate.Grade)}."), level).ConfigureAwait(false);
+            + GradeSentence(gate), level).ConfigureAwait(false);
+        // Recette R-21: an Error verdict says which producer or report it refuses and why, one line per cause.
+        if (gate.Status == AnalysisGateStatus.Error)
+            await LogErrorCausesAsync(gate, onOutput).ConfigureAwait(false);
+        // Recette R-21: each threshold rule that was crossed, with its observed value and its limit, and the grade under
+        // its minimum, so a Blocked or Warning verdict is as readable as an Error one.
+        foreach (var violation in gate.Violations)
+            await onOutput(AnalysisGateDiagnosticText.ViolationLine(violation),
+                violation.Outcome == "Block" ? TaskLogLevel.Warning : TaskLogLevel.Info).ConfigureAwait(false);
+        if (gate.Status != AnalysisGateStatus.Error
+            && AnalysisGateDiagnosticText.GradeBelowMinimumLine(gate.Grade) is { } belowMinimum)
+            await onOutput(belowMinimum, TaskLogLevel.Warning).ConfigureAwait(false);
+        foreach (var unreadable in gate.UnreadableEvidence)
+            await onOutput(AnalysisGateDiagnosticText.UnreadableLine(unreadable), TaskLogLevel.Warning).ConfigureAwait(false);
         // Run #2958: a rejected grading rule is an F; the log says which rule and why, never a bare letter.
         foreach (var rejected in Rejections(gate.Grade))
             await onOutput($"Règle de notation rejetée (note F) {rejected.Key} : {rejected.Rejection}", TaskLogLevel.Warning)
@@ -69,11 +80,35 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
         // receives it (a trigger step hands up its child's outputs) and grade-candidate-from-gates seals it into the
         // release. A gate with no grade says "none", never a letter it did not compute.
         await onOutput(
-            $"##aetheus[setvariable name=ANALYSIS_{target.ToUpperInvariant()}_GRADE]{gate.Grade?.OverallGrade?.ToString() ?? "none"}",
+            $"##aetheus[setvariable name=ANALYSIS_{target.ToUpperInvariant()}_GRADE]{ShownGrade(gate)?.ToString() ?? "none"}",
             TaskLogLevel.Info).ConfigureAwait(false);
         // A blocked policy verdict is valid evidence and must degrade the assurance grade without
         // masquerading as a producer failure. Only unavailable/incomplete gate evidence is technical.
-        return new ExecutorResult(gate.Status == AnalysisGateStatus.Error ? 1 : 0, false);
+        // The step's own error state carries the causes (the task's failure reason), not only "exit code 1".
+        return gate.Status == AnalysisGateStatus.Error
+            ? new ExecutorResult(1, false, TaskFailureCodes.ToolError, AnalysisGateDiagnosticText.ErrorReason(target, gate))
+            : new ExecutorResult(0, false);
+    }
+
+    /// <summary>The reason the parameters of the step are refused, or null when they are valid.</summary>
+    private static string? InvalidParameters(
+        OperationKind kind, string target, IReadOnlyDictionary<string, string> envVars)
+    {
+        if (kind != OperationKind.PipelineEvaluateAnalysisGate)
+            return $"Opération inattendue pour le jugement d'analyse : {kind}.";
+        if (target.ToLowerInvariant() is not ("security" or "quality"))
+            return $"Cible de jugement d'analyse invalide « {target} » : « security » ou « quality » est attendu.";
+        if (!envVars.TryGetValue("AETHEUS_RUN_ID", out var runText))
+            return "La variable AETHEUS_RUN_ID est absente : le run dont il faut juger les rapports est inconnu.";
+        return !int.TryParse(runText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var runId) || runId <= 0
+            ? $"La variable AETHEUS_RUN_ID vaut « {runText} » : un numéro de run strictement positif est attendu."
+            : null;
+    }
+
+    private static async Task<ExecutorResult> FailAsync(Func<string, TaskLogLevel, Task> onOutput, string reason)
+    {
+        await onOutput(reason, TaskLogLevel.Error).ConfigureAwait(false);
+        return new ExecutorResult(1, false, TaskFailureCodes.ToolError, reason);
     }
 
     private static string BuildMarkdown(string scope, AnalysisRunGateDto gate)
@@ -84,7 +119,7 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
             .AppendLine()
             .AppendLine($"- Run : [{gate.PipelineRunId}](/pipelines/runs/{gate.PipelineRunId})")
             .AppendLine($"- Verdict : **{gate.Status}**")
-            .AppendLine($"- Note globale : **{GradeText(gate.Grade)}**")
+            .AppendLine($"- Note globale : **{GateGradeText(gate)}**")
             .AppendLine($"- Domaine limitant : {gate.Grade?.LimitingDomain?.ToString() ?? "indisponible"}")
             .AppendLine($"- Snapshot du barème : `{gate.Grade?.SnapshotHash ?? "indisponible"}`")
             .AppendLine($"- Rapports : {gate.ReportCount}")
@@ -93,11 +128,55 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
             .AppendLine($"- Métriques : {gate.MetricCount}")
             .AppendLine($"- Blocages : {gate.BlockerCount}; avertissements : {gate.WarningCount}")
             .AppendLine($"- Producteurs manquants : {(gate.MissingProducers.Count == 0 ? "aucun" : string.Join(", ", gate.MissingProducers))}");
+        AppendErrorCauses(text, gate);
+        AppendUnreadableEvidence(text, gate);
         AppendGrades(text, gate);
         AppendViolations(text, gate);
         AppendReports(text, gate);
         AppendFindings(text, gate);
         return text.ToString();
+    }
+
+    /// <summary>The letter the verdict may show: none for an Error verdict, which refuses the evidence the letter was computed
+    /// from (run 3100 read "Error" beside a grade A).</summary>
+    private static AnalysisGrade? ShownGrade(AnalysisRunGateDto gate) =>
+        gate.Status == AnalysisGateStatus.Error ? null : gate.Grade?.OverallGrade;
+
+    private static string GradeSentence(AnalysisRunGateDto gate) =>
+        gate.Status == AnalysisGateStatus.Error ? $"note : {GateGradeText(gate)}."
+        : gate.Grade?.OverallGrade is { } letter ? $"note {letter}."
+        : $"note : {GradeText(gate.Grade)}.";
+
+    private static string GateGradeText(AnalysisRunGateDto gate) =>
+        gate.Status == AnalysisGateStatus.Error ? "aucune (verdict en erreur)" : GradeText(gate.Grade);
+
+    private static async Task LogErrorCausesAsync(AnalysisRunGateDto gate, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        if (gate.ErrorCauses.Count == 0)
+        {
+            await onOutput($"Cause de l'erreur : {AnalysisGateErrorCauseText.NoneProvided}", TaskLogLevel.Error).ConfigureAwait(false);
+            return;
+        }
+        foreach (var cause in gate.ErrorCauses)
+            await onOutput($"Cause de l'erreur : {AnalysisGateErrorCauseText.Line(cause)}", TaskLogLevel.Error).ConfigureAwait(false);
+    }
+
+    private static void AppendErrorCauses(StringBuilder text, AnalysisRunGateDto gate)
+    {
+        if (gate.Status != AnalysisGateStatus.Error) return;
+        text.AppendLine().AppendLine("## Causes de l'erreur").AppendLine();
+        if (gate.ErrorCauses.Count == 0)
+            text.AppendLine($"- {AnalysisGateErrorCauseText.NoneProvided}");
+        foreach (var cause in gate.ErrorCauses)
+            text.AppendLine($"- {Escape(AnalysisGateErrorCauseText.Line(cause))}");
+    }
+
+    private static void AppendUnreadableEvidence(StringBuilder text, AnalysisRunGateDto gate)
+    {
+        if (gate.UnreadableEvidence.Count == 0) return;
+        text.AppendLine().AppendLine("## Preuves illisibles, ignorées du verdict").AppendLine();
+        foreach (var evidence in gate.UnreadableEvidence)
+            text.AppendLine($"- {Escape(AnalysisGateDiagnosticText.UnreadableLine(evidence))}");
     }
 
     private static void AppendGrades(StringBuilder text, AnalysisRunGateDto gate)

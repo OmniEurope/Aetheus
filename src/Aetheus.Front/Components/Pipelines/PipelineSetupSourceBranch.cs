@@ -7,10 +7,10 @@ namespace Aetheus.Front.Components.Pipelines;
 /// The branch the pipelines the wizard creates read (recette R-94, user decision 2026-10-25). The wizard proposes
 /// <c>develop</c> when the project's repository has it, else the project's default branch, lets the user pick another
 /// branch of the repository, and writes the result into every pipeline as <c>source_branch:</c> and as the pipeline's
-/// source branch. Without it a pipeline reads the project's default branch (main for a project whose default is main),
+/// source branch; once they exist the same branch is written to the project's default branch (R-31, <see cref="WriteProjectDefaultAsync"/>).
+/// Without it a pipeline reads the project's default branch (main for a project whose default is main),
 /// which is not where the work is delivered.
-/// Only the choice is made here: what the production analysis and the readiness check read stays the repository's
-/// default branch.
+/// The production analysis reads the branch chosen here (R-9), see <see cref="PipelineSetupProduction"/>.
 /// </summary>
 internal sealed class PipelineSetupSourceBranch(ApiClient api, Action changed)
 {
@@ -19,6 +19,7 @@ internal sealed class PipelineSetupSourceBranch(ApiClient api, Action changed)
 
     private ProjectDto? _project;
     private int? _readProjectId;
+    private int? _repositoryId;
     private IReadOnlyList<string> _branches = [];
     private string? _repositoryDefaultBranch;
     private Task _reading = Task.CompletedTask;
@@ -57,6 +58,17 @@ internal sealed class PipelineSetupSourceBranch(ApiClient api, Action changed)
         : !string.IsNullOrWhiteSpace(defaultBranch) ? defaultBranch
         : string.IsNullOrWhiteSpace(repositoryDefaultBranch) ? null : repositoryDefaultBranch;
 
+    /// <summary>R-31 (user decision 2026-11-08): the branch the pipelines were written on is also written to the project's default
+    /// branch, so the overview and the pipelines say the same. Nothing is written when no pipeline was created or no branch is
+    /// known. Throws <see cref="InvalidOperationException"/> with <paramref name="failed"/> when the server refuses, so the
+    /// wizard rolls the pipelines back.</summary>
+    public async Task WriteProjectDefaultAsync(int projectId, bool pipelinesCreated, string failed)
+    {
+        if (!pipelinesCreated || Chosen is not { } branch) return;
+        if (!(await api.Projects.SetDefaultBranchAsync(projectId, branch)).Success)
+            throw new InvalidOperationException(failed);
+    }
+
     public void Pick(string? branch)
     {
         Picked = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
@@ -70,6 +82,7 @@ internal sealed class PipelineSetupSourceBranch(ApiClient api, Action changed)
         if (project?.Id == _readProjectId) return;
         _project = project;
         _readProjectId = project?.Id;
+        _repositoryId = project?.InternalRepositoryId;
         Picked = null;
         _branches = [];
         _repositoryDefaultBranch = null;
@@ -77,6 +90,26 @@ internal sealed class PipelineSetupSourceBranch(ApiClient api, Action changed)
         _read = project is not null && project.InternalRepositoryId is null;
         _reading = project?.InternalRepositoryId is { } repositoryId ? ReadAsync(project.Id, repositoryId) : Task.CompletedTask;
     }
+
+    /// <summary>R-20: the repository was created, or received its first push, after the wizard loaded the project (which then
+    /// names no repository): its branches are read again, the pick kept, so <c>develop</c> is proposed once it is pushed.
+    /// Completes when the reading did, like <see cref="SettledAsync"/>.</summary>
+    public Task RereadAsync(int repositoryId)
+    {
+        if (_project is null) return Task.CompletedTask;
+        _repositoryId = repositoryId;
+        _read = false;
+        _readFailed = false;
+        return _reading = ReadAsync(_project.Id, repositoryId);
+    }
+
+    /// <summary>R-6: asked just before the pipelines are written. The branches were read when the project was chosen; code pushed
+    /// since (from a terminal, without the first-push offer) adds <c>develop</c>, which the pipelines must then read. Only a
+    /// proposal can change, so a branch the user picked is left alone, and a project with no repository has nothing to read.
+    /// <paramref name="createdRepositoryId"/> is the repository the wizard itself created for the project: the project was loaded
+    /// before it existed and names none, and without it a push made from a terminal after the creation would never be seen.</summary>
+    public Task RefreshAsync(int? createdRepositoryId = null) =>
+        Picked is null && (_repositoryId ?? createdRepositoryId) is { } repositoryId ? RereadAsync(repositoryId) : Task.CompletedTask;
 
     private async Task ReadAsync(int projectId, int repositoryId)
     {

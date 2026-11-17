@@ -8,9 +8,12 @@ namespace Aetheus.Agent.Core.Collectors;
 /// unknown so proxy names do not obscure container ownership.</summary>
 public sealed class ListeningPortsCollector(
     ILogger<ListeningPortsCollector> logger,
-    IShellRunner shell)
+    IShellRunner shell,
+    TimeProvider? clock = null)
     : BaseShellCollector<ListeningPortsCollector>(logger, shell), IListeningPortsCollector
 {
+    private readonly TimeProvider _time = clock ?? TimeProvider.System;
+
     private const string UnknownHolder = "host process";
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
 
@@ -24,30 +27,44 @@ public sealed class ListeningPortsCollector(
     private const string NetUdpScript =
         "Get-NetUDPEndpoint | Select-Object LocalAddress,LocalPort | ConvertTo-Csv -NoTypeInformation";
 
-    public async Task<List<ObservedPortDto>> CollectAsync(CancellationToken ct = default)
+    public async Task<List<ObservedPortDto>> CollectAsync(CancellationToken ct = default) =>
+        [.. (await ScanAsync(ct).ConfigureAwait(false)).Ports];
+
+    public async Task<ListeningPortsScan> ScanAsync(CancellationToken ct = default)
     {
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        // A probe that failed returns null, never an empty list: an empty list is a measurement ("nothing
+        // listens on this protocol") and a failure is not. Each success carries the instant its own probe
+        // returned.
         var tcp = isWindows
             ? await CollectWindowsAsync(NetTcpScript, "Get-NetTCPConnection", ct).ConfigureAwait(false)
             : await CollectLinuxAsync("-ltnpH", ct).ConfigureAwait(false);
+        var tcpMeasurement = Measurement(tcp, PortRegistryLimits.TcpProtocol);
         var udp = isWindows
             ? await CollectWindowsAsync(NetUdpScript, "Get-NetUDPEndpoint", ct).ConfigureAwait(false)
             : await CollectLinuxAsync("-lunpH", ct).ConfigureAwait(false);
-        if (tcp.Count == 0 && udp.Count == 0) return [];
+        var udpMeasurement = Measurement(udp, PortRegistryLimits.UdpProtocol);
+        var measured = new[] { tcpMeasurement, udpMeasurement }.OfType<ProtocolMeasurement>().ToList();
+        if ((tcp?.Count ?? 0) == 0 && (udp?.Count ?? 0) == 0) return new ListeningPortsScan([], measured);
 
         var containers = await CollectDockerPortMapAsync(ct).ConfigureAwait(false);
 
         var byPort = new Dictionary<(int Port, string Protocol), ObservedPortDto>();
-        Absorb(byPort, tcp, PortRegistryLimits.TcpProtocol, containers);
-        Absorb(byPort, udp, PortRegistryLimits.UdpProtocol, containers);
+        Absorb(byPort, tcp ?? [], PortRegistryLimits.TcpProtocol, containers);
+        Absorb(byPort, udp ?? [], PortRegistryLimits.UdpProtocol, containers);
 
-        return
-        [
-            .. byPort.Values
-                .OrderBy(observed => observed.Port)
-                .ThenBy(observed => observed.Protocol, StringComparer.Ordinal)
-        ];
+        return new ListeningPortsScan(
+            [
+                .. byPort.Values
+                    .OrderBy(observed => observed.Port)
+                    .ThenBy(observed => observed.Protocol, StringComparer.Ordinal)
+            ],
+            measured);
     }
+
+    private ProtocolMeasurement? Measurement(
+        List<(int Port, string Interface, string? Process)>? probe, string protocol) =>
+        probe is null ? null : new ProtocolMeasurement(protocol, _time.GetUtcNow());
 
     private static void Absorb(
         Dictionary<(int Port, string Protocol), ObservedPortDto> byPort,
@@ -81,7 +98,8 @@ public sealed class ListeningPortsCollector(
         }
     }
 
-    private async Task<List<(int Port, string Interface, string? Process)>> CollectLinuxAsync(
+    /// <summary>The listeners of one probe, or null when the probe failed.</summary>
+    private async Task<List<(int Port, string Interface, string? Process)>?> CollectLinuxAsync(
         string arguments, CancellationToken ct)
     {
         try
@@ -103,10 +121,11 @@ public sealed class ListeningPortsCollector(
             Logger.LogDebug(ex, "[ListeningPortsCollector] ss {Arguments} probe failed", arguments);
         }
 
-        return [];
+        return null;
     }
 
-    private async Task<List<(int Port, string Interface, string? Process)>> CollectWindowsAsync(
+    /// <summary>The listeners of one probe, or null when the probe failed.</summary>
+    private async Task<List<(int Port, string Interface, string? Process)>?> CollectWindowsAsync(
         string script, string probeName, CancellationToken ct)
     {
         try
@@ -139,7 +158,7 @@ public sealed class ListeningPortsCollector(
             Logger.LogDebug(ex, "[ListeningPortsCollector] {Probe} probe failed", probeName);
         }
 
-        return [];
+        return null;
     }
 
     private async Task<Dictionary<(int Port, string Protocol), string>> CollectDockerPortMapAsync(

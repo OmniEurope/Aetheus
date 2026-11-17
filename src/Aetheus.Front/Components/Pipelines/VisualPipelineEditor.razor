@@ -112,7 +112,7 @@ else
         @if (!_positionsLoaded && DisplayStages.Count > 0)
         {
             <div class="vp-empty-canvas">
-                <AetheusLoader Size="OmniControlSize.Small" />
+                <ZoneVeil />
             </div>
         }
         <div class="@($"vp-canvas-inner{(_positionsLoaded ? string.Empty : " vp-canvas-inner-loading")}")">

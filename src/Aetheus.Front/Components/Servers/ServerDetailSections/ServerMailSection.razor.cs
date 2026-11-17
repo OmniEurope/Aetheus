@@ -8,6 +8,9 @@ public partial class ServerMailSection
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+
+    /// <summary>Recette R-12: what a task adopted on arrival is called, as the page names the task it launches itself.</summary>
+    internal string? AdoptedTitle(string taskName) => MailAdoptedTitles.For(L, taskName);
     [Inject] private IJSRuntime Js { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private ILogger<ServerMailSection> Logger { get; set; } = default!;
@@ -167,6 +170,16 @@ public partial class ServerMailSection
         await Task.WhenAll(domainsReload, accountsReload, aliasesReload);
     }
 
+    // R-10: an action that changes a row without handing back the final one (a DNS check, a key rotation) reads
+    // the lists again, quietly: no bar, the rows stay on screen.
+    private async Task RestoreDataAsync()
+    {
+        var domainsRestore = _domainsGrid?.RestoreRowsAsync() ?? Task.CompletedTask;
+        var accountsRestore = _accountsGrid?.RestoreRowsAsync() ?? Task.CompletedTask;
+        var aliasesRestore = _aliasesGrid?.RestoreRowsAsync() ?? Task.CompletedTask;
+        await Task.WhenAll(domainsRestore, accountsRestore, aliasesRestore);
+    }
+
     // R-119: the state of the stack (the banner above the tabs, the State tab) is read from the backend, which has
     // the agent's new inventory once the heartbeat has arrived; the follower asks for this read before it lifts the
     // veil, instead of leaving it to the live feed's reload a moment later.
@@ -175,15 +188,6 @@ public partial class ServerMailSection
         var banner = _complianceBanner?.ReloadNowAsync() ?? Task.CompletedTask;
         var status = _statusList?.ReloadNowAsync() ?? Task.CompletedTask;
         await Task.WhenAll(banner, status);
-    }
-
-    // A completed task is live data, so the grids refresh quietly (rows, page, filters kept).
-    private async Task RefreshDataAsync()
-    {
-        var domainsRefresh = _domainsGrid?.Refresh() ?? Task.CompletedTask;
-        var accountsRefresh = _accountsGrid?.Refresh() ?? Task.CompletedTask;
-        var aliasesRefresh = _aliasesGrid?.Refresh() ?? Task.CompletedTask;
-        await Task.WhenAll(domainsRefresh, accountsRefresh, aliasesRefresh);
     }
 
     // One page of each list's export, with the grid's sort and column filters.
@@ -300,7 +304,7 @@ public partial class ServerMailSection
         await Dialog.OpenAsync<MailDnsCheckDialog>($"{L["MailVerifyDns"]}: {domain.Name}",
             new Dictionary<string, object?> { { "Check", check } },
             new OmniDialogOptions { Width = "44rem", AutoFocusFirstElement = false });
-        await ReloadDataAsync();
+        await RestoreDataAsync();
     }
 
     // Quota 0 = adopted mailbox whose quota Aetheus does not manage: show the measured size only.
@@ -334,7 +338,7 @@ public partial class ServerMailSection
                 Toast.Success(L["TaskQueued"]);
                 _newDomainName = string.Empty;
                 _newDkimSelector = "default";
-                await ReloadDataAsync();
+                if (_domainsGrid is not null) await _domainsGrid.ShowRowAsync(result);
             }
             else
             {
@@ -360,15 +364,15 @@ public partial class ServerMailSection
         await CreateDomainAsync();
     }
 
-    private async Task DeleteDomainAsync(int domainId)
+    private async Task DeleteDomainAsync(MailDomainDto domain)
     {
         if (BlockedByOfflineAgent()) return;
         _follower?.Expect(L["DeleteDomain"]);
-        var success = await Api.Mail.DeleteMailDomainAsync(ServerId, domainId);
+        var success = await Api.Mail.DeleteMailDomainAsync(ServerId, domain.Id);
         if (success)
         {
             Toast.Success(L["TaskQueued"]);
-            await ReloadDataAsync();
+            if (_domainsGrid is not null) await _domainsGrid.HideRowAsync(domain);
         }
         else
         {
@@ -395,7 +399,7 @@ public partial class ServerMailSection
                 _newAccountEmail = string.Empty;
                 _newAccountPassword = string.Empty;
                 _newAccountQuota = 1024;
-                await ReloadDataAsync();
+                if (_accountsGrid is not null) await _accountsGrid.ShowRowAsync(result);
             }
             else
             {
@@ -431,15 +435,15 @@ public partial class ServerMailSection
 
     private void OpenMailbox(MailAccountDto account) => Nav.NavigateTo($"/servers/{ServerId}/mail/accounts/{account.Id}/mailbox");
 
-    private async Task DeleteAccountAsync(int accountId)
+    private async Task DeleteAccountAsync(MailAccountDto account)
     {
         if (BlockedByOfflineAgent()) return;
         _follower?.Expect(L["DeleteAccount"]);
-        var success = await Api.Mail.DeleteMailAccountAsync(ServerId, accountId);
+        var success = await Api.Mail.DeleteMailAccountAsync(ServerId, account.Id);
         if (success)
         {
             Toast.Success(L["TaskQueued"]);
-            await ReloadDataAsync();
+            if (_accountsGrid is not null) await _accountsGrid.HideRowAsync(account);
         }
         else
         {
@@ -488,7 +492,7 @@ public partial class ServerMailSection
         {
             var setupDone = _assistant?.OwnsSetupTask(notification.TaskId) == true;
             if (Mail.IsInstalled)
-                await Task.WhenAll(RefreshDataAsync(), setupDone ? ReadCountsAsync() : Task.CompletedTask);
+                await Task.WhenAll(RestoreDataAsync(), setupDone ? ReadCountsAsync() : Task.CompletedTask);
             if (_reinstall is not null) await _reinstall.HandleTaskCompletedAsync(notification);
             if (_queueTab is not null) await _queueTab.HandleTaskCompletedAsync(notification);
             if (_logsTab is not null) await _logsTab.HandleTaskCompletedAsync(notification);
@@ -528,7 +532,7 @@ public partial class ServerMailSection
             _newAliasSource = string.Empty;
             _newAliasDest = string.Empty;
             Toast.Success(L["AliasCreated"]);
-            if (_aliasesGrid is not null) await _aliasesGrid.Reload();
+            if (_aliasesGrid is not null) await _aliasesGrid.ShowRowAsync(result);
         }
         else
         {
@@ -555,14 +559,14 @@ public partial class ServerMailSection
         await CreateAliasAsync();
     }
 
-    private async Task DeleteAliasAsync(int aliasId)
+    private async Task DeleteAliasAsync(MailAliasDto alias)
     {
         if (BlockedByOfflineAgent()) return;
         _follower?.Expect(L["DeleteAlias"]);
-        if (await Api.Mail.DeleteMailAliasAsync(ServerId, aliasId))
+        if (await Api.Mail.DeleteMailAliasAsync(ServerId, alias.Id))
         {
             Toast.Success(L["AliasDeleted"]);
-            if (_aliasesGrid is not null) await _aliasesGrid.Reload();
+            if (_aliasesGrid is not null) await _aliasesGrid.HideRowAsync(alias);
         }
         else
         {
@@ -602,7 +606,7 @@ public partial class ServerMailSection
         if (result is not null)
         {
             Toast.Success(L["DkimKeyRotated"]);
-            await ReloadDataAsync();
+            await RestoreDataAsync();
         }
         else
         {

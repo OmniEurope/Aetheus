@@ -46,9 +46,7 @@ public partial class ServerPackageInventory : IDisposable
     private bool AdoptOpenRead()
     {
         if (Busy) return false;
-        var open = Tracker.Tasks.FirstOrDefault(task => task.ServerId == ServerId
-            && task.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned or TaskExecutionStatus.Running
-            && task.Name == InstalledPackages.TaskName);
+        var open = ServerTaskAdoption.FindInFlight(Tracker.Tasks, ServerId, name => name == InstalledPackages.TaskName, includePipelineTasks: true);
         if (open is null) return false;
         _taskId = open.Id;
         _running = true;

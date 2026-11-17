@@ -2,6 +2,7 @@
 using System.Net;
 using Aetheus.Front.Components.Audit;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Audit;
 
@@ -38,7 +39,7 @@ public class AuditDetailDialogTests : BunitContext
 
     /// <summary>Recette R-116: while the chain is verified, OE's busy veil lies over the integrity card; no loader is added.</summary>
     [Fact]
-    public void WhileTheChainIsVerified_TheIntegrityCardIsVeiled_AndNoLoaderIsAdded()
+    public void WhileTheChainIsVerified_ThePageVeilIsHeld_AndNoLoaderIsAdded()
     {
         var verification = new TaskCompletionSource<AuditChainVerificationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/audit/1/verify", _ => verification.Task);
@@ -46,12 +47,12 @@ public class AuditDetailDialogTests : BunitContext
         var cut = Render<AuditDetailDialog>(p => p.Add(c => c.Log, Sample()));
 
         cut.WaitForAssertion(() => Assert.Contains("AuditVerifying", cut.Markup));
-        Assert.Equal("true", cut.Find(".omni-busy").GetAttribute("aria-busy"));
+        Assert.True(Services.GetRequiredService<BusyVeil>().IsBusy);
         Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
 
         verification.SetResult(new AuditChainVerificationResult { IsValid = true, TotalEntries = 7 });
         cut.WaitForAssertion(() => Assert.Contains("AuditChainIntact", cut.Markup));
-        Assert.Empty(cut.FindAll(".omni-busy"));
+        Assert.False(Services.GetRequiredService<BusyVeil>().IsBusy);
     }
 
     [Fact]

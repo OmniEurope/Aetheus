@@ -54,7 +54,7 @@ public sealed class UserPipelineOwnershipGuardTests
         IUserRepository repo, IHttpContextAccessor http, IAuditService audit, IDomainEventDispatcher events) =>
         new(repo, http, audit, Substitute.For<IResourceAuthorizationService>(), new MemoryCache(new MemoryCacheOptions()),
             TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), Substitute.For<IUserChangeNotifier>(), events,
-            Substitute.For<Aetheus.Back.Services.IOrganizationRoleAssignmentService>());
+            Substitute.For<Aetheus.Back.Services.IOrganizationRoleAssignmentService>(), LeaderLeaseDouble.Leader());
 
     private static UpdateUserRequest Deactivate(string? transferTo = null, bool force = false) => new()
     {

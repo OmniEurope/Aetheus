@@ -692,6 +692,74 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
             (_, _) => Task.CompletedTask,
             TestContext.Current.CancellationToken);
 
+    private sealed class ManifestOnlyHandler(Func<HttpResponseMessage> manifest) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(manifest());
+    }
+
+    private static AgentReleaseManifestDto ManifestWith(string commit, params AgentReleaseArchiveDto[] archives) => new()
+    {
+        SoftwareVersion = VersionedLinuxHandler.Version,
+        ProtocolVersion = Aetheus.Shared.Components.Shared.AgentProtocol.CurrentVersion,
+        MinimumSupportedProtocol = Aetheus.Shared.Components.Shared.AgentProtocol.CurrentVersion - 1,
+        MaximumSupportedProtocol = Aetheus.Shared.Components.Shared.AgentProtocol.MaximumSupportedVersion,
+        Commit = commit,
+        Archives = [.. archives]
+    };
+
+    private static AgentReleaseArchiveDto Archive(string platform) => new()
+    {
+        Platform = platform,
+        Architecture = "x64",
+        FileName = $"aetheus-agent-{platform}-x64-v{VersionedLinuxHandler.Version}.tar.gz",
+        SizeBytes = 10,
+        Sha256 = new string('a', 64)
+    };
+
+    // R-113: a server without agent-release-manifest.json or without the archive of the version says so,
+    // instead of calling the manifest invalid; a manifest that really disagrees keeps "invalid".
+    [Theory]
+    [InlineData("absent-404", "release archive absent")]
+    [InlineData("absent-no-archives", "release archive absent")]
+    [InlineData("absent-no-linux-archive", "release archive absent")]
+    [InlineData("invalid-commit", "release manifest invalid")]
+    public async Task Execute_ReportsAbsentReleaseArchiveApartFromAnInvalidManifest(string scenario, string expected)
+    {
+        var good = new string('e', 40);
+        var handler = new ManifestOnlyHandler(() => scenario switch
+        {
+            "absent-404" => new HttpResponseMessage(HttpStatusCode.NotFound),
+            "absent-no-archives" => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(ManifestWith("development"))
+            },
+            "absent-no-linux-archive" => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(ManifestWith(good, Archive("windows")))
+            },
+            _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(ManifestWith("not-a-commit", Archive("linux")))
+            }
+        });
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient(Arg.Any<string>()).Returns(_ => new HttpClient(handler));
+        var sut = new AgentSelfUpdateOperationExecutor(
+            factory,
+            Options.Create(new AetheusAgentOptions { WorkDirectory = _workDir, ServerUrl = "https://backend.test" }),
+            _api, _state, NullLogger<AgentSelfUpdateOperationExecutor>.Instance);
+        sut.IsWindowsOverride = false;
+
+        var result = await RunVersionedLinux(sut);
+
+        Assert.Equal(-1, result.ExitCode);
+        await _api.Received().ReportUpdateProgressAsync(7,
+            Arg.Is<Aetheus.Shared.Components.Servers.AgentUpdateProgressReport>(
+                r => r.Phase == AgentUpdatePhase.Failed && r.Message == expected),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Execute_ValidLinuxArchive_RequestsQualifiedFullPostureUpgrade()
     {

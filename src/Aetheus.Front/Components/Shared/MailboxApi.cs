@@ -71,6 +71,15 @@ public sealed class MailboxApi(HttpClient http) : ApiClientBase(http)
             new Dictionary<string, string?> { ["folder"] = folder, ["loadImages"] = loadImages ? "true" : "false" }),
             null, ct);
 
+    /// <summary>The absolute URL of a message document path (<see cref="MailboxMessageDto.DocumentPath"/>), on the
+    /// same API base address as every other call; the reading frame loads it.</summary>
+    public string DocumentUrl(string documentPath)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(documentPath);
+        var baseAddress = Http.BaseAddress ?? throw new InvalidOperationException("The API client has no base address.");
+        return new Uri(baseAddress, documentPath).AbsoluteUri;
+    }
+
     public Task<MailboxResult<MailboxDraftDto>> GetDraftAsync(
         int serverId, int accountId, string folder, uint uid, MailboxComposeMode mode, string language, CancellationToken ct = default) =>
         SendAsync<MailboxDraftDto>(HttpMethod.Get, QueryHelpers.AddQueryString(

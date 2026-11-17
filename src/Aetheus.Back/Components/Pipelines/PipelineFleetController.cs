@@ -8,8 +8,29 @@ namespace Aetheus.Back.Components.Pipelines;
 public sealed class PipelineFleetController(
     IPipelineFleetService fleetService,
     IResourceAuthorizationService authz,
-    IPipelineTemplateService templateService) : ControllerBase
+    IPipelineTemplateService templateService,
+    IPipelineFleetBulkUpdateService bulkUpdateService) : ControllerBase
 {
+    /// <summary>R-8: "Update all pipelines". Every pipeline of the caller's fleet (or of one project) pinned on an
+    /// older version of a shipped template (generic or versioned, R-45) moves to its latest version, each one under the authorization of
+    /// the single update (<see cref="ApplyFleetUpdate"/>); a pipeline the caller may not update is reported, untouched.</summary>
+    [HttpPost("fleet-update/generic-templates")]
+    public async Task<ActionResult<PipelineFleetBulkUpdateResultDto>> ApplyGenericTemplatesUpdate(
+        [FromBody] PipelineFleetBulkUpdateRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var accessiblePipelineIds = await authz.GetAccessibleResourceIdsAsync(
+            User, ResourceType.Pipeline, Permission.Read, ct);
+        if (accessiblePipelineIds is { Count: 0 })
+            return Ok(new PipelineFleetBulkUpdateResultDto());
+        var organizationIds = User.IsInRole("Admin")
+            ? null
+            : await authz.GetUserOrganizationIdsAsync(User, ct);
+        return Ok(await bulkUpdateService.UpdateGenericTemplatesAsync(
+            request.ProjectId, organizationIds, accessiblePipelineIds,
+            (pipelineId, token) => CanUseTemplateAsync(pipelineId, Permission.Read, token), ct));
+    }
+
     [HttpGet("fleet")]
     public async Task<ActionResult<PaginatedResult<PipelineFleetItemDto>>> GetFleet(
         [FromQuery] PipelineFleetPaginationRequest request, CancellationToken ct)
@@ -84,6 +105,10 @@ public sealed class PipelineFleetController(
         // extends: a site Admin's decision (as in PipelineTemplatesController).
         if (!User.IsInRole("Admin")
             && await templateService.IsSharedCatalogNameAsync(request.TemplateName, item.OrganizationId, ct))
+            return Forbid();
+        // The YAML given here rewrites the pipeline: same rule as PUT api/pipelines/{id} and its schedule route.
+        if (await fleetService.ExtractionTurnsScheduleOnAsync(id, request, ct)
+            && !await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, id, ct))
             return Forbid();
         return Ok(await fleetService.ExtractAsync(id, request, ct));
     }

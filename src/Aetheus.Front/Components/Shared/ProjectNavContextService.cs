@@ -13,7 +13,8 @@ public sealed class ProjectNavContextService : IDisposable
 {
     private static readonly string[] TrackedPrefixes =
     [
-        "projects/", "vaults/", "releases/", "pipelines/", "variable-libraries/", "environments/", "git-repositories", "artifacts/"
+        "projects/", "vaults/", "releases/", "pipelines/", "variable-libraries/", "environments/", "git-repositories", "artifacts/",
+        "analysis/findings/", "analysis/cve-watch/runs/"
     ];
 
     private readonly NavigationManager _nav;

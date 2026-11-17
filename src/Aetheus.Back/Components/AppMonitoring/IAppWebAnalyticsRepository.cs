@@ -48,6 +48,11 @@ public interface IAppWebAnalyticsRepository
         DateTime? lastIngestAtUtc,
         CancellationToken ct = default);
 
+    /// <summary>The app's daily visitors since <paramref name="sinceDayUtc"/>, newest first visit first: when
+    /// each came and on which page (no IP address, no user agent).</summary>
+    Task<IReadOnlyList<AppWebAnalyticsVisitorDto>> GetVisitorsAsync(
+        int appId, DateOnly sinceDayUtc, int limit, CancellationToken ct = default);
+
     Task<WebAnalyticsPurgeResult> PurgeAsync(
         DateTime eventCutoffUtc,
         DateTime sessionCutoffUtc,

@@ -23,6 +23,9 @@ public partial class EnvironmentEdit
     /// local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
 
+    /// <summary>R-10: the form first (the default tab, clean URL), then the database's expand/contract tracking.</summary>
+    private static readonly string[] TabSlugs = ["overview", "expand-contract"];
+
     private EnvironmentDto? _detail;
     private EnvironmentModel _model = new();
     private List<ProjectDto> _projects = [];

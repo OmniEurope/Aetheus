@@ -15,7 +15,6 @@ public static partial class OperationTargetValidator
         OperationKind.SystemPackageUpgrade,
         OperationKind.CertbotRenewAll,
         OperationKind.CertbotNormalize,
-        OperationKind.CertbotRenewalCheck,
         OperationKind.RkhunterScan,
         OperationKind.RkhunterUpdate,
         OperationKind.RkhunterPropupd,
@@ -116,9 +115,10 @@ public static partial class OperationTargetValidator
         OperationKind.MailSetQuota
     ];
 
+    // Log reads only: an existing server may live anywhere the collector found it. The install
+    // itself (TeamspeakSetup) has its own, narrower rule, see TeamspeakSetupInstallPathRegex.
     private static readonly HashSet<OperationKind> s_teamspeakPathTargets =
     [
-        OperationKind.TeamspeakSetup,
         OperationKind.TeamspeakGetLogs
     ];
 
@@ -173,6 +173,15 @@ public static partial class OperationTargetValidator
 
     [GeneratedRegex(@"^/(?!.*\.\.)[a-zA-Z0-9._/-]{1,127}$")]
     public static partial Regex TeamspeakInstallPathRegex();
+
+    // DEPLOY-001: the root-owned teamspeak-setup helper extracts the server into this path and then
+    // chowns it recursively to the teamspeak user, so it must be a dedicated directory, never /etc,
+    // /usr or /home. The install lives under /opt in a directory whose name starts with "teamspeak"
+    // (the default is /opt/teamspeak3-server_linux_amd64), each segment starts with a letter, digit,
+    // underscore or dash (no ".", no "..", no empty segment, no trailing slash), 127 characters at most.
+    // The helper applies the same rule again and also refuses a symbolic link on the way.
+    [GeneratedRegex(@"^(?=.{1,127}\z)(?!.*\.\.)/opt/teamspeak[a-zA-Z0-9._-]{0,63}(/[a-zA-Z0-9_-][a-zA-Z0-9._-]{0,63})*\z")]
+    public static partial Regex TeamspeakSetupInstallPathRegex();
 
     [GeneratedRegex(@"^[a-zA-Z0-9_-]{1,64}$")]
     public static partial Regex DeployAppRegex();
@@ -246,6 +255,19 @@ public static partial class OperationTargetValidator
         return null;
     }
 
+    /// <summary>Recette R-19: the certificate names of a <see cref="OperationKind.CertbotRenewalCheck"/> target; empty
+    /// for <see cref="CertbotRenewalCheckTarget.All"/>, null when the target is neither that nor 1 to
+    /// <see cref="CertbotRenewalCheckTarget.MaxNames"/> distinct valid certificate names.</summary>
+    public static IReadOnlyList<string>? CertbotRenewalCheckNames(string? target)
+    {
+        if (string.IsNullOrEmpty(target)) return null;
+        if (target == CertbotRenewalCheckTarget.All) return [];
+        var names = target.Split(CertbotRenewalCheckTarget.Separator);
+        if (names.Length > CertbotRenewalCheckTarget.MaxNames || names.Distinct(StringComparer.Ordinal).Count() != names.Length) return null;
+        // The pattern ends with "$", which also accepts a final line feed: control characters are refused here.
+        return names.All(name => CertbotCertNameRegex().IsMatch(name) && !name.Any(char.IsControl)) ? names : null;
+    }
+
     private static bool? ValidateWebTarget(OperationKind kind, string target)
     {
         if (s_apacheServiceTargets.Contains(kind))
@@ -264,6 +286,8 @@ public static partial class OperationTargetValidator
             return target == "-";
         if (kind == OperationKind.CertbotObtain)
             return MailValidation.IsValidDomainName(target);
+        if (kind == OperationKind.CertbotRenewalCheck)
+            return CertbotRenewalCheckNames(target) is not null;
         if (s_certificateTargets.Contains(kind))
             return CertbotCertNameRegex().IsMatch(target);
         return null;
@@ -307,6 +331,8 @@ public static partial class OperationTargetValidator
             return ComposeProjectRegex().IsMatch(target);
         if (kind == OperationKind.TeamspeakServerQuery)
             return TeamspeakQueryRegex().IsMatch(target);
+        if (kind == OperationKind.TeamspeakSetup)
+            return TeamspeakSetupInstallPathRegex().IsMatch(target);
         if (s_teamspeakPathTargets.Contains(kind))
             return TeamspeakInstallPathRegex().IsMatch(target);
         if (kind is OperationKind.TeamspeakGracefulRestart or OperationKind.TeamspeakStart

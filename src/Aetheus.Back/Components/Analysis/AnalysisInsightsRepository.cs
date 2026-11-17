@@ -35,12 +35,14 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
+            // A null package URL never matches (NULL LIKE is not true): no per-row COALESCE needed.
             query = query.Where(item => item.VulnerabilityId.ToLower().Contains(search)
                 || item.ComponentName.ToLower().Contains(search)
-                || (item.PackageUrl ?? string.Empty).ToLower().Contains(search));
+                || (item.PackageUrl != null && item.PackageUrl.ToLower().Contains(search)));
         }
-        var total = await query.CountAsync(ct).ConfigureAwait(false);
-        query = (request.SortBy, request.SortDescending) switch
+        // Every observation of a snapshot shares its ObservedAt, and a severity or an id repeats: the id as the
+        // last key keeps a page from repeating or skipping rows of the next one.
+        var ordered = (request.SortBy, request.SortDescending) switch
         {
             ("Severity", false) => query.OrderBy(item => item.Severity),
             ("Severity", true) => query.OrderByDescending(item => item.Severity),
@@ -49,7 +51,10 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             ("ObservedAt", false) => query.OrderBy(item => item.ObservedAt),
             _ => query.OrderByDescending(item => item.ObservedAt)
         };
-        return (await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct).ConfigureAwait(false), total);
+        var items = await ordered.ThenByKey(item => item.Id, descending: true)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct).ConfigureAwait(false);
+        var total = await query.CountGivenPageAsync(page, pageSize, items.Count, ct).ConfigureAwait(false);
+        return (items, total);
     }
 
     public async Task<(int Count, long Bytes)> GetProjectIngestUsageAsync(
@@ -330,7 +335,9 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
                 ComponentCount = report.Components.Count,
                 MetricCount = report.Metrics.Count,
                 BlockerCount = report.Evaluation == null ? 0 : report.Evaluation.BlockerCount,
-                WarningCount = report.Evaluation == null ? 0 : report.Evaluation.WarningCount
+                WarningCount = report.Evaluation == null ? 0 : report.Evaluation.WarningCount,
+                ReportPath = report.ReportPath,
+                ErrorMessage = report.ErrorMessage
             })
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -371,11 +378,22 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             evaluationSnapshots.Select(snapshot => snapshot.GradeSnapshotJson),
             pipelineRunId: runId);
 
-        var missingProducers = AnalysisProducerMatcher.FindMissingProducers(expectedProducers, reports);
-        var status = ResolveGateStatus(reports, missingProducers, grade);
+        var missingProducers = AnalysisProducerMatcher.FindMissing(expectedProducers, reports);
+        // Recette R-21: a producer that published nothing is named with what became of its task.
+        var producerTaskDetails = await AnalysisGateProducerStates.DescribeAsync(
+            db, missingProducers.Where(missing => missing.TaskId.HasValue).Select(missing => missing.TaskId!.Value), ct)
+            .ConfigureAwait(false);
+        var errorCauses = AnalysisGateVerdict.ErrorCauses(runId, reports, missingProducers, grade, producerTaskDetails);
+        var status = AnalysisGateVerdict.Resolve(reports, errorCauses, grade);
+        var runNumber = await db.PipelineRuns.AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => run.BuildNumber)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
         return new AnalysisRunGateDto
         {
             PipelineRunId = runId,
+            PipelineRunNumber = runNumber,
             Status = status,
             ReportCount = reports.Count,
             // Count findings rather than report occurrences so multiple producers cannot inflate
@@ -389,7 +407,9 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             BlockerCount = reports.Sum(report => report.BlockerCount),
             WarningCount = reports.Sum(report => report.WarningCount),
             Grade = grade,
-            MissingProducers = missingProducers,
+            MissingProducers = [.. missingProducers.Select(missing => missing.Token)],
+            ErrorCauses = errorCauses,
+            UnreadableEvidence = AnalysisGateUnreadableEvidence.Find(evaluationSnapshots, reports),
             Reports = reports,
             Findings = findings,
             Violations = violations
@@ -416,35 +436,6 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
                     && (policy.ProjectId == null || policy.ProjectId == owner.ProjectId))
                 .ToListAsync(ct).ConfigureAwait(false);
         return AnalysisGatePolicyNames.Apply(violations, [.. stored, .. AnalysisDefaultPolicyCatalog.Policies]);
-    }
-
-    /// <summary>The run's gate verdict: an operational error (no report, a missing or failed producer,
-    /// a grading that measured nothing) wins over a block, a block (a blocking report or a grade below the
-    /// minimum) over a warning. A grading rule the validator rejects is no operational error: it is a measure graded
-    /// F (run #2958), so it blocks through the minimum grade like any other F. A grade resting on part of the
-    /// required measures is still a grade (recette R-73, R-74): the measures nobody observed are listed on the Gate tab with their step, and a producer that ran and
-    /// published nothing is already a missing producer. Extracted from <see cref="GetRunGateAsync"/> to keep it under
-    /// the complexity budget.</summary>
-    private static AnalysisGateStatus ResolveGateStatus(
-        List<AnalysisRunGateReportDto> reports,
-        List<string> missingProducers,
-        AnalysisGradeSummaryDto? grade)
-    {
-        var hasOperationalError = reports.Count == 0 || missingProducers.Count > 0 || reports.Any(report =>
-            report.ReportStatus is AnalysisReportStatus.Error or AnalysisReportStatus.TimedOut or AnalysisReportStatus.Unavailable
-            || report.GateStatus is null or AnalysisGateStatus.Error)
-            || grade is { OverallGrade: null, Completeness: AnalysisGradeCompleteness.Incomplete };
-        if (hasOperationalError) return AnalysisGateStatus.Error;
-        var gradeBlocks = grade?.OverallGrade.HasValue == true
-            && (grade.MinimumGrade.HasValue
-                ? grade.OverallGrade.Value > grade.MinimumGrade.Value
-                // Only a rejected minimum_grade leaves a graded summary without a minimum: its F cannot pass.
-                : grade.OverallGrade.Value == AnalysisGrade.F);
-        if (gradeBlocks || reports.Any(report => report.GateStatus == AnalysisGateStatus.Blocked))
-            return AnalysisGateStatus.Blocked;
-        return reports.Any(report => report.GateStatus == AnalysisGateStatus.Warning)
-            ? AnalysisGateStatus.Warning
-            : AnalysisGateStatus.Passed;
     }
 
     private static bool IsProducerForScope(ExpectedAnalysisProducer producer, string scope)

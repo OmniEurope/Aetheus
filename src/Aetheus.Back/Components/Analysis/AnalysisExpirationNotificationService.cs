@@ -8,20 +8,11 @@ public sealed class AnalysisExpirationNotificationService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<AnalysisExpirationNotificationService> logger,
-    IPostgresLeaderLease? leaderLease = null) : BackgroundService
+    IPostgresLeaderLease leaderLease) : LeaderBackgroundService(leaderLease, "aetheus:analysis-expiration-notifications")
 {
     private static readonly TimeSpan NoticeWindow = TimeSpan.FromDays(7);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        if (leaderLease is null)
-            await RunLeaderLoopAsync(stoppingToken).ConfigureAwait(false);
-        else
-            await leaderLease.RunAsLeaderAsync(
-                "aetheus:analysis-expiration-notifications", RunLeaderLoopAsync, stoppingToken).ConfigureAwait(false);
-    }
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         await RunCycleAsync(stoppingToken).ConfigureAwait(false);
         using var timer = new PeriodicTimer(BackendRuntimeDefaults.MaintenanceInterval, timeProvider);

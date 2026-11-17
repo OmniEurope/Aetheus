@@ -51,6 +51,10 @@ public static class AgentCapabilities
     public const string AiExecution = "ai.run";
     public const string Backup = "backup.manage";
 
+    /// <summary>Recette R-8: the agent may reboot its host for a scheduled reboot (<c>ServerReboot</c>). A grant
+    /// capability, published only where the argv-exact <c>aetheus-reboot</c> sudoers drop-in is installed.</summary>
+    public const string HostReboot = "host.reboot";
+
     /// <summary>Identifies agents supporting unprivileged TCP listener observation. The backend
     /// refuses on-demand scans when this software capability is absent.</summary>
     public const string PortObservation = "ports.observe";
@@ -149,6 +153,7 @@ public static class AgentCapabilities
         >= OperationKind.DockerRestartContainer and <= OperationKind.DockerBuildImage => DockerExecution,
         >= OperationKind.DockerRemoveContainer and <= OperationKind.DockerPrune => DockerManagement,
         OperationKind.SystemPackageUpgrade => PatchManagement,
+        OperationKind.ServerReboot => HostReboot,
         >= OperationKind.ApacheReload and <= OperationKind.ApacheDeleteSite => ApacheManagement,
         OperationKind.ApacheEnableModule or OperationKind.ApacheDisableModule => ApacheModules,
         >= OperationKind.CertbotObtain and <= OperationKind.CertbotRemoveDomain => CertbotManagement,

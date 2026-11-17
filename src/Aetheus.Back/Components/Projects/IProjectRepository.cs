@@ -17,7 +17,14 @@ public sealed record ProjectListInsight(
     ProjectProductionStatus ProductionStatus,
     int? OnlineUserCount,
     bool LastRunIsActive = false,
-    string? LastRunCurrentStep = null);
+    string? LastRunCurrentStep = null,
+    int? LastRunNumber = null,
+    AnalysisQualificationDto? GradeQualification = null,
+    OnlineAudienceState OnlineUserState = OnlineAudienceState.Unavailable,
+    DateTime? OnlineUserLastEventAt = null);
+
+/// <summary>The pipeline a run belongs to.</summary>
+public sealed record RunPipelineRef(int PipelineId, string PipelineName);
 
 public interface IProjectRepository
 {
@@ -37,7 +44,15 @@ public interface IProjectRepository
 
     /// <summary>Returns only the current project quality grade required by the detail
     /// page.</summary>
+    /// <summary>R-8: the number a person reads for each run, by technical key.</summary>
+    Task<IReadOnlyDictionary<int, int>> GetRunNumbersAsync(IEnumerable<int> runIds, CancellationToken ct = default);
     Task<AnalysisGradeSummaryDto?> GetLatestGateGradeAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>The pipeline a run belongs to (the cause shown beside a grade below A); null when the run is unknown.</summary>
+    Task<RunPipelineRef?> GetRunPipelineAsync(int runId, CancellationToken ct = default);
+
+    /// <summary>R-29: the address the project's latest successful production deployment run deployed; null when no run did.</summary>
+    Task<PipelineRunDeployedAddressDto?> GetProductionAddressAsync(int projectId, CancellationToken ct = default);
 
     Task<Project?> GetProjectDetailAsync(int id, CancellationToken ct = default);
 

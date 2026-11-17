@@ -52,6 +52,7 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
     {
         ct.ThrowIfCancellationRequested();
         string? binary = null;
+        Task<ApacheRunState>? runningTask = null;
         try
         {
             (binary, var ctlBinary) = await DetectBinariesAsync(ct).ConfigureAwait(false);
@@ -64,7 +65,7 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
             var ctl = ctlBinary ?? (IsWindows ? binary : "apache2ctl");
 
             var versionTask = CollectVersionAsync(binary, ct);
-            var runningTask = CollectRunningStateAsync(ct);
+            runningTask = CollectRunStateOrThrowAsync(ct);
             var modulesTask = CollectModulesAsync(ctl, ct);
             var vhostsTask = CollectVirtualHostsAsync(ctl, ct);
             var configRootTask = DetectConfigRootAsync(ct);
@@ -87,7 +88,9 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
                 CollectionDiagnostics = diagnostics
             };
         }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
+        // A failed running-state probe is not a degraded inventory that says "stopped": the failure surfaces, and the
+        // heartbeat's cache keeps the last collected state (R-17). Any other partial failure stays degraded below.
+        catch (Exception ex) when (!ct.IsCancellationRequested && runningTask is not { IsFaulted: true })
         {
             // F-ENG-06: if the binary was detected, Apache IS installed - a later partial-collection failure
             // must not be reported as "not installed", and it must be visible (LogWarning), not hidden in Debug.
@@ -101,6 +104,19 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
                 CollectionDegraded = installed,
                 CollectionDiagnostics = installed ? "Apache data collection failed; see agent logs." : string.Empty
             };
+        }
+    }
+
+    public async Task<ApacheRunState?> CollectRunStateAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await CollectRunStateOrThrowAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Logger.LogDebug(ex, "Failed to read the Apache running state");
+            return null;
         }
     }
 
@@ -151,19 +167,13 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
         }
     }
 
-    private async Task<(bool IsRunning, int? Pid)> CollectRunningStateAsync(CancellationToken ct)
+    /// <summary>The running state, or the failure of the probe: a read that failed is not "stopped".</summary>
+    private async Task<ApacheRunState> CollectRunStateOrThrowAsync(CancellationToken ct)
     {
-        try
-        {
-            return IsWindows
-                ? await CollectRunningStateWindowsAsync(ct).ConfigureAwait(false)
-                : await CollectRunningStateLinuxAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            Logger.LogDebug(ex, "Failed to check Apache running state");
-            return (false, null);
-        }
+        var (isRunning, pid) = IsWindows
+            ? await CollectRunningStateWindowsAsync(ct).ConfigureAwait(false)
+            : await CollectRunningStateLinuxAsync(ct).ConfigureAwait(false);
+        return new ApacheRunState(isRunning, pid);
     }
 
     private async Task<(bool IsRunning, int? Pid)> CollectRunningStateWindowsAsync(CancellationToken ct)
@@ -295,12 +305,39 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
             await EnrichWithDocumentRootsAsync(result, ct).ConfigureAwait(false);
             EnrichWithEnabledState(result);
             result.AddRange(DisabledSites());
+            result = await EnrichWithForeignOwnersAsync(result, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             Logger.LogDebug(ex, "Failed to collect Apache virtual hosts");
         }
         return (result, degraded, diagnostics);
+    }
+
+    /// <summary>The account that agent runs as; a site file owned by another account is one it cannot delete.</summary>
+    internal Func<string> AgentUser { get; init; } = static () => Environment.UserName;
+
+    /// <summary>
+    /// Recette R-14: reports, per site, the account that owns its file when it is not the agent's own (the sticky
+    /// sites directories let the agent unlink only its own entries). One shell-free <c>stat</c> reads every owner; when
+    /// it cannot run or does not answer for a file, that site reports no owner rather than a guessed one.
+    /// </summary>
+    private async Task<List<ApacheVirtualHostDto>> EnrichWithForeignOwnersAsync(List<ApacheVirtualHostDto> vhosts, CancellationToken ct)
+    {
+        if (IsWindows || vhosts.Count == 0) return vhosts;
+        try
+        {
+            var paths = ApacheSiteFileOwners.PathsToRead(vhosts, SitesAvailableDirectory, SitesEnabledDirectory);
+            if (paths.Count == 0) return vhosts;
+            var stat = await Shell.RunExecAsync("stat", ["-c", ApacheSiteFileOwners.StatFormat, "--", .. paths], ct).ConfigureAwait(false);
+            var owners = ApacheSiteFileOwners.Parse(stat?.StdOut ?? string.Empty);
+            return ApacheSiteFileOwners.Apply(vhosts, owners, AgentUser(), SitesAvailableDirectory, SitesEnabledDirectory);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            Logger.LogDebug(ex, "Failed to read the owners of the Apache site files");
+            return vhosts;
+        }
     }
 
     private async Task EnrichWithDocumentRootsAsync(List<ApacheVirtualHostDto> vhosts, CancellationToken ct)

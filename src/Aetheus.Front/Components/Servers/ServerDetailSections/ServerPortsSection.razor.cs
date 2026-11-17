@@ -12,7 +12,9 @@ public partial class ServerPortsSection
     /// never phoned home, so the scan is neither offered nor declared impossible.</summary>
     [Parameter] public bool? PortObservationAvailable { get; set; }
 
-    /// <summary>When the host's ports were last scanned, null when never.</summary>
+    /// <summary>When the host's ports were last scanned, null when never. The layout loads it with the
+    /// server and no heartbeat refreshes it, so it is only the fallback when the section cannot read
+    /// the server's own scan time (see <see cref="LastScanAt"/>).</summary>
     [Parameter] public DateTime? PortsObservedAt { get; set; }
 
     /// <summary>The agent is reachable. A scan queued for an offline agent would sit Pending.</summary>
@@ -70,29 +72,44 @@ public partial class ServerPortsSection
     private string? _scanError;
     private bool _loading = true;
     private bool _busy;
+
+    /// <summary>R-22: the reservation form is folded by default and stays as the reader left it.</summary>
+    private bool _formExpanded;
     private bool _scanning;
 
     // R-119: the scan is a queued agent task: it is followed, and the section is veiled until it ends.
     private ServerTaskFollower? _follower;
+    private ServerFollowerBusyLink? _busyLink;
     private int? _loadedServerId;
     private int _loadGeneration;
 
+    // R-12: the scan button stays disabled while a scan adopted on arrival runs, as while this page's own runs.
+    private bool ScanBusy => _scanning || (_busyLink?.Busy ?? false);
+
+    protected override void OnAfterRender(bool firstRender) =>
+        (_busyLink ??= new ServerFollowerBusyLink(() => _ = InvokeAsync(StateHasChanged))).Follower = _follower;
+
+    /// <summary>Recette R-12: what the scan adopted on arrival is called, as the page names its own.</summary>
+    internal string? AdoptedTitle(string taskName) => ServerAdoptedTaskTitles.Resolve(taskName,
+        [ServerAdoptedTaskTitles.Key(L, ServerTaskNames.PortObservation, "PortScanRefresh")]);
+
     private bool CanWrite => Permissions.Can(PermissionKeys.ServerPortsReserve, ServerId);
 
-    private bool CanScan => !_scanning && AgentOnline && PortObservationAvailable == true;
+    private bool CanScan => !ScanBusy && AgentOnline && PortObservationAvailable == true;
 
     /// <summary>
-    /// The newest scan this page knows of. <see cref="PortsObservedAt"/> comes from the server DTO the
-    /// layout loaded once, and a scan reported by a heartbeat never refreshes it, so on its own it can
-    /// still say "never scanned" above rows that scan just stamped. Every scan stamps its rows with its
-    /// own time (<c>PortObservationWriter</c>), so the newest row stamp is a server-clock scan time too.
+    /// When the server was last scanned, as the server itself says. <see cref="PortsObservedAt"/> comes
+    /// from the server DTO the layout loaded once, and a scan reported by a heartbeat never refreshes
+    /// it, so the section reads the scan time with the rows (<see cref="LoadScanTimeAsync"/>), the same
+    /// moment, so the two describe one state. A row stamp is never used as a scan time: a scan stamps a
+    /// claim it confirmed but leaves an unchanged observed row unwritten (<c>PortObservationWriter</c>),
+    /// and a claim whose port stopped listening keeps its old stamp, so the newest stamp can be far
+    /// older than the last scan. The DTO value stands in only when the server's could not be read.
     /// </summary>
-    internal DateTime? LastScanAt => Latest(PortsObservedAt, _newestRowStamp);
+    internal DateTime? LastScanAt => _scanTimeRead ? _serverScanAt : PortsObservedAt;
 
-    private DateTime? _newestRowStamp;
-
-    private static DateTime? Latest(DateTime? left, DateTime? right) =>
-        left is null ? right : right is null ? left : left > right ? left : right;
+    private DateTime? _serverScanAt;
+    private bool _scanTimeRead;
 
     private string ScanCaption => LastScanAt is { } at
         ? string.Format(CultureInfo.CurrentCulture, L["PortLastScan"].Value, at.ToString("g", CultureInfo.CurrentCulture))
@@ -165,7 +182,8 @@ public partial class ServerPortsSection
             }
 
             Toast.Success("PortAllocated");
-            await LoadAsync();
+            // R-10: the answer is the port numbers alone, so the rows come from a read that does not hide the grid.
+            await LoadAsync(live: true);
         }
         catch (HttpRequestException)
         {
@@ -210,8 +228,8 @@ public partial class ServerPortsSection
     {
         if (_loadedServerId == ServerId)
         {
-            // The scan timestamp arrives through the server DTO, so a heartbeat can move it without
-            // the reservations changing; the rows are rebuilt so "listening" follows it.
+            // The server DTO's scan timestamp is the fallback of LastScanAt (used only when the
+            // section's own read failed), so a new value is followed by rebuilding the rows.
             BuildRows();
             return;
         }
@@ -229,6 +247,10 @@ public partial class ServerPortsSection
         if (!live) _loading = true;
         try
         {
+            // The scan time is read BEFORE the rows: a scan landing between the two leaves rows stamped
+            // at or after the scan time we hold, which reads "listening"; the other order would hold a
+            // scan time newer than every stamp and turn each live claim into "not listening".
+            var scanTime = await LoadScanTimeAsync(serverId);
             var reservations = await Api.ServerTools.GetPortReservationsAsync(serverId);
             // The project list only feeds the "linked project" dropdown, so a server with no projects
             // (or a caller who cannot read them) still gets a usable page.
@@ -238,6 +260,7 @@ public partial class ServerPortsSection
             if (live && _grid is not null) await _grid.RefreshAsync();
             _reservations = reservations;
             _projects = projects;
+            (_scanTimeRead, _serverScanAt) = scanTime;
             if (range is not null)
             {
                 _rangeFrom = range.From;
@@ -261,6 +284,18 @@ public partial class ServerPortsSection
     }
 
     /// <summary>
+    /// Reads <c>Server.PortsObservedAt</c>, written on every scan, through the port check with no port
+    /// asked: it answers with the server's scan time and nothing else. <c>Read</c> is false when the
+    /// check was refused or failed, so the caller falls back to the DTO value instead of treating the
+    /// server as never scanned.
+    /// </summary>
+    private async Task<(bool Read, DateTime? ScanAt)> LoadScanTimeAsync(int serverId)
+    {
+        var check = await Api.ServerTools.CheckPortsAsync(serverId, new PortCheckRequest { Ports = [] });
+        return check is null ? (false, null) : (true, check.LastScanAt);
+    }
+
+    /// <summary>
     /// Crosses the two sources into one list. A claim keeps its row and gains a listening verdict; an
     /// observed port that a claim already covers is not repeated, because it is the same port, and the
     /// claim is the row an operator acts on. An observed port nobody claimed stays visible on its own -
@@ -274,7 +309,6 @@ public partial class ServerPortsSection
         // FRONT-018: a port is the pair (number, protocol). A TCP claim on 53 says nothing about a UDP
         // listener on 53, which stays visible as an unclaimed observation.
         var claimedPorts = claimed.Select(PortKey).ToHashSet();
-        _newestRowStamp = _reservations.Max(reservation => reservation.ObservedAt);
 
         var rows = new List<PortRow>(_reservations.Count);
         foreach (var reservation in claimed)
@@ -299,9 +333,9 @@ public partial class ServerPortsSection
     /// what keeps an old sighting from being read as a live listener.
     ///
     /// The comparison is "not older than" rather than "equal" because the two values arrive on
-    /// different responses: the reservations come from this section, the scan time from the server the
-    /// layout keeps refreshed on heartbeats, so a scan landing between the two would otherwise turn
-    /// every live listener into "not observed" until the next reload.
+    /// different responses (scan time first, then the reservations, see <see cref="LoadAsync"/>), so a
+    /// scan landing between the two would otherwise turn every live listener into "not observed" until
+    /// the next reload.
     /// </summary>
     private ListeningState ListeningFor(PortReservationDto reservation)
     {
@@ -351,8 +385,9 @@ public partial class ServerPortsSection
             _form.OwnerLabel = string.Empty;
             _form.ProjectId = null;
             Toast.Success("PortReservationAdded");
-            // Reloaded rather than appended: the creation response carries no project name.
-            await LoadAsync();
+            // R-10: the claim shows at once from the answer, the read behind it confirms without hiding the grid.
+            ShowReservation(outcome.Value);
+            await LoadAsync(live: true);
         }
         catch (HttpRequestException)
         {
@@ -389,7 +424,8 @@ public partial class ServerPortsSection
             }
 
             Toast.Success("PortReservationAdded");
-            await LoadAsync();
+            ShowReservation(outcome.Value);
+            await LoadAsync(live: true);
         }
         catch (HttpRequestException)
         {
@@ -399,6 +435,17 @@ public partial class ServerPortsSection
         {
             _busy = false;
         }
+    }
+
+    /// <summary>R-10: draws a claim the server just answered, before the registry is read again. The answer carries no
+    /// project name, so it comes from the projects the section already holds.</summary>
+    private void ShowReservation(PortReservationDto saved)
+    {
+        var named = saved.ProjectId is { } projectId
+            ? saved with { ProjectName = _projects.FirstOrDefault(project => project.Id == projectId)?.Name ?? saved.ProjectName }
+            : saved;
+        _reservations = [.. _reservations.Where(held => held.Id != named.Id), named];
+        BuildRows();
     }
 
     private async Task ObserveAsync()
@@ -447,7 +494,10 @@ public partial class ServerPortsSection
                 if ((await Api.ServerTools.ReleasePortReservationAsync(ServerId, row.Id)).Success)
                 {
                     Toast.Success("PortReservationReleased");
-                    await LoadAsync();
+                    // R-10: the claim leaves the grid at once, the read behind it confirms without hiding it.
+                    _reservations = [.. _reservations.Where(held => held.Id != row.Id)];
+                    BuildRows();
+                    await LoadAsync(live: true);
                 }
                 else
                 {

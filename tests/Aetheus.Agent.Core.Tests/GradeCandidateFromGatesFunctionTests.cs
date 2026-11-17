@@ -19,7 +19,9 @@ public sealed class GradeCandidateFromGatesFunctionTests : IDisposable
         ["APPLICATION_SECURITY_ENABLED"] = "true",
         ["ANALYSIS_QUALITY_GRADE"] = "",
         ["ANALYSIS_SECURITY_GRADE"] = "",
-        ["AETHEUS_DEPLOY_MINIMUM_GRADE"] = ""
+        ["AETHEUS_DEPLOY_MINIMUM_GRADE"] = "",
+        ["UNIT_TEST_FLAKY_TESTS"] = "",
+        ["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = ""
     };
     private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
 
@@ -138,6 +140,55 @@ public sealed class GradeCandidateFromGatesFunctionTests : IDisposable
 
         Assert.Equal("none", published["CANDIDATE_ASSURANCE_GRADE"]);
         Assert.Equal("none", published["CANDIDATE_DEPLOYABLE"]);
+    }
+
+    /// <summary>PLAN-006: the flaky tests the generic CI and QA named (handed up by the trigger steps) grade the candidate
+    /// as the platform's own seal does, 1 to 10 B, 11 to 20 C, more F, and the worst grade wins.</summary>
+    [Theory]
+    [InlineData("A, B", "", "A", "B", "true")]
+    [InlineData("A, B", "C", "D", "D", "true")]
+    [InlineData("A, +11 more", "", "A", "C", "true")]
+    [InlineData("A, +12 more", "B, C, D, E, F, G, H, I", "A", "F", "false")]
+    public async Task TheFlakyTests_GradeTheCandidate(string unit, string integration, string gates, string expected, string deployable)
+    {
+        _env["ANALYSIS_QUALITY_GRADE"] = gates;
+        _env["ANALYSIS_SECURITY_GRADE"] = "A";
+        _env["UNIT_TEST_FLAKY_TESTS"] = unit;
+        _env["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = integration;
+
+        var published = await PublishedAsync();
+
+        Assert.Equal(expected, published["CANDIDATE_ASSURANCE_GRADE"]);
+        Assert.Equal(deployable, published["CANDIDATE_DEPLOYABLE"]);
+        Assert.Contains(_harness.Log, entry => entry.Line.Contains("Flaky tests in unit", StringComparison.Ordinal));
+    }
+
+    /// <summary>A flaky test named by two suites counts once.</summary>
+    [Fact]
+    public async Task AFlakyTestNamedTwice_CountsOnce()
+    {
+        _env["ANALYSIS_QUALITY_GRADE"] = "A";
+        _env["ANALYSIS_SECURITY_GRADE"] = "A";
+        _env["UNIT_TEST_FLAKY_TESTS"] = "Ns.T.M";
+        _env["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = "Ns.T.M";
+
+        var published = await PublishedAsync();
+
+        Assert.Equal("B", published["CANDIDATE_ASSURANCE_GRADE"]);
+        Assert.Contains(_harness.Log, entry => entry.Line.Contains("flaky tests (1) B", StringComparison.Ordinal));
+    }
+
+    /// <summary>Without flaky tests the verdict is the gates' alone, as before PLAN-006.</summary>
+    [Fact]
+    public async Task NoFlakyTest_LeavesTheGatesVerdict()
+    {
+        _env["ANALYSIS_QUALITY_GRADE"] = "A";
+        _env["ANALYSIS_SECURITY_GRADE"] = "A";
+
+        var published = await PublishedAsync();
+
+        Assert.Equal("A", published["CANDIDATE_ASSURANCE_GRADE"]);
+        Assert.DoesNotContain(_harness.Log, entry => entry.Line.Contains("flaky", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]

@@ -78,7 +78,10 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
         await Dialog.OpenAsync<PackageRegistryPackageDialog>(package.Name,
             new Dictionary<string, object?> { ["PackageId"] = package.Id },
             new OmniDialogOptions { Width = "820px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
-        await ReloadAsync();
+        // R-10: the dialog answers no row (a version may have been listed, deprecated or the access changed):
+        // the list is read again behind the rows, quietly, with no bar.
+        if (_grid is not null) await _grid.RestoreRowsAsync();
+        else await ReloadAsync();
     }
 
 }

@@ -9,8 +9,7 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>Environment-less approvals remain stored, listed and expired on their own delay under
 /// the migrated PostgreSQL schema.</summary>
-[Collection(PostgresCollection.Name)]
-public sealed class PipelineApprovalScopeIntegrationTests(PostgresFixture fixture)
+public sealed class PipelineApprovalScopeIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     [Fact]
     public async Task AnEnvironmentLessPipelineApproval_IsListedAndExpires()

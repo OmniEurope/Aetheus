@@ -27,9 +27,12 @@ public sealed class ReclaimSpaceRepository(AppDbContext db) : IReclaimSpaceRepos
     {
         Require(table);
         if (!db.Database.IsRelational()) return null;
-        return await db.Database
+        // The statement answers one row. It is read whole and its first row taken: a First over the raw
+        // statement has no ordering to name, and EF warns about it at every compilation.
+        var sizes = await db.Database
             .SqlQueryRaw<long?>(SizeStatement, new NpgsqlParameter("relation", $"\"{table}\""))
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            .ToListAsync(ct).ConfigureAwait(false);
+        return sizes.FirstOrDefault();
     }
 
     public async Task VacuumFullAsync(string table, CancellationToken ct = default)

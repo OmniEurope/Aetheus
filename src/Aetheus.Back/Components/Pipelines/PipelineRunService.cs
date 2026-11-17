@@ -38,8 +38,19 @@ public class PipelineRunService(
 
     public async Task<PipelineRunDto?> TriggerRunAsync(int id, Dictionary<string, string>? additionalVariables = null,
         Dictionary<string, string>? parameters = null, CancellationToken ct = default)
-        => await launcher.TriggerResolvedRunAsync(id, additionalVariables, parameters,
-            yamlOverride: null, ResolveSourceCommit(additionalVariables), ct).ConfigureAwait(false);
+    {
+        try
+        {
+            return await launcher.TriggerResolvedRunAsync(id, additionalVariables, parameters,
+                yamlOverride: null, ResolveSourceCommit(additionalVariables), ct).ConfigureAwait(false);
+        }
+        catch (BadRequestException refusal)
+        {
+            // Mandatory catch: the caller reads the refusal, and the pipeline's runs table must show it too.
+            await RecordManualRefusalAsync(id, null, refusal, ct).ConfigureAwait(false);
+            throw;
+        }
+    }
 
     public Task<PipelineRunPreparation?> PrepareRunAsync(int pipelineId, string? sourceBranch = null,
         CancellationToken ct = default)
@@ -59,17 +70,61 @@ public class PipelineRunService(
 
     // --- Launching now lives in PipelineRunLauncher; the facade keeps the IPipelineRunService surface ---
 
-    public Task<PipelineRunDto?> TriggerPreparedRunAsync(PipelineRunPreparation preparation,
+    public async Task<PipelineRunDto?> TriggerPreparedRunAsync(PipelineRunPreparation preparation,
         Dictionary<string, string>? additionalVariables = null,
         Dictionary<string, string>? parameters = null, CancellationToken ct = default,
         string? idempotencyKey = null)
-        => launcher.TriggerPreparedRunAsync(preparation, additionalVariables, parameters, ct, idempotencyKey);
+    {
+        try
+        {
+            return await launcher.TriggerPreparedRunAsync(preparation, additionalVariables, parameters, ct, idempotencyKey)
+                .ConfigureAwait(false);
+        }
+        catch (BadRequestException refusal)
+        {
+            // Mandatory catch: see TriggerRunAsync. The pre-checks refuse before any run row exists.
+            await RecordManualRefusalAsync(preparation.PipelineId, preparation, refusal, ct).ConfigureAwait(false);
+            throw;
+        }
+    }
 
-    public Task<PipelineRunPreparation> ResolveRunParametersAsync(
+    public async Task<PipelineRunPreparation> ResolveRunParametersAsync(
         PipelineRunPreparation preparation,
         IReadOnlyDictionary<string, string>? parameters,
         CancellationToken ct = default)
-        => parameterResolver.ResolveRunParametersAsync(preparation, parameters, ct);
+    {
+        try
+        {
+            return await parameterResolver.ResolveRunParametersAsync(preparation, parameters, ct).ConfigureAwait(false);
+        }
+        catch (BadRequestException refusal)
+        {
+            // Mandatory catch: a missing required parameter refuses the launch here, before it is prepared.
+            await RecordManualRefusalAsync(preparation.PipelineId, preparation, refusal, ct).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>A launch someone asked for and the pre-checks refused leaves a failed run on the pipeline carrying the
+    /// reason (no step, no job), so it shows in the runs table next to the error the caller reads. Never throws: the
+    /// caller must get the refusal itself, not the failure to record it.</summary>
+    private async Task RecordManualRefusalAsync(
+        int pipelineId, PipelineRunPreparation? preparation, BadRequestException refusal, CancellationToken ct)
+    {
+        try
+        {
+            var named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(preparation?.BranchName)) named[SourceBranchVariable] = preparation.BranchName;
+            if (IsGitCommitHash(preparation?.CommitHash)) named[SourceCommitVariable] = preparation!.CommitHash!;
+            await launcher.RecordRefusedAutomatedLaunchAsync(
+                pipelineId, PipelineLaunchSources.Manual, refusal.Message, named, ct, refusal.Problems,
+                notifySubscribers: false).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "The refused launch of pipeline {PipelineId} could not be recorded as a run", pipelineId);
+        }
+    }
 
     public Task<PipelineRunDto?> TriggerAutomatedRunAsync(
         int pipelineId, string triggerSource, Dictionary<string, string>? additionalVariables = null,
@@ -89,8 +144,9 @@ public class PipelineRunService(
     public Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
         IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
-        IReadOnlyList<ProblemDto>? problems = null)
-        => launcher.RecordRefusedAutomatedLaunchAsync(pipelineId, triggerSource, reason, additionalVariables, ct, problems);
+        IReadOnlyList<ProblemDto>? problems = null, bool notifySubscribers = true)
+        => launcher.RecordRefusedAutomatedLaunchAsync(
+            pipelineId, triggerSource, reason, additionalVariables, ct, problems, notifySubscribers);
 
     public Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default)
         => launcher.RerunAsync(sourceRunId, mode, ct);
@@ -131,8 +187,8 @@ public class PipelineRunService(
     }
 
     public Task<List<PipelineRunDto>> GetActiveRunsAsync(
-        List<int>? accessiblePipelineIds = null, int? projectId = null, CancellationToken ct = default) =>
-        repo.GetActiveRunsAsync(accessiblePipelineIds, projectId, ct);
+        List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null, CancellationToken ct = default) =>
+        repo.GetActiveRunsAsync(accessiblePipelineIds, projectId, serverId, ct);
 
     public Task<List<PipelineRunDto>> GetRecentRunsAsync(
         List<int>? accessiblePipelineIds = null, int? projectId = null, int? serverId = null,
@@ -238,19 +294,25 @@ public class PipelineRunService(
         // S-TECH-D4XR: validate the supplied run parameters during preflight too, so a bad value is
         // reported alongside the unresolved-target warnings before the run is launched.
         var paramWarnings = ValidateAndApplyParameters(definition, ref additionalVars, forPreflight: true);
+        // R-7: the preview is one of the four requests of a click on "Exécuter"; its phases are read from the log.
+        var timing = new PhaseTiming(TimeProvider.System);
 
         var (resolvedVars, warnings, _) = await variableResolver.ResolveVariablesWithWarningsAsync(
             definition, preparation.EffectiveProjectId, additionalVars, ct).ConfigureAwait(false);
         warnings.InsertRange(0, paramWarnings);
         preflight.ValidateUniqueDeploymentTargets(definition, resolvedVars);
+        timing.Mark("variables");
 
         var organizationId = await repo.GetPipelineOrganizationIdAsync(pipeline.Id, ct).ConfigureAwait(false);
         var result = await advisoryPreflight
             .BuildAsync(definition, resolvedVars, warnings, organizationId, preparation.EffectiveProjectId, ct)
             .ConfigureAwait(false);
+        timing.Mark("advisory-preflight");
         // R-72: what the gate holds against the release a deployment names, for the launch to confirm.
         var gate = await PipelineDeploymentGateWarnings.AssessAsync(
             definition, resolvedVars, preparation.EffectiveProjectId, repo, ct).ConfigureAwait(false);
+        timing.Mark("gate");
+        logger.LogInformation("Preflight timing of pipeline {PipelineId}: {Timing}", pipeline.Id, timing.Describe());
         return gate is { Warnings.Count: > 0 } ? result with { GateWarnings = gate.Warnings } : result;
     }
 
@@ -309,6 +371,9 @@ public class PipelineRunService(
 
     public Task ReconcileRunAsync(int pipelineRunId, CancellationToken ct = default)
         => scheduler.ReconcileRunAsync(pipelineRunId, launcher, ct);
+
+    public Task ContinueAfterCancelledTaskStoppedAsync(int pipelineRunId, CancellationToken ct = default)
+        => scheduler.ContinueAfterCancelledTaskStoppedAsync(pipelineRunId, launcher, ct);
 
     public Task ContinueAfterArtifactCollectionAsync(
         int pipelineRunId, TaskExecutionStatus collectionStatus, CancellationToken ct = default)

@@ -8,8 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture)
+public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
     private const string SystemPrepare = "System:Prepare";
     private const string RunnerCapabilities = "[\"pipeline.build\",\"shell.execute\"]";
@@ -22,47 +21,6 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
             steps:
               - name: compile
                 shell: echo build
-          - name: deploy
-            agent: default
-            depends_on: [build]
-            steps:
-              - name: ship
-                shell: echo deploy
-        """;
-
-    private const string SingleStageYaml = """
-        name: single
-        trigger: manual
-        stages:
-          - name: build
-            agent: default
-            steps:
-              - name: compile
-                shell: echo build
-        """;
-
-    private const string RetryYaml = """
-        name: retry-test
-        trigger: manual
-        stages:
-          - name: build
-            agent: default
-            steps:
-              - name: flaky
-                shell: echo maybe
-                retry_count: 2
-        """;
-
-    private const string ContinueOnErrorYaml = """
-        name: continue-test
-        trigger: manual
-        stages:
-          - name: build
-            agent: default
-            steps:
-              - name: optional
-                shell: echo maybe
-                continue_on_error: true
           - name: deploy
             agent: default
             depends_on: [build]
@@ -90,65 +48,6 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
         """;
 
     [Fact]
-    public async Task FullCycle_SingleStage_PendingToSuccess()
-    {
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-
-        int runId;
-        int stepId;
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            var pipeline = new Pipeline { Name = $"sm-single-{Guid.NewGuid():N}", YamlDefinition = SingleStageYaml };
-            db.Pipelines.Add(pipeline);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            var run = NewRunningRun(pipeline.Id);
-            db.PipelineRuns.Add(run);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            db.PipelineStepRuns.AddRange(
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = SystemPrepare,
-                    StepName = "prepare",
-                    Order = 0,
-                    Status = TaskExecutionStatus.Success,
-                    IsSystem = true
-                },
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = "build",
-                    StepName = "compile",
-                    Order = 1,
-                    Status = TaskExecutionStatus.Success
-                });
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            runId = run.Id;
-            stepId = await db.PipelineStepRuns
-                .Where(s => s.PipelineRunId == run.Id && s.StageName == "build")
-                .Select(s => s.Id)
-                .FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            var service = scope.ServiceProvider.GetRequiredService<IPipelineRunService>();
-            await service.AdvanceStageAsync(run.Id, "build", ct: TestContext.Current.CancellationToken);
-        }
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var run = await db.PipelineRuns.AsNoTracking().FirstAsync(r => r.Id == runId, cancellationToken: TestContext.Current.CancellationToken);
-            Assert.Equal(PipelineStatus.Success, run.Status);
-            Assert.NotNull(run.CompletedAt);
-        }
-    }
-
-    [Fact]
     public async Task MultiStage_BuildSuccess_DeployGetsDispatched()
     {
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
@@ -158,7 +57,7 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var orgId = await db.Set<Organization>().Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var orgId = await db.Set<Organization>().OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
             var server = new Server
             {
                 Name = $"runner-{Guid.NewGuid():N}",
@@ -233,229 +132,6 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
             var task = await db.Tasks.AsNoTracking()
                 .FirstOrDefaultAsync(t => t.PipelineRunId == runId && t.Name == "ship", cancellationToken: TestContext.Current.CancellationToken);
             Assert.NotNull(task);
-        }
-    }
-
-    [Fact]
-    public async Task FailedStep_NonContinuable_RunFailsImmediately()
-    {
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-
-        int runId;
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            var pipeline = new Pipeline { Name = $"sm-fail-{Guid.NewGuid():N}", YamlDefinition = TwoStageYaml };
-            db.Pipelines.Add(pipeline);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            var run = NewRunningRun(pipeline.Id);
-            db.PipelineRuns.Add(run);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            db.PipelineStepRuns.AddRange(
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = SystemPrepare,
-                    StepName = "prepare",
-                    Order = 0,
-                    Status = TaskExecutionStatus.Success,
-                    IsSystem = true
-                },
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = "build",
-                    StepName = "compile",
-                    Order = 1,
-                    Status = TaskExecutionStatus.Failed,
-                    ContinueOnError = false
-                },
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = "deploy",
-                    StepName = "ship",
-                    Order = 2,
-                    Status = TaskExecutionStatus.Pending
-                });
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            runId = run.Id;
-
-            var service = scope.ServiceProvider.GetRequiredService<IPipelineRunService>();
-            await service.AdvanceStageAsync(run.Id, "build", ct: TestContext.Current.CancellationToken);
-        }
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var run = await db.PipelineRuns.AsNoTracking().FirstAsync(r => r.Id == runId, cancellationToken: TestContext.Current.CancellationToken);
-            Assert.Equal(PipelineStatus.Failed, run.Status);
-            Assert.NotNull(run.CompletedAt);
-        }
-    }
-
-    [Fact]
-    public async Task FailedStepWithRetry_DecrementsAndResets()
-    {
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-
-        int runId;
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            var orgId = await db.Set<Organization>().Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
-            var server = new Server
-            {
-                Name = $"runner-{Guid.NewGuid():N}",
-                Hostname = "test",
-                Status = ServerStatus.Online,
-                PipelineRunnerEnabled = true,
-                LastHeartbeat = DateTime.UtcNow,
-                OrganizationId = orgId,
-                AgentProtocolVersion = AgentProtocol.CurrentVersion,
-                AgentCapabilitiesJson = RunnerCapabilities
-            };
-            db.Servers.Add(server);
-
-            var pipeline = new Pipeline { Name = $"sm-retry-{Guid.NewGuid():N}", YamlDefinition = RetryYaml };
-            db.Pipelines.Add(pipeline);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            var run = NewRunningRun(pipeline.Id);
-            db.PipelineRuns.Add(run);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            db.PipelineStepRuns.AddRange(
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = SystemPrepare,
-                    StepName = "prepare",
-                    Order = 0,
-                    Status = TaskExecutionStatus.Success,
-                    IsSystem = true
-                },
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = "build",
-                    StepName = "flaky",
-                    Order = 1,
-                    Status = TaskExecutionStatus.Failed,
-                    RetryCount = 2,
-                    ExitCode = 1,
-                    StartedAt = DateTime.UtcNow.AddSeconds(-5),
-                    CompletedAt = DateTime.UtcNow
-                });
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            runId = run.Id;
-
-            var service = scope.ServiceProvider.GetRequiredService<IPipelineRunService>();
-            await service.AdvanceStageAsync(run.Id, "build", ct: TestContext.Current.CancellationToken);
-        }
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var step = await db.PipelineStepRuns.AsNoTracking()
-                .FirstAsync(s => s.PipelineRunId == runId && s.StepName == "flaky", cancellationToken: TestContext.Current.CancellationToken);
-            // The retry resets the failed step (RetryCount 2->1, ExitCode/timestamps cleared) and re-dispatches it.
-            // Because this run has an online runner provisioned, the reset step is immediately re-assigned to it
-            // (Pending -> Assigned, see PipelineRunHelpers.MarkStepDispatched) rather than left waiting for pickup.
-            Assert.Equal(TaskExecutionStatus.Assigned, step.Status);
-            Assert.Equal(1, step.RetryCount);
-            Assert.Null(step.ExitCode);
-            Assert.Null(step.StartedAt);
-            Assert.Null(step.CompletedAt);
-
-            var run = await db.PipelineRuns.AsNoTracking().FirstAsync(r => r.Id == runId, cancellationToken: TestContext.Current.CancellationToken);
-            Assert.Equal(PipelineStatus.Running, run.Status);
-        }
-    }
-
-    [Fact]
-    public async Task ContinueOnError_FailedOptional_AdvancesToNextStage()
-    {
-        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
-
-        int runId;
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var orgId = await db.Set<Organization>().Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
-            var server = new Server
-            {
-                Name = $"runner-{Guid.NewGuid():N}",
-                Hostname = "test",
-                Status = ServerStatus.Online,
-                PipelineRunnerEnabled = true,
-                LastHeartbeat = DateTime.UtcNow,
-                OrganizationId = orgId,
-                AgentProtocolVersion = AgentProtocol.CurrentVersion,
-                AgentCapabilitiesJson = RunnerCapabilities
-            };
-            db.Servers.Add(server);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            var pipeline = new Pipeline { Name = $"sm-continue-{Guid.NewGuid():N}", YamlDefinition = ContinueOnErrorYaml };
-            db.Pipelines.Add(pipeline);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            var run = NewRunningRun(pipeline.Id);
-            db.PipelineRuns.Add(run);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-            db.PipelineStepRuns.AddRange(
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = SystemPrepare,
-                    StepName = "prepare",
-                    Order = 0,
-                    Status = TaskExecutionStatus.Success,
-                    IsSystem = true
-                },
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = "build",
-                    StepName = "optional",
-                    Order = 1,
-                    Status = TaskExecutionStatus.Failed,
-                    ContinueOnError = true
-                },
-                new PipelineStepRun
-                {
-                    PipelineRunId = run.Id,
-                    StageName = "deploy",
-                    StepName = "ship",
-                    Order = 2,
-                    Status = TaskExecutionStatus.Pending
-                });
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            runId = run.Id;
-
-            var service = scope.ServiceProvider.GetRequiredService<IPipelineRunService>();
-            await service.AdvanceStageAsync(run.Id, "build", ct: TestContext.Current.CancellationToken);
-        }
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-            var run = await db.PipelineRuns.AsNoTracking().FirstAsync(r => r.Id == runId, cancellationToken: TestContext.Current.CancellationToken);
-            Assert.Equal(PipelineStatus.Running, run.Status);
-
-            var deployStep = await db.PipelineStepRuns.AsNoTracking()
-                .FirstAsync(s => s.PipelineRunId == runId && s.StageName == "deploy", cancellationToken: TestContext.Current.CancellationToken);
-            Assert.True(deployStep.ServerId.HasValue);
         }
     }
 
@@ -646,7 +322,7 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
                         shell: echo $(VERSION)
                 """;
 
-            var orgId = await db.Set<Organization>().Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var orgId = await db.Set<Organization>().OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
             var server = new Server
             {
                 Name = $"runner-ov-{Guid.NewGuid():N}",

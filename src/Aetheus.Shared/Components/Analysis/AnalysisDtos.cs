@@ -47,6 +47,8 @@ public sealed record AnalysisRunGateDto
     public const int SummaryFindingLimit = 50;
 
     public int PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int PipelineRunNumber { get; init; }
     public AnalysisGateStatus Status { get; init; }
     public int ReportCount { get; init; }
     public int FindingCount { get; init; }
@@ -65,6 +67,14 @@ public sealed record AnalysisRunGateDto
     public int WarningCount { get; init; }
     public AnalysisGradeSummaryDto? Grade { get; init; }
     public IReadOnlyList<string> MissingProducers { get; init; } = [];
+
+    /// <summary>Recette R-21: why the verdict is <see cref="AnalysisGateStatus.Error"/>, one entry per failing report, missing
+    /// producer or other condition; empty for any other verdict.</summary>
+    public IReadOnlyList<AnalysisGateErrorCauseDto> ErrorCauses { get; init; } = [];
+
+    /// <summary>Recette R-21: stored evidence of the run's reports that could not be read and was left out of the
+    /// verdict and the grade. Named for diagnosis only; it never changes the verdict.</summary>
+    public IReadOnlyList<AnalysisGateUnreadableEvidenceDto> UnreadableEvidence { get; init; } = [];
     public IReadOnlyList<AnalysisRunGateReportDto> Reports { get; init; } = [];
     public IReadOnlyList<AnalysisRunGateFindingDto> Findings { get; init; } = [];
     public IReadOnlyList<AnalysisRunGateViolationDto> Violations { get; init; } = [];
@@ -117,6 +127,12 @@ public sealed record AnalysisRunGateReportDto
     public int MetricCount { get; init; }
     public int BlockerCount { get; init; }
     public int WarningCount { get; init; }
+
+    /// <summary>The report file the producer read or wrote (R-21: the evidence an Error verdict names).</summary>
+    public string? ReportPath { get; init; }
+
+    /// <summary>The producer's own error message when its report ended in error (R-21).</summary>
+    public string? ErrorMessage { get; init; }
 }
 
 public sealed record AnalysisRunGateFindingDto
@@ -160,6 +176,8 @@ public sealed record AnalysisFindingOccurrenceDto
     public int Id { get; init; }
     public int AnalysisReportId { get; init; }
     public int? PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int? PipelineRunNumber { get; init; }
     public int? RepositoryId { get; init; }
     public string ToolName { get; init; } = string.Empty;
     public string ScannerKey { get; init; } = string.Empty;
@@ -362,6 +380,8 @@ public sealed record AnalysisPortfolioRowDto
     public int? PipelineId { get; init; }
     public string? PipelineName { get; init; }
     public int? PipelineRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int? PipelineRunNumber { get; init; }
     public string? BranchName { get; init; }
     public string? CommitHash { get; init; }
     public AnalysisCategory Category { get; init; }
@@ -376,6 +396,9 @@ public sealed record AnalysisPortfolioRowDto
     public int BlockerCount { get; init; }
     public int WarningCount { get; init; }
     public DateTime CompletedAt { get; init; }
+
+    /// <summary>R-21: what wrote the report. For the CVE watch, <see cref="AnalysisReportId"/> is the number of its run.</summary>
+    public AnalysisScanSource Source { get; init; }
 
     /// <summary>The internal repository the report's run built, when its clone URL names one, so
     /// the commit links to its Aetheus page; null otherwise (the commit is then text).</summary>
@@ -417,10 +440,16 @@ public sealed record AnalysisProjectSummaryDto
 
     /// <summary>The pipeline run of the project's latest analysis evaluation.</summary>
     public int? LastAnalysisRunId { get; init; }
+    /// <summary>R-8: that run's number within its pipeline.</summary>
+    public int? LastAnalysisRunNumber { get; init; }
 
     /// <summary>The project's latest release (published first, then detected).</summary>
     public int? LatestReleaseId { get; init; }
     [StringLength(200)] public string? LatestReleaseVersion { get; init; }
+
+    /// <summary>The latest release's short application version ("1.5.24"), the series and the release
+    /// number of the run that published it; null when it has none.</summary>
+    [StringLength(200)] public string? LatestReleaseApplicationVersion { get; init; }
 }
 
 public sealed record AnalysisMetricPaginationRequest : PaginationRequest
@@ -577,6 +606,11 @@ public sealed record CreateAnalysisFindingDecisionRequest
     public AnalysisFindingStatus Status { get; init; }
     [Required, StringLength(2000, MinimumLength = 10)] public string Reason { get; init; } = string.Empty;
     public DateTime? ExpiresAt { get; init; }
+
+    /// <summary>How many days a risk is accepted for (30, 90 or 180, see <see cref="AcceptedRiskDuration"/>).
+    /// Required to accept a finding of the CVE watch, where the server derives the expiry from it, and never
+    /// sent together with <see cref="ExpiresAt"/>.</summary>
+    public int? AcceptanceDays { get; init; }
 }
 
 public sealed record AnalysisTrackingStatusDto

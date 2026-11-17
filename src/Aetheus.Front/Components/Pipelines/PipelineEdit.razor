@@ -8,15 +8,24 @@
 {
     @* Run is the main page action; Edit opens the edit tab through the header menu. *@
     RenderFragment pipelineMenu = @<text>
-        <OmniMenuItem OnClick="@(() => _selectedTab = 1)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+        @* R-11: an imported pipeline is never edited in Aetheus; its menu offers Synchronize (a re-import from the
+           mirror's head) instead of Edit, to a user who may import. *@
+        @if (!IsImported)
+        {
+            <OmniMenuItem OnClick="@(() => _selectedTab = 1)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+        }
+        else if (_pipeline is { ProjectId: { } importProjectId } importedPipeline && Permissions.CanWrite(ResourceType.Pipeline, Id))
+        {
+            <OmniMenuItem OnClick="@(async () => { if (await new ExternalPipelineSync(Api.ExternalPipelines, Toast).SyncAsync(importProjectId, importedPipeline.Id, importedPipeline.Name)) await OnRefresh(); })" title="@L["ExternalPipelineSynchronizeHint"]"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["ExternalPipelineSynchronize"]</ChildContent></OmniMenuItem>
+        }
         <OmniMenuItem OnClick="@OnRunWithOptionsAsync"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["RunWithOptions"]</ChildContent></OmniMenuItem>
         <OmniMenuItem OnClick="@OnDryRun"><Icon><OmniIcon Name="OmniIconName.Flask" /></Icon><ChildContent>@L["DryRun"]</ChildContent></OmniMenuItem>
-        @if (_fleetItem is { Freshness: PipelineFleetFreshness.Outdated, LatestVersion: not null }
+        @if (!IsImported && _fleetItem is { Freshness: PipelineFleetFreshness.Outdated, LatestVersion: not null }
             && Permissions.CanWrite(ResourceType.Pipeline, Id))
         {
             <OmniMenuItem OnClick="@OnUpdateTemplate"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdatePipelineTemplate"]</ChildContent></OmniMenuItem>
         }
-        @if (_canTemplateWrite)
+        @if (_canTemplateWrite && !IsImported)
         {
             @if (HasTemplateReference)
             {
@@ -31,6 +40,14 @@
     </text>;
     <OmniPageHeader Title="@(_isNew ? L["NewPipeline"] : _pipeline?.Name ?? "")" ShowBack="@(!string.IsNullOrWhiteSpace(BackHref))" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@(_isNew ? null : pipelineMenu)">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
+        <Badges>
+            @if (_pipeline?.ExternalImportCommit is { } importedCommit)
+            {
+                <OmniTooltip Text="@L["ExternalPipelineImportedTooltip", DisplayFormatting.ShortSha(importedCommit)]">
+                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lock))" Fill="OmniFill.Tonal" Tone="OmniTone.Info">@L["ReadOnly"]</OmniBadge>
+                </OmniTooltip>
+            }
+        </Badges>
         @* R-40: Run is pinned (never folded, on a row of its own on a phone) and has no chevron;
            its variants (run with options) are in the page menu. *@
         <PinnedActionsContent>
@@ -50,6 +67,18 @@
             @L["PipelineChangedElsewhere"]
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnRefresh"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["ReloadNow"]</span></ChildContent></OmniButton>
         </OmniAlert>
+    }
+
+    @* R-9: what this pipeline reads and nothing defines, told here as the run would tell it, but before the run. *@
+    @if (!_isNew && _pipeline is { ProjectId: { } readinessProjectId })
+    {
+        <ProjectPipelinesReadiness ProjectId="@readinessProjectId" PipelineId="@_pipeline.Id" />
+    }
+
+    @* R-38: a production pipeline created without its preparation offers to complete it, never to be deleted and created again. *@
+    @if (!_isNew && _pipeline is { ProjectId: not null })
+    {
+        <PipelineProductionCompletion Pipeline="@_pipeline" Completed="@OnRefresh" />
     }
 
     @if (HasLegacyTemplateReference)
@@ -72,9 +101,9 @@
             <OmniStack>
             <OmniRow Gap="OmniSpacing.Large">
                 <OmniColumn Span="12" MediumSpan="6">
-                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small">
                         <OmniFormField Label="@L["Name"]" For="Name">
-                            <OmniTextBox @bind-Value="_model.Name" Id="Name" />
+                            <OmniTextBox @bind-Value="_model.Name" Id="Name" Autocomplete="organization" />
                             <ValidationMessage For="@(() => _model.Name)" />
                         </OmniFormField>
                         <OmniFormField Label="@L["Description"]" For="Description">
@@ -166,7 +195,7 @@
 }
 else if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" Class="omni-u-mt-lg" />
+    <VeilHold Busy="true" />
 }
 else if (_forbidden)
 {
@@ -184,15 +213,16 @@ else if (_notFound)
 }
 else
 {
-    @* R-98: OE's veil lies over the page while the pipeline is being deleted; the content stays mounted under it. *@
-    <div class="@(_deleting ? "pipeline-detail-page omni-busy" : "pipeline-detail-page")" aria-busy="@(_deleting ? "true" : "false")" data-testid="pipeline-detail-page">
+    @* R-98, R-1: the page veil is held while the pipeline is being deleted; the content stays mounted. *@
+    <VeilHold Busy="@_deleting" />
+    <div class="pipeline-detail-page" data-testid="pipeline-detail-page">
     <UrlSyncedTabs Slugs="@(new[] { "runs", "edit", "visual", "settings" })" @bind-SelectedIndex="_selectedTab" class="pipeline-detail-tabs">
         <Tabs>
             <OmniTabsItem Key="runs" Title="@L["Runs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("history"))" /></Icon><ChildContent>
                 @* Tiles summarize the loaded page of runs, with a label and a separate value line
                    for consistent scanning. They sit in one OE tile grid (same size, recette R1-20); the two
                    that open a run are themselves the link (OmniCard.Href), never wrapped. *@
-                <OmniTileGrid Columns="4" Class="pipeline-runs-summary">
+                <OmniTileGrid Columns="4" MinColumnWidth="9rem" Class="pipeline-runs-summary tiles-scroll-row">
                     @* The tile opens the graded run on its Gate tab, where its findings are. *@
                     <OmniCard Class="analysis-summary-card pipeline-runs-summary-card"
                               Href="@(RunsSummary.LatestGradeRunId is { } gradedRunId ? PipelineRunPresentation.GateHref(gradedRunId, ProjectId, ServerId) : null)"
@@ -256,10 +286,10 @@ else
                         VirtualData="@(() => new OmniDataGridResult<PipelineRunDto>(_runs, _runsTotalCount))"
                         RowClick="@(run => Nav.NavigateTo(PipelineRunPresentation.Href(run.Id, ProjectId, ServerId)))" class="pipeline-runs-grid">
                         <Columns>
-                            <OmniDataGridColumn Frozen="true" TItem="PipelineRunDto" Property="Id" Title="@L["ID"]" Width="@PipelineRunPresentation.IdColumnWidth(_runs.Concat(_firstRunsPage))" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+                            <OmniDataGridColumn Frozen="true" TItem="PipelineRunDto" Property="BuildNumber" Title="@L["RunNumberColumn"]" Width="@PipelineRunPresentation.IdColumnWidth(_runs.Concat(_firstRunsPage))" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                                 <Template Context="run">
                                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                                        <NavLink href="@PipelineRunPresentation.Href(run.Id, ProjectId, ServerId)" class="pipeline-name-link">#@run.Id</NavLink>
+                                        <NavLink href="@PipelineRunPresentation.Href(run.Id, ProjectId, ServerId)" class="pipeline-name-link">#@run.BuildNumber</NavLink>
                                         @if (PipelineRunPresentation.CanCancel(run))
                                         {
                                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnCancelRunAsync(run))" title="@L["CancelRun"]" Label="@L["CancelRun"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon></OmniButton>
@@ -289,7 +319,7 @@ else
                                         else
                                         {
                                             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="pipeline-run-current-step">
-                                                <AetheusLoader Size="OmniControlSize.Small" />
+                                                <div class="run-tl-dot run-timeline-dot-running"><span class="run-timeline-pulse"></span></div>
                                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["PreparingRun"]</OmniText>
                                             </OmniStack>
                                         }
@@ -390,11 +420,18 @@ else
             <OmniTabsItem Key="edit" Title="@L["Edit"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("edit"))" /></Icon><ChildContent>
                 @* Compact meta (name + description inline) + toolbar; the editor fills the remaining
                    viewport height so the definition uses 100% of the space with no page scrollbar. *@
+                @* R-11: an imported pipeline is never edited here: its definition is shown as stored. *@
+                @if (IsImported)
+                {
+                    <ExternalPipelineReadOnlyView Pipeline="@(_pipeline!)" ShowDefinition="true" />
+                }
+                else
+                {
                 <div class="pipeline-edit-form"><OmniTemplateForm TModel="PipelineModel" Model="@_model" OnValidSubmit="@OnSubmit">
                     <OmniDataAnnotationsValidator Localizer="@L" />
                     <div class="pipeline-edit-meta">
                         <OmniFormField Label="@L["Name"]" Class="pipeline-edit-name" For="Name">
-                            <OmniTextBox @bind-Value="_model.Name" Id="Name" />
+                            <OmniTextBox @bind-Value="_model.Name" Id="Name" Autocomplete="organization" />
                             <ValidationMessage For="@(() => _model.Name)" />
                         </OmniFormField>
                         <OmniFormField Label="@L["Description"]" Class="pipeline-edit-desc" For="Description">
@@ -421,7 +458,7 @@ else
                         <div class="pipeline-yaml-editor">
                             <MonacoEditor @ref="_monacoEditor" Value="@_model.YamlDefinition"
                                 ValueChanged="@OnYamlValueChanged" DebouncedValueChanged="@OnDebouncedYamlChanged"
-                                OnBlur="@OnValidateYaml" OnSave="@OnSubmit" OnPipelineRefClicked="@OnEditorPipelineRef" />
+                                OnBlur="@OnValidateYaml" OnSave="@OnSubmit" OnPipelineRefClicked="@OnEditorPipelineRef" OnTemplateRefClicked="@OnEditorTemplateRef" />
                         </div>
 
                         @if (_showDiff)
@@ -431,15 +468,22 @@ else
                             </div>
                         }
 
-                        @if (_peekName is not null)
+                        @if (_peek.IsOpen)
                         {
-                            <PipelineDefinitionPeek PipelineName="@_peekName" ProjectId="@(_pipeline?.ProjectId)"
-                                OnClose="@(() => { _peekName = null; })" />
+                            <PipelineDefinitionPeek PipelineName="@_peek.PipelineName" TemplateReference="@_peek.TemplateReference" ProjectId="@(_pipeline?.ProjectId)"
+                                OnClose="@_peek.Close" />
                         }
                     </div>
                 </OmniTemplateForm></div>
+                }
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="visual" Title="@L["Visual"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("account_tree"))" /></Icon><ChildContent>
+                @if (IsImported)
+                {
+                    <ExternalPipelineReadOnlyView Pipeline="@(_pipeline!)" ShowDefinition="true" />
+                }
+                else
+                {
                 <VisualPipelineEditor YamlDefinition="@_model.YamlDefinition"
                                       YamlDefinitionChanged="@OnVisualYamlChanged"
                                       BaseTemplateYaml="@_baseTemplateYaml"
@@ -447,8 +491,20 @@ else
                                       AvailableServers="@_serverNames"
                                       AvailableLibraries="@_libraryNames"
                                       AvailableVaults="@_vaultNames" />
+                }
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="settings" Title="@L["Settings"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("settings"))" /></Icon><ChildContent>
+                @* R-11: an imported pipeline has no settings of its own to save here. *@
+                @if (IsImported)
+                {
+                    <OmniStack>
+                        <ExternalPipelineReadOnlyView Pipeline="@(_pipeline!)" />
+                        <PipelineOwnerPanel Pipeline="@(_pipeline!)" OnOwnerChanged="@(() => ReloadRunsAsync())" />
+                        <Aetheus.Front.Components.Notifications.PipelineFailureMailSwitch PipelineId="@(_pipeline!.Id)" />
+                    </OmniStack>
+                }
+                else
+                {
                 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
                     <OmniRow Gap="OmniSpacing.Large">
                         <OmniColumn Span="12" MediumSpan="6">
@@ -460,7 +516,8 @@ else
                     </OmniRow>
                     @if (_pipeline is not null)
                     {
-                        <PipelineOwnerPanel Pipeline="@_pipeline" OnOwnerChanged="@ReloadRunsAsync" />
+                        <PipelineOwnerPanel Pipeline="@_pipeline" OnOwnerChanged="@(() => ReloadRunsAsync())" />
+                        <Aetheus.Front.Components.Notifications.PipelineFailureMailSwitch PipelineId="@_pipeline.Id" />
                     }
                     @if (_sourceBranches.Count > 0)
                     {
@@ -504,6 +561,7 @@ else
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSubmit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["SaveSettings"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniStack>
+                }
             </ChildContent></OmniTabsItem>
         </Tabs>
     </UrlSyncedTabs>

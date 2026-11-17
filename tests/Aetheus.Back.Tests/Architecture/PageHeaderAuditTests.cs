@@ -9,10 +9,11 @@ namespace Aetheus.Back.Tests.Architecture;
 public sealed class PageHeaderAuditTests
 {
     /// <summary>Pages that render no chrome of their own: the authentication screens (SetPassword.razor:
-    /// owner decision 2026-10-28, R-14, the sign-in shell of the set-password link), plus the two pure
-    /// redirectors that immediately navigate elsewhere and never paint a page.</summary>
+    /// owner decision 2026-10-28, R-14, the sign-in shell of the set-password link; AccountSetup.razor: R-1, the
+    /// seeded administrator's first step, in the same shell as the forced password change), plus the pure
+    /// redirectors that immediately navigate elsewhere and never paint a page (Updates.razor: R-23, the old URL of the Packages tab).</summary>
     private static readonly string[] ChromelessPages =
-        ["Login.razor", "ChangePasswordRequired.razor", "SetPassword.razor", "ServerDetail.razor", "ExternalRepo.razor"];
+        ["Login.razor", "ChangePasswordRequired.razor", "AccountSetup.razor", "SetPassword.razor", "ServerDetail.razor", "ExternalRepo.razor", "Updates.razor"];
 
     /// <summary>Components that render the page header for the page hosting them.</summary>
     private static readonly string[] HeaderRenderingComponents = ["PipelineRunHeader"];

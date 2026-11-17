@@ -34,6 +34,7 @@ internal sealed class SlowRequestDiagnosticsMiddleware(
     ILogger<SlowRequestDiagnosticsMiddleware> logger)
 {
     private readonly TimeSpan _threshold = options.Value.Threshold;
+    private readonly string[] _knownSlowRoutes = [.. options.Value.KnownSlowRoutes];
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -74,8 +75,12 @@ internal sealed class SlowRequestDiagnosticsMiddleware(
         var poolDelta = pool.Totals().Since(poolBefore);
         var levels = pool.Levels();
         var host = hostPressure.Read();
-        logger.LogWarning(
-            "Slow request {Method} {Path}: {ElapsedMs} ms (threshold {ThresholdMs} ms), status {StatusCode}. "
+        // R-2 (b): a route whose time follows the size of its payload is listed in KnownSlowRoutes; its slow requests
+        // keep the same line, at information level, so they stay readable without counting as a warning.
+        var level = IsKnownSlow(context) ? LogLevel.Information : LogLevel.Warning;
+        logger.Log(
+            level,
+            "Slow request {Method} {Path}: {ElapsedMs} ms (threshold {ThresholdMs} ms), status {StatusCode}, request body {RequestBytes} bytes. "
             + "GC pause {GcPauseMs} ms, collections gen0/gen1/gen2 {Gen0}/{Gen1}/{Gen2}. "
             + "Thread pool {ThreadPoolThreads} threads, {ThreadPoolPending} queued work items, {LockContentions} lock contentions. "
             + "Npgsql pool {PoolPending} requests waiting, {PoolInUse} connections in use, {PoolIdle} idle, "
@@ -88,6 +93,7 @@ internal sealed class SlowRequestDiagnosticsMiddleware(
             (long)elapsed.TotalMilliseconds,
             (long)_threshold.TotalMilliseconds,
             context.Response.StatusCode,
+            context.Request.ContentLength ?? -1,
             (long)runtime.GcPause.TotalMilliseconds,
             runtime.Gen0Collections,
             runtime.Gen1Collections,
@@ -113,6 +119,9 @@ internal sealed class SlowRequestDiagnosticsMiddleware(
             context.TraceIdentifier);
     }
 
+    private bool IsKnownSlow(HttpContext context) =>
+        _knownSlowRoutes.Any(route => context.Request.Path.StartsWithSegments(route, StringComparison.OrdinalIgnoreCase));
+
     internal static string Describe(IReadOnlyList<string> overlapping) =>
         overlapping.Count == 0 ? "none tracked" : string.Join(", ", overlapping);
 
@@ -127,6 +136,19 @@ internal sealed class SlowRequestDiagnosticsOptions
 {
     /// <summary>A request at least this long is reported; zero or less switches the diagnostics off.</summary>
     public TimeSpan Threshold { get; set; } = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>
+    /// Routes (path prefixes, whole segments) whose duration follows the size of the payload they carry (git
+    /// transfers, artifact uploads and downloads): a slow request on one of them is logged at information level,
+    /// with the same evidence, instead of a warning (R-2, decision of 2026-10-30). The threshold is the same for
+    /// every route. A list configured under "SlowRequestDiagnostics:KnownSlowRoutes" adds to these.
+    /// </summary>
+    public List<string> KnownSlowRoutes { get; set; } =
+    [
+        "/git",
+        "/api/artifacts/upload",
+        "/api/artifacts/agent-download"
+    ];
 
     /// <summary>A pool connection creation at least this long is reported on its own line (R-6); zero or less
     /// switches that line off.</summary>

@@ -60,6 +60,15 @@ public class AuthRepositoryExtraTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSecurityStampAsync_DeactivatedUserWithUnchangedStamp_ReturnsNull()
+    {
+        // R-49: an account switched off outside UserService (database edit, script) keeps its stamp.
+        SeedUser(1, active: false, stamp: "abc");
+
+        Assert.Null(await _repo.GetSecurityStampAsync(1, ct: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task FindUserByIdTrackedAsync_FoundAndMissing()
     {
         SeedUser(1);
@@ -75,8 +84,8 @@ public class AuthRepositoryExtraTests : IDisposable
         _db.RefreshTokens.Add(new RefreshToken { Id = 1, UserId = 1, TokenHash = "hash-x", ExpiresAt = DateTime.UtcNow.AddDays(1) });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.NotNull(await _repo.FindRefreshTokenByHashAsync("hash-x", ct: TestContext.Current.CancellationToken));
-        Assert.Null(await _repo.FindRefreshTokenByHashAsync("nope", ct: TestContext.Current.CancellationToken));
+        Assert.NotNull(await _repo.FindRefreshTokenByHashAsync(["hash-x"], ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.FindRefreshTokenByHashAsync(["nope"], ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]

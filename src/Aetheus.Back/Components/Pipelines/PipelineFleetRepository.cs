@@ -42,12 +42,7 @@ internal sealed class PipelineFleetRepository(AppDbContext db) : IPipelineFleetR
         if (accessiblePipelineIds is not null)
             pipelines = pipelines.Where(pipeline => accessiblePipelineIds.Contains(pipeline.Id));
         if (organizationIds is not null)
-            pipelines = pipelines.Where(pipeline => organizationIds.Contains(
-                pipeline.Project != null
-                    ? pipeline.Project.OrganizationId
-                    : pipeline.Environment != null && pipeline.Environment.Project != null
-                        ? pipeline.Environment.Project.OrganizationId
-                        : pipeline.ProjectServer != null ? pipeline.ProjectServer.Project.OrganizationId : 0));
+            pipelines = pipelines.InOrganizations(organizationIds);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim();
@@ -228,7 +223,8 @@ internal sealed class PipelineFleetRepository(AppDbContext db) : IPipelineFleetR
                     ? pipeline.Environment.Project.OrganizationId
                     : pipeline.ProjectServer != null ? pipeline.ProjectServer.Project.OrganizationId : 0)
         {
-            AiRunnerProfileId = pipeline.AiRunnerProfileId
+            AiRunnerProfileId = pipeline.AiRunnerProfileId,
+            SourceRepositoryId = pipeline.SourceRepositoryId
         });
 
     private static IQueryable<PipelineFleetItemDto> Sort(

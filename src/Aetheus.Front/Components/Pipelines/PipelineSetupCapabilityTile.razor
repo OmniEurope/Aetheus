@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-22: one tile of the Capabilities step is an OE selectable card (a short title and a short line) and, beside it, a "?"
+   that opens a dialog with the longer explanation. A selectable card is one button and holds nothing interactive, so the "?" is
+   a sibling laid over the card's corner (.pipeline-setup-tile in app.css), never inside it. *@
+<div class="@(Waiting ? "pipeline-setup-tile pipeline-setup-tile--waiting" : "pipeline-setup-tile")" data-testid="@($"setup-tile-{Key}")">
+    @Card
+    <OmniButton Variant="OmniButtonVariant.Ghost" Size="OmniControlSize.Small" Class="pipeline-setup-tile__help"
+                Label="@L["PipelineSetupTileHelpLabel", Title].Value" OnClick="@ShowHelpAsync"
+                data-testid="@($"setup-help-{Key}")">
+        <Icon><OmniIcon Name="OmniIconName.Question" /></Icon>
+    </OmniButton>
+</div>

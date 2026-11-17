@@ -44,6 +44,10 @@ public partial class AppDatabaseSizeView
         }
     }
 
+    /// <summary>R-27: why no measurement ever arrived, as the server read it; the general hint when it gave no cause.</summary>
+    private string? NoDataDescription =>
+        AppNoMeasureText.Describe(L, _report?.NoMeasure, AppMeasureSignal.Database);
+
     private AppDatabaseTableSizeDto? Largest => _report?.Tables.FirstOrDefault();
 
     private string TotalText => Bytes(_report?.TotalBytes);

@@ -37,6 +37,12 @@ public sealed partial class NullMeansAuthorizedAuditTests
         // to hold Read on. The item itself is already gated by the unconditional Pipeline/Read above.
         "src/Aetheus.Back/Components/Pipelines/PipelineFleetController.cs:GetFleetItem",
 
+        // CORRECT. BACK-003: ActionKey is null when the operation kind's dedicated endpoint checks no
+        // named permission, only a level. The unconditional Server Write gate, and the Server Admin gate
+        // for Admin kinds, are already applied above; an unclassified kind (no requirement at all) is
+        // refused on its own null branch before them.
+        "src/Aetheus.Back/Components/Tasks/TasksController.cs:CreateOperation",
+
         // Pipeline owner authorization checks each nullable owner branch explicitly through
         // PipelineOwnerAuthorization.CanOwnAsync.
     };

@@ -14,7 +14,7 @@ namespace Aetheus.Front.Tests.Pages.Pipelines;
 public sealed class PipelineSetupDeployChainTests : BunitContext
 {
     private const string Tile = "setup-option-deploy-after-candidate";
-    private const string Group = "[data-testid='setup-deploy-chain']";
+    private const string Group = "[data-testid='setup-option-deploy-after-candidate']";
 
     private readonly BunitTestHelper.TestHandler _handler;
 
@@ -103,19 +103,22 @@ public sealed class PipelineSetupDeployChainTests : BunitContext
     }
 
     [Fact]
-    public async Task TheOption_IsHidden_WhenTheDeploymentPipelineIsNotCreated()
+    public async Task TheOption_IsGreyedAndUnticked_WhenTheDeploymentPipelineIsNotCreated()
     {
         var cut = await OpenCapabilitiesAsync();
         Assert.NotEmpty(cut.FindAll(Group));
 
         await ClickAsync(cut, "setup-option-production");
 
-        Assert.Empty(cut.FindAll(Group));
-        Assert.Empty(cut.FindAll($"[data-testid='{Tile}']"));
+        // R-23: it stays on screen, greyed, saying what it depends on (it is no longer removed).
+        var tile = cut.Find($"[data-testid='{Tile}']");
+        Assert.Equal("true", tile.GetAttribute("aria-disabled"));
+        Assert.Equal("false", tile.GetAttribute("aria-checked"));
+        Assert.Equal("production", cut.Find($"{Group} [data-testid='setup-dependency-note']").GetAttribute("data-depends-on"));
     }
 
     [Fact]
-    public async Task TheOption_IsHidden_WhenNeitherTheCandidateNorTheNightlyIsCreated()
+    public async Task TheOption_IsGreyed_WhenNeitherTheCandidateNorTheNightlyIsCreated()
     {
         var cut = await OpenCapabilitiesAsync();
 
@@ -123,7 +126,8 @@ public sealed class PipelineSetupDeployChainTests : BunitContext
         Assert.NotEmpty(cut.FindAll(Group));
         await ClickAsync(cut, "setup-option-nightly");
 
-        Assert.Empty(cut.FindAll(Group));
+        Assert.Equal("true", cut.Find($"[data-testid='{Tile}']").GetAttribute("aria-disabled"));
+        Assert.Equal("false", cut.Find($"[data-testid='{Tile}']").GetAttribute("aria-checked"));
     }
 
     [Fact]
@@ -188,7 +192,7 @@ public sealed class PipelineSetupDeployChainTests : BunitContext
         .. new[]
         {
             "application-ci", "application-quality", "application-security", "application-qa",
-            "application-candidate", "application-nightly", "application-deploy-prod"
+            "application-candidate", "application-nightly", "application-deploy-prod", "application-deploy-prod-front-back"
         }.Select(name => new PipelineTemplateSummaryDto
         {
             Id = name.GetHashCode(StringComparison.Ordinal),

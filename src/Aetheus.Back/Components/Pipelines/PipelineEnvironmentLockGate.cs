@@ -37,6 +37,6 @@ internal sealed class PipelineEnvironmentLockGate(IPipelineEnvironmentReader rep
         var environmentName = names.GetValueOrDefault(holder.Key, holder.Key);
         return holder.RunId == 0
             ? $"Stage '{stage.Name}' {WaitMarker}{environmentName}', just taken by another run."
-            : $"Stage '{stage.Name}' {WaitMarker}{environmentName}', held by {holder.PipelineName} #{holder.BuildNumber} (run {holder.RunId}).";
+            : $"Stage '{stage.Name}' {WaitMarker}{environmentName}', held by {holder.PipelineName} #{holder.BuildNumber}.";
     }
 }

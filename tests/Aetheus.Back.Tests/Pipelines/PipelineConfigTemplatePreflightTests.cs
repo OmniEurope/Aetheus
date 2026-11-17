@@ -127,6 +127,31 @@ public class PipelineConfigTemplatePreflightTests
         Assert.Empty(findings.Warnings);
     }
 
+    /// <summary>Decision 2026-11-10: when the run's source is the mirror of an external repository, a template the
+    /// configuration repository does not hold is refused as never read from the mirror, not as a missing file.</summary>
+    [Fact]
+    public async Task Decision20261110_TemplatesOfAMirrorSource_AreRefusedAsNeverReadFromTheMirror()
+    {
+        _configRepository.ReadAsync(7, ".pipeline/configs/apache/site.conf", Commit, 11, Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        _git.ReadProjectConfigAtRevisionAsync(
+                7, PipelineHostOperationTaskFactory.DefaultProxyTemplatePath, Commit, Arg.Any<CancellationToken>(), 11)
+            .Returns((string?)null);
+        _git.IsExternalMirrorDefinitionSourceAsync(7, 11, Arg.Any<CancellationToken>()).Returns(true);
+
+        var findings = await CreateSut().FindProblemsAsync(
+            Definition(), new Dictionary<string, string>(), 7, Commit, 11, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, findings.Problems.Count);
+        Assert.All(findings.Problems, problem =>
+        {
+            Assert.Equal(PipelineProblemCodes.ConfigTemplateFromExternalMirror, problem.Code);
+            Assert.Contains("never read from the mirror of an external repository", problem.English, StringComparison.Ordinal);
+        });
+        Assert.Contains(findings.Problems, problem => problem.Parameters["steps"] == "'proxy'");
+        Assert.Contains(findings.Problems, problem => problem.Parameters["steps"] == "'vhosts'");
+    }
+
     private const string ConditionalYaml = """
         name: deploy
         trigger: manual

@@ -16,6 +16,12 @@ public partial class TelemetrySendIntervalNote
 
     [Parameter] public string? Class { get; set; }
 
+    /// <summary>False when the host states the setting itself (the « ? » help of the application picker, R-30).</summary>
+    [Parameter] public bool ShowSetting { get; set; } = true;
+
+    /// <summary>The interval the host already read: no second call is made for it.</summary>
+    [Parameter] public AppTelemetrySendIntervalDto? Interval { get; set; }
+
     private AppTelemetrySendIntervalDto? _interval;
     private int _lastAppId = -1;
 
@@ -27,6 +33,13 @@ public partial class TelemetrySendIntervalNote
 
     protected override async Task OnParametersSetAsync()
     {
+        if (Interval is not null)
+        {
+            _interval = Interval;
+            _lastAppId = AppId;
+            return;
+        }
+
         if (AppId == _lastAppId) return;
         _lastAppId = AppId;
         try

@@ -7,7 +7,8 @@ namespace Aetheus.Back.Components.SystemLogs;
 [ApiController]
 [Route("api/system-logs")]
 [Authorize(Roles = "Admin")]
-public class SystemLogsController(ISystemLogService logService, ISettingsService settings) : ControllerBase
+public class SystemLogsController(
+    ISystemLogService logService, ISettingsService settings, ISystemLogExclusionService exclusionRules) : ControllerBase
 {
     [HttpGet("files")]
     public async Task<ActionResult<List<SystemLogFileDto>>> GetLogFiles(CancellationToken ct)
@@ -27,13 +28,22 @@ public class SystemLogsController(ISystemLogService logService, ISettingsService
         [FromQuery, StringLength(50)] string? sortBy = null,
         [FromQuery] bool sortDescending = true,
         CancellationToken ct = default,
-        [FromQuery(Name = "Filters"), MaxLength(PaginationRequest.MaxFilters)] List<GridFilter>? filters = null)
+        [FromQuery(Name = "Filters"), MaxLength(PaginationRequest.MaxFilters)] List<GridFilter>? filters = null,
+        [FromQuery, Range(1, int.MaxValue)] int? organizationId = null,
+        [FromQuery] bool excluded = false)
     {
         page = Math.Max(1, page);
         pageSize = PaginationDefaults.Clamp(pageSize);
+        // R-28: with an organization, its enabled exclusion rules split the log into the page's two tabs
+        // (excluded=false the lines no rule matches, true the lines one does). Without one, every line.
+        var rules = organizationId is { } organization
+            ? await exclusionRules.ListEnabledAsync(organization, ct)
+            : null;
+        if (excluded && rules is null)
+            return Ok(new PaginatedResult<SystemLogEntryDto> { Items = [], TotalCount = 0, Page = page, PageSize = pageSize });
         // The virtualized grid's column sort and header filters travel with each block.
         return Ok(await logService.GetLogEntriesAsync(fileName, level, search, dateFrom, dateTo, page, pageSize, ct,
-            sortBy, sortDescending, filters is { Count: > 0 } ? filters : null));
+            sortBy, sortDescending, filters is { Count: > 0 } ? filters : null, rules, excluded));
     }
 
     [HttpDelete("purge")]

@@ -31,10 +31,12 @@ public interface IPortRegistryService
     /// timestamps only, and a declared port the owner no longer asks for is released, so the registry
     /// follows a project that changes its ports instead of accumulating dead claims.
     /// Never steals a port held by another owner - <see cref="FindConflictsAsync"/> is the gate.
+    /// <paramref name="alsoKeep"/> names ports the owner still holds for another reason (a library entry): they are
+    /// not released, nor declared here.
     /// </summary>
     Task DeclareAsync(
         int serverId, IReadOnlyCollection<int> ports, string ownerKey, string ownerLabel,
-        int? projectId, CancellationToken ct = default);
+        int? projectId, CancellationToken ct = default, IReadOnlyCollection<int>? alsoKeep = null);
 
     Task<PortReservationDto> AddManualReservationAsync(
         int serverId, CreatePortReservationRequest request, CancellationToken ct = default);
@@ -42,15 +44,22 @@ public interface IPortRegistryService
     Task<bool> ReleaseAsync(int serverId, int reservationId, CancellationToken ct = default);
 
     /// <summary>
-    /// Replaces the whole <c>Observed</c> source of one server with what a scan just saw, and stamps
+    /// Replaces the <c>Observed</c> source of one server with what a scan just saw, and stamps
     /// the server's last-scan time. Touches no <c>Declared</c> or <c>Manual</c> row: an observation is
     /// evidence, never a decision, so a port declared but not listening keeps its claim and is merely
     /// reported as unobserved. Ports beyond
     /// <see cref="Aetheus.Shared.Components.PortRegistry.PortRegistryLimits.MaxObservedPorts"/> are dropped rather than written.
+    /// <para>
+    /// <paramref name="protocols"/> names the protocols whose probe really succeeded, with the age of
+    /// each measurement: only those protocols are replaced, dated by their own measurement time, and the
+    /// observations of a protocol that was not measured are kept. Null means a legacy report in which
+    /// every protocol was measured at <paramref name="observedAt"/>.
+    /// </para>
     /// </summary>
     Task ReplaceObservedAsync(
         int serverId, IReadOnlyCollection<ObservedPortDto> ports, DateTime observedAt,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IReadOnlyCollection<ObservedProtocolScanDto>? protocols = null);
 
     /// <summary>
     /// Releases one port on one server, but only when <paramref name="ownerKey"/> is the holder.
@@ -72,6 +81,18 @@ public interface IPortRegistryService
     /// unavailable port.</summary>
     Task SyncOwnedPortAsync(
         int? serverId, int? port, string ownerKey, string ownerLabel, int? projectId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Adds ONE declared claim of <paramref name="ownerKey"/> on <paramref name="port"/>, without touching the
+    /// other ports the owner holds (unlike <see cref="DeclareAsync"/>, which releases what it is not asked for).
+    /// Idempotent: a port the owner already declared keeps its label and only gets a fresh timestamp.
+    /// A port declared or reserved manually by ANOTHER owner throws <see cref="ConflictException"/> naming it.
+    /// A port only seen listening is not a refusal (it may be the owner's own running service): the claim is
+    /// written and the listener's label is returned, for the caller to warn about; null when nothing listens.
+    /// </summary>
+    Task<string?> ClaimPortAsync(
+        int serverId, int port, string ownerKey, string ownerLabel, int? projectId,
         CancellationToken ct = default);
 
     /// <summary>The server's allocation window, reporting the fleet default when it has no row.</summary>
@@ -96,4 +117,8 @@ public interface IPortRegistryService
     Task<List<int>> AllocateAsync(
         int serverId, int count, string ownerKey, string ownerLabel, int? projectId,
         CancellationToken ct = default);
+
+    /// <summary>The ports <see cref="AllocateAsync"/> would hand out now, reserving nothing (the preview a
+    /// reallocation shows before it is confirmed). Throws like <see cref="AllocateAsync"/> when too few remain.</summary>
+    Task<List<int>> PeekFreePortsAsync(int serverId, int count, CancellationToken ct = default);
 }

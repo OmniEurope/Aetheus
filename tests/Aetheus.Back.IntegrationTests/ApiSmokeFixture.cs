@@ -21,7 +21,7 @@ namespace Aetheus.Back.IntegrationTests;
 /// <para>
 /// DRPS: this fixture uses the dedicated <c>aetheus_smoke</c> database on the SHARED assembly
 /// container (<see cref="SharedPostgresContainer"/>), separate from the relational suites'
-/// <c>aetheus_it</c> database - so its admin password / seed state can never be perturbed by the
+/// <c>aetheus_it_N</c> databases - so its admin password / seed state can never be perturbed by the
 /// relational suites that drop and reseed their own schema, yet only ONE Postgres boots for the whole
 /// assembly (no second concurrent container).
 /// </para>

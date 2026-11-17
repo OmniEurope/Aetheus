@@ -108,6 +108,8 @@ public class DependencyCycleAuditTests
         ["Plugins"] = 2,
         ["SystemLogs"] = 2,
         ["Tasks"] = 2,
+        // Public advisories, read by the modules above; its staleness alert goes through Notifications (L1).
+        ["VulnerabilityWatch"] = 2,
 
         // L3 - things driven onto a machine through tasks.
         ["AgentInstaller"] = 3,
@@ -134,6 +136,8 @@ public class DependencyCycleAuditTests
         ["AppBackups"] = 5,
         ["Mail"] = 5,
         ["Teamspeak"] = 5,
+        // What a project contains: reads the repositories and hears their events. PLAN-004 lot 2.
+        ["Inventory"] = 5,
 
         // L6 - the orchestrator.
         ["Pipelines"] = 6,

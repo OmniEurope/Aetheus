@@ -66,6 +66,24 @@ public sealed class PipelineRunsGridCancelTests : BunitContext
         Assert.Equal(0, _refreshes);
     }
 
+    /// <summary>A stale row: the run finished while the table still offered its cancel. The 404 is said in a
+    /// sentence (a warning, never a reported failure) and the host reads the runs again.</summary>
+    [Fact]
+    public async Task ACancelOfARunAlreadyFinished_SaysSo_AndRefreshesTheHost()
+    {
+        Dialog.ConfirmResult = true;
+        _handler.SetResponse(HttpMethod.Post, CancelUrl, HttpStatusCode.NotFound);
+        var cut = RenderGrid();
+
+        await ClickCancelAsync(cut);
+
+        var toast = Assert.Single(Toasts.Toasts());
+        Assert.Equal(OmniSeverity.Warning, toast.Severity);
+        Assert.Equal("RunNoLongerCancellable", toast.Detail);
+        Assert.Equal(1, _refreshes);
+        Assert.DoesNotContain(_handler.RequestsSnapshot(), request => request.Url.Contains("api/client-errors", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ADeclinedCancel_SendsNothing()
     {

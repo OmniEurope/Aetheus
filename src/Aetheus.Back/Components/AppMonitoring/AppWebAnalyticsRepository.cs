@@ -232,7 +232,9 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
     {
         foreach (var (kind, start, pseudonym) in Periods(analyticsEvent))
         {
-            var newIdentity = TrackPeriodIdentity(appId, kind, start, pseudonym, analyticsEvent);
+            // The entry page is kept for the daily visitor only (the Visitors list), from its first page view.
+            var entryRoute = isPageView && kind == AnalyticsPeriodKind.Day ? analyticsEvent.Route : null;
+            var newIdentity = TrackPeriodIdentity(appId, kind, start, pseudonym, analyticsEvent, entryRoute);
             // A signed-in visitor shares the period identity of the anonymous events that precede
             // sign-in (same network, same period), so "first time this period" must be decided on
             // the authenticated pseudonym's own identity, not on the visitor identity.
@@ -303,7 +305,8 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
         AnalyticsPeriodKind kind,
         DateOnly start,
         string pseudonym,
-        AppWebAnalyticsIngestEvent analyticsEvent)
+        AppWebAnalyticsIngestEvent analyticsEvent,
+        string? entryRoute = null)
     {
         var identity = db.AppAnalyticsPeriodIdentities.Local.FirstOrDefault(item =>
             item.MonitoredAppId == appId
@@ -324,6 +327,8 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
             };
             db.AppAnalyticsPeriodIdentities.Add(identity);
         }
+        // FirstSeenAtUtc is written on insert only; the entry route is written once, by the first page view.
+        identity.EntryRoute ??= entryRoute;
         identity.LastSeenAtUtc = analyticsEvent.OccurredAtUtc;
         return newIdentity;
     }
@@ -501,6 +506,30 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
             Daily = daily,
             TopPages = pages
         };
+    }
+
+    public async Task<IReadOnlyList<AppWebAnalyticsVisitorDto>> GetVisitorsAsync(
+        int appId, DateOnly sinceDayUtc, int limit, CancellationToken ct = default)
+    {
+        var rows = await db.AppAnalyticsPeriodIdentities.AsNoTracking()
+            .Where(item => item.MonitoredAppId == appId
+                           && item.PeriodKind == AnalyticsPeriodKind.Day
+                           && item.PeriodStartUtc >= sinceDayUtc)
+            .OrderByDescending(item => item.FirstSeenAtUtc)
+            .ThenBy(item => item.Id)
+            .Take(limit)
+            .Select(item => new { item.Pseudonym, item.FirstSeenAtUtc, item.EntryRoute })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return
+        [
+            .. rows.Select(item => new AppWebAnalyticsVisitorDto
+            {
+                // A short prefix of the daily pseudonym tells two visitors of a day apart; it identifies nobody.
+                Visitor = item.Pseudonym[..Math.Min(8, item.Pseudonym.Length)],
+                FirstSeenAtUtc = DateTime.SpecifyKind(item.FirstSeenAtUtc, DateTimeKind.Utc),
+                EntryRoute = item.EntryRoute
+            })
+        ];
     }
 
     public Task<WebAnalyticsPurgeResult> PurgeAsync(

@@ -99,6 +99,55 @@ public sealed class AppMonitoringService(
         return await MapWithUptimeAsync(app, ct).ConfigureAwait(false);
     }
 
+    public async Task<AppTelemetrySetupDto?> ConfigureTelemetrySetupAsync(int projectId, CancellationToken ct = default)
+    {
+        if (await EnsureCollectionAppAsync(projectId, telemetry: true, ct).ConfigureAwait(false) is null)
+            return null;
+        return await GetTelemetrySetupAsync(projectId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<EnsuredCollectionApp?> EnsureCollectionAppAsync(int projectId, bool telemetry, CancellationToken ct = default)
+    {
+        var projectName = await repo.GetProjectNameAsync(projectId, ct).ConfigureAwait(false);
+        if (projectName is null)
+            return null;
+
+        var existing = await repo.GetFirstEnabledAppForUpdateAsync(projectId, ct).ConfigureAwait(false);
+        if (existing is not null
+            && (!telemetry || await repo.HasTelemetrySetupRequestedAsync(projectId, ct).ConfigureAwait(false)))
+            return new EnsuredCollectionApp(existing.Id, Created: false);
+
+        // The first request of the telemetry marks the enabled application; a project without one gets it created.
+        var created = existing is null;
+        if (existing is not null)
+        {
+            existing.TelemetrySetupRequested = true;
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            // No probe URL and no server: the application only carries the ingest key the deployment issues.
+            existing = new MonitoredApp
+            {
+                ProjectId = projectId,
+                Name = projectName.Trim() is { Length: > 150 } longName ? longName[..150] : projectName.Trim(),
+                Enabled = true,
+                TelemetrySetupRequested = telemetry,
+                CurrentStatus = AppHealthStatus.Unknown
+            };
+            await repo.AddAppAsync(existing, ct).ConfigureAwait(false);
+        }
+        await BroadcastAppChangeAsync(projectId, EntityChangeOps.Created, ct).ConfigureAwait(false);
+        return new EnsuredCollectionApp(existing.Id, created);
+    }
+
+    public async Task<AppTelemetrySetupDto> GetTelemetrySetupAsync(int projectId, CancellationToken ct = default) =>
+        new()
+        {
+            Requested = await repo.HasTelemetrySetupRequestedAsync(projectId, ct).ConfigureAwait(false),
+            PackagesDetected = await repo.HasTelemetryPackagesAsync(projectId, ct).ConfigureAwait(false)
+        };
+
     public async Task<MonitoredAppDto?> UpdateAppAsync(int id, UpdateMonitoredAppRequest request, CancellationToken ct = default)
     {
         ValidateProbeUrl(request.ProbeUrl);
@@ -187,7 +236,8 @@ public sealed class AppMonitoringService(
             ProbeUrl = a.ProbeUrl ?? string.Empty,
             ProbeIntervalSeconds = a.ProbeIntervalSeconds,
             ProbeTimeoutSeconds = a.ProbeTimeoutSeconds,
-            ExpectedStatusCode = a.ExpectedStatusCode
+            ExpectedStatusCode = a.ExpectedStatusCode,
+            ProbeRequestedAt = a.ProbeRequestResultAt is null ? a.ProbeRequestedAt : null
         }).ToList();
     }
 
@@ -234,6 +284,9 @@ public sealed class AppMonitoringService(
             app.ConsecutiveSuccesses = transition.ConsecutiveSuccesses;
             app.LastCheckedAt = ts;
             app.LastResponseTimeMs = result.ResponseTimeMs;
+            // R-29: the first sample ingested after an immediate probe request answers it.
+            if (app.ProbeRequestedAt is not null && app.ProbeRequestResultAt is null)
+                app.ProbeRequestResultAt = ts;
 
             if (transition.Changed)
             {
@@ -263,11 +316,12 @@ public sealed class AppMonitoringService(
             .Where(app => app.AnalyticsEnabled)
             .Select(app => app.Id)
             .ToList();
+        var onlineWindowStart = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-OnlineAudience.WindowMinutes);
         Dictionary<int, int> activeVisitorCounts = analyticsAppIds.Count == 0
             ? []
             : await repo.GetActiveVisitorCountsAsync(
                 analyticsAppIds,
-                timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-5),
+                onlineWindowStart,
                 ct).ConfigureAwait(false);
 
         var applications = apps
@@ -285,6 +339,9 @@ public sealed class AppMonitoringService(
                 OnlineVisitorCount = a.AnalyticsEnabled
                     ? activeVisitorCounts.GetValueOrDefault(a.Id)
                     : null,
+                OnlineVisitorState = OnlineAudience.Resolve(
+                    a.AnalyticsEnabled, activeVisitorCounts.GetValueOrDefault(a.Id), a.AnalyticsLastIngestAt, onlineWindowStart),
+                OnlineVisitorLastEventAt = a.AnalyticsEnabled ? a.AnalyticsLastIngestAt : null,
                 LastEventAt = LatestOf(a.LastIngestAt, a.AnalyticsLastIngestAt)
             })
             .ToList();
@@ -292,7 +349,10 @@ public sealed class AppMonitoringService(
             .Where(app => app.CurrentStatus is AppHealthStatus.Down or AppHealthStatus.Degraded)
             .Take(10)
             .ToList();
-        var audience = await GetAudienceTotalsAsync(analyticsAppIds, activeVisitorCounts, ct).ConfigureAwait(false);
+        var audience = await GetAudienceTotalsAsync(
+            analyticsAppIds, activeVisitorCounts, OnlineAudience.Combine(applications.Select(app => app.OnlineVisitorState)),
+            applications.Max(app => app.OnlineVisitorLastEventAt), ct)
+            .ConfigureAwait(false);
 
         return new AppMonitoringSummaryDto
         {
@@ -312,7 +372,8 @@ public sealed class AppMonitoringService(
     /// ingestion already keeps per day, week and month. Null when no application measures its
     /// audience.</summary>
     private async Task<AppAudienceTotalsDto?> GetAudienceTotalsAsync(
-        List<int> analyticsAppIds, Dictionary<int, int> activeVisitorCounts, CancellationToken ct)
+        List<int> analyticsAppIds, Dictionary<int, int> activeVisitorCounts, OnlineAudienceState onlineState,
+        DateTime? onlineLastEventAt, CancellationToken ct)
     {
         if (analyticsAppIds.Count == 0) return null;
 
@@ -330,6 +391,8 @@ public sealed class AppMonitoringService(
         {
             ApplicationCount = analyticsAppIds.Count,
             OnlineVisitors = activeVisitorCounts.Values.Sum(),
+            OnlineVisitorState = onlineState,
+            OnlineVisitorLastEventAt = onlineLastEventAt,
             VisitorsToday = day?.UniqueVisitors ?? 0,
             VisitorsThisWeek = week?.UniqueVisitors ?? 0,
             VisitorsThisMonth = month?.UniqueVisitors ?? 0,

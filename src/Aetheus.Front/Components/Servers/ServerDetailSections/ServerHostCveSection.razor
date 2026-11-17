@@ -1,0 +1,53 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-41: the CVE of the server's host system, a tab of the services page beside the packages and updates. Nothing is
+   concluded before the watch answered: "not reported" and "not covered" are said as such, never as "no CVE". *@
+<OmniStack Gap="OmniSpacing.Large" Class="server-host-cve" data-testid="server-host-cve">
+    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" AdoptPrefixes="DryRunTaskPrefixes" AdoptedTitle="@AdoptedTitle" />
+
+    @if (_loading)
+    {
+        <ZoneVeil />
+    }
+    else if (_loadFailed)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger">
+            @L["LoadFailed"]
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync())"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
+        </OmniAlert>
+    }
+    else if (_data is null || _data.State == HostVulnerabilityWatchState.NotReported)
+    {
+        <EmptyState Icon="help" Title="@L["ServerHostCveNotReportedTitle"]" Description="@L["ServerHostCveNotReportedDescription"]" />
+    }
+    else if (_data.State == HostVulnerabilityWatchState.UnsupportedSystem)
+    {
+        <EmptyState Icon="help" Title="@L["ServerHostCveUnsupportedTitle"]" Description="@string.Format(L["ServerHostCveUnsupportedDescription"], _data.OsName)" />
+    }
+    else
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Large" Align="OmniAlignment.Center">
+            <NumberBadge Fill="OmniFill.Solid" Tone="@(OpenCount > 0 ? OmniTone.Danger : OmniTone.Success)">@string.Format(L["ServerHostCveCount"], OpenCount)</NumberBadge>
+            @if (ExploitedCount > 0)
+            {
+                <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@string.Format(L["ServerHostCveExploitedCount"], ExploitedCount)</NumberBadge>
+            }
+            <NumberBadge Fill="OmniFill.Tonal" Tone="OmniTone.Neutral">@string.Format(L["ServerHostCveFixableCount"], FixableCount)</NumberBadge>
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@ReportText</OmniText>
+        </OmniStack>
+
+        @if (_data.MatchedAt is null)
+        {
+            <OmniAlert Severity="OmniSeverity.Info" data-testid="server-host-cve-pending">@L["ServerHostCvePending"]</OmniAlert>
+        }
+
+        <ServerHostFindingsGrid Items="@_data.Findings" OnDryRun="@DryRunAsync" CanUpgrade="@(CanUpgrade && !_busy)">
+            <EmptyContent>
+                @if (_data.MatchedAt is not null)
+                {
+                    <EmptyState Icon="verified_user" Title="@L["ServerHostCveNoneTitle"]" Description="@string.Format(L["ServerHostCveNoneDescription"], _data.OsName)" />
+                }
+            </EmptyContent>
+        </ServerHostFindingsGrid>
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["CveWatchAdvisoryAttribution"]</OmniText>
+    }
+</OmniStack>

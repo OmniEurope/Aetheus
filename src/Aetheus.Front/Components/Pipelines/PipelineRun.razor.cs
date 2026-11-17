@@ -90,7 +90,7 @@ public partial class PipelineRun : IAsyncDisposable
         if (!await ResetRunPageAsync(runId, generation).ConfigureAwait(false)) return;
         _logStreamer = new PipelineRunLogStreamer(Api, HubFactory, Logger, _logWindow, InvokeAsync, StateHasChanged);
         _baselines = new PipelineRunStageBaselines(Api);
-        _approval = new PipelineRunApprovalController(Api, Toast, ReloadRunAsync, PendingApprovals);
+        _approval = new PipelineRunApprovalController(Api, Toast, ReloadRunAndRenderAsync, PendingApprovals);
         // A return shows the run as it was left at once; the page-wide loader is for a first visit.
         // The run is then read again and the page rebuilt from it, as on a first visit.
         var address = $"pipelines/runs/{runId}";
@@ -122,7 +122,7 @@ public partial class PipelineRun : IAsyncDisposable
         await _logStreamer.UpdateAsync(_selectedStep);
         if (!IsCurrentLoad(runId, generation)) return;
         _live = new PipelineRunLiveConnection(HubFactory, Logger, runId,
-            () => LiveChildRunIds(_childRunCache), ReloadRunAsync, RefreshQueueAsync, InvokeAsync,
+            () => LiveChildRunIds(_childRunCache), ReloadRunAndRenderAsync, RefreshQueueAsync, InvokeAsync,
             () => AllStepsAcrossChildren().Any(step => step.Status == TaskExecutionStatus.Assigned),
             () => RunInProgress, () => _ = InvokeAsync(StateHasChanged));
         await _live.StartAsync();
@@ -134,7 +134,7 @@ public partial class PipelineRun : IAsyncDisposable
     private void ReassertBreadcrumb()
     {
         if (_run is null) return;
-        var runItem = new BreadcrumbItem($"#{_run.Id} {L["PipelineRun"]}");
+        var runItem = new BreadcrumbItem($"#{_run.BuildNumber} {L["PipelineRun"]}");
         if (_run.ProjectId is { } projectId)
         {
             Breadcrumb.Set(
@@ -214,20 +214,23 @@ public partial class PipelineRun : IAsyncDisposable
         // show now, while the gate, the baselines and the trends are still on their way.
         _childrenLoaded = true;
         await InvokeAsync(StateHasChanged);
+        // The step the reader lands on and its log need nothing of what follows (the gate, the baselines,
+        // the metrics, the releases): they are read beside those, never behind the slowest of them.
+        var selectionTask = AutoSelectStepAsync(runId, generation);
         await Task.WhenAll(
             _baselines.LoadAsync(_childRunCache.Values.Prepend(_run)),
             LoadGateAsync(ct),
             _schemaState.LoadAsync(Api, runId, ct),
             _metrics.LoadAsync(Api, runId, _run),
             failedLogsTask,
-            approvalTask);
+            approvalTask,
+            selectionTask);
         if (!IsCurrentLoad(runId, generation)) return false;
         _repoId = await repositoryTask;
         _releases = await LoadReleasesAsync(releasesTask).ConfigureAwait(false);
         _aiResults = await aiResultsTask;
         _pipelineRunsSummary = await summaryTask;
-        if (!IsCurrentLoad(runId, generation)) return false;
-        return await AutoSelectStepAsync(runId, generation).ConfigureAwait(false);
+        return IsCurrentLoad(runId, generation);
     }
 
     private static async Task<List<ReleaseDto>> LoadReleasesAsync(Task<List<ReleaseDto>> releasesTask)
@@ -249,10 +252,21 @@ public partial class PipelineRun : IAsyncDisposable
                                     && s.Status is TaskExecutionStatus.Failed or TaskExecutionStatus.Success);
         if (autoSelect is null) return true;
         _selectedStep = autoSelect;
-        await _logStreamer!.UpdateAsync(_selectedStep);
-        if (!IsCurrentLoad(runId, generation)) return false;
-        if (!autoSelect.TaskId.HasValue) return true;
-        await LoadTaskLogSnapshotAsync(autoSelect.TaskId.Value);
+        // This runs beside the other reads of the page, which hold the load open: the pane is drawn now
+        // with its loading marker and again once the log is in, not when the whole page has loaded.
+        _logsLoading = autoSelect.TaskId.HasValue;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await _logStreamer!.UpdateAsync(_selectedStep);
+            if (!IsCurrentLoad(runId, generation)) return false;
+            if (autoSelect.TaskId is { } taskId) await LoadTaskLogSnapshotAsync(taskId, PipelineRunLogView.IsOver(autoSelect));
+        }
+        finally
+        {
+            if (IsCurrentLoad(runId, generation)) _logsLoading = false;
+        }
+        await InvokeAsync(StateHasChanged);
         return IsCurrentLoad(runId, generation);
     }
 
@@ -389,7 +403,16 @@ public partial class PipelineRun : IAsyncDisposable
         {
         }
         if (_logStreamer is not null) await _logStreamer.UpdateAsync(_selectedStep);
-        StateHasChanged();
+    }
+
+    /// <summary>The reload for the callers that are not a handler of this page: the live connection (SignalR push, timer)
+    /// and the approval controller (driven by a child panel, whose own render does not draw this page). Nothing else
+    /// renders this page after them, so it draws the reloaded run itself; the handlers of the page use
+    /// <see cref="ReloadRunAsync"/>, after which the framework renders.</summary>
+    private async Task ReloadRunAndRenderAsync()
+    {
+        await ReloadRunAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     internal async Task RefreshQueueAsync()
@@ -431,8 +454,11 @@ public partial class PipelineRun : IAsyncDisposable
 
     private string? GitBranch => PipelineRunPresentation.GitBranch(_run);
 
-    /// <summary>Application version this run built (APP_VERSION), shown under the Release tile.</summary>
-    private string? AppVersion => _run is null ? null : BuiltAppVersion(_run);
+    /// <summary>R-63: the full versions of a release (its own and the application version this run built, APP_VERSION),
+    /// the tooltip of the Release tile's single line.</summary>
+    private string ReleaseFullVersions(ReleaseDto release) =>
+        string.Join(" / ", new[] { release.Version, _run is null ? null : BuiltAppVersion(_run) }
+            .Where(version => !string.IsNullOrWhiteSpace(version)).Distinct(StringComparer.Ordinal));
 
     // Recette R-16: a notice (PipelineRunNotices) is information, not a warning of the run: it is neither
     // blocking, nor orange, nor counted in "Avertissements (n)".
@@ -548,7 +574,6 @@ public partial class PipelineRun : IAsyncDisposable
     {
         try { _logWindow.ApplySnapshot(taskId, await Api.Monitoring.GetTaskLogsAsync(taskId) ?? [], requested: null); }
         catch (HttpRequestException) { _stepLogsCache[taskId] = []; }
-        StateHasChanged();
     }
 
     private async Task RetryFailedAsync()
@@ -625,7 +650,7 @@ public partial class PipelineRun : IAsyncDisposable
     }
 
     private Task ShowParameters() =>
-        _run is null || _run.Parameters.Count == 0
+        _run is null || (_run.Parameters.Count == 0 && UsedResources.IsEmpty)
             ? Task.CompletedTask
             : Commands.ShowParametersAsync(_run);
 
@@ -657,7 +682,11 @@ public partial class PipelineRun : IAsyncDisposable
         // R-31: a step that timed out is a failure too; it used to be missing here, so a run that failed on a
         // timeout listed no failed step and said nothing.
         _run?.Steps.Where(step => step.Status is TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout && !step.IsSystem).ToList() ?? [];
-    private Task LoadFailedStepLogsAsync() => PipelineRunLogView.LoadFailedStepLogsAsync(FailedSteps, Api, _logWindow);
+    private Task LoadFailedStepLogsAsync() => PipelineRunLogView.LoadFailedStepLogsAsync(
+        _selectedStep is { TaskId: not null } selected && PipelineRunLogView.IsOver(selected) && !FailedSteps.Any(step => step.Id == selected.Id)
+            ? [.. FailedSteps, selected]
+            : FailedSteps,
+        Api, _logWindow);
     private Task DownloadArtifactAsync(PipelineArtifactDto artifact) => Commands.DownloadArtifactAsync(artifact);
     private Task OpenAiResultAsync(AiRunResultDto result) => PipelineRunAiResults.OpenAsync(Dialog, L, result);
     private Task CopyYamlAsync() => string.IsNullOrEmpty(_run?.YamlSnapshot) ? Task.CompletedTask : Commands.CopyYamlAsync(_run.YamlSnapshot);
@@ -685,16 +714,22 @@ public partial class PipelineRun : IAsyncDisposable
         if (step.Status == TaskExecutionStatus.Running) _logWindow.Forget(taskId);
         if (_logStreamer is not null) await _logStreamer.UpdateAsync(_selectedStep);
         // Streamed lines may omit earlier history, so the complete log must still be read.
-        if (_logWindow.HasSnapshot(taskId)) return;
+        // R-21: a read held from while the step ran is read again once it is over (its last lines were not there).
+        var over = PipelineRunLogView.IsOver(step);
+        if (_logWindow.HasSnapshot(taskId) && (!over || _logWindow.IsFinalRead(taskId))) return;
         _logsLoading = true;
         StateHasChanged();
-        await LoadTaskLogSnapshotAsync(taskId);
+        await LoadTaskLogSnapshotAsync(taskId, over);
         _logsLoading = false;
     }
-    private async Task LoadTaskLogSnapshotAsync(int taskId)
+    private async Task LoadTaskLogSnapshotAsync(int taskId, bool stepIsOver = false)
     {
         List<TaskLogDto> snapshot;
-        try { snapshot = await Api.Monitoring.GetTaskLogTailAsync(taskId, PipelineRunLogWindow.LiveWindow); }
+        try
+        {
+            snapshot = await Api.Monitoring.GetTaskLogTailAsync(taskId, PipelineRunLogWindow.LiveWindow);
+            if (stepIsOver) _logWindow.MarkFinalRead(taskId);
+        }
         catch (HttpRequestException) { snapshot = []; }
         // Lines streamed while the snapshot was read are kept (merged by id).
         _logWindow.ApplySnapshot(taskId, snapshot, PipelineRunLogWindow.LiveWindow);

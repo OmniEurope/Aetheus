@@ -48,7 +48,7 @@ public sealed class MailMasterAccessService(
 
         var password = MailMasterAccess.NewPassword();
         var env = new Dictionary<string, string>(StringComparer.Ordinal) { [MailSetupEnv.MasterPassword] = password };
-        var task = ServerTaskFactory.Operation(serverId, "Mail - prepare the administrator access",
+        var task = ServerTaskFactory.Operation(serverId, ServerTaskNames.MailPrepareAdministratorAccess,
             OperationKind.MailMasterAccess, "-", env, timeoutSeconds: TimeoutSeconds);
         // The password rides encrypted at rest, like every secret-bearing mail task (F-001 / F11b).
         task.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(env));

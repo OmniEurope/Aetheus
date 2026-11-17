@@ -90,9 +90,11 @@ public static class PipelineRunDtoMapper
         PipelineRun r, Dictionary<string, int> stageDepths, HashSet<string> advisoryKeys) => new()
         {
             Id = r.Id,
+            Uid = r.Uid,
             PipelineId = r.PipelineId,
             ProjectId = r.Pipeline?.ProjectId,
             PipelineName = r.Pipeline?.Name ?? string.Empty,
+            BuildNumber = r.BuildNumber,
             Status = r.Status,
             RunToEnd = r.RunToEnd,
             GateOverrideBy = r.GateOverrideBy,

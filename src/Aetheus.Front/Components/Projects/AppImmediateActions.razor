@@ -1,0 +1,39 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Projects
+@* R-24: when a leading fragment is given (the application picker), it shares one row with the probe button; the alerts below stay outside that row. *@
+@* R-29: the immediate actions of the selected application. One visible action, the probe; the telemetry request is
+   in its menu. The page veil is held while a request is sent; the results are alerts with the time of each step. *@
+<VeilHold Busy="@_busy" />
+<OmniStack Gap="OmniSpacing.Medium" data-testid="app-immediate-actions">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Wrap="true" data-testid="app-immediate-actions-row">
+        @Leading
+        <div>
+        <OmniSplitButton Text="@L["AppProbeNow"]" OnClick="@ProbeNowAsync" Busy="@_busy" Disabled="@(!CanProbe)"
+                         MenuLabel="@L["AppImmediateActionsMore"]" data-testid="app-probe-now">
+            <Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon>
+            <ChildContent>
+                <OmniMenuItem OnClick="@RequestTelemetryAsync" Disabled="@(!App.HasIngestKey)" data-testid="app-telemetry-now">
+                    <Icon><OmniIcon Name="@MaterialIconMap.Resolve(("insights"))" /></Icon>
+                    <ChildContent>@L["AppTelemetryNow"]</ChildContent>
+                </OmniMenuItem>
+            </ChildContent>
+        </OmniSplitButton>
+        </div>
+    </OmniStack>
+    @if (Prerequisite is { } missing)
+    {
+        <OmniAlert Severity="OmniSeverity.Info" data-testid="app-immediate-prerequisite">@missing</OmniAlert>
+    }
+    @if (_refusal is not null)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" data-testid="app-immediate-refusal">@_refusal</OmniAlert>
+    }
+    @if (AppImmediateActionText.Probe(L, _probe) is { } probe)
+    {
+        <OmniAlert Severity="@probe.Severity" Title="@L["AppProbeNowTitle"]" data-testid="app-probe-now-result">@probe.Text</OmniAlert>
+    }
+    @if (AppImmediateActionText.Telemetry(L, _telemetry) is { } telemetry)
+    {
+        <OmniAlert Severity="@telemetry.Severity" Title="@L["AppTelemetryNowTitle"]" data-testid="app-telemetry-now-result">@telemetry.Text</OmniAlert>
+    }
+</OmniStack>

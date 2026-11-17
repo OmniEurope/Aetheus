@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @if (Project is null)
 {
-    <AetheusLoader />
+    <ZoneVeil />
 }
 else
 {
@@ -14,7 +14,7 @@ else
                     <OnboardingStepList Title="@L["ProjectGettingStartedTitle"]"
                         Description="@GettingStartedDescription"
                         Steps="@GettingStartedSteps"
-                        OnDone="@GettingStartedDone" />
+                        OnDone="@GettingStartedDone" DoneLabel="@GettingStartedDoneLabel" DoneTestId="@(GettingStartedComplete ? null : "onboarding-finish")" />
                 }
 
                 @* Missing pipeline requirements are identified above the project cards with their
@@ -55,6 +55,10 @@ else
                 @* R-68: the variables and secrets still to fill, the same list as the pipelines page, so the project's
                    to-do is visible without opening it. *@
                 <Aetheus.Front.Components.Pipelines.ProjectPipelinesReadiness ProjectId="@Project.Id" EmptyValuesOnly="true" />
+                @* R-47: the telemetry the wizard configured waits for the repository to hold its NuGet package. *@
+                <ProjectTelemetrySetupWarning ProjectId="@Project.Id" />
+                @* R-26: what the wizard prepared for the telemetry and the audience, item by item, until dismissed. *@
+                <ProjectCollectionSetupResult ProjectId="@Project.Id" />
                 @* Two balanced cards: "Information" (description, status, dates, tags) on the left,
                    "Repository" (git source, branch, last git activity) on the right. *@
                 <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
@@ -72,36 +76,65 @@ else
                                 {
                                     <OmniDescriptionItem Term="@L["Description"]"><Icon><OmniIcon Name="OmniIconName.TextAlignLeft" /></Icon><ChildContent>@Project.Description</ChildContent></OmniDescriptionItem>
                                 }
-                                @* Status and grade share a row, followed by dates and tags for
-                                   compact project information. *@
-                                <OmniDescriptionItem Term="@($"{L["Status"]} · {L["AnalysisGrade"]}")">
+                                @* R-29: the production addresses, one per line, each opening in a new tab. They come from the address the
+                                   latest successful production deployment deployed (read by the back end, never composed here); nothing
+                                   is shown while the project has no production deployment. *@
+                                @if (Project.ProductionAddress is { } production)
+                                {
+                                    <OmniDescriptionItem Term="@($"{L["Application"]} · {L["Production"]}")" Class="project-production-app-url">
+                                        <Icon><OmniIcon Name="OmniIconName.Globe" /></Icon>
+                                        <ChildContent><OmniLink Href="@production.AppUrl" NewTab="true" Class="project-production-app-link">@production.AppUrl</OmniLink></ChildContent>
+                                    </OmniDescriptionItem>
+                                    @if (production.ApiUrl is { Length: > 0 } productionApiUrl)
+                                    {
+                                        <OmniDescriptionItem Term="@($"{L["RunDeployedApi"]} · {L["Production"]}")" Class="project-production-api-url">
+                                            <Icon><OmniIcon Name="OmniIconName.Link" /></Icon>
+                                            <ChildContent><OmniLink Href="@productionApiUrl" NewTab="true" Class="project-production-api-link">@productionApiUrl</OmniLink></ChildContent>
+                                        </OmniDescriptionItem>
+                                    }
+                                }
+                                @* R-30: one item per fact (status, grade, each date), each with its own term. *@
+                                <OmniDescriptionItem Term="@L["Status"]">
                                     <Icon><OmniIcon Name="OmniIconName.Broadcast" /></Icon>
                                     <ChildContent>
-                                        @* Status and grade retain distinct spacing. *@
-                                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="project-status-grade">
                                         <OmniBadge Icon="@(BadgeIcon.ForState(Project.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Project.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral)">@L[Project.Status.ToString()]</OmniBadge>
-                                        @* The latest candidate grade links to its Gate tab;
-                                           projects without a graded run link to quality. *@
-                                        @if (Project.LatestGateGradeRunId is { } gradeRunId)
+                                    </ChildContent>
+                                </OmniDescriptionItem>
+                                <OmniDescriptionItem Term="@L["AnalysisGrade"]">
+                                    <Icon><OmniIcon Name="OmniIconName.Medal" /></Icon>
+                                    <ChildContent>
+                                      <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                                        @* R-12, R-20: the grade is the project's current grade (the sealed verdict of the deployed release, lowered
+                                           by its open findings), the one the menu shows; it links to the Gate tab of the run that sealed it. Without a
+                                           deployed release, or a verdict, the badge links to quality and its tooltip says why there is no letter. *@
+                                        @if (Project.LatestGateGrade is not null && Project.LatestGateGradeRunId is { } gradeRunId)
                                         {
                                             <a href="@($"/pipelines/runs/{gradeRunId}?projectId={Project.Id}&tab=gate")" class="project-grade-run-link"
-                                                title="@string.Format(L["ProjectGradeLatestCandidate"], gradeRunId)">
-                                                <GradeBadge Value="@Project.LatestGateGrade" />
+                                                title="@ProjectGradeLabel.For(L, Project.LatestGateGradeQualification)">
+                                                <GradeBadge Value="@Project.LatestGateGrade" Old="@ProjectGradeLabel.IsOld(Project.LatestGateGradeQualification)" />
                                             </a>
                                         }
                                         else
                                         {
                                             <a href="@($"/projects/{Project.Id}/quality")"
-                                                title="@L["AnalysisGlobalGrade"]">
-                                                <GradeBadge Value="@Project.LatestGateGrade" />
+                                                title="@ProjectGradeLabel.For(L, Project.LatestGateGradeQualification)">
+                                                <GradeBadge Value="@Project.LatestGateGrade" Old="@ProjectGradeLabel.IsOld(Project.LatestGateGradeQualification)" />
                                             </a>
                                         }
-                                        </OmniStack>
+                                        @* User decision 2026-11-10: below A, what lowers the grade: the pipeline run, or the project itself. *@
+                                        <ProjectGradeCause Grade="@Project.LatestGateGrade" Cause="@Project.LatestGateGradeCause" ProjectId="@Project.Id"
+                                                           ProjectName="@Project.Name" RunId="@Project.LatestGateGradeRunId" RunNumber="@Project.LatestGateGradeRunNumber"
+                                                           PipelineName="@Project.LatestGateGradePipelineName" />
+                                      </OmniStack>
                                     </ChildContent>
                                 </OmniDescriptionItem>
-                                <OmniDescriptionItem Term="@($"{L["Created"]} · {L["Updated"]}")">
+                                <OmniDescriptionItem Term="@L["Created"]">
                                     <Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon>
-                                    <ChildContent>@Project.CreatedAt.ToString("g") · @Project.UpdatedAt.ToString("g")</ChildContent>
+                                    <ChildContent>@Project.CreatedAt.ToString("g")</ChildContent>
+                                </OmniDescriptionItem>
+                                <OmniDescriptionItem Term="@L["Updated"]">
+                                    <Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon>
+                                    <ChildContent>@Project.UpdatedAt.ToString("g")</ChildContent>
                                 </OmniDescriptionItem>
                                 @if (Project.Tags.Count > 0)
                                 {
@@ -145,7 +178,7 @@ else
                                     }
                                     @if (!string.IsNullOrWhiteSpace(RepositoryDisplayUrl))
                                     {
-                                        <OmniDescriptionItem Term="@L["RepositoryUrl"]">
+                                        <OmniDescriptionItem Term="@RepositoryUrlTerm">
                                             <Icon><OmniIcon Name="OmniIconName.Link" /></Icon>
                                             @* The clone address, read-only in OE's copyable field,
                                                so a long URL stays inside the card (the field
@@ -154,23 +187,36 @@ else
                                             <ChildContent>
                                                 <OmniTextBox Value="@RepositoryDisplayUrl" ReadOnly="true" ShowCopy="true" CopyIconOnly="true"
                                                              Id="project-overview-clone-url" ValueExpression="@(() => RepositoryDisplayUrl)"
-                                                             aria-label="@L["RepositoryUrl"]" Class="overview-clone-url" />
+                                                             aria-label="@RepositoryUrlTerm" Class="overview-clone-url" />
                                             </ChildContent>
                                         </OmniDescriptionItem>
                                     }
-                                    @* Branch and latest activity share a repository row. *@
-                                    @if (!string.IsNullOrWhiteSpace(RepositoryDisplayBranch) || Project.LastGitUpdateAt.HasValue)
+                                    @* R-30: one item per fact; an absent branch or git date hides only its own item. *@
+                                    @if (!string.IsNullOrWhiteSpace(RepositoryDisplayBranch))
                                     {
-                                        <OmniDescriptionItem Term="@RepositoryActivityLabel">
+                                        <OmniDescriptionItem Term="@L["DefaultBranch"]">
                                             <Icon><OmniIcon Name="OmniIconName.Graph" /></Icon>
-                                            <ChildContent><span title="@(Project.LastGitUpdateAt?.ToString("F"))">@RepositoryActivityValue</span></ChildContent>
+                                            <ChildContent>@RepositoryDisplayBranch</ChildContent>
+                                        </OmniDescriptionItem>
+                                    }
+                                    @if (Project.LastGitUpdateAt is { } lastGitUpdateAt)
+                                    {
+                                        <OmniDescriptionItem Term="@L["LastGitUpdate"]">
+                                            <Icon><OmniIcon Name="OmniIconName.GitCommit" /></Icon>
+                                            <ChildContent><span title="@lastGitUpdateAt.ToString("F")">@RelativeTime.FormatAgo(L, lastGitUpdateAt)</span></ChildContent>
                                         </OmniDescriptionItem>
                                     }
                                 </OmniDescriptionList>
+                                <ProjectRepositorySourceNotice ProjectId="@Project.Id" RepositoryUrl="@Project.RepositoryUrl"
+                                                               HasRepository="@(_primaryGitRepository is not null)" ReadsFromMirror="@_readsFromMirror"
+                                                               CanWrite="@Permissions.CanWrite(ResourceType.Project, Project.Id)" OnMirrored="@ProjectMirrored" />
                             }
                             </ChildContent>
                         </OmniCard>
                 </OmniTileGrid>
+
+                @* R-14: the open CVE of the watch for this project, by severity, leading to the CVE section of its quality page. *@
+                <ProjectCveTile ProjectId="@Project.Id" />
 
                 <OmniHeading Level="OmniHeadingLevel.H5">@L["ProjectSections"]</OmniHeading>
                 <div class="project-section-grid-scroll" role="region" aria-label="@L["ProjectSections"]" tabindex="0">
@@ -180,8 +226,10 @@ else
                         {
                             @* Only while something runs the Pipelines tile says so, in its description line; a finished run is read on the Pipelines page. *@
                             var running = navItem.Slug == "pipelines" && LatestRunStatus is PipelineStatus.Running or PipelineStatus.Pending or PipelineStatus.WaitingForApproval;
-                            @* The tile is itself the link to the section; FitTitle keeps the title on one line, left aligned (R-57, OE 1.10.0). *@
-                            <OmniNavTile Href="@(navItem.Href(Project.Id))" Title="@L[navItem.LabelKey]" Description="@(running ? L.Localize(PipelineStatus.Running) : null)" FitTitle="true">
+                            @* The tile is itself the link to the section; FitTitle keeps the title on one line (R-57, OE 1.10.0), and R-9
+                               centres the icon and the title (OE 1.11.1 IconAlign and TitleAlign). *@
+                            <OmniNavTile Href="@(navItem.Href(Project.Id))" Title="@L[navItem.LabelKey]" Description="@(running ? L.Localize(PipelineStatus.Running) : null)" FitTitle="true"
+                                         IconAlign="OmniAlignment.Center" TitleAlign="OmniAlignment.Center">
                                 <Icon><OmniIcon Name="@MaterialIconMap.Resolve(navItem.Icon)" /></Icon>
                             </OmniNavTile>
                         }
@@ -257,7 +305,15 @@ else
                 </OmniStack>
             </ChildContent></OmniTabsItem>
 
-            <OmniTabsItem Key="readme" Title="@L["Readme"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("description"))" /></Icon><ChildContent>
+            @* R-10: the database's expand/contract tracking, grouped by environment (read when the tab is first opened). *@
+            @if (ShowExpandContractTab)
+            {
+                <OmniTabsItem Key="expand-contract" Title="@L["SchemaTrackingTabProject"]"><Icon><OmniIcon Name="OmniIconName.Database" /></Icon><ChildContent>
+                    <ProjectSchemaTracking ProjectId="@Project.Id" />
+                </ChildContent></OmniTabsItem>
+            }
+
+            <OmniTabsItem Key="readme"Title="@L["Readme"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("description"))" /></Icon><ChildContent>
                 <section class="project-readme-panel">
                     @if (!string.IsNullOrWhiteSpace(_readmeBranch))
                     {

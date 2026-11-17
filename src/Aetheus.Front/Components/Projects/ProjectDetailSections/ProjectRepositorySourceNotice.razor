@@ -1,0 +1,27 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@if (AddressUnmirrored)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ExternalAddressNotMirroredTitle"]">
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniText Element="OmniTextElement.Span">@L["ExternalAddressNotMirroredHint"]</OmniText>
+            @if (CanWrite)
+            {
+                <div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateMirrorAsync" Busy="@_creating"
+                                Class="@(_creating ? "btn-busy" : null)" Id="project-create-mirror">
+                        <Icon><OmniIcon Name="OmniIconName.Sync" /></Icon>
+                        <ChildContent><span>@L["CreateProjectMirror"]</span></ChildContent>
+                    </OmniButton>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <OmniAlert Severity="OmniSeverity.Danger" Live="true">@_error</OmniAlert>
+            }
+        </OmniStack>
+    </OmniAlert>
+}
+else if (ReadsFromMirror)
+{
+    <OmniText Element="OmniTextElement.Span">@L["CodeReadFromProjectMirror"]</OmniText>
+}

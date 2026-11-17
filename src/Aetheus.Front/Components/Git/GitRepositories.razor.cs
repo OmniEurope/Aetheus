@@ -22,13 +22,23 @@ public partial class GitRepositories : IAsyncDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private int _loadGeneration;
     private AetheusDataGrid<GitLightRepoDto>? _grid;
-    private readonly HashSet<int> _joinedRepositoryIds = [];
+    private readonly RepositoryGroupMembership _groups;
+
+    public GitRepositories()
+    {
+        _groups = new RepositoryGroupMembership(InvokeOnHubAsync);
+    }
 
     [SupplyParameterFromQuery(Name = "projectId")]
     public int? ProjectId { get; set; }
 
     [SupplyParameterFromQuery(Name = "create")]
     public bool CreateRequested { get; set; }
+
+    /// <summary>R-31: where the page of a repository created from here leads back to (the project's
+    /// checklist, for instance); the list itself when absent.</summary>
+    [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)]
+    public string? ReturnUrl { get; set; }
 
     private List<GitLightRepoDto> _repos = [];
     private int _totalCount;
@@ -117,7 +127,7 @@ public partial class GitRepositories : IAsyncDisposable
             // Group membership is per-connection and lost on auto-reconnect - re-join + reload.
             _hub.RejoinOnReconnect(() => InvokeAsync(async () =>
             {
-                _joinedRepositoryIds.Clear();
+                await _groups.ForgetAllAsync();
                 await LiveRefreshAsync();
             }));
             await _hub.StartAsync(lifetime);
@@ -140,19 +150,31 @@ public partial class GitRepositories : IAsyncDisposable
         }
     }
 
+    // A call made while no hub exists fails loudly instead of hiding a null behind the connected guard.
+    private Task InvokeOnHubAsync(string target, int repositoryId)
+    {
+        var hub = _hub ?? throw new InvalidOperationException("The git hub connection does not exist yet.");
+        return hub.InvokeAsync(target, repositoryId);
+    }
+
+    // A sync is one at a time: the initial load, the connection start and every live reload all end here,
+    // and two of them reading the joined set before either finished its hub calls joined or left the same
+    // group twice.
+    // A failed hub call (connection dropped mid-sync, server refusal) leaves the membership consistent: the
+    // groups not yet joined or left are retried by the next sync, so the rows still show and the failure is
+    // only logged.
     private async Task JoinVisibleRepositoryGroupsAsync()
     {
-        if (_hub?.State != HubConnectionState.Connected) return;
-        var visible = _repos.Select(repository => repository.Id).ToHashSet();
-        foreach (var repositoryId in _joinedRepositoryIds.Except(visible).ToList())
+        try
         {
-            await _hub.InvokeAsync("LeaveRepositoryGroup", repositoryId);
-            _joinedRepositoryIds.Remove(repositoryId);
+            await _groups.SyncAsync(
+                () => _repos.Select(repository => repository.Id).ToList(),
+                () => _hub?.State == HubConnectionState.Connected);
         }
-        foreach (var repositoryId in visible.Except(_joinedRepositoryIds))
+        catch (Exception ex) when (ex is Microsoft.AspNetCore.SignalR.HubException or InvalidOperationException
+            or OperationCanceledException or HttpRequestException)
         {
-            await _hub.InvokeAsync("JoinRepositoryGroup", repositoryId);
-            _joinedRepositoryIds.Add(repositoryId);
+            Logger.LogWarning(ex, "Git repository groups could not be synchronized; the next sync retries them");
         }
     }
 
@@ -166,7 +188,7 @@ public partial class GitRepositories : IAsyncDisposable
     {
         if (_createDialogOpened || !CreateRequested || !_projectFilter.HasValue || !_canWrite) return;
         _createDialogOpened = true;
-        await ShowCreateDialog();
+        if (await ShowCreateDialog()) return; // the page of the new repository is open
         Nav.NavigateTo($"git-repositories?projectId={_projectFilter.Value}", replace: true);
     }
 
@@ -314,20 +336,23 @@ public partial class GitRepositories : IAsyncDisposable
         await RefreshGridAsync();
     }
 
-    private async Task ShowCreateDialog()
+    /// <summary>Creates a repository; true when its page was opened (R-31), so the caller must not navigate elsewhere.</summary>
+    private async Task<bool> ShowCreateDialog()
     {
-        if (!_projectFilter.HasValue) return;
+        if (!_projectFilter.HasValue) return false;
 
-        var name = await Dialog.OpenAsync<GitRepositoryCreateDialog>(
+        var returnUrl = LocalReturnUrl.Validated(ReturnUrl) ?? $"/git-repositories?projectId={_projectFilter.Value}";
+        var created = await Dialog.OpenAsync<GitRepositoryCreateDialog>(
             L["NewRepository"].Value,
             new Dictionary<string, object?> { { "ProjectId", _projectFilter.Value } },
             new OmniDialogOptions { Width = "500px", AutoFocusFirstElement = false });
 
-        if (name is true)
-        {
-            await ResetAndReloadAsync();
-        }
+        if (GitRepositoryCreateDialog.RepositoryPageHref(created, returnUrl, Nav) is not { } href) return false;
+        Nav.NavigateTo(href);
+        return true;
     }
+
+    private async Task OnCreateClicked() => await ShowCreateDialog();
 
     private async Task DeleteRepo(GitLightRepoDto repo)
     {
@@ -343,11 +368,14 @@ public partial class GitRepositories : IAsyncDisposable
             if (result)
             {
                 Toast.Success("Deleted", repo.Name);
-                await ResetAndReloadAsync();
+                // R-10: the repository is out of the grid at once, the read behind it confirms.
+                if (_grid is not null) await _grid.HideRowAsync(repo);
+                else await ResetAndReloadAsync();
             }
             else
             {
                 Toast.Error("Error", "DeleteFailed");
+                if (_grid is not null) await _grid.RestoreRowsAsync();
             }
         });
     }
@@ -425,6 +453,8 @@ public partial class GitRepositories : IAsyncDisposable
         var cts = Interlocked.Exchange(ref _loadCts, null);
         cts?.Cancel();
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
+        // Before the hub goes: waits for a sync in flight, then no queued sync touches the disposed hub.
+        await _groups.DisposeAsync();
         if (_hub is not null)
         {
             // SignalR removes every repository-group membership when the connection closes.
@@ -433,7 +463,6 @@ public partial class GitRepositories : IAsyncDisposable
             try { await _hub.DisposeAsync(); }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException) { }
         }
-        _joinedRepositoryIds.Clear();
         _lifetime.Dispose();
     }
 

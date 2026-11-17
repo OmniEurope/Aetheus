@@ -22,7 +22,14 @@ public class PipelineApprovalService(
     public async Task<List<PipelineApprovalDto>> GetApprovalsAsync(int runId, CancellationToken ct = default)
     {
         var approvals = await repo.GetApprovalsAsync(runId, ct).ConfigureAwait(false);
-        return approvals.Select(MapApprovalToDto).ToList();
+        var number = approvals.Count == 0 ? 0 : await repo.GetRunNumberAsync(runId, ct).ConfigureAwait(false);
+        // R-34: what the run restores is shown with the approval that lets it deploy, with what is wrong with it.
+        var deployed = approvals.Any(a => a.Status == ApprovalStatus.Pending)
+            ? await runs.GetDeployedReleaseAsync(runId, includeAlreadyDeployed: true, ct).ConfigureAwait(false)
+            : null;
+        return approvals
+            .Select(a => MapApprovalToDto(a, number) with { DeployedRelease = a.Status == ApprovalStatus.Pending ? deployed : null })
+            .ToList();
     }
 
     public Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(
@@ -42,7 +49,8 @@ public class PipelineApprovalService(
         DecisionOutcome outcome;
         try
         {
-            outcome = await ApplyDecisionAsync(approvalId, approval, request, ct).ConfigureAwait(false);
+            var runNumber = approval is null ? 0 : await repo.GetRunNumberAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
+            outcome = await ApplyDecisionAsync(approvalId, approval, runNumber, request, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -58,7 +66,7 @@ public class PipelineApprovalService(
     }
 
     private async Task<DecisionOutcome> ApplyDecisionAsync(
-        int approvalId, PipelineApproval? approval, ApprovalDecisionRequest request, CancellationToken ct)
+        int approvalId, PipelineApproval? approval, int runNumber, ApprovalDecisionRequest request, CancellationToken ct)
     {
         // F2: TimedOut is a system-issued decision (see PipelineTriggerReconcileService.ExpireStaleApprovalsAsync), never a
         // human choice offered by the UI, but it resolves the run exactly like a Rejected decision -
@@ -69,7 +77,7 @@ public class PipelineApprovalService(
         if (approval is null)
             return DecisionOutcome.Refused(new NotFoundException($"Approval {approvalId} does not exist."));
         if (approval.Status != ApprovalStatus.Pending)
-            return DecisionOutcome.Refused(new ConflictException(AlreadyDecided(approval)));
+            return DecisionOutcome.Refused(new ConflictException(AlreadyDecided(approval, runNumber)));
 
         // Ended runs cannot accept approval decisions because they must not resume or acquire a new
         // failure. Their pending approvals are closed by the ended-run sweep.
@@ -77,7 +85,7 @@ public class PipelineApprovalService(
                 .TryGetValue(approval.PipelineRunId, out var runStatus)
             && runStatus.IsTerminal())
             return DecisionOutcome.Refused(new ConflictException(
-                $"Run {approval.PipelineRunId} has already ended ({runStatus}); its approvals can no longer be decided."));
+                $"Run #{runNumber} has already ended ({runStatus}); its approvals can no longer be decided."));
 
         // F-43: persist who resolved the approval so it surfaces in the audit trail/DTOs.
         var userIdClaim = httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -91,15 +99,15 @@ public class PipelineApprovalService(
             var current = await repo.FindApprovalAsync(approvalId, ct).ConfigureAwait(false);
             return DecisionOutcome.Refused(new ConflictException(current is null
                 ? $"Approval {approvalId} no longer exists."
-                : AlreadyDecided(current)));
+                : AlreadyDecided(current, runNumber)));
         }
 
         return request.Decision == ApprovalStatus.Approved
-            ? await ResumeAsync(approvalId, resolved, ct).ConfigureAwait(false)
-            : await RefuseAsync(approvalId, resolved, request.Decision, ct).ConfigureAwait(false);
+            ? await ResumeAsync(approvalId, resolved, runNumber, ct).ConfigureAwait(false)
+            : await RefuseAsync(approvalId, resolved, runNumber, request.Decision, ct).ConfigureAwait(false);
     }
 
-    private async Task<DecisionOutcome> ResumeAsync(int approvalId, PipelineApproval approval, CancellationToken ct)
+    private async Task<DecisionOutcome> ResumeAsync(int approvalId, PipelineApproval approval, int runNumber, CancellationToken ct)
     {
         if (!await runService.ResumeAfterApprovalAsync(approval.PipelineRunId, ct).ConfigureAwait(false))
         {
@@ -111,17 +119,17 @@ public class PipelineApprovalService(
                 "Approval {ApprovalId} was approved but run {RunId} did not resume; the run is stranded until the reconciler re-applies it",
                 approvalId, approval.PipelineRunId);
             return DecisionOutcome.Refused(new ConflictException(
-                $"The approval was recorded, but run {approval.PipelineRunId} did not resume: it was no longer waiting "
+                $"The approval was recorded, but run #{runNumber} did not resume: it was no longer waiting "
                 + "for an approval. The reconciler re-applies the recorded decision on its next pass."));
         }
         var approvedPipelineId = await runs.GetPipelineIdForRunAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
         var approvedGroups = HubGroups.PipelineRunUpdates(approval.PipelineRunId, approvedPipelineId);
         await pipelineHub.Clients.Groups(approvedGroups).SendAsync("ApprovalResolved", approval.PipelineRunId, approval.StageName, "Approved", ct).ConfigureAwait(false);
-        return DecisionOutcome.Applied(MapApprovalToDto(approval), "approved, run resumed");
+        return DecisionOutcome.Applied(MapApprovalToDto(approval, runNumber), "approved, run resumed");
     }
 
     private async Task<DecisionOutcome> RefuseAsync(
-        int approvalId, PipelineApproval approval, ApprovalStatus decision, CancellationToken ct)
+        int approvalId, PipelineApproval approval, int runNumber, ApprovalStatus decision, CancellationToken ct)
     {
         // Stage confirmation failure leaves rollback handlers eligible before terminal run status
         // is computed.
@@ -133,7 +141,7 @@ public class PipelineApprovalService(
                 "Approval {ApprovalId} was {Decision} but run {RunId} did not fail; the run is stranded until the reconciler re-applies it",
                 approvalId, decision, approval.PipelineRunId);
             return DecisionOutcome.Refused(new ConflictException(
-                $"The decision was recorded, but run {approval.PipelineRunId} did not stop: it was no longer waiting "
+                $"The decision was recorded, but run #{runNumber} did not stop: it was no longer waiting "
                 + "for an approval. The reconciler re-applies the recorded decision on its next pass."));
         }
         var rejectedPipelineId = await runs.GetPipelineIdForRunAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
@@ -142,16 +150,16 @@ public class PipelineApprovalService(
         await pipelineHub.Clients.Groups(rejectedGroups).SendAsync("ApprovalResolved", approval.PipelineRunId, approval.StageName, reason, ct).ConfigureAwait(false);
         if (outcome == PipelineStatus.Failed)
             await pipelineHub.Clients.Groups(rejectedGroups).SendAsync("PipelineRunCompleted", approval.PipelineRunId, PipelineStatus.Failed, ct).ConfigureAwait(false);
-        return DecisionOutcome.Applied(MapApprovalToDto(approval), $"{reason.ToLowerInvariant()}, run {outcome}");
+        return DecisionOutcome.Applied(MapApprovalToDto(approval, runNumber), $"{reason.ToLowerInvariant()}, run {outcome}");
     }
 
-    private static string AlreadyDecided(PipelineApproval approval)
+    private static string AlreadyDecided(PipelineApproval approval, int runNumber)
     {
         var by = approval.ResolvedByUser?.Username is { Length: > 0 } username ? $" by {username}" : string.Empty;
         var at = approval.ResolvedAt is { } resolvedAt
             ? $" at {resolvedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} UTC"
             : string.Empty;
-        return $"Approval {approval.Id} (run {approval.PipelineRunId}, stage '{approval.StageName}') was already "
+        return $"Approval {approval.Id} (run #{runNumber}, stage '{approval.StageName}') was already "
             + $"{approval.Status}{by}{at}; there is nothing left to decide.";
     }
 
@@ -174,10 +182,11 @@ public class PipelineApprovalService(
         public static DecisionOutcome Refused(Exception refusal) => new(null, refusal, $"refused: {refusal.Message}");
     }
 
-    private static PipelineApprovalDto MapApprovalToDto(PipelineApproval a) => new()
+    private static PipelineApprovalDto MapApprovalToDto(PipelineApproval a, int runNumber) => new()
     {
         Id = a.Id,
         PipelineRunId = a.PipelineRunId,
+        PipelineRunNumber = runNumber,
         StageName = a.StageName,
         Scope = a.Scope,
         EnvironmentId = a.EnvironmentId,

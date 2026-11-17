@@ -40,8 +40,18 @@ internal sealed class PipelineRunLogFollow(IJSRuntime js, Func<Task> changed) : 
     public async Task AfterRenderAsync(ElementReference terminal, int lineCount)
     {
         await WatchAsync(terminal);
+        // R-21: a terminal that is not mounted yet (a fresh load fills the log before the pane is drawn) cannot be
+        // scrolled; the count is then not consumed, or the log would stay at its top with the tail virtualized away.
+        if (terminal.Id is null) return;
         if (!Following || lineCount == _lastAutoScrollCount) return;
         _lastAutoScrollCount = lineCount;
+        await ScrollAsync("Aetheus.scrollToBottom", terminal);
+    }
+
+    /// <summary>R-21: the list just reached its full height; while following, pin to the tail again.</summary>
+    public async Task RepinAsync(ElementReference terminal)
+    {
+        if (!Following || terminal.Id is null) return;
         await ScrollAsync("Aetheus.scrollToBottom", terminal);
     }
 

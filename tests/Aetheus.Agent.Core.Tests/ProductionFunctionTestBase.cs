@@ -56,10 +56,11 @@ public abstract class ProductionFunctionTestBase : IDisposable
 
     protected static string Read(string path) => File.ReadAllText(path);
 
-    internal async Task<(ExecutorResult Result, Dictionary<string, string> Variables)> RunAsync(IPipelineFunction function)
+    internal async Task<(ExecutorResult Result, Dictionary<string, string> Variables)> RunAsync(
+        IPipelineFunction function, CancellationToken? cancellationToken = null)
     {
         Env[PipelineFunctionVariables.ParametersJson] = JsonSerializer.Serialize(Parameters);
-        return await _harness.RunAsync(function, Env);
+        return await _harness.RunAsync(function, Env, cancellationToken: cancellationToken);
     }
 
     /// <summary>Runs the function, requires it to fail as a function and returns its failure reason.</summary>

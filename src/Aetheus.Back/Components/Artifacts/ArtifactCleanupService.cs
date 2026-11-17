@@ -11,15 +11,12 @@ public sealed class ArtifactCleanupService(
     ILogger<ArtifactCleanupService> logger,
     TimeProvider timeProvider,
     IPostgresLeaderLease operationLock,
-    IChunkedArtifactUploadService chunkedUploads) : BackgroundService
+    IChunkedArtifactUploadService chunkedUploads) : LeaderBackgroundService(operationLock, LeaseName)
 {
     /// <summary>Only one backend holds the cleanup lease at a time.</summary>
     internal const string LeaseName = "aetheus:artifact-cleanup";
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        operationLock.RunAsLeaderAsync(LeaseName, RunLeaderLoopAsync, stoppingToken);
-
-    private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
+    protected override async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(BackendRuntimeDefaults.MaintenanceInterval);
 
@@ -83,7 +80,7 @@ public sealed class ArtifactCleanupService(
         IArtifactRepository repo, IArtifactStorageService storage, PipelineArtifact artifact, DateTime now, CancellationToken ct)
     {
         var removed = false;
-        await operationLock.RunSerializedAsync(
+        await LeaderLease.RunSerializedAsync(
             ArtifactRetentionLock.For(artifact.Id),
             async lockToken =>
             {

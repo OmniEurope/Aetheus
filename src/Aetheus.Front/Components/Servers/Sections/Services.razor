@@ -5,7 +5,7 @@
 @implements IDisposable
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 
-<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["Services"] - Aetheus</PageTitle>
+<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["ServerApplicationsManagement"] - Aetheus</PageTitle>
 
 @if (Loader?.Server is not null)
 {

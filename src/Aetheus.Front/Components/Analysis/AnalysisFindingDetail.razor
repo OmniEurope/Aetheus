@@ -6,7 +6,7 @@
 
 @if (_loading)
 {
-    <AetheusLoader Size="OmniControlSize.Large" />
+    <VeilHold Busy="true" />
 }
 else if (_finding is null)
 {
@@ -14,11 +14,25 @@ else if (_finding is null)
 }
 else
 {
-    <OmniPageHeader Title="@_finding.Title" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+    <OmniPageHeader Title="@_finding.Title" ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("policy")" /></Icon>
         <Badges>
-            <OmniBadge Icon="@(BadgeIcon.ForState(SeverityStyle(_finding.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityStyle(_finding.Severity)">@L[$"AnalysisSeverity{_finding.Severity}"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForSeverity(SeverityStyle(_finding.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityStyle(_finding.Severity)">@L[$"AnalysisSeverity{_finding.Severity}"]</OmniBadge>
             <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L[$"AnalysisFindingStatus{_finding.Status}"]</OmniBadge>
+            @if (AcceptedDecision is { } accepted)
+            {
+                @* R-24: how long the acceptance lasts. An acceptance older than the expiry has none, and says so. *@
+                <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral" data-testid="analysis-accepted-until">
+                    @if (accepted.ExpiresAt is { } until)
+                    {
+                        <span>@L["AnalysisAcceptedUntil"]</span> <time datetime="@AsUtc(until).ToString("O")">@AsUtc(until).ToLocalTime().ToString("d")</time>
+                    }
+                    else
+                    {
+                        <span>@L["AnalysisAcceptedNoExpiry"]</span>
+                    }
+                </OmniBadge>
+            }
         </Badges>
         <ActionsContent>
             @if (_canWrite)
@@ -44,6 +58,11 @@ else
                             <p>@_finding.Message</p>
                         </div>
                     </div>
+                    @if (IsCveWatchFinding)
+                    {
+                        @* R-14: what the CVE watch recommends for this match, and the way to have the upgrade prepared. *@
+                        <CveWatchRemediationBlock FindingId="@Id" CanWrite="@_canWrite" />
+                    }
                     @if (ShownOccurrence is { } source)
                     {
                         <OmniCard Class="analysis-source-card">
@@ -112,7 +131,7 @@ else
                                 <span>@L["Report"] #@source.AnalysisReportId</span>
                                 @if (source.PipelineRunId.HasValue)
                                 {
-                                    <OmniLink Href="@($"pipelines/runs/{source.PipelineRunId}")">@($"{L["PipelineRun"]} #{source.PipelineRunId}")</OmniLink>
+                                    <OmniLink Href="@($"pipelines/runs/{source.PipelineRunId}")">@PipelineRunPresentation.Label(L["PipelineRun"].Value, source.PipelineRunNumber)</OmniLink>
                                 }
                             </div>
                             </OmniStack>
@@ -211,9 +230,19 @@ else
                                         <ValidationMessage For="@(() => _decision.Reason)" />
                                     </div>
                                     <div>
-                                        <OmniFormField Label="@L["ExpiresAt"]" For="oe-formfield-pages-analysis-analysisfindingdetail-2">
-                                    <OmniDateTimePicker Id="oe-formfield-pages-analysis-analysisfindingdetail-2" @bind-Value="_decision.ExpiresAt" />
-                                        </OmniFormField>
+                                        @if (AsksAcceptanceLength)
+                                        {
+                                            @* R-24: accepting the risk of a CVE-watch finding is for 30, 90 or 180 days, never a free date. *@
+                                            <OmniFormField Label="@L["AnalysisAcceptanceLength"]" For="AcceptanceDays">
+                                                <OmniSelectBar TValue="int" Id="AcceptanceDays" Options="@AcceptanceOptions" @bind-Value="_decision.AcceptanceDays" />
+                                            </OmniFormField>
+                                        }
+                                        else
+                                        {
+                                            <OmniFormField Label="@L["ExpiresAt"]" For="oe-formfield-pages-analysis-analysisfindingdetail-2">
+                                                <OmniDateTimePicker Id="oe-formfield-pages-analysis-analysisfindingdetail-2" @bind-Value="_decision.ExpiresAt" />
+                                            </OmniFormField>
+                                        }
                                     </div>
                                 </section>
                             </div>

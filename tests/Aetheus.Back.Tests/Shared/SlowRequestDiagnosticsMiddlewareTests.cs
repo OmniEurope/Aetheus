@@ -78,6 +78,22 @@ public sealed class SlowRequestDiagnosticsMiddlewareTests : IDisposable
         Assert.Single(Slow());
     }
 
+    /// <summary>R-1: the report publication, coverage and lint uploads of a pipeline run were slow with 177 to 448 ms of
+    /// database time, a few hundred ms of GC and no host pressure: the time followed the payload, which the line did not
+    /// say. The declared size of the body is on it so the next export settles it.</summary>
+    [Fact]
+    public async Task ASlowRequest_SaysTheDeclaredSizeOfItsBody_MinusOneWhenTheLengthIsNotDeclared()
+    {
+        var upload = Context("/api/analysis/runs/3050/reports");
+        upload.Request.ContentLength = 4_194_304;
+        await Sut(TakesMilliseconds(2619)).InvokeAsync(upload);
+        await Sut(TakesMilliseconds(2619)).InvokeAsync(Context("/api/analysis/runs/3050/reports"));
+
+        var lines = Slow();
+        Assert.Contains("status 200, request body 4194304 bytes.", lines[0], StringComparison.Ordinal);
+        Assert.Contains("status 200, request body -1 bytes.", lines[1], StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task ASlowRequest_IsOneWarning_NamingTheRequestItsDurationAndTheCorrelation()
     {
@@ -96,6 +112,44 @@ public sealed class SlowRequestDiagnosticsMiddlewareTests : IDisposable
         // R-6: the two figures that say whether the request waited on the host or on the database.
         Assert.Contains("Database 0 commands in 0 ms (longest 0 ms), commits 0 ms.", entry.Message, StringComparison.Ordinal);
         Assert.Contains("Host pressure cpu n/a, io n/a (full n/a), memory n/a.", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/git/3/aetheus.git/git-upload-pack")]
+    [InlineData("/api/artifacts/upload/12/part/abc/4")]
+    [InlineData("/api/artifacts/agent-download/9")]
+    public async Task ASlowRequest_OnARouteKnownToFollowItsPayload_IsTheSameLineAtInformationLevel(string path)
+    {
+        await Sut(TakesMilliseconds(15000)).InvokeAsync(Context(path));
+
+        var entry = Assert.Single(_log.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Contains($"GET {path}: 15000 ms (threshold 1500 ms)", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/api/tasks/claim")]
+    [InlineData("/api/servers/4/heartbeat")]
+    [InlineData("/api/artifacts/other")]
+    [InlineData("/gitlab/3")]
+    public async Task ASlowRequest_OnAnyOtherRoute_StaysAWarning_AtTheSameThreshold(string path)
+    {
+        await Sut(TakesMilliseconds(1500)).InvokeAsync(Context(path));
+
+        Assert.Equal(LogLevel.Warning, Assert.Single(_log.Entries).Level);
+    }
+
+    [Fact]
+    public async Task ARouteAddedByConfiguration_IsKnownSlowToo()
+    {
+        var sut = new SlowRequestDiagnosticsMiddleware(
+            TakesMilliseconds(2000),
+            Options.Create(new SlowRequestDiagnosticsOptions { Threshold = Threshold, KnownSlowRoutes = ["/api/exports"] }),
+            _pool, _background, new HostPressureReader(_pressureDirectory), _clock, _log);
+
+        await sut.InvokeAsync(Context("/api/exports/7"));
+
+        Assert.Equal(LogLevel.Information, Assert.Single(_log.Entries).Level);
     }
 
     [Fact]

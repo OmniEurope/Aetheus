@@ -6,11 +6,11 @@ namespace Aetheus.Back.Components.Auth;
 
 public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthRepository
 {
-    public async Task<RegistrationToken?> FindValidRegistrationTokenAsync(string token, CancellationToken ct = default)
+    public async Task<RegistrationToken?> FindValidRegistrationTokenAsync(IReadOnlyCollection<string> tokenHashes, CancellationToken ct = default)
     {
         return await db.RegistrationTokens
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Token == token
+            .FirstOrDefaultAsync(t => tokenHashes.Contains(t.Token)
                                       && !t.IsUsed
                                       && t.ExpiresAt > timeProvider.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false);
     }
@@ -203,13 +203,13 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
             .FirstOrDefaultAsync(t => t.Id == id, ct).ConfigureAwait(false);
     }
 
-    public async Task<int?> ValidateServerTokenHashAsync(string tokenHash, CancellationToken ct = default)
+    public async Task<int?> ValidateServerTokenHashAsync(IReadOnlyCollection<string> tokenHashes, CancellationToken ct = default)
     {
         // Check DeletedAt as well as revoked tokens to prevent an in-flight heartbeat from renewing
         // credentials after retirement.
         var serverToken = await db.ServerTokens
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash
+            .FirstOrDefaultAsync(t => tokenHashes.Contains(t.TokenHash)
                                       && !t.IsRevoked
                                       && t.ExpiresAt > timeProvider.GetUtcNow().UtcDateTime
                                       && t.Server.DeletedAt == null, ct).ConfigureAwait(false);
@@ -300,7 +300,7 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
     {
         return await db.Users
             .AsNoTracking()
-            .Where(u => u.Id == userId)
+            .Where(u => u.Id == userId && u.IsActive)
             .Select(u => u.SecurityStamp)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
@@ -393,11 +393,11 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<RefreshToken?> FindRefreshTokenByHashAsync(string tokenHash, CancellationToken ct = default)
+    public async Task<RefreshToken?> FindRefreshTokenByHashAsync(IReadOnlyCollection<string> tokenHashes, CancellationToken ct = default)
     {
         return await db.RefreshTokens
             .Include(r => r.User).ThenInclude(u => u.UserRoles).ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash, ct)
+            .FirstOrDefaultAsync(r => tokenHashes.Contains(r.TokenHash), ct)
             .ConfigureAwait(false);
     }
 

@@ -106,6 +106,29 @@ public class PipelineSaveDialogTests : BunitContext
     }
 
     [Fact]
+    public void R12_ASettingsOnlySave_WithNoRepositoryToPlaceTheFileIn_DoesNotAnnounceACommit()
+    {
+        // An external source: the branch is typed (no branch list), the repository holds no file, nothing is edited.
+        _handler.SetJsonResponse("api/pipelines/5/repository-definition", new PipelineRepositoryDefinitionDto());
+
+        var cut = RenderDialog(AetheusYaml);
+
+        Assert.Contains("PipelineSaveSettingsOnly", cut.Markup);
+        Assert.DoesNotContain("PipelineSaveCommitPreview", cut.Markup);
+    }
+
+    [Fact]
+    public void R12_AnEdit_WithNoRepositoryFile_StillAnnouncesTheCommit()
+    {
+        _handler.SetJsonResponse("api/pipelines/5/repository-definition", new PipelineRepositoryDefinitionDto());
+
+        var cut = RenderDialog(AetheusYaml + "stages: []\n");
+
+        Assert.Contains("PipelineSaveCommitPreview", cut.Markup);
+        Assert.DoesNotContain("PipelineSaveSettingsOnly", cut.Markup);
+    }
+
+    [Fact]
     public void ARepositoryFileThatCannotBeRead_IsSaidSo_NotGuessed()
     {
         _handler.SetResponse("api/pipelines/5/repository-definition", System.Net.HttpStatusCode.InternalServerError);

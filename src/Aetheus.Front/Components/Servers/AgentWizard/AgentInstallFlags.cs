@@ -21,7 +21,8 @@ internal static class AgentInstallFlags
         bool includeDeploymentAgent,
         bool includePatchManagement,
         bool includeFirewallManagement,
-        bool includeDocker)
+        bool includeDocker,
+        bool includeHostReboot = false)
     {
         var flags = string.Empty;
         if (!includePipelineRunner) flags += " --no-pipeline-runner";
@@ -35,6 +36,9 @@ internal static class AgentInstallFlags
         if (includePatchManagement) flags += " --enable-patch-manage";
         // ADR-024 4.2: firewall-manage is an independent opt-in (ufw helper).
         if (includeFirewallManagement) flags += " --enable-firewall-manage";
+        // Recette R-8: host-reboot is an independent opt-in (argv-exact `systemctl reboot` grant), so Aetheus can
+        // run the host reboots it schedules; never bundled with server-management.
+        if (includeHostReboot) flags += " --enable-host-reboot";
         // --enable-docker (docker-group membership) is implied by server-management, so only add it
         // standalone when the operator wants container isolation WITHOUT the full server-admin posture.
         if (includeDocker && !includeServerManagement) flags += " --enable-docker";

@@ -72,6 +72,11 @@ internal sealed class GitRepositoryGrids
     public static Task ReloadOrLoadAsync<T>(AetheusDataGrid<T>? grid, Func<Task> load) where T : notnull =>
         grid is not null ? grid.GoToPage(0, forceReload: true) : load();
 
+    /// <summary>R-10: a row the server just deleted leaves the grid at once, the quiet read behind it confirms. Before the
+    /// grid exists the direct load stands in.</summary>
+    public static Task HideOrLoadAsync<T>(AetheusDataGrid<T>? grid, T row, Func<Task> load) where T : notnull =>
+        grid is not null ? grid.HideRowAsync(row) : load();
+
     /// <summary>The whole tab strip unmounts while the page loads a repository (its loader replaces it):
     /// the references would otherwise point at disposed grids until each tab is shown again.</summary>
     public void ForgetMountedGrids()

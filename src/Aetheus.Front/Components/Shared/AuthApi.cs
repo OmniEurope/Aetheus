@@ -60,14 +60,16 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     public Task<PublicDemoInfoDto?> GetPublicDemoInfoAsync(CancellationToken ct = default)
         => GetJsonAsync<PublicDemoInfoDto>("api/auth/public-demo", ct);
 
-    /// <summary> Tells the server the user logs out, while the token is still held, so it forgets
-    /// what it keeps in memory for them (the typed mailbox passwords). Best effort: false when the
-    /// server could not be told, and the caller logs out anyway. </summary>
-    public async Task<bool> NotifyLogoutAsync(CancellationToken ct = default)
+    /// <summary> Tells the server the user logs out, while the token is still held: it revokes
+    /// <paramref name="refreshToken"/> (this client's own, so it cannot be replayed once dropped) and
+    /// forgets what it keeps in memory for the user (the typed mailbox passwords). Best effort: false
+    /// when the server could not be told, and the caller logs out anyway. </summary>
+    public async Task<bool> NotifyLogoutAsync(string? refreshToken, CancellationToken ct = default)
     {
         try
         {
-            return (await PostNoBodyAsync("api/auth/logout", ct).ConfigureAwait(false)).Success;
+            return (await PostJsonNoBodyAsync("api/auth/logout", new LogoutRequest { RefreshToken = refreshToken }, ct)
+                .ConfigureAwait(false)).Success;
         }
         catch (HttpRequestException) { return false; }
         catch (TaskCanceledException) { return false; }
@@ -169,6 +171,15 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
 
     public Task<ApiStatus> ChangeOwnPasswordAsync(ChangeUserPasswordRequest request, CancellationToken ct = default)
         => PostJsonNoBodyAsync<ChangeUserPasswordRequest>("api/users/me/change-password", request, ct);
+
+    /// <summary>R-1: the seeded administrator's first step. The status says which refusal it was: 400 (wrong
+    /// current password, the default address kept, the installation's password kept), 409 (name or address
+    /// already used).</summary>
+    public async Task<System.Net.HttpStatusCode> SetUpOwnAccountAsync(SetUpOwnAccountRequest request, CancellationToken ct = default)
+    {
+        using var response = await Http.PostAsJsonAsync("api/users/me/account-setup", request, ct).ConfigureAwait(false);
+        return response.StatusCode;
+    }
 
 
     public async Task<List<string>> GetRolesAsync()
@@ -318,9 +329,8 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    public async Task<bool> DisableTotpAsync(string password, CancellationToken ct = default)
-    {
-        var status = await PostJsonNoBodyAsync("api/auth/totp/disable", new TotpDisableRequest { Password = password }, ct).ConfigureAwait(false);
-        return status.Success;
-    }
+    /// <summary>R-50: the password and a second factor; on success the server answers with the caller's new
+    /// session (every other session ended), null when refused.</summary>
+    public Task<LoginResponse?> DisableTotpAsync(TotpDisableRequest request, CancellationToken ct = default)
+        => PostJsonAsync<TotpDisableRequest, LoginResponse>("api/auth/totp/disable", request, ct);
 }

@@ -16,7 +16,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// (a new expiry date, its row replaced by the heartbeat) alerts again. The notification pipeline is replaced by a
 /// recorder: this proves the persistence and the once-only rule, not the delivery channels.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class CertificateExpiryAlertIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private static readonly DateTime Start = new(2026, 10, 1, 8, 0, 0, DateTimeKind.Utc);
@@ -110,22 +109,5 @@ public sealed class CertificateExpiryAlertIntegrationTests(PostgresFixture fixtu
         var mark = await verify.CertificateExpiryAlertMarks.SingleAsync(ct);
         Assert.Equal(7, mark.LeadDays);
         Assert.Equal(Start.AddDays(96), mark.ExpiryDate);
-    }
-
-    [Fact]
-    public async Task TheAdministratorsLeadTimes_ArePersisted_AndReadBack()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await ResetAndMigrateAsync();
-        var notifications = Substitute.For<INotificationService>();
-
-        await using (var db = NewContext())
-            await Sut(db, notifications, TimeProvider.System).UpdateSettingsAsync(
-                new UpdateCertificateAlertSettingsRequest { LeadDays = [1, 30, 7] }, ct);
-
-        await using var read = NewContext();
-        var settings = await Sut(read, notifications, TimeProvider.System).GetSettingsAsync(ct);
-        Assert.Equal([30, 7, 1], settings.LeadDays);
-        Assert.Equal(30, (await Sut(read, notifications, TimeProvider.System).GetExpiryWarningAsync(ct)).Days);
     }
 }

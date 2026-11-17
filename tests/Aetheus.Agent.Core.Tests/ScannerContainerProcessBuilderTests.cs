@@ -129,13 +129,46 @@ public sealed class ScannerContainerProcessBuilderTests
 
         Assert.DoesNotContain("--ignore", arguments);
         Assert.DoesNotContain("--ignore-pattern", arguments);
+        // The configuration names no format: the source-language restriction has nothing to replace.
+        Assert.Equal(SourceFormats, OptionValue(arguments, "--format"));
+    }
+
+    [Theory]
+    [InlineData(".jscpd.json", "{\"format\":[\"csharp\"],\"minTokens\":70}")]
+    [InlineData(".jscpd.json", "{\n  // the project's own list\n  \"format\": [\"python\",],\n}")]
+    [InlineData("package.json", "{\"name\":\"app\",\"jscpd\":{\"format\":[\"java\"]}}")]
+    [InlineData(".jscpd.json", "not json")]
+    public void Build_JscpdWithAConfiguredFormat_KeepsTheRepositoryFormatList(string fileName, string content)
+    {
+        // jscpd 5 replaces the configured format list by --format: the project's explicit list must win.
+        using var source = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(source.Path, fileName), content);
+
+        var arguments = BuildJscpd(source.Path);
+
+        Assert.DoesNotContain("--format", arguments);
+        Assert.DoesNotContain("-f", arguments);
+        Assert.DoesNotContain("--ignore", arguments);
+    }
+
+    [Fact]
+    public void Build_JscpdOnlyMeasuresTheDocumentedSourceLanguages()
+    {
+        // A repository holds generated JSON, XML and lock files (packages.lock.json, Cobertura coverage): jscpd must
+        // not measure them, or a 30 % "markup" duplication of generated files grades a clean project F.
+        using var source = new TemporaryDirectory();
+
+        var formats = OptionValue(BuildJscpd(source.Path), "--format").Split(',');
+
+        Assert.Equal(["csharp", "javascript", "jsx", "typescript", "tsx", "python", "java"], formats);
+        Assert.DoesNotContain(formats, format => format is "json" or "markup" or "xml" or "yaml" or "markdown");
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("{\"name\":\"app\",\"devDependencies\":{\"jscpd\":\"5.0.12\"}}")]
     [InlineData("not json")]
-    public void Build_JscpdWithoutRepositoryConfiguration_IgnoresInstalledPackages(string? packageJson)
+    public void Build_JscpdWithoutRepositoryConfiguration_IgnoresInstalledPackagesAndPipelineDefinitions(string? packageJson)
     {
         using var source = new TemporaryDirectory();
         if (packageJson is not null)
@@ -145,8 +178,9 @@ public sealed class ScannerContainerProcessBuilderTests
 
         var index = arguments.IndexOf("--ignore");
         Assert.InRange(index, arguments.IndexOf("/src/node_modules/jscpd/run-jscpd.js"), arguments.Count - 2);
-        Assert.Equal("**/node_modules/**", arguments[index + 1]);
+        Assert.Equal("**/node_modules/**,**/.pipeline/**,**/.pipeline-quality/**", arguments[index + 1]);
         Assert.DoesNotContain("--ignore-pattern", arguments);
+        Assert.Equal(SourceFormats, OptionValue(arguments, "--format"));
     }
 
     /// <summary>Recette R3-63, option 3: a repository without <c>.gitleaks.toml</c> is scanned with
@@ -217,6 +251,15 @@ public sealed class ScannerContainerProcessBuilderTests
             null,
             new Dictionary<string, string>(),
             null).ArgumentList.ToList();
+    }
+
+    private const string SourceFormats = "csharp,javascript,jsx,typescript,tsx,python,java";
+
+    private static string OptionValue(List<string> arguments, string option)
+    {
+        var index = arguments.IndexOf(option);
+        Assert.InRange(index, arguments.IndexOf("/src/node_modules/jscpd/run-jscpd.js"), arguments.Count - 2);
+        return arguments[index + 1];
     }
 
     private static List<string> BuildJscpd(string sourceDirectory)

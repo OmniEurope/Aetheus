@@ -30,6 +30,8 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineResourceLockRepository, PipelineResourceLockRepository>();
         services.AddScoped<IPipelineResumeWaitRepository, PipelineResumeWaitRepository>();
         services.AddScoped<IPipelineRunLineageService, PipelineRunLineageService>();
+        services.AddScoped<IPipelineRunUsedVariablesReader, PipelineRunUsedVariablesRepository>();
+        services.AddScoped<IPipelineRunUsedVariablesService, PipelineRunUsedVariablesService>();
         services.AddScoped<IPipelineFavoriteRepository, PipelineFavoriteRepository>();
         services.AddScoped<IPipelineFavoriteService, PipelineFavoriteService>();
         services.AddScoped<IPipelineGitService, PipelineGitService>();
@@ -37,15 +39,31 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineEnvFilePreparer, PipelineEnvFilePreparer>();
         services.AddScoped<IPipelineSetupServerRepository, PipelineSetupServerRepository>();
         services.AddScoped<IPipelineProductionSetupService, PipelineProductionSetupService>();
+        services.AddScoped<IPipelineSetupCollectionService, PipelineSetupCollectionService>();
         services.AddScoped<IPipelineVariableResolver, PipelineVariableResolver>();
         services.AddScoped<IPipelineService, PipelineService>();
+        // R-11: read-only import of the pipeline files of external repository mirrors.
+        services.AddScoped<IPipelineExternalImportRepository, PipelineExternalImportRepository>();
+        services.AddScoped<PipelineExternalMirrorReader>();
+        services.AddScoped<IPipelineExternalImportService, PipelineExternalImportService>();
         services.AddHostedService<TaskTimeoutService>();
+        services.AddScoped<IPipelineRunIdentityBackfillRepository, PipelineRunIdentityBackfillRepository>();
+        services.AddScoped<IPipelineRunIdentityProgressService, PipelineRunIdentityProgressService>();
+        services.AddHostedService<PipelineRunIdentityBackfillService>();
         services.AddScoped<IPipelineRunService, PipelineRunService>();
         services.AddScoped<IPipelineLauncher>(sp => (IPipelineLauncher)sp.GetRequiredService<IPipelineRunService>());
         services.AddScoped<IPipelineApprovalService, PipelineApprovalService>();
         services.AddScoped<IPipelineArtifactService, PipelineArtifactService>();
         services.AddScoped<IPipelineFleetRepository, PipelineFleetRepository>();
         services.AddScoped<IPipelineFleetService, PipelineFleetService>();
+        services.AddScoped<IGenericTemplatePinRepository, GenericTemplatePinRepository>();
+        services.AddScoped<IPipelineFleetBulkUpdateService, PipelineFleetBulkUpdateService>();
+        services.AddScoped<IPipelineScheduleRepository, PipelineScheduleRepository>();
+        services.AddScoped<IServerActionScheduleRepository, ServerActionScheduleRepository>();
+        services.AddScoped<ServerActionPlanReader>();
+        services.AddScoped<IPipelineSchedulePlanService, PipelineSchedulePlanService>();
+        services.AddScoped<IPipelineScheduleWriter, PipelineScheduleWriter>();
+        services.AddScoped<IPipelineHolderDeclarationService, PipelineHolderDeclarationService>();
         services.AddScoped<IPipelineTemplateResolver, PipelineTemplateResolver>();
         services.AddScoped<IPipelineEnvironmentCheckGuard, PipelineEnvironmentCheckGuard>();
         services.AddScoped<IPipelineDispatchServerResolver, PipelineDispatchServerResolver>();
@@ -71,7 +89,9 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineAiProfilePreflight, PipelineAiProfilePreflight>();
         services.AddScoped<IPipelineConfigTemplatePreflight, PipelineConfigTemplatePreflight>();
         services.AddScoped<IPipelineRunPreflightService, PipelineRunPreflightService>();
-        services.AddScoped<IPipelineSetupReadinessService, PipelineSetupReadinessService>();
+        // R-44: the readiness resolves the template of every pipeline of a project; over a request-scoped memo of the
+        // template rows, pipelines extending the same template read it once instead of once each.
+        services.AddScoped<IPipelineSetupReadinessService>(CreateSetupReadinessService);
         services.AddScoped<IPipelineRequirementsProvisioner, PipelineRequirementsProvisioner>();
         services.AddScoped<IPipelineResourceUsageRepository, PipelineResourceUsageRepository>();
         services.AddScoped<IPipelineResourceUsageService, PipelineResourceUsageService>();
@@ -93,6 +113,8 @@ public static class PipelinesModuleExtensions
         // Launcher -> scheduler is an injected edge; scheduler -> launcher travels as a method
         // parameter (IPipelineChildRunLauncher), so the recursion closes without a DI cycle.
         services.AddScoped<IPipelineRunLauncher, PipelineRunLauncher>();
+        // R-7: the first stage of a manual launch is dispatched after the launch answered, from its own scope.
+        services.AddSingleton<IPipelineDeferredFirstDispatch, PipelineDeferredFirstDispatch>();
         services.AddScoped<IPipelineTemplateService, PipelineTemplateService>();
         services.AddScoped<IPipelineWebhookService, PipelineWebhookService>();
         services.AddScoped<IPipelineRunToEndPolicy, PipelineRunToEndPolicy>();
@@ -103,13 +125,6 @@ public static class PipelinesModuleExtensions
         services.AddScoped<
             IDomainEventHandler<Users.Events.UserPipelinesTransferRequestedEvent>,
             UserPipelinesTransferHandler>();
-        // Only the colour behind the public API address leads (decision of 2026-10-02): the lease asks
-        // the probe, which asks the address itself which instance answers.
-        services.AddHttpClient(LiveInstanceProbe.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5));
-        services.AddSingleton<LiveInstanceProbe>();
-        services.AddSingleton<ILiveInstanceProbe>(provider => provider.GetRequiredService<LiveInstanceProbe>());
-        services.AddHostedService(provider => provider.GetRequiredService<LiveInstanceProbe>());
-        services.AddSingleton<IPostgresLeaderLease, PostgresLeaderLease>();
         // Pipeline chaining: trigger downstream pipelines when an upstream run succeeds (on_success:).
         services.AddScoped<Services.DomainEvents.IDomainEventHandler<Events.PipelineRunCompletedEvent>, PipelineRunCompletedDownstreamHandler>();
         // Orchestration: complete a waiting `type: trigger` step when its child run finishes.
@@ -139,6 +154,9 @@ public static class PipelinesModuleExtensions
         services.AddScoped<
             Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineStepTaskCompletedEvent>,
             PipelineStepTaskCompletedHandler>();
+        services.AddScoped<
+            Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineCancelledTaskStoppedEvent>,
+            PipelineCancelledTaskStoppedHandler>();
         services.AddScoped<
             Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineStepTaskMetricsCollectedEvent>,
             PipelineStepTaskMetricsHandler>();
@@ -187,4 +205,12 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IDomainEventHandler<Events.PipelineApprovalRequestedEvent>, DomainEventAuditHandler<Events.PipelineApprovalRequestedEvent>>();
         return services;
     }
+
+    /// <summary>R-44: the readiness service over a resolver whose template reads are memoized for the scope: the
+    /// pipelines of a project that extend the same template read its rows once instead of once each.</summary>
+    internal static PipelineSetupReadinessService CreateSetupReadinessService(IServiceProvider provider) =>
+        ActivatorUtilities.CreateInstance<PipelineSetupReadinessService>(
+            provider,
+            new PipelineTemplateResolver(new MemoizingPipelineTemplateRepository(
+                provider.GetRequiredService<IPipelineTemplateRepository>())));
 }

@@ -17,4 +17,8 @@ internal sealed record PipelineFleetRow(
 {
     /// <summary>Carried through a rewrite of the pipeline, which would otherwise return it to automatic.</summary>
     public int? AiRunnerProfileId { get; init; }
+
+    /// <summary>Carried through a rewrite too: without it the update would read and write the definition in the
+    /// project's default repository instead of the one the pipeline lives in, and forget that repository.</summary>
+    public int? SourceRepositoryId { get; init; }
 }

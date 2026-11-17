@@ -281,9 +281,13 @@ public static class DemoDataSeeder
         void AddRunIfMissing(int pipelineId, PipelineStatus status, DateTime startedAt, DateTime completedAt, string commit)
         {
             if (existingRunKeys.Contains((pipelineId, startedAt))) return;
+            // A demo run takes its number like any run: the next launch of this pipeline continues after it.
+            var pipeline = pipelines.Single(item => item.Id == pipelineId);
+            pipeline.BuildCounter++;
             runs.Add(new PipelineRun
             {
                 PipelineId = pipelineId,
+                BuildNumber = pipeline.BuildCounter,
                 Status = status,
                 StartedAt = startedAt,
                 CompletedAt = completedAt,

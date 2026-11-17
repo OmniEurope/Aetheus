@@ -42,7 +42,8 @@ public class ServerPortReservation
 
     /// <summary>Records the last agent observation of this listening port; null means no scan has
     /// confirmed the claim. Missing observations remain visible discrepancies rather than
-    /// triggering automatic corrections.</summary>
+    /// triggering automatic corrections. On an observed row it is when the row was last written (an
+    /// unchanged sighting is refreshed at most every few minutes), not the time of the last scan.</summary>
     public DateTime? ObservedAt { get; set; }
 
     // Navigation

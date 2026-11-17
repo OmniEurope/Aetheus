@@ -103,8 +103,17 @@ public partial class OrganizationDetail : IAsyncDisposable
         {
             _hub = HubFactory.Create("admin");
             _hub.On<string, int, string>("AdminEntityChanged", OnAdminEntityChangedAsync);
-            await _hub.StartAsync();
+            // Not awaited: OnParametersSetAsync (the organization read) only runs once this method
+            // completes, so awaiting the start tied the page to a realtime negotiation of up to the
+            // start timeout under load. _hub is set before the first yield, so DisposeAsync reaches it.
+            _ = StartHubAsync(_hub);
         }
+        catch { /* Hub unavailable - degrade to static */ }
+    }
+
+    private static async Task StartHubAsync(HubConnection hub)
+    {
+        try { await hub.StartAsync(); }
         catch { /* Hub unavailable - degrade to static */ }
     }
 

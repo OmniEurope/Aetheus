@@ -72,6 +72,23 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
         => PutJsonAsync<UpdateServerRequest, ServerDto>($"api/servers/{id}", request, ct);
 
 
+    /// <summary>Recette R-8: the server's daily reboot schedule, or null when it has none (the backend answers 204).</summary>
+    public async Task<ServerRebootScheduleDto?> GetRebootScheduleAsync(int id, CancellationToken ct = default)
+    {
+        using var response = await Http.GetAsync($"api/servers/{id}/reboot-schedule", ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NoContent) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ServerRebootScheduleDto>(JsonOptions.Web, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Creates or changes the server's daily reboot schedule; null when the backend refused it.</summary>
+    public Task<ServerRebootScheduleDto?> SaveRebootScheduleAsync(int id, SaveServerRebootScheduleRequest request, CancellationToken ct = default)
+        => PutJsonAsync<SaveServerRebootScheduleRequest, ServerRebootScheduleDto>($"api/servers/{id}/reboot-schedule", request, ct);
+
+    /// <summary>Deletes the server's daily reboot schedule.</summary>
+    public Task<ApiStatus> DeleteRebootScheduleAsync(int id, CancellationToken ct = default)
+        => DeleteAsync($"api/servers/{id}/reboot-schedule", ct);
+
     /// <summary>Toggles the pipeline-runner capability on a server (item #11 secure-by-default).
     /// Returns the updated DTO or null on failure (404 / forbidden).</summary>
     public Task<ServerDto?> SetPipelineRunnerEnabledAsync(int id, bool enabled, CancellationToken ct = default)

@@ -1,5 +1,4 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@inject GridExportContext ExportContext
 @page "/admin/settings"
 
 <PageTitle>@L["PlatformSettings"] - Aetheus</PageTitle>
@@ -73,7 +72,10 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddSecret"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                 </OmniRow>
 
-                <OmniDataGrid FillAvailableHeight="true" Items="@_secrets" ExportTitle="@ExportContext.Title(L["Secrets"])" ExportFields="@ExportContext.Fields()" TItem="SecretDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                @* The secret's value is not in SecretDto: the cell is a placeholder, an export could only write the key and the dates. *@
+                <AetheusDataGrid @ref="_secretsGrid" FullHeight="true" Data="@_secretRows" Count="@_secretCount" LoadData="@LoadSecretsAsync" ExportRead="@ReadSecretsExportAsync"
+                                 VirtualData="@(() => new OmniDataGridResult<SecretDto>(_secretRows, _secretCount))" ExportName="@L["Secrets"]" TItem="SecretDto"
+                                 EmptyText="@L["NoRecords"]" Virtualize="@AetheusGrid.RemoteVirtualization">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="SecretDto" Property="Key" Title="@L["Key"]" Filterable="true" />
                         <OmniDataGridColumn TItem="SecretDto" Title="@L["Value"]" Width="12.5rem" Sortable="false">
@@ -84,11 +86,11 @@
                         <OmniDataGridColumn TItem="SecretDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="10rem" Filterable="true" />
                         <OmniDataGridColumn TItem="SecretDto" Title="" Width="6.25rem" Sortable="false">
                             <Template Context="secret">
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteSecret(secret.Id))" title="@L["DeleteSecret"]" Label="@L["DeleteSecret"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteSecret(secret))" title="@L["DeleteSecret"]" Label="@L["DeleteSecret"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                             </Template>
                         </OmniDataGridColumn>
                     </Columns>
-                </OmniDataGrid>
+                </AetheusDataGrid>
             </OmniCard>
         </ChildContent></OmniTabsItem>
 
@@ -96,7 +98,9 @@
             <OmniCard>
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GenerateToken" Class="omni-u-mb-lg" title="@L["GenerateToken"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Generate"]</span></ChildContent></OmniButton>
 
-                <OmniDataGrid @ref="_tokensGrid" ExportMarkdown="false" FillAvailableHeight="true" Items="@_tokens" TItem="RegistrationTokenDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" Class="aetheus-grid-fullheight" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                <AetheusDataGrid @ref="_tokensGrid" ExportMarkdown="false" FullHeight="true" Data="@_tokenRows" Count="@_tokenCount" LoadData="@LoadTokensAsync"
+                                 VirtualData="@(() => new OmniDataGridResult<RegistrationTokenDto>(_tokenRows, _tokenCount))" TItem="RegistrationTokenDto"
+                                 EmptyText="@L["NoRecords"]" class="aetheus-grid-fullheight" Virtualize="@AetheusGrid.RemoteVirtualization">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="RegistrationTokenDto" Property="Token" Title="@L["Token"]" Filterable="true">
                             <Template Context="t">
@@ -119,7 +123,7 @@
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="RegistrationTokenDto" Property="ExpiresAt" Title="@L["Expires"]" FormatString="{0:g}" Width="10rem" Filterable="true" />
                     </Columns>
-                </OmniDataGrid>
+                </AetheusDataGrid>
             </OmniCard>
         </ChildContent></OmniTabsItem>
     </Tabs>

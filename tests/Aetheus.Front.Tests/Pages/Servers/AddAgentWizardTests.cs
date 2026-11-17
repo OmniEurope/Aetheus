@@ -281,4 +281,29 @@ public class AddAgentWizardTests : BunitContext
         Assert.True(patch);
         Assert.Contains("--enable-patch-manage", AgentInstallFlags.BuildLinux(true, true, false, patch, false, true), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void R8_TheCapabilitiesStep_OffersTheHostRebootCard_ForLinuxOnly()
+    {
+        var linux = Render<WizardCapabilitiesStep>(p => p.Add(c => c.Platform, "linux"));
+        var windows = Render<WizardCapabilitiesStep>(p => p.Add(c => c.Platform, "windows"));
+
+        Assert.Contains("WizardModuleHostReboot", linux.Markup, StringComparison.Ordinal);
+        Assert.Contains("WizardModuleHostRebootHint", linux.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("WizardModuleHostReboot", windows.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R8_ClickingTheHostRebootCard_RaisesItsChangeWithTrue()
+    {
+        bool? raised = null;
+        var cut = Render<WizardCapabilitiesStep>(p => p
+            .Add(c => c.Platform, "linux")
+            .Add(c => c.IncludeHostRebootChanged, EventCallback.Factory.Create<bool>(this, value => raised = value)));
+
+        var card = cut.FindAll("[role=\"checkbox\"]").Single(element => element.TextContent.Contains("WizardModuleHostReboot", StringComparison.Ordinal));
+        await card.ClickAsync(new());
+
+        Assert.True(raised);
+    }
 }

@@ -13,6 +13,7 @@ public sealed class AppTelemetryService(
     IIngestService ingestService,
     IAuditService audit,
     IConfiguration configuration,
+    IngestKeyRejectionLog rejections,
     TimeProvider timeProvider) : IAppTelemetryService
 {
     public async Task<IngestKeyResponse?> GenerateIngestKeyAsync(int appId, CancellationToken ct = default)
@@ -135,14 +136,27 @@ public sealed class AppTelemetryService(
     {
         var samples = await metricRepo.GetLatestExportAsync(
             appId, AppRoutePerformance.MetricNames, AppRoutePerformance.LatestPointLookback, ct).ConfigureAwait(false);
-        return AppRoutePerformance.Build(samples);
+        var report = AppRoutePerformance.Build(samples);
+        return report.MeasuredAt is null
+            ? report with { NoMeasure = await DiagnoseNoMeasureAsync(appId, ct).ConfigureAwait(false) }
+            : report;
+    }
+
+    /// <summary>R-27: the reason no measure arrived, null when the application cannot be read.</summary>
+    private async Task<AppNoMeasureDto?> DiagnoseNoMeasureAsync(int appId, CancellationToken ct)
+    {
+        var app = await appRepo.GetAppAsync(appId, ct).ConfigureAwait(false);
+        return app is null
+            ? null
+            : AppNoMeasureDiagnosis.Build(app, timeProvider.GetUtcNow().UtcDateTime, rejections);
     }
 
     public async Task<AppDatabaseSizeReportDto> GetDatabaseSizeAsync(int appId, CancellationToken ct = default)
     {
         var latest = await metricRepo.GetLatestExportAsync(
             appId, AppDatabaseSize.MetricNames, AppDatabaseSize.MeasurementSpread, ct).ConfigureAwait(false);
-        if (latest.Count == 0) return AppDatabaseSize.Build(latest, []);
+        if (latest.Count == 0)
+            return AppDatabaseSize.Build(latest, []) with { NoMeasure = await DiagnoseNoMeasureAsync(appId, ct).ConfigureAwait(false) };
         var dayBefore = latest.Max(sample => sample.Timestamp) - AppDatabaseSize.TrendDistance;
         var earlier = await metricRepo.GetLatestBetweenAsync(
             appId, AppDatabaseSize.MetricNames, dayBefore - AppDatabaseSize.TrendWindow, dayBefore, ct).ConfigureAwait(false);

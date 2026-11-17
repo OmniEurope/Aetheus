@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using System.Text;
 using Aetheus.Agent.Core.Collectors;
 
 namespace Aetheus.Agent.Linux.Collectors;
@@ -25,7 +26,8 @@ internal static class LinuxStatvfs
         if (!OperatingSystem.IsLinux() || !Environment.Is64BitProcess) return null;
 
         var buffer = new byte[BufferSize];
-        if (statvfs(mountPoint, buffer) != 0) return null;
+        // The path goes to libc as null-terminated UTF-8 bytes: no string marshalling to specify (CA2101).
+        if (statvfs(Encoding.UTF8.GetBytes(mountPoint + "\0"), buffer) != 0) return null;
 
         return InodeUsage.FromStatvfs(
             BitConverter.ToUInt64(buffer, FilesOffset),
@@ -37,5 +39,5 @@ internal static class LinuxStatvfs
     [SuppressMessage("Security", "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes",
         Justification = "libc on Linux; the attribute only constrains the Windows DLL search order.")]
     [DllImport("libc", SetLastError = true)]
-    private static extern int statvfs([MarshalAs(UnmanagedType.LPUTF8Str)] string path, [Out] byte[] buffer);
+    private static extern int statvfs(byte[] path, [Out] byte[] buffer);
 }

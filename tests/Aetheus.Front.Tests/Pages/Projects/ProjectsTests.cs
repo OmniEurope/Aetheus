@@ -74,7 +74,8 @@ public class ProjectsTests : BunitContext
                     LastRunAt = new DateTime(2026, 7, 30, 9, 5, 0, DateTimeKind.Utc),
                     LatestGateGrade = AnalysisGrade.B,
                     ProductionStatus = ProjectProductionStatus.Online,
-                    OnlineUserCount = 8
+                    OnlineUserCount = 8,
+                    OnlineUserState = OnlineAudienceState.Measured
                 }
             ],
             TotalCount = 1
@@ -107,6 +108,91 @@ public class ProjectsTests : BunitContext
         Assert.Contains("OnlineUsers", cut.Markup);
         Assert.DoesNotContain("PipelineCount", cut.Markup);
         Assert.DoesNotContain("Repository", cut.Markup);
+    }
+
+    /// <summary>R-12, R-20 (option B): the list shows a sealed letter as is, an old last known letter marked old with
+    /// the tooltip naming its release, and a dash (no letter, no old mark) when nothing is known.</summary>
+    [Fact]
+    public void ProjectCard_Grade_ShowsSealedAsIs_LastKnownMarkedOld_AndNothingKnownAsADash()
+    {
+        _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto>
+        {
+            Items =
+            [
+                new ProjectDto
+                {
+                    Id = 1, Name = "Sealed", Status = ProjectStatus.Active, LatestGateGrade = AnalysisGrade.B,
+                    LatestGateGradeQualification = new AnalysisQualificationDto { State = AnalysisQualificationState.DeployedSealed, ReleaseVersion = "1.5.30" }
+                },
+                new ProjectDto
+                {
+                    Id = 2, Name = "Old", Status = ProjectStatus.Active, LatestGateGrade = AnalysisGrade.F,
+                    LatestGateGradeQualification = new AnalysisQualificationDto
+                    {
+                        State = AnalysisQualificationState.DeployedLastKnownGrade, ReleaseVersion = "1.5.31", KnownReleaseVersion = "1.5.30"
+                    }
+                },
+                new ProjectDto
+                {
+                    Id = 3, Name = "Nothing", Status = ProjectStatus.Active,
+                    LatestGateGradeQualification = new AnalysisQualificationDto { State = AnalysisQualificationState.DeployedWithoutVerdict, ReleaseVersion = "1.4.0" }
+                }
+            ],
+            TotalCount = 3
+        });
+        var cut = Render<ProjectsPage>();
+        cut.WaitForState(() => cut.Markup.Contains("Nothing"));
+
+        // The list is sorted by name, so each row is found by the sentence of its tooltip.
+        var rows = cut.FindAll(".project-gate-summary").ToDictionary(row => row.GetAttribute("title")!);
+        Assert.Equal(3, rows.Count);
+        var sealedRow = rows["ProjectGradeDeployedRelease"];
+        Assert.Equal("B", sealedRow.QuerySelector(".grade-badge--b")!.TextContent.Trim());
+        Assert.Empty(sealedRow.QuerySelectorAll("[data-testid='grade-badge-old']"));
+        var oldRow = rows["ProjectGradeLastKnown"];
+        Assert.Equal("F", oldRow.QuerySelector(".grade-badge--f")!.TextContent.Trim());
+        Assert.Single(oldRow.QuerySelectorAll("[data-testid='grade-badge-old']"));
+        var nothingRow = rows["ProjectGradeDeployedWithoutVerdict"];
+        Assert.Single(nothingRow.QuerySelectorAll(".grade-badge--none"));
+        Assert.Empty(nothingRow.QuerySelectorAll("[data-testid='grade-badge-old']"));
+    }
+
+    /// <summary>R-13/R-23: a project whose audience measurement waits for data says so with a « ? » help, never a
+    /// zero; a measured zero is a number; a project without web analytics shows no counter at all.</summary>
+    [Fact]
+    public void ProjectCard_OnlineCounter_TellsWaitingFromMeasuredZeroFromUnavailable()
+    {
+        _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto>
+        {
+            Items =
+            [
+                new ProjectDto { Id = 1, Name = "Waiting", Status = ProjectStatus.Active, OnlineUserCount = 0, OnlineUserState = OnlineAudienceState.Waiting, OnlineUserLastEventAt = new DateTime(2026, 11, 5, 10, 0, 0, DateTimeKind.Utc) },
+                new ProjectDto { Id = 2, Name = "Zero", Status = ProjectStatus.Active, OnlineUserCount = 0, OnlineUserState = OnlineAudienceState.Measured },
+                new ProjectDto { Id = 3, Name = "Hidden", Status = ProjectStatus.Active, OnlineUserState = OnlineAudienceState.Unavailable }
+            ],
+            TotalCount = 3
+        });
+        var cut = Render<ProjectsPage>();
+        cut.WaitForState(() => cut.Markup.Contains("Hidden"));
+
+        var counters = cut.FindAll("[data-testid=\"online-audience\"]");
+        Assert.Equal(2, counters.Count);
+        Assert.Equal("Waiting", counters[0].GetAttribute("data-state"));
+        // Waiting: the words, no number at all.
+        Assert.NotNull(counters[0].QuerySelector("[data-testid=\"online-audience-waiting\"]"));
+        Assert.Null(counters[0].QuerySelector("[data-testid=\"online-audience-count\"]"));
+        Assert.Equal("Measured", counters[1].GetAttribute("data-state"));
+        // The measured zero stays a count, with no waiting words.
+        Assert.NotNull(counters[1].QuerySelector("[data-testid=\"online-audience-count\"]"));
+        Assert.Null(counters[1].QuerySelector("[data-testid=\"online-audience-waiting\"]"));
+        // Both carry the « ? » help; the waiting one adds that it is not a measured zero.
+        var helps = cut.FindAll("[data-testid=\"online-audience-help\"]");
+        Assert.Equal(2, helps.Count);
+        Assert.Contains("OnlineUsersWaitingHint", helps[0].GetAttribute("aria-label"), StringComparison.Ordinal);
+        // R-23: the waiting help carries the last data time the project DTO brought.
+        Assert.Contains("OnlineUsersWaitingLast", helps[0].GetAttribute("aria-label"), StringComparison.Ordinal);
+        Assert.DoesNotContain("OnlineUsersWaitingHint", helps[1].GetAttribute("aria-label"), StringComparison.Ordinal);
+        Assert.Contains("OnlineUsersHelp", helps[1].GetAttribute("aria-label"), StringComparison.Ordinal);
     }
 
     /// <summary> The commit message's first line on its own line (whole message in the title), the

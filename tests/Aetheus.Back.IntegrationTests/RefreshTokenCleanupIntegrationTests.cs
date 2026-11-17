@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Tests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,7 +14,6 @@ namespace Aetheus.Back.IntegrationTests;
 /// retention window (a set-based DELETE), a token still inside the window is kept so reuse detection
 /// keeps working, and live tokens are never touched.
 /// </summary>
-[Collection(PostgresCollection.Name)]
 public sealed class RefreshTokenCleanupIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     [Fact]
@@ -46,7 +46,8 @@ public sealed class RefreshTokenCleanupIntegrationTests(PostgresFixture fixture)
         var sweep = new RefreshTokenCleanupService(
             services.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<RefreshTokenCleanupService>.Instance,
-            TimeProvider.System);
+            TimeProvider.System,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await sweep.CleanupExpiredTokensAsync(ct);
 

@@ -51,12 +51,43 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
     }
 
 
+    /// <summary>R-29: probes the application now; a refusal (409 prerequisite, 403) is thrown as <see cref="HttpRequestException"/>
+    /// with the server's status so the caller says what was refused.</summary>
+    public async Task<AppProbeNowDto?> ProbeMonitoredAppNowAsync(int id, CancellationToken ct = default)
+    {
+        using var response = await Http.PostAsync($"api/appmonitoring/apps/{id}/probe-now", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AppProbeNowDto>(JsonOptions.Web, ct);
+    }
+
+    public async Task<AppProbeNowDto?> GetMonitoredAppProbeNowAsync(int id, CancellationToken ct = default) =>
+        await Http.GetFromJsonAsync<AppProbeNowDto>($"api/appmonitoring/apps/{id}/probe-now", JsonOptions.Web, ct);
+
+    /// <summary>R-29: asks the application's telemetry package to export now; refusals thrown like the probe.</summary>
+    public async Task<AppTelemetryExportRequestDto?> RequestMonitoredAppTelemetryExportAsync(int id, CancellationToken ct = default)
+    {
+        using var response = await Http.PostAsync($"api/appmonitoring/apps/{id}/telemetry-export-request", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AppTelemetryExportRequestDto>(JsonOptions.Web, ct);
+    }
+
+    public async Task<AppTelemetryExportRequestDto?> GetMonitoredAppTelemetryExportAsync(int id, CancellationToken ct = default) =>
+        await Http.GetFromJsonAsync<AppTelemetryExportRequestDto>(
+            $"api/appmonitoring/apps/{id}/telemetry-export-request", JsonOptions.Web, ct);
+
     public async Task<MonitoredAppDto?> CreateMonitoredAppAsync(int projectId, CreateMonitoredAppRequest request)
     {
         var response = await Http.PostAsJsonAsync($"api/appmonitoring/projects/{projectId}/apps", request);
         return response.IsSuccessStatusCode
             ? await response.Content.ReadFromJsonAsync<MonitoredAppDto>(JsonOptions.Web)
             : null;
+    }
+
+
+    /// <summary>R-47: whether the telemetry the wizard configured still waits for the repository's telemetry package.</summary>
+    public async Task<AppTelemetrySetupDto?> GetTelemetrySetupAsync(int projectId, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<AppTelemetrySetupDto>($"api/appmonitoring/projects/{projectId}/telemetry-setup", JsonOptions.Web, ct);
     }
 
 
@@ -174,6 +205,18 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
     {
         return await Http.GetFromJsonAsync<AppWebAnalyticsSummaryDto>(
             $"api/appmonitoring/apps/{appId}/web-analytics?days={days}",
+            JsonOptions.Web,
+            ct);
+    }
+
+
+    public async Task<IReadOnlyList<AppWebAnalyticsVisitorDto>?> GetAppWebAnalyticsVisitorsAsync(
+        int appId,
+        int days = 30,
+        CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<List<AppWebAnalyticsVisitorDto>>(
+            $"api/appmonitoring/apps/{appId}/web-analytics/visitors?days={days}",
             JsonOptions.Web,
             ct);
     }

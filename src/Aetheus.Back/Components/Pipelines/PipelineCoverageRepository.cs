@@ -112,7 +112,7 @@ internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQua
             .OrderByDescending(c => c.PipelineRun.StartedAt)
             .ThenByDescending(c => c.LinesValid)
             .ThenByDescending(c => c.CreatedAt)
-            .Select(c => new CoverageTrendRow(c.PipelineRunId, c.PipelineRun.StartedAt, c.LineRate, c.BranchRate))
+            .Select(c => new CoverageTrendRow(c.PipelineRunId, c.PipelineRun.StartedAt, c.LineRate, c.BranchRate, c.PipelineRun.BuildNumber, c.PipelineRun.Pipeline.Name))
             .Take(take * 4)
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -127,7 +127,7 @@ internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQua
             .Where(m => ComplexityKeys.Contains(m.Key))
             .OrderByDescending(m => m.PipelineRun.StartedAt)
             .ThenByDescending(m => m.CreatedAt)
-            .Select(m => new ComplexityMetricRow(m.PipelineRunId, m.PipelineRun.StartedAt, m.Key, m.Value))
+            .Select(m => new ComplexityMetricRow(m.PipelineRunId, m.PipelineRun.StartedAt, m.Key, m.Value, m.PipelineRun.BuildNumber, m.PipelineRun.Pipeline.Name))
             .Take(take * 12)
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -154,7 +154,7 @@ internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQua
             var maximum = Pick("complexity.cyclomatic.max");
             if (average is null && maximum is null) continue;
             result.Add(new ComplexityTrendRow(group.Key, group.First().StartedAt,
-                average ?? 0, maximum ?? 0, Pick("complexity.crap.avg")));
+                average ?? 0, maximum ?? 0, Pick("complexity.crap.avg"), group.First().RunNumber, group.First().PipelineName));
             if (result.Count >= take) break;
         }
         result.Reverse();
@@ -167,7 +167,7 @@ internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQua
         var recentRunIds = await db.PipelineRuns.AsNoTracking()
             .Where(r => r.Pipeline.ProjectId == projectId && r.TestResults.Any())
             .OrderByDescending(r => r.StartedAt)
-            .Select(r => new { r.Id, r.StartedAt })
+            .Select(r => new { r.Id, r.StartedAt, r.BuildNumber, PipelineName = r.Pipeline.Name })
             .Take(take)
             .ToListAsync(ct).ConfigureAwait(false);
         if (recentRunIds.Count == 0) return [];
@@ -182,7 +182,7 @@ internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQua
         var perRun = recentRunIds.Select(r =>
         {
             int C(TestOutcome o) => counts.Where(x => x.PipelineRunId == r.Id && x.Outcome == o).Sum(x => x.Count);
-            return new TestTrendRow(r.Id, r.StartedAt, C(TestOutcome.Passed), C(TestOutcome.Failed) + C(TestOutcome.Error), C(TestOutcome.Skipped));
+            return new TestTrendRow(r.Id, r.StartedAt, C(TestOutcome.Passed), C(TestOutcome.Failed) + C(TestOutcome.Error), C(TestOutcome.Skipped), r.BuildNumber, r.PipelineName);
         }).ToList();
         perRun.Reverse(); // oldest -> newest for charting
         return perRun;
@@ -298,13 +298,13 @@ internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQua
     }
 }
 
-internal sealed record ComplexityMetricRow(int PipelineRunId, DateTime StartedAt, string Key, double Value);
+internal sealed record ComplexityMetricRow(int PipelineRunId, DateTime StartedAt, string Key, double Value, int RunNumber, string? PipelineName = null);
 
 /// <summary>Repository projection for a single coverage-trend point (K).</summary>
-public sealed record CoverageTrendRow(int RunId, DateTime Date, double LineRate, double BranchRate);
+public sealed record CoverageTrendRow(int RunId, DateTime Date, double LineRate, double BranchRate, int RunNumber = 0, string? PipelineName = null);
 
 /// <summary>Repository projection for a single complexity/CRAP trend point (L · S-FEAT-C4R2).</summary>
-public sealed record ComplexityTrendRow(int RunId, DateTime Date, double AvgCyclomatic, double MaxCyclomatic, double? CrapAvg);
+public sealed record ComplexityTrendRow(int RunId, DateTime Date, double AvgCyclomatic, double MaxCyclomatic, double? CrapAvg, int RunNumber = 0, string? PipelineName = null);
 
 /// <summary>Repository projection for a single project test pass/fail trend point.</summary>
-public sealed record TestTrendRow(int RunId, DateTime Date, int Passed, int Failed, int Skipped);
+public sealed record TestTrendRow(int RunId, DateTime Date, int Passed, int Failed, int Skipped, int RunNumber = 0, string? PipelineName = null);

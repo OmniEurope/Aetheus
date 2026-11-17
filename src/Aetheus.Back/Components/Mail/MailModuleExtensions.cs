@@ -46,6 +46,8 @@ public static class MailModuleExtensions
         services.AddScoped<Mailbox.IMailboxService, Mailbox.MailboxService>();
         services.AddSingleton<Mailbox.IMailboxConnector, Mailbox.MailKitMailboxConnector>();
         services.AddSingleton<Mailbox.IMailboxCredentialStore, Mailbox.MailboxCredentialStore>();
+        // The single-use tickets the reading frame loads a message document with (its own CSP, no JWT in a URL).
+        services.AddSingleton<Mailbox.IMailboxDocumentTickets, Mailbox.MailboxDocumentTickets>();
         // A user's session end forgets the mailbox passwords they hold.
         services.AddScoped<IDomainEventHandler<Users.Events.UserSessionEndedEvent>, Mailbox.MailboxCredentialSessionEndHandler>();
         services.AddScoped<Mailbox.IMailboxRemoteImageFetcher, Mailbox.MailboxRemoteImageFetcher>();

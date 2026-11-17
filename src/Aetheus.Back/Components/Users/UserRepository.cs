@@ -15,10 +15,11 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public async Task<(List<UserDto> Items, int TotalCount)> GetUsersPagedProjectedAsync(
         string? search, int page, int pageSize, CancellationToken ct = default,
         string? sortBy = null, bool sortDescending = false,
-        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null)
+        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null, bool siteAdminView = true)
     {
         // Limited to organizations (an organization's administrator, or the switcher's choice): their members
-        // only, each with the roles it holds there only.
+        // only, each with the roles it holds there only. Outside the site Admin's view the e-mail is neither
+        // returned nor searched, sorted or filtered on, so a caller cannot guess an address by prefix.
         return await GetUsersPageAsync(
             search,
             page,
@@ -27,7 +28,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
             {
                 Id = u.Id,
                 Username = u.Username,
-                Email = u.Email,
+                Email = siteAdminView ? u.Email : null,
                 IsActive = u.IsActive,
                 TotpEnabled = u.TotpEnabled,
                 Roles = u.UserRoles.Where(ur => ur.Role.Name == RoleNames.Admin).Select(ur => ur.Role.Name).ToList(),
@@ -43,12 +44,16 @@ public class UserRepository(AppDbContext db) : IUserRepository
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt,
                 LastActivityAt = u.LastActivityAt
-            }),
+            })
+            // Two collections per user (the administrator role, the organization roles): one query each,
+            // as IncludeRoles does, rather than one join that repeats a user for every pair.
+            .AsSplitQuery(),
             ct,
             sortBy,
             sortDescending,
             filters,
-            organizationIds).ConfigureAwait(false);
+            organizationIds,
+            siteAdminView).ConfigureAwait(false);
     }
 
     private async Task<(List<T> Items, int TotalCount)> GetUsersPageAsync<T>(
@@ -60,30 +65,34 @@ public class UserRepository(AppDbContext db) : IUserRepository
         string? sortBy = null,
         bool sortDescending = false,
         IReadOnlyList<GridFilter>? filters = null,
-        IReadOnlyList<int>? organizationIds = null)
+        IReadOnlyList<int>? organizationIds = null,
+        bool siteAdminView = true)
     {
-        var scoped = BuildUserQuery(search);
+        var scoped = BuildUserQuery(search, matchEmail: siteAdminView);
         if (organizationIds is not null)
             scoped = scoped.Where(user => db.OrganizationMembers.Any(member =>
                 member.UserId == user.Id && organizationIds.Contains(member.OrganizationId)));
-        // The header filters, before the count.
-        var query = UserListQuery.Columns.ApplyFilters(scoped, filters);
+        // The header filters, before the count. A list limited to organizations matches the roles held there only.
+        var columns = organizationIds is null && siteAdminView
+            ? UserListQuery.Columns
+            : UserListQuery.For(organizationIds, siteAdminView);
+        var query = columns.ApplyFilters(scoped, siteAdminView ? filters : UserListQuery.WithoutEmail(filters));
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
         var pageQuery = query
-            .OrderByProperty(sortBy, sortDescending, user => user.Username, fallbackDescending: false)
+            .OrderByProperty(UserListQuery.SortKey(sortBy, siteAdminView), sortDescending, user => user.Username, fallbackDescending: false)
             .Skip((page - 1) * pageSize)
             .Take(pageSize);
         var items = await project(pageQuery).ToListAsync(ct).ConfigureAwait(false);
         return (items, totalCount);
     }
 
-    private IQueryable<User> BuildUserQuery(string? search)
+    private IQueryable<User> BuildUserQuery(string? search, bool matchEmail)
     {
         var query = db.Users.AsNoTracking().AsQueryable();
-        return string.IsNullOrWhiteSpace(search)
-            ? query
-            : query.Where(user => user.Username.Contains(search)
-                || user.Email.Contains(search));
+        if (string.IsNullOrWhiteSpace(search)) return query;
+        return matchEmail
+            ? query.Where(user => user.Username.Contains(search) || user.Email.Contains(search))
+            : query.Where(user => user.Username.Contains(search));
     }
 
     public async Task<User?> GetUserDetailAsync(int id, CancellationToken ct = default)
@@ -177,52 +186,6 @@ public class UserRepository(AppDbContext db) : IUserRepository
         foreach (var token in tokens)
             token.RevokedAt = revokedAt;
         return tokens.Count;
-    }
-
-    private const string AdministratorSetLockSql =
-        "SELECT pg_advisory_lock(hashtextextended('aetheus:administrator-set', 0))";
-    private const string AdministratorSetUnlockSql =
-        "SELECT pg_advisory_unlock(hashtextextended('aetheus:administrator-set', 0))";
-
-    public async Task<IAsyncDisposable> LockAdministratorSetAsync(CancellationToken ct = default)
-    {
-        if (!db.Database.IsRelational()) return NoLock.Instance;
-        // A session lock, held on a connection kept open until the caller has committed: the next
-        // request counts the administrators only once this change is visible.
-        await db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync(AdministratorSetLockSql, ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            await db.Database.CloseConnectionAsync().ConfigureAwait(false);
-            throw;
-        }
-        return new Release(ReleaseAdministratorSetAsync);
-    }
-
-    private async ValueTask ReleaseAdministratorSetAsync()
-    {
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync(AdministratorSetUnlockSql).ConfigureAwait(false);
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync().ConfigureAwait(false);
-        }
-    }
-
-    private sealed class Release(Func<ValueTask> release) : IAsyncDisposable
-    {
-        public ValueTask DisposeAsync() => release();
-    }
-
-    private sealed class NoLock : IAsyncDisposable
-    {
-        public static readonly NoLock Instance = new();
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     public Task<string[]> GetOwnedPipelineNamesAsync(string username, CancellationToken ct = default) =>

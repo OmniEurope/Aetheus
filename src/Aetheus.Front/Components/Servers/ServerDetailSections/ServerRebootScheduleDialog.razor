@@ -1,0 +1,20 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-8: the form of a server's daily reboot: a time, the zone it is read in, and whether the schedule is on.
+   It returns the request; the card writes it. *@
+<OmniTemplateForm TModel="RebootForm" Model="@_form" OnValidSubmit="@Save">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniStack Gap="OmniSpacing.Small">
+        <OmniFormField Label="@L["ServerRebootTime"]" For="server-reboot-time" Required="true" Help="@L["ServerRebootTimeHelp"]" Class="omni-u-w-100">
+            <OmniTimePicker Id="server-reboot-time" @bind-Value="_form.Time" Class="omni-u-w-100" />
+            <ValidationMessage For="@(() => _form.Time)" />
+        </OmniFormField>
+        <OmniFormField Label="@L["ServerRebootZone"]" For="server-reboot-zone" Required="true" Help="@L["ServerRebootZoneHelp"]" Class="omni-u-w-100">
+            <OmniDropDown Id="server-reboot-zone" TValue="string" @bind-Value="_form.TimeZoneId" Options="@_zoneOptions" Filterable="true" Class="omni-u-w-100" />
+            <ValidationMessage For="@(() => _form.TimeZoneId)" />
+        </OmniFormField>
+        <OmniSwitch Id="server-reboot-enabled" @bind-Value="_form.Enabled">@L["ServerRebootEnabledSwitch"]</OmniSwitch>
+        <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@Cancel">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" data-testid="server-reboot-save"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+        </Aetheus.Front.Components.Shared.DialogFooter>
+    </OmniStack>
+</OmniTemplateForm>

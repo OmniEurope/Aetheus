@@ -31,7 +31,9 @@ public sealed class ButtonLabelLengthAuditTests
         // Explicit security-settings wording.
         "ChangePassword",
         // The public-demo button names the form it fills because it sits outside that form.
-        "PublicDemoFillForm"
+        "PublicDemoFillForm",
+        // Recette R-29, the user's wording (2026-10-29): "Relancer" alone did not say that the deletion starts again.
+        "ProjectDeletionRelaunchDeletion"
     };
 
     [Fact]

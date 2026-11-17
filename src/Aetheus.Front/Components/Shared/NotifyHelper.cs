@@ -19,11 +19,31 @@ public class NotifyHelper(
     public void Success(string titleKey, string messageKey, params object[] args) =>
         Raise(OmniSeverity.Success, localizer[titleKey].Value, FormatMessage(messageKey, args));
 
+    /// <summary>A toast with one button (for example "Undo"). The message is already a sentence, the action
+    /// key a resource key. It stays as long as a warning so the reader has time to reach the button.</summary>
+    public void Notify(OmniSeverity severity, string titleKey, string rawMessage, string actionKey, Func<Task> action) =>
+        overlay.Notify(
+            string.IsNullOrWhiteSpace(rawMessage) ? localizer[titleKey].Value : rawMessage,
+            severity,
+            string.IsNullOrWhiteSpace(rawMessage) ? null : localizer[titleKey].Value,
+            WarningDuration,
+            localizer[actionKey].Value,
+            action);
+
     public void Error(string titleKey, string messageKey, params object[] args) =>
         ErrorRaw(localizer[titleKey].Value, FormatMessage(messageKey, args));
 
     public void Info(string titleKey, string messageKey, params object[] args) =>
         Raise(OmniSeverity.Info, localizer[titleKey].Value, FormatMessage(messageKey, args));
+
+    internal static readonly TimeSpan PendingDuration = TimeSpan.FromSeconds(60);
+
+    /// <summary>An info notice for work still in flight: it stays (up to a minute) until the caller removes it
+    /// with <see cref="Dismiss"/>, instead of vanishing after the usual five seconds while the work goes on.</summary>
+    public Guid Pending(string titleKey, string messageKey) =>
+        overlay.Notify(localizer[messageKey].Value, OmniSeverity.Info, localizer[titleKey].Value, PendingDuration);
+
+    public void Dismiss(Guid id) => overlay.Dismiss(id);
 
     public void Warning(string titleKey, string messageKey, params object[] args) =>
         Raise(OmniSeverity.Warning, localizer[titleKey].Value, FormatMessage(messageKey, args));

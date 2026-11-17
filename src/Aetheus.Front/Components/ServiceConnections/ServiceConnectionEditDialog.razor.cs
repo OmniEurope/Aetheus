@@ -57,7 +57,7 @@ public partial class ServiceConnectionEditDialog : EntityEditDialogBase
                         ConfigurationJson = string.IsNullOrWhiteSpace(_model.ConfigurationJson) ? "{}" : _model.ConfigurationJson
                     }),
                     "Updated",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedAsync,
                     successTitleKey: "Updated");
             }
             else
@@ -73,10 +73,17 @@ public partial class ServiceConnectionEditDialog : EntityEditDialogBase
                         ConfigurationJson = string.IsNullOrWhiteSpace(_model.ConfigurationJson) ? "{}" : _model.ConfigurationJson
                     }),
                     "Created",
-                    _ => CloseAfterSuccessAsync(),
+                    CloseWithSavedAsync,
                     successTitleKey: "Created");
             }
         });
+    }
+
+    // The list draws the saved connection at once (R-10): the dialog closes with what the server answered.
+    private Task CloseWithSavedAsync(ServiceConnectionDto saved)
+    {
+        Dialog.Close(saved);
+        return Task.CompletedTask;
     }
 
     // Local form model so create/edit share one binding surface (Update has no Type; Create does).

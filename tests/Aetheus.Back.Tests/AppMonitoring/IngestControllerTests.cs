@@ -203,4 +203,31 @@ public class IngestControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(900, Assert.IsType<IngestConfigurationDto>(ok.Value).MetricExportIntervalSeconds);
     }
+
+    [Fact]
+    public async Task ExportRequest_UnknownKey_Returns401_WithoutTakingAnyRequest()
+    {
+        var actions = Substitute.For<IAppImmediateActionService>();
+        _ingest.ResolveAppIdAsync("bad", Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var result = await Build("bad", null, string.Empty).ExportRequest(actions, TestContext.Current.CancellationToken);
+
+        Assert.IsType<UnauthorizedResult>(result);
+        await actions.DidNotReceiveWithAnyArgs().TakeTelemetryExportRequestAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ExportRequest_HandsThePendingRequestOfTheKeysApplication_Then204()
+    {
+        var actions = Substitute.For<IAppImmediateActionService>();
+        _ingest.ResolveAppIdAsync("ok", Arg.Any<CancellationToken>()).Returns(7);
+        actions.TakeTelemetryExportRequestAsync(7, Arg.Any<CancellationToken>()).Returns("2026-11-06T09:00:00.0000000Z", (string?)null);
+
+        var first = await Build("ok", null, string.Empty).ExportRequest(actions, TestContext.Current.CancellationToken);
+        var second = await Build("ok", null, string.Empty).ExportRequest(actions, TestContext.Current.CancellationToken);
+
+        var ok = Assert.IsType<OkObjectResult>(first);
+        Assert.Contains("2026-11-06T09:00:00", System.Text.Json.JsonSerializer.Serialize(ok.Value), StringComparison.Ordinal);
+        Assert.IsType<NoContentResult>(second);
+    }
 }

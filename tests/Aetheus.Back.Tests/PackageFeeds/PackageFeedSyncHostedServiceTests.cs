@@ -24,7 +24,8 @@ public class PackageFeedSyncHostedServiceTests
             .BuildServiceProvider();
 
         var sut = new PackageFeedSyncHostedService(provider, new ConfigurationBuilder().Build(),
-            NullLogger<PackageFeedSyncHostedService>.Instance);
+            NullLogger<PackageFeedSyncHostedService>.Instance,
+            leaderLease: LeaderLeaseDouble.Leader());
 
         await sut.SyncAllAsync(TestContext.Current.CancellationToken);
 

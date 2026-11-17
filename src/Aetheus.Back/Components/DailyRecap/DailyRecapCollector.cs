@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.AgentUpdate;
+using Aetheus.Back.Components.VulnerabilityWatch;
 
 namespace Aetheus.Back.Components.DailyRecap;
 
@@ -53,8 +54,21 @@ internal sealed class DailyRecapCollector(
             report = report with { Findings = await repo.GetFindingChangesAsync(startUtc, endUtc, ct).ConfigureAwait(false) };
         if (sections.Contains(DailyRecapSection.Mail))
             report = report with { MailServers = await repo.GetMailServersAsync(ct).ConfigureAwait(false) };
+        if (sections.Contains(DailyRecapSection.Cve))
+            report = report with
+            {
+                CveWatch = await repo.GetCveWatchAsync(startUtc, endUtc, ct).ConfigureAwait(false),
+                CveProjects = await repo.GetOpenCvesByProjectAsync(ct).ConfigureAwait(false),
+                CveServers = await repo.GetOpenCvesByServerAsync(ct).ConfigureAwait(false),
+                CveSources = VulnerabilityAttributions.For(WatchedEcosystems())
+            };
         return report;
     }
+
+    /// <summary>The ecosystems the watch runs, read from the same configuration section as the watch itself.</summary>
+    private IReadOnlyList<string> WatchedEcosystems() =>
+        (configuration.GetSection(VulnerabilityWatchOptions.SectionName).Get<VulnerabilityWatchOptions>() ?? new VulnerabilityWatchOptions())
+        .EffectiveEcosystems;
 
     private async Task<IReadOnlyList<RecapServer>> CollectServersAsync(CancellationToken ct)
     {

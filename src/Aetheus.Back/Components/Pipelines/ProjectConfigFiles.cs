@@ -18,8 +18,8 @@ internal static class ProjectConfigFiles
     public const string ApiHttps = ".pipeline/configs/apache/api-https.conf";
 
     /// <summary>The Apache virtual hosts the default deployment applies: the front's always, the API's only
-    /// when the Compose file publishes a back port.</summary>
-    /// <param name="includeApi">The Compose file publishes a back port: the API gets its own virtual hosts.</param>
+    /// for a front and an API (R-11), never for a monolith.</summary>
+    /// <param name="includeApi">The application is a front and an API: the API gets its own virtual hosts.</param>
     /// <param name="blueGreen">The HTTPS virtual hosts proxy to the ports of the upstream file the blue-green
     /// cutover maintains, instead of to the one port the Compose file publishes.</param>
     public static IReadOnlyDictionary<string, string> GenericApacheFiles(bool includeApi, bool blueGreen = false)
