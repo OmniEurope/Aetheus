@@ -15,7 +15,17 @@
     "JwtKey": "CHANGE_ME-at-least-32-utf8-bytes-long",
     "AdminEmail": "admin@aetheus.local",
     "AdminPassword": "CHANGE_ME",
+    "_comment_AdministratorSetupRequired": "false lets the seeded administrator sign in with AdminPassword at once, as the local tests and the E2E stack do. Accepted in Development only: any other environment refuses to start with it, and a real install makes the administrator set up its own account first.",
+    "AdministratorSetupRequired": false,
     "EncryptionKey": "CHANGE_ME"
+  },
+  "ServerReachabilityProbe": {
+    "_comment": "Local servers live on private addresses (localhost, Docker networks): allow the reachability probe to reach them on a developer machine.",
+    "AllowPrivateTargets": true
+  },
+  "VulnerabilityWatch": {
+    "_comment": "Off on a developer machine: the first load downloads about 387 MB and imports about 370,000 advisories into a database that a reset empties. To try it locally, set VulnerabilityWatch__Enabled=true for one launch.",
+    "Enabled": false
   },
   "Aetheus": {
     "_comment": "The URL the Add-Agent wizard bakes into the generated install command. Local dev: agents reach the backend over plain HTTP on :5300. Production sets its canonical API URL here instead.",
