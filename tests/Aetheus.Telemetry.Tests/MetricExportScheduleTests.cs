@@ -13,6 +13,7 @@ namespace Aetheus.Telemetry.Tests;
 /// <summary> The package sends its metrics at the interval Aetheus hands over with the ingest key,
 /// and keeps its own interval when the server says nothing (an older Aetheus, a network failure).
 /// </summary>
+[Collection(TelemetryEnvironmentCollection.Name)]
 public sealed class MetricExportScheduleTests
 {
     private static readonly Uri MetricsEndpoint = new("https://aetheus.test/api/ingest/otlp/v1/metrics");

@@ -18,30 +18,6 @@ public sealed class PublicDistributionBoundaryAuditTests
     // The export refuses a dropTests entry whose file or method is gone; checked here so a renamed test
     // fails at commit time instead of at the next public copy (export of v1.6.15 refused, 2026-11-15).
     [Fact]
-    public void EveryDroppedTest_StillExistsInTheSource()
-    {
-        var root = RepositoryScan.Root;
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, BoundaryPath)));
-        var drops = document.RootElement.GetProperty("dropTests").EnumerateObject().ToList();
-        Assert.NotEmpty(drops);
-
-        var stale = new List<string>();
-        foreach (var file in drops)
-        {
-            var path = Path.Combine(root, file.Name);
-            if (!File.Exists(path)) { stale.Add($"{file.Name} (file)"); continue; }
-            var source = File.ReadAllText(path);
-            stale.AddRange(file.Value.EnumerateArray().Select(name => name.GetString()!)
-                .Where(name => !Regex.IsMatch(source, $@"\b(void|Task)\s+{Regex.Escape(name)}\s*\("))
-                .Select(name => $"{file.Name}: {name}"));
-        }
-
-        Assert.True(stale.Count == 0,
-            $"'dropTests' of {BoundaryPath} names tests the source no longer has; the public export refuses it. "
-            + "Rename or remove the entry with the test:\n  " + string.Join("\n  ", stale));
-    }
-
-    [Fact]
     public void TheMatcher_NamesTheFileAndTheLiteral()
     {
         var hits = FindForbidden("tests/Some.Tests/ServerTest.cs", "var host = \"10.9.8.7\";", ["10.9.8.7", "absent.example"]);

@@ -6,6 +6,8 @@ using OmniEurope.Diagnostics;
 
 namespace Aetheus.Telemetry.Tests;
 
+// AETHEUS_TELEMETRY_ENABLED is process-wide: the classes that set it never run in parallel with each other.
+[Collection(TelemetryEnvironmentCollection.Name)]
 public sealed class AetheusTelemetryBuilderExtensionsTests : IDisposable
 {
     private readonly string? _originalEnabled = Environment.GetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED");

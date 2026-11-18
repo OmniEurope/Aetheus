@@ -74,6 +74,10 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
         // Must be valid base64 decoding to >= 16 bytes (EncryptionService.GetConfiguredSalt validates).
         builder.UseSetting("Auth:EncryptionSalt", "aW50ZWdyYXRpb24tc2FsdC0xNi1ieXRlcy1taW4h");
         builder.UseSetting("Auth:AdminPassword", AdminPassword);
+        // R-1: the seeded administrator must set up its own account before anything else, unless the host opts out.
+        // Set here, not read from the developer's appsettings.Development.json (private, absent from the public
+        // distribution): a host without that file made every authenticated call answer 403 (2026-11-17).
+        builder.UseSetting("Auth:AdministratorSetupRequired", "false");
         builder.UseSetting("RateLimiting:Disabled", "true");
         // Recette R3-7: no nightly AI model list read in a test host (seeded profiles hold fake keys).
         builder.UseSetting("AiTasks:ModelListRefresh:Enabled", "false");
