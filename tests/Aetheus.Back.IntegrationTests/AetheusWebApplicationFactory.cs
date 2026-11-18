@@ -74,6 +74,9 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
         // Must be valid base64 decoding to >= 16 bytes (EncryptionService.GetConfiguredSalt validates).
         builder.UseSetting("Auth:EncryptionSalt", "aW50ZWdyYXRpb24tc2FsdC0xNi1ieXRlcy1taW4h");
         builder.UseSetting("Auth:AdminPassword", AdminPassword);
+        // The seeded administrator's address, which the site admin bootstrap reads: set here for the same reason as
+        // AdministratorSetupRequired below, the public distribution has no appsettings.Development.json (2026-11-18).
+        builder.UseSetting("Auth:AdminEmail", IntegrationAuth.AdminEmail);
         // R-1: the seeded administrator must set up its own account before anything else, unless the host opts out.
         // Set here, not read from the developer's appsettings.Development.json (private, absent from the public
         // distribution): a host without that file made every authenticated call answer 403 (2026-11-17).

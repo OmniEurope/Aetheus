@@ -16,8 +16,8 @@ internal static class IntegrationAuth
     /// <summary>The bootstrap-admin password the integration <see cref="AetheusWebApplicationFactory"/> seeds.</summary>
     public const string AdminPassword = AetheusWebApplicationFactory.AdminPassword;
 
-    /// <summary>The sign-in e-mail of the seeded admin: the factory runs in Development, whose
-    /// appsettings.Development.json names it (Auth:AdminEmail).</summary>
+    /// <summary>The sign-in e-mail of the seeded admin: the factory sets it (Auth:AdminEmail), so the
+    /// tests never depend on the private appsettings.Development.json.</summary>
     public const string AdminEmail = "admin@aetheus.local";
 
     /// <summary>Logs in by e-mail, as everyone does (a username is never a sign-in), and returns the JWT,
